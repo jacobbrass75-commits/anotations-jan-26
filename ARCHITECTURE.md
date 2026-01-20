@@ -452,9 +452,19 @@ npm run dev        # Start development server (port 5001)
 npm run build      # Build for production
 npm run start      # Run production server
 npm run check      # TypeScript type checking
-npm run db:push    # Apply database migrations
+npm run db:push    # Apply database migrations (IMPORTANT: run after schema changes)
 npm run db:generate # Generate migration files
 ```
+
+### Important: After Schema Changes
+
+When modifying `shared/schema.ts` (adding columns, tables, etc.), you **must** run:
+
+```bash
+npm run db:push
+```
+
+This syncs the TypeScript schema definitions with the actual SQLite database. Without this step, you'll get errors like `no such column: "column_name"`.
 
 ### Environment Variables
 
