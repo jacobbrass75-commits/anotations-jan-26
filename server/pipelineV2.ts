@@ -772,3 +772,39 @@ export async function processChunksWithPipelineV2(
 
   return allAnnotations;
 }
+
+/**
+ * Process chunks with multiple prompts in parallel
+ * Each prompt runs the full 3-phase pipeline independently
+ * Returns a Map of promptIndex -> PipelineAnnotation[]
+ */
+export async function processChunksWithMultiplePrompts(
+  chunks: Array<{ text: string; startPosition: number; id: string }>,
+  prompts: Array<{ text: string; color: string; index: number }>,
+  documentId: string,
+  fullText: string,
+  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+): Promise<Map<number, PipelineAnnotation[]>> {
+  // Run all prompts in parallel
+  const results = await Promise.all(
+    prompts.map(async (prompt) => {
+      // Each prompt runs the full pipeline independently
+      // Note: We pass a copy of existingAnnotations so prompts don't interfere with each other's deduplication
+      const annotations = await processChunksWithPipelineV2(
+        chunks,
+        prompt.text,
+        documentId,
+        fullText,
+        [...existingAnnotations]
+      );
+      return { promptIndex: prompt.index, annotations };
+    })
+  );
+
+  // Return map of promptIndex -> annotations
+  const resultMap = new Map<number, PipelineAnnotation[]>();
+  for (const { promptIndex, annotations } of results) {
+    resultMap.set(promptIndex, annotations);
+  }
+  return resultMap;
+}

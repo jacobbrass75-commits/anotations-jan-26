@@ -66,6 +66,11 @@ export const annotations = sqliteTable("annotations", {
   note: text("note").notNull(),
   isAiGenerated: integer("is_ai_generated", { mode: "boolean" }).default(false).notNull(),
   confidenceScore: real("confidence_score"),
+  // Multi-prompt support
+  promptText: text("prompt_text"),
+  promptIndex: integer("prompt_index"),
+  promptColor: text("prompt_color"),
+  analysisRunId: text("analysis_run_id"),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
 });
 
@@ -279,6 +284,15 @@ export const projects = sqliteTable("projects", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
 });
 
+// Prompt templates table (project-scoped prompt sets)
+export const promptTemplates = sqliteTable("prompt_templates", {
+  id: text("id").primaryKey().$defaultFn(genId),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  prompts: text("prompts", { mode: "json" }).$type<Array<{ text: string; color: string }>>().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+});
+
 // Folders table (for nested sub-folders)
 export const folders = sqliteTable("folders", {
   id: text("id").primaryKey().$defaultFn(genId),
@@ -319,6 +333,11 @@ export const projectAnnotations = sqliteTable("project_annotations", {
   note: text("note"),
   isAiGenerated: integer("is_ai_generated", { mode: "boolean" }).default(true),
   confidenceScore: real("confidence_score"),
+  // Multi-prompt support
+  promptText: text("prompt_text"),
+  promptIndex: integer("prompt_index"),
+  promptColor: text("prompt_color"),
+  analysisRunId: text("analysis_run_id"),
   searchableContent: text("searchable_content"),
   searchEmbedding: text("search_embedding", { mode: "json" }).$type<number[]>(),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
@@ -328,6 +347,14 @@ export const projectAnnotations = sqliteTable("project_annotations", {
 export const projectsRelations = relations(projects, ({ many }) => ({
   folders: many(folders),
   projectDocuments: many(projectDocuments),
+  promptTemplates: many(promptTemplates),
+}));
+
+export const promptTemplatesRelations = relations(promptTemplates, ({ one }) => ({
+  project: one(projects, {
+    fields: [promptTemplates.projectId],
+    references: [projects.id],
+  }),
 }));
 
 export const foldersRelations = relations(folders, ({ one, many }) => ({
@@ -377,6 +404,13 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
 });
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
+
+export const insertPromptTemplateSchema = createInsertSchema(promptTemplates).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPromptTemplate = z.infer<typeof insertPromptTemplateSchema>;
+export type PromptTemplate = typeof promptTemplates.$inferSelect;
 
 export const insertFolderSchema = createInsertSchema(folders).omit({
   id: true,

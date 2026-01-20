@@ -13,7 +13,8 @@ import {
   type ThoroughnessLevel,
 } from "./openai";
 // V2 Pipeline - improved annotation system
-import { processChunksWithPipelineV2 } from "./pipelineV2";
+import { processChunksWithPipelineV2, processChunksWithMultiplePrompts } from "./pipelineV2";
+import { randomUUID } from "crypto";
 import { batchProcess } from "./replit_integrations/batch/utils";
 import {
   insertProjectSchema,
@@ -36,6 +37,22 @@ interface AnalysisConstraints {
   maxAnnotationsPerDoc?: number;
   minConfidence?: number;
   thoroughness?: ThoroughnessLevel;
+}
+
+// Default color palette for multi-prompt analysis
+const PROMPT_COLORS = [
+  '#ef4444', // red
+  '#3b82f6', // blue
+  '#22c55e', // green
+  '#f59e0b', // amber
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#06b6d4', // cyan
+  '#f97316', // orange
+];
+
+function getDefaultPromptColor(index: number): string {
+  return PROMPT_COLORS[index % PROMPT_COLORS.length];
 }
 
 async function analyzeProjectDocument(
@@ -280,6 +297,67 @@ export function registerProjectRoutes(app: Express): void {
     } catch (error) {
       console.error("Error deleting project:", error);
       res.status(500).json({ error: "Failed to delete project" });
+    }
+  });
+
+  // === PROMPT TEMPLATES ===
+
+  app.post("/api/projects/:projectId/prompt-templates", async (req: Request, res: Response) => {
+    try {
+      const { name, prompts } = req.body;
+      if (!name || typeof name !== "string") {
+        return res.status(400).json({ error: "Template name is required" });
+      }
+      if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
+        return res.status(400).json({ error: "At least one prompt is required" });
+      }
+
+      const template = await projectStorage.createPromptTemplate({
+        projectId: req.params.projectId,
+        name,
+        prompts,
+      });
+      res.status(201).json(template);
+    } catch (error) {
+      console.error("Error creating prompt template:", error);
+      res.status(500).json({ error: "Failed to create prompt template" });
+    }
+  });
+
+  app.get("/api/projects/:projectId/prompt-templates", async (req: Request, res: Response) => {
+    try {
+      const templates = await projectStorage.getPromptTemplatesByProject(req.params.projectId);
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching prompt templates:", error);
+      res.status(500).json({ error: "Failed to fetch prompt templates" });
+    }
+  });
+
+  app.put("/api/prompt-templates/:id", async (req: Request, res: Response) => {
+    try {
+      const { name, prompts } = req.body;
+      const updated = await projectStorage.updatePromptTemplate(req.params.id, {
+        ...(name && { name }),
+        ...(prompts && { prompts }),
+      });
+      if (!updated) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating prompt template:", error);
+      res.status(500).json({ error: "Failed to update prompt template" });
+    }
+  });
+
+  app.delete("/api/prompt-templates/:id", async (req: Request, res: Response) => {
+    try {
+      await projectStorage.deletePromptTemplate(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting prompt template:", error);
+      res.status(500).json({ error: "Failed to delete prompt template" });
     }
   });
 
@@ -662,6 +740,192 @@ export function registerProjectRoutes(app: Express): void {
       });
     } catch (error) {
       console.error("Error analyzing project document:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to analyze document" });
+    }
+  });
+
+  // Multi-prompt parallel analysis
+  app.post("/api/project-documents/:id/analyze-multi", async (req: Request, res: Response) => {
+    try {
+      const { prompts, thoroughness } = req.body;
+
+      if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
+        return res.status(400).json({ error: "At least one prompt is required" });
+      }
+
+      // Validate prompts structure
+      for (const prompt of prompts) {
+        if (!prompt.text || typeof prompt.text !== "string") {
+          return res.status(400).json({ error: "Each prompt must have a text field" });
+        }
+      }
+
+      const validThoroughness = ['quick', 'standard', 'thorough', 'exhaustive'].includes(thoroughness)
+        ? thoroughness as ThoroughnessLevel
+        : 'standard';
+
+      const projectDocId = req.params.id;
+      const projectDoc = await projectStorage.getProjectDocument(projectDocId);
+      if (!projectDoc) {
+        return res.status(404).json({ error: "Project document not found" });
+      }
+
+      const doc = await storage.getDocument(projectDoc.documentId);
+      if (!doc) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const project = await projectStorage.getProject(projectDoc.projectId);
+      const chunks = await storage.getChunksForDocument(doc.id);
+
+      if (chunks.length === 0) {
+        return res.status(400).json({ error: "No text chunks found for analysis" });
+      }
+
+      // Rank chunks by similarity (using first prompt for ranking, or document order)
+      const maxChunks = getMaxChunksForLevel(validThoroughness);
+      let topChunks: { text: string; startPosition: number; id: string }[];
+
+      try {
+        const firstPromptIntent = project?.thesis
+          ? `Project thesis: ${project.thesis}\n\nResearch focus: ${prompts[0].text}`
+          : prompts[0].text;
+        const intentEmbedding = await getEmbedding(firstPromptIntent);
+
+        const chunksWithEmbeddings = await Promise.all(
+          chunks.map(async (chunk) => {
+            if (!chunk.embedding) {
+              try {
+                const embedding = await getEmbedding(chunk.text);
+                await storage.updateChunkEmbedding(chunk.id, embedding);
+                return { ...chunk, embedding };
+              } catch {
+                return chunk;
+              }
+            }
+            return chunk;
+          })
+        );
+
+        const rankedChunks = chunksWithEmbeddings
+          .filter(c => c.embedding)
+          .map((chunk) => ({
+            chunk,
+            similarity: cosineSimilarity(chunk.embedding!, intentEmbedding),
+          }))
+          .sort((a, b) => b.similarity - a.similarity);
+
+        const minSimilarity = validThoroughness === 'exhaustive' ? 0.1 : 0.3;
+        topChunks = rankedChunks
+          .filter(({ similarity }) => similarity >= minSimilarity)
+          .slice(0, maxChunks)
+          .map(({ chunk }) => ({
+            text: chunk.text,
+            startPosition: chunk.startPosition,
+            id: chunk.id,
+          }));
+
+        if (topChunks.length === 0) {
+          topChunks = chunks.slice(0, maxChunks).map(chunk => ({
+            text: chunk.text,
+            startPosition: chunk.startPosition,
+            id: chunk.id,
+          }));
+        }
+      } catch {
+        topChunks = chunks.slice(0, maxChunks).map(chunk => ({
+          text: chunk.text,
+          startPosition: chunk.startPosition,
+          id: chunk.id,
+        }));
+      }
+
+      // Get existing user annotations (keep them), delete AI annotations
+      const existingAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
+      const userAnnotations = existingAnnotations
+        .filter(a => !a.isAiGenerated)
+        .map(a => ({
+          startPosition: a.startPosition,
+          endPosition: a.endPosition,
+          confidenceScore: a.confidenceScore,
+        }));
+
+      for (const ann of existingAnnotations.filter(a => a.isAiGenerated)) {
+        await projectStorage.deleteProjectAnnotation(ann.id);
+      }
+
+      // Prepare prompts with colors and indices
+      const promptsWithMeta = prompts.map((p: { text: string; color?: string }, index: number) => ({
+        text: project?.thesis
+          ? `Project thesis: ${project.thesis}\n\nResearch focus: ${p.text}`
+          : p.text,
+        color: p.color || getDefaultPromptColor(index),
+        index,
+      }));
+
+      // Generate analysis run ID
+      const analysisRunId = randomUUID();
+
+      console.log(`Multi-prompt analysis: ${prompts.length} prompts on ${topChunks.length} chunks`);
+
+      // Run all prompts in parallel
+      const resultsMap = await processChunksWithMultiplePrompts(
+        topChunks,
+        promptsWithMeta,
+        doc.id,
+        doc.fullText,
+        userAnnotations
+      );
+
+      // Create annotations with prompt metadata
+      const results: Array<{ promptIndex: number; promptText: string; annotationsCreated: number }> = [];
+      let totalAnnotations = 0;
+
+      for (const [promptIndex, annotations] of Array.from(resultsMap.entries())) {
+        const originalPrompt = prompts[promptIndex];
+        let created = 0;
+
+        for (const ann of annotations) {
+          await projectStorage.createProjectAnnotation({
+            projectDocumentId: projectDocId,
+            startPosition: ann.absoluteStart,
+            endPosition: ann.absoluteEnd,
+            highlightedText: ann.highlightText,
+            category: ann.category as AnnotationCategory,
+            note: ann.note,
+            isAiGenerated: true,
+            confidenceScore: ann.confidence,
+            promptText: originalPrompt.text,
+            promptIndex,
+            promptColor: promptsWithMeta[promptIndex].color,
+            analysisRunId,
+          });
+          created++;
+        }
+
+        results.push({
+          promptIndex,
+          promptText: originalPrompt.text,
+          annotationsCreated: created,
+        });
+        totalAnnotations += created;
+      }
+
+      const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
+
+      res.json({
+        analysisRunId,
+        results,
+        totalAnnotations,
+        annotations: finalAnnotations,
+        stats: {
+          chunksAnalyzed: topChunks.length,
+          totalChunks: chunks.length,
+          coverage: Math.round((topChunks.length / chunks.length) * 100),
+        },
+      });
+    } catch (error) {
+      console.error("Error in multi-prompt analysis:", error);
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to analyze document" });
     }
   });

@@ -7,12 +7,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { HighlightedText } from "./HighlightedText";
 import type { Annotation, Document } from "@shared/schema";
 
+// Extended annotation type with prompt fields
+interface AnnotationWithPrompt extends Omit<Annotation, 'promptText' | 'promptIndex' | 'promptColor'> {
+  promptText?: string | null;
+  promptIndex?: number | null;
+  promptColor?: string | null;
+}
+
 interface DocumentViewerProps {
   document: Document | null;
-  annotations: Annotation[];
+  annotations: AnnotationWithPrompt[];
   isLoading: boolean;
   selectedAnnotationId: string | null;
-  onAnnotationClick: (annotation: Annotation) => void;
+  onAnnotationClick: (annotation: AnnotationWithPrompt) => void;
   onTextSelect?: (selection: { text: string; start: number; end: number }) => void;
 }
 

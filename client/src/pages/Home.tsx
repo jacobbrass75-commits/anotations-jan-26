@@ -103,7 +103,7 @@ export default function Home() {
     }
   }, [currentDocumentId, intentMutation, toast]);
 
-  const handleAnnotationClick = useCallback((annotation: Annotation) => {
+  const handleAnnotationClick = useCallback((annotation: { id: string }) => {
     setSelectedAnnotationId(annotation.id);
   }, []);
 

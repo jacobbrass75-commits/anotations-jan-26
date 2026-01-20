@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Project, Folder, ProjectDocument, ProjectAnnotation, InsertProject, InsertFolder, InsertProjectDocument, InsertProjectAnnotation, CitationData, SearchResult } from "@shared/schema";
+import type { Project, Folder, ProjectDocument, ProjectAnnotation, InsertProject, InsertFolder, InsertProjectDocument, InsertProjectAnnotation, CitationData, SearchResult, PromptTemplate } from "@shared/schema";
 
 export function useProjects() {
   return useQuery<Project[]>({
@@ -266,6 +266,87 @@ export function useBatchAddDocuments() {
     },
     onSuccess: (data, { projectId }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "documents"] });
+    },
+  });
+}
+
+// Multi-prompt analysis
+export function useAnalyzeMultiPrompt() {
+  return useMutation({
+    mutationFn: async ({
+      projectDocumentId,
+      prompts,
+      thoroughness = "standard",
+    }: {
+      projectDocumentId: string;
+      prompts: Array<{ text: string; color: string }>;
+      thoroughness?: "quick" | "standard" | "thorough" | "exhaustive";
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/project-documents/${projectDocumentId}/analyze-multi`,
+        { prompts, thoroughness }
+      );
+      const data = await res.json();
+      return { ...data, projectDocumentId };
+    },
+    onSuccess: ({ projectDocumentId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/project-documents", projectDocumentId, "annotations"],
+      });
+    },
+  });
+}
+
+// Prompt Templates
+export function usePromptTemplates(projectId: string) {
+  return useQuery<PromptTemplate[]>({
+    queryKey: ["/api/projects", projectId, "prompt-templates"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/prompt-templates`);
+      if (!res.ok) throw new Error("Failed to fetch prompt templates");
+      return res.json();
+    },
+    enabled: !!projectId,
+  });
+}
+
+export function useCreatePromptTemplate() {
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      name,
+      prompts,
+    }: {
+      projectId: string;
+      name: string;
+      prompts: Array<{ text: string; color: string }>;
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/projects/${projectId}/prompt-templates`,
+        { name, prompts }
+      );
+      return res.json();
+    },
+    onSuccess: (_, { projectId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/projects", projectId, "prompt-templates"],
+      });
+    },
+  });
+}
+
+export function useDeletePromptTemplate() {
+  return useMutation({
+    mutationFn: async ({ id, projectId }: { id: string; projectId: string }) => {
+      await apiRequest("DELETE", `/api/prompt-templates/${id}`);
+      return projectId;
+    },
+    onSuccess: (projectId) => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/projects", projectId, "prompt-templates"],
+      });
     },
   });
 }

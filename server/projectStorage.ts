@@ -5,6 +5,7 @@ import {
   folders,
   projectDocuments,
   projectAnnotations,
+  promptTemplates,
   documents,
   type Project,
   type InsertProject,
@@ -14,6 +15,8 @@ import {
   type InsertProjectDocument,
   type ProjectAnnotation,
   type InsertProjectAnnotation,
+  type PromptTemplate,
+  type InsertPromptTemplate,
   type CitationData,
   type AnnotationCategory,
 } from "@shared/schema";
@@ -57,6 +60,13 @@ export interface IProjectStorage {
   getProjectAnnotationsByDocument(projectDocumentId: string): Promise<ProjectAnnotation[]>;
   updateProjectAnnotation(id: string, data: Partial<InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] }>): Promise<ProjectAnnotation | undefined>;
   deleteProjectAnnotation(id: string): Promise<void>;
+
+  // Prompt Templates
+  createPromptTemplate(data: InsertPromptTemplate): Promise<PromptTemplate>;
+  getPromptTemplate(id: string): Promise<PromptTemplate | undefined>;
+  getPromptTemplatesByProject(projectId: string): Promise<PromptTemplate[]>;
+  updatePromptTemplate(id: string, data: Partial<InsertPromptTemplate>): Promise<PromptTemplate | undefined>;
+  deletePromptTemplate(id: string): Promise<void>;
 }
 
 export const projectStorage: IProjectStorage = {
@@ -233,5 +243,40 @@ export const projectStorage: IProjectStorage = {
 
   async deleteProjectAnnotation(id: string): Promise<void> {
     await db.delete(projectAnnotations).where(eq(projectAnnotations.id, id));
+  },
+
+  // === PROMPT TEMPLATES ===
+  async createPromptTemplate(data: InsertPromptTemplate): Promise<PromptTemplate> {
+    const [template] = await db.insert(promptTemplates).values(data).returning();
+    return template;
+  },
+
+  async getPromptTemplate(id: string): Promise<PromptTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(promptTemplates)
+      .where(eq(promptTemplates.id, id));
+    return template;
+  },
+
+  async getPromptTemplatesByProject(projectId: string): Promise<PromptTemplate[]> {
+    return db
+      .select()
+      .from(promptTemplates)
+      .where(eq(promptTemplates.projectId, projectId))
+      .orderBy(desc(promptTemplates.createdAt));
+  },
+
+  async updatePromptTemplate(id: string, data: Partial<InsertPromptTemplate>): Promise<PromptTemplate | undefined> {
+    const [updated] = await db
+      .update(promptTemplates)
+      .set(data)
+      .where(eq(promptTemplates.id, id))
+      .returning();
+    return updated;
+  },
+
+  async deletePromptTemplate(id: string): Promise<void> {
+    await db.delete(promptTemplates).where(eq(promptTemplates.id, id));
   },
 };

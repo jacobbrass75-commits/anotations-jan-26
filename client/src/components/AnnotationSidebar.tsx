@@ -24,11 +24,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { Annotation, AnnotationCategory } from "@shared/schema";
 
+// Extended annotation type with prompt fields
+interface AnnotationWithPrompt extends Omit<Annotation, 'promptText' | 'promptIndex' | 'promptColor'> {
+  promptText?: string | null;
+  promptIndex?: number | null;
+  promptColor?: string | null;
+}
+
 interface AnnotationSidebarProps {
-  annotations: Annotation[];
+  annotations: AnnotationWithPrompt[];
   isLoading: boolean;
   selectedAnnotationId: string | null;
-  onSelect: (annotation: Annotation) => void;
+  onSelect: (annotation: AnnotationWithPrompt) => void;
   onDelete: (annotationId: string) => void;
   onUpdate: (annotationId: string, note: string, category: AnnotationCategory) => void;
   onAddManual: () => void;
@@ -38,6 +45,7 @@ interface AnnotationSidebarProps {
 }
 
 type FilterType = "all" | "ai" | "manual" | AnnotationCategory;
+type PromptFilterType = "all" | number; // "all" or prompt index
 
 const categoryColors: Record<AnnotationCategory, string> = {
   key_quote: "bg-yellow-500",
@@ -68,21 +76,53 @@ export function AnnotationSidebar({
   onCopyFootnote,
 }: AnnotationSidebarProps) {
   const [filter, setFilter] = useState<FilterType>("all");
-  const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(null);
+  const [promptFilter, setPromptFilter] = useState<PromptFilterType>("all");
+  const [editingAnnotation, setEditingAnnotation] = useState<AnnotationWithPrompt | null>(null);
   const [editNote, setEditNote] = useState("");
   const [editCategory, setEditCategory] = useState<AnnotationCategory>("user_added");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // Get unique prompts from annotations
+  const uniquePrompts = useMemo(() => {
+    const promptMap = new Map<number, { text: string; color: string; count: number }>();
+    for (const ann of annotations) {
+      if (ann.promptIndex != null && ann.promptText) {
+        const existing = promptMap.get(ann.promptIndex);
+        if (existing) {
+          existing.count++;
+        } else {
+          promptMap.set(ann.promptIndex, {
+            text: ann.promptText,
+            color: ann.promptColor || "#888",
+            count: 1,
+          });
+        }
+      }
+    }
+    return promptMap;
+  }, [annotations]);
+
+  const hasMultiplePrompts = uniquePrompts.size > 1;
+
   const filteredAnnotations = useMemo(() => {
     return annotations.filter((a) => {
-      if (filter === "all") return true;
-      if (filter === "ai") return a.isAiGenerated;
-      if (filter === "manual") return !a.isAiGenerated;
-      return a.category === filter;
-    });
-  }, [annotations, filter]);
+      // Category/type filter
+      let passesFilter = true;
+      if (filter === "ai") passesFilter = a.isAiGenerated;
+      else if (filter === "manual") passesFilter = !a.isAiGenerated;
+      else if (filter !== "all") passesFilter = a.category === filter;
 
-  const handleEditStart = (annotation: Annotation) => {
+      // Prompt filter
+      let passesPromptFilter = true;
+      if (promptFilter !== "all") {
+        passesPromptFilter = a.promptIndex === promptFilter;
+      }
+
+      return passesFilter && passesPromptFilter;
+    });
+  }, [annotations, filter, promptFilter]);
+
+  const handleEditStart = (annotation: AnnotationWithPrompt) => {
     setEditingAnnotation(annotation);
     setEditNote(annotation.note);
     setEditCategory(annotation.category);
@@ -142,7 +182,7 @@ export function AnnotationSidebar({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="ai">AI Generated</SelectItem>
                 <SelectItem value="manual">Manual</SelectItem>
                 <SelectItem value="key_quote">Key Quotes</SelectItem>
@@ -153,6 +193,35 @@ export function AnnotationSidebar({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Prompt Filter - only show if there are multiple prompts */}
+          {hasMultiplePrompts && (
+            <div className="flex items-center gap-2">
+              <Select
+                value={String(promptFilter)}
+                onValueChange={(v) => setPromptFilter(v === "all" ? "all" : Number(v))}
+              >
+                <SelectTrigger className="flex-1" data-testid="select-prompt-filter">
+                  <SelectValue placeholder="All Prompts" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Prompts</SelectItem>
+                  {Array.from(uniquePrompts.entries()).map(([index, { text, color, count }]) => (
+                    <SelectItem key={index} value={String(index)}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="truncate max-w-[150px]">{text}</span>
+                        <span className="text-muted-foreground">({count})</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <Button
             variant="outline"
@@ -196,7 +265,12 @@ export function AnnotationSidebar({
                     data-testid={`annotation-item-${annotation.id}`}
                   >
                     <div className="flex items-start gap-2 mb-2">
-                      <div className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${categoryColors[annotation.category]}`} />
+                      {/* Show prompt color if available, otherwise category color */}
+                      <div
+                        className="w-2.5 h-2.5 rounded-full mt-1 shrink-0"
+                        style={annotation.promptColor ? { backgroundColor: annotation.promptColor } : undefined}
+                        {...(!annotation.promptColor && { className: `w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${categoryColors[annotation.category]}` })}
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="secondary" className="text-xs">
@@ -206,6 +280,18 @@ export function AnnotationSidebar({
                             <Bot className="h-3 w-3 text-muted-foreground" />
                           ) : (
                             <User className="h-3 w-3 text-muted-foreground" />
+                          )}
+                          {/* Show prompt indicator if from multi-prompt analysis */}
+                          {annotation.promptText && hasMultiplePrompts && (
+                            <span
+                              className="text-xs px-1.5 py-0.5 rounded"
+                              style={{
+                                backgroundColor: `${annotation.promptColor}20`,
+                                color: annotation.promptColor || undefined,
+                              }}
+                            >
+                              P{(annotation.promptIndex ?? 0) + 1}
+                            </span>
                           )}
                         </div>
                       </div>

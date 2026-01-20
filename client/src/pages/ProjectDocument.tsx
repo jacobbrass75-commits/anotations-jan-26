@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -9,6 +9,9 @@ import {
   useUpdateProjectDocument,
   useAnalyzeProjectDocument,
   useSearchProjectDocument,
+  useAnalyzeMultiPrompt,
+  usePromptTemplates,
+  useCreatePromptTemplate,
 } from "@/hooks/useProjects";
 import { useGenerateCitation } from "@/hooks/useProjectSearch";
 import { queryClient } from "@/lib/queryClient";
@@ -46,7 +49,7 @@ import {
   FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { IntentPanel } from "@/components/IntentPanel";
+import { MultiPromptPanel, type Prompt } from "@/components/MultiPromptPanel";
 import { SearchPanel } from "@/components/SearchPanel";
 import { DocumentViewer } from "@/components/DocumentViewer";
 import { AnnotationSidebar } from "@/components/AnnotationSidebar";
@@ -125,9 +128,21 @@ export default function ProjectDocumentPage() {
   const generateCitation = useGenerateCitation();
   const analyzeDocument = useAnalyzeProjectDocument();
   const searchDocument = useSearchProjectDocument();
+  const analyzeMultiPrompt = useAnalyzeMultiPrompt();
+  const createPromptTemplate = useCreatePromptTemplate();
+
+  // Queries for templates
+  const { data: promptTemplates = [] } = usePromptTemplates(projectId);
+
+  // Extended annotation type with prompt fields
+  interface AnnotationWithPrompt extends Omit<Annotation, 'promptText' | 'promptIndex' | 'promptColor'> {
+    promptText?: string | null;
+    promptIndex?: number | null;
+    promptColor?: string | null;
+  }
 
   // Convert project annotations to regular Annotation format for AnnotationSidebar
-  const annotations: Annotation[] = projectAnnotations.map((pa) => ({
+  const annotations: AnnotationWithPrompt[] = projectAnnotations.map((pa) => ({
     id: pa.id,
     documentId: projectDoc?.documentId || "",
     startPosition: pa.startPosition,
@@ -135,10 +150,26 @@ export default function ProjectDocumentPage() {
     highlightedText: pa.highlightedText,
     category: pa.category as AnnotationCategory,
     note: pa.note || "",
-    isAiGenerated: pa.isAiGenerated,
+    isAiGenerated: pa.isAiGenerated ?? false,
     confidenceScore: pa.confidenceScore,
     createdAt: pa.createdAt,
+    chunkId: null,
+    analysisRunId: pa.analysisRunId,
+    promptText: pa.promptText,
+    promptIndex: pa.promptIndex,
+    promptColor: pa.promptColor,
   }));
+
+  // Calculate prompt stats for MultiPromptPanel
+  const promptStats = useMemo(() => {
+    const stats = new Map<number, number>();
+    for (const ann of projectAnnotations) {
+      if (ann.promptIndex != null) {
+        stats.set(ann.promptIndex, (stats.get(ann.promptIndex) || 0) + 1);
+      }
+    }
+    return stats;
+  }, [projectAnnotations]);
 
   // Initialize citation form from project doc
   useEffect(() => {
@@ -189,7 +220,65 @@ export default function ProjectDocumentPage() {
     [projectDocId, analyzeDocument, toast]
   );
 
-  const handleAnnotationClick = useCallback((annotation: Annotation) => {
+  const handleMultiPromptAnalyze = useCallback(
+    async (
+      prompts: Prompt[],
+      thoroughness: "quick" | "standard" | "thorough" | "exhaustive" = "standard"
+    ) => {
+      if (!projectDocId) return;
+
+      try {
+        await analyzeMultiPrompt.mutateAsync({
+          projectDocumentId: projectDocId,
+          prompts: prompts.map((p) => ({ text: p.text, color: p.color })),
+          thoroughness,
+        });
+        setHasAnalyzed(true);
+
+        toast({
+          title: "Analysis complete",
+          description: `${prompts.length} prompt(s) analyzed. AI has highlighted relevant passages.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Analysis failed",
+          description:
+            error instanceof Error ? error.message : "Could not analyze the document.",
+          variant: "destructive",
+        });
+      }
+    },
+    [projectDocId, analyzeMultiPrompt, toast]
+  );
+
+  const handleSaveTemplate = useCallback(
+    async (name: string, prompts: Prompt[]) => {
+      if (!projectId) return;
+
+      try {
+        await createPromptTemplate.mutateAsync({
+          projectId,
+          name,
+          prompts: prompts.map((p) => ({ text: p.text, color: p.color })),
+        });
+
+        toast({
+          title: "Template saved",
+          description: `"${name}" saved for reuse in this project.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Failed to save template",
+          description:
+            error instanceof Error ? error.message : "Could not save the template.",
+          variant: "destructive",
+        });
+      }
+    },
+    [projectId, createPromptTemplate, toast]
+  );
+
+  const handleAnnotationClick = useCallback((annotation: AnnotationWithPrompt) => {
     setSelectedAnnotationId(annotation.id);
   }, []);
 
@@ -551,17 +640,20 @@ export default function ProjectDocumentPage() {
       {/* Main Content - 4 Column Grid */}
       <main className="flex-1 container mx-auto px-4 py-6">
         <div className="grid lg:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
-          {/* Left Sidebar: Intent + Citation Info */}
+          {/* Left Sidebar: Multi-Prompt Panel + Citation Info */}
           <div className="lg:col-span-1 flex flex-col gap-4 overflow-hidden">
             <div className="flex-1 min-h-0">
-              <IntentPanel
+              <MultiPromptPanel
                 documentId={projectDocId}
-                onAnalyze={handleAnalyze}
-                isAnalyzing={analyzeDocument.isPending}
+                projectId={projectId}
+                onAnalyze={handleMultiPromptAnalyze}
+                isAnalyzing={analyzeMultiPrompt.isPending}
                 hasAnalyzed={hasAnalyzed}
                 annotationCount={annotations.length}
-                defaultResearch={project?.thesis || ""}
-                defaultGoals={project?.scope || ""}
+                promptStats={promptStats}
+                templates={promptTemplates}
+                onSaveTemplate={handleSaveTemplate}
+                isSavingTemplate={createPromptTemplate.isPending}
               />
             </div>
 
@@ -580,9 +672,9 @@ export default function ProjectDocumentPage() {
                     <em>{projectDoc.citationData.title || "Untitled"}</em>
                   </p>
                   <Button
-                    variant="link"
+                    variant="ghost"
                     size="sm"
-                    className="px-0 h-auto mt-1"
+                    className="px-0 h-auto mt-1 text-primary hover:underline"
                     onClick={() => setIsCitationOpen(true)}
                   >
                     Edit citation

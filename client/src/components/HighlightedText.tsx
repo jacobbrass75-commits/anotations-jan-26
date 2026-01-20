@@ -4,10 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Bot, User, X } from "lucide-react";
 
+// Extended annotation type with prompt fields
+interface AnnotationWithPrompt extends Omit<Annotation, 'promptText' | 'promptIndex' | 'promptColor'> {
+  promptText?: string | null;
+  promptIndex?: number | null;
+  promptColor?: string | null;
+}
+
 interface HighlightedTextProps {
   text: string;
-  annotations: Annotation[];
-  onAnnotationClick: (annotation: Annotation) => void;
+  annotations: AnnotationWithPrompt[];
+  onAnnotationClick: (annotation: AnnotationWithPrompt) => void;
   selectedAnnotationId: string | null;
   onTextSelect?: (selection: { text: string; start: number; end: number }) => void;
 }
@@ -52,7 +59,7 @@ interface TextSegment {
   start: number;
   end: number;
   text: string;
-  annotation: Annotation | null;
+  annotation: AnnotationWithPrompt | null;
 }
 
 export function HighlightedText({
@@ -62,7 +69,7 @@ export function HighlightedText({
   selectedAnnotationId,
   onTextSelect,
 }: HighlightedTextProps) {
-  const [activePopover, setActivePopover] = useState<Annotation | null>(null);
+  const [activePopover, setActivePopover] = useState<AnnotationWithPrompt | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -156,7 +163,7 @@ export function HighlightedText({
     }
   }, [onTextSelect]);
 
-  const handleHighlightClick = useCallback((e: React.MouseEvent, annotation: Annotation) => {
+  const handleHighlightClick = useCallback((e: React.MouseEvent, annotation: AnnotationWithPrompt) => {
     e.stopPropagation();
     const rect = (e.target as HTMLElement).getBoundingClientRect();
     const containerRect = containerRef.current?.getBoundingClientRect();
@@ -199,15 +206,26 @@ export function HighlightedText({
 
       const colors = categoryColors[segment.annotation.category];
       const isSelected = selectedAnnotationId === segment.annotation.id;
+      const promptColor = segment.annotation.promptColor;
+
+      // Use prompt color if available, otherwise fall back to category colors
+      const highlightStyle = promptColor
+        ? {
+            backgroundColor: isSelected ? `${promptColor}60` : `${promptColor}30`,
+            // Add subtle border for selected state
+            boxShadow: isSelected ? `0 0 0 2px ${promptColor}` : undefined,
+          }
+        : undefined;
 
       return (
         <mark
           key={segment.annotation.id}
           className={`
             cursor-pointer rounded-sm px-0.5 -mx-0.5 transition-all duration-150
-            ${colors.bg} ${colors.hover}
-            ${isSelected ? `ring-2 ring-offset-1 ring-primary ${colors.bg.replace("/20", "/40")}` : ""}
+            ${!promptColor ? `${colors.bg} ${colors.hover}` : "hover:opacity-80"}
+            ${isSelected && !promptColor ? `ring-2 ring-offset-1 ring-primary ${colors.bg.replace("/20", "/40")}` : ""}
           `}
+          style={highlightStyle}
           onClick={(e) => handleHighlightClick(e, segment.annotation!)}
           data-testid={`highlight-${segment.annotation.id}`}
           role="button"
@@ -239,11 +257,13 @@ export function HighlightedText({
         >
           <Card className="w-80 p-4 shadow-lg">
             <div className="flex items-start justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <div
-                  className={`w-3 h-3 rounded-full ${
-                    categoryColors[activePopover.category].bg.replace("/20", "")
-                  }`}
+                  className="w-3 h-3 rounded-full"
+                  style={activePopover.promptColor ? { backgroundColor: activePopover.promptColor } : undefined}
+                  {...(!activePopover.promptColor && {
+                    className: `w-3 h-3 rounded-full ${categoryColors[activePopover.category].bg.replace("/20", "")}`,
+                  })}
                 />
                 <Badge variant="secondary" className="text-xs">
                   {categoryLabels[activePopover.category]}
@@ -252,6 +272,17 @@ export function HighlightedText({
                   <Bot className="h-3.5 w-3.5 text-muted-foreground" />
                 ) : (
                   <User className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+                {activePopover.promptText && (
+                  <span
+                    className="text-xs px-1.5 py-0.5 rounded"
+                    style={{
+                      backgroundColor: `${activePopover.promptColor}20`,
+                      color: activePopover.promptColor || undefined,
+                    }}
+                  >
+                    P{(activePopover.promptIndex ?? 0) + 1}
+                  </span>
                 )}
               </div>
               <button
@@ -271,6 +302,12 @@ export function HighlightedText({
             </p>
 
             <p className="text-sm text-foreground">{activePopover.note}</p>
+
+            {activePopover.promptText && (
+              <p className="mt-2 text-xs text-muted-foreground italic border-t pt-2">
+                <span className="font-medium">Prompt:</span> {activePopover.promptText}
+              </p>
+            )}
 
             {activePopover.confidenceScore !== null && activePopover.confidenceScore !== undefined && (
               <div className="mt-3 flex items-center gap-2">
