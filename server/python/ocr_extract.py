@@ -3,9 +3,28 @@
 
 import argparse
 import json
+import os
 import sys
 
+import numpy as np
 from pdf2image import convert_from_path
+from PIL import Image
+
+os.environ["DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
+MAX_SIDE = 960
+
+
+def _resize_if_needed(img: Image.Image) -> np.ndarray:
+    """Resize image so longest side is at most MAX_SIDE pixels.
+
+    PaddlePaddle 3.x on Apple Silicon segfaults on larger images.
+    """
+    w, h = img.size
+    scale = min(MAX_SIDE / w, MAX_SIDE / h, 1.0)
+    if scale < 1.0:
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    return np.array(img)
 
 
 def run_ppocr(pdf_path: str, lang: str = "en") -> dict:
@@ -15,27 +34,31 @@ def run_ppocr(pdf_path: str, lang: str = "en") -> dict:
     """
     from paddleocr import PaddleOCR
 
-    ocr = PaddleOCR(use_angle_cls=True, lang=lang, show_log=False)
+    ocr = PaddleOCR(
+        use_textline_orientation=False,
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
+        lang=lang,
+    )
 
-    images = convert_from_path(pdf_path, dpi=300)
+    images = convert_from_path(pdf_path, dpi=200)
     pages = []
     all_text_parts = []
 
     for i, img in enumerate(images):
-        # PaddleOCR can accept PIL images directly
-        import numpy as np
-        img_array = np.array(img)
-        result = ocr.ocr(img_array, cls=True)
+        img_array = _resize_if_needed(img)
+        result = ocr.predict(img_array)
 
         page_lines = []
         page_confidences = []
 
-        if result and result[0]:
-            for line in result[0]:
-                text = line[1][0]
-                confidence = line[1][1]
+        if result and len(result) > 0:
+            page_result = result[0]
+            rec_texts = page_result.get("rec_texts", [])
+            rec_scores = page_result.get("rec_scores", [])
+            for text, confidence in zip(rec_texts, rec_scores):
                 page_lines.append(text)
-                page_confidences.append(confidence)
+                page_confidences.append(float(confidence))
 
         page_text = "\n".join(page_lines)
         avg_confidence = (
@@ -63,7 +86,7 @@ def run_vl(pdf_path: str, lang: str = "en") -> dict:
     """Run PaddleOCR-VL directly on the PDF."""
     from paddleocr import PaddleOCRVL
 
-    ocr_vl = PaddleOCRVL(show_log=False)
+    ocr_vl = PaddleOCRVL()
     result = ocr_vl.predict(input=pdf_path)
 
     pages = []
