@@ -63,6 +63,15 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Verify database tables exist before starting the server
+  const { checkDatabaseHealth } = await import("./db");
+  const dbHealth = checkDatabaseHealth();
+  if (!dbHealth.ok) {
+    log(`DATABASE NOT INITIALIZED - missing tables: ${dbHealth.missing.join(", ")}. Run "npm run db:push" to fix.`, "db");
+  } else {
+    log("Database health check passed", "db");
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

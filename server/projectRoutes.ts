@@ -228,9 +228,14 @@ export function registerProjectRoutes(app: Express): void {
       }
       
       res.status(201).json(project);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating project:", error);
-      res.status(400).json({ error: "Failed to create project" });
+      const message = error?.message?.includes("no such table")
+        ? "Database not initialized. Run 'npm run db:push' to create tables."
+        : error?.name === "ZodError"
+          ? `Validation error: ${error.errors?.map((e: any) => e.message).join(", ")}`
+          : "Failed to create project";
+      res.status(400).json({ error: message });
     }
   });
 
