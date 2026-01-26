@@ -1,9 +1,16 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import path from "path";
 import multer from "multer";
-import { PDFParse } from "pdf-parse";
 import { storage } from "./storage";
 import { extractTextFromTxt } from "./chunker";
+import {
+  saveTempPdf,
+  extractPdfScreenshots,
+  runOcr,
+  cleanupTempFiles,
+} from "./ocrBridge";
+import { analyzePdfDifficulty, chooseOcrModel } from "./visionAnalysis";
 import {
   getEmbedding,
   analyzeChunkForIntent,
@@ -25,39 +32,9 @@ import {
 import { registerProjectRoutes } from "./projectRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
 
-// Detect garbled text from failed PDF extraction
-// Checks for high ratio of non-word characters or unusual patterns
-function isGarbledText(text: string): boolean {
-  if (!text || text.length < 100) return false;
-  
-  // Sample the first 2000 characters for analysis
-  const sample = text.slice(0, 2000);
-  
-  // Count normal words (sequences of 3+ alphabetic characters)
-  const words = sample.match(/[a-zA-Z]{3,}/g) || [];
-  
-  // Count special/unusual character patterns
-  const specialChars = sample.match(/[^\w\s.,;:!?'"()-]/g) || [];
-  const brackets = sample.match(/[\[\]{}\\|^~`@#$%&*+=<>]/g) || [];
-  
-  // Calculate ratios
-  const wordChars = words.join("").length;
-  const totalChars = sample.replace(/\s/g, "").length;
-  const wordRatio = totalChars > 0 ? wordChars / totalChars : 0;
-  const bracketRatio = totalChars > 0 ? brackets.length / totalChars : 0;
-  
-  // Text is likely garbled if:
-  // - Less than 40% of non-space characters form recognizable words
-  // - Or more than 10% are unusual bracket/symbol characters
-  // - Or average "word" length is very short (fragmented characters)
-  const avgWordLen = words.length > 0 ? wordChars / words.length : 0;
-  
-  return wordRatio < 0.4 || bracketRatio > 0.1 || (words.length > 10 && avgWordLen < 3);
-}
-
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = ["application/pdf", "text/plain"];
     const allowedExtensions = [".pdf", ".txt"];
@@ -87,19 +64,67 @@ export async function registerRoutes(
 
       // Extract text based on file type
       if (file.mimetype === "application/pdf" || file.originalname.endsWith(".pdf")) {
-        // Use pdf-parse to properly extract text from PDF
-        const parser = new PDFParse({ data: file.buffer });
-        const textResult = await parser.getText();
-        fullText = textResult.text;
-        await parser.destroy();
-        // Clean up whitespace
-        fullText = fullText.replace(/\s+/g, " ").trim();
-        
-        // Check if extracted text appears garbled (common with scanned PDFs or custom fonts)
-        if (isGarbledText(fullText)) {
-          return res.status(400).json({ 
-            message: "This PDF appears to be scanned or uses custom fonts that cannot be read. Please try: (1) Using a PDF with selectable text, or (2) Copy the text content into a .txt file and upload that instead." 
-          });
+        // OCR pipeline: save temp file → screenshots → vision analysis → OCR
+        let tempPdfPath: string | undefined;
+        let screenshotPaths: string[] = [];
+        let screenshotDir: string | undefined;
+
+        try {
+          // 1. Save buffer to temp file
+          tempPdfPath = await saveTempPdf(file.buffer);
+
+          // 2. Extract screenshots for vision analysis (page 0 + middle page)
+          // Extract page 0 first to learn total page count, then include middle page
+          const page0Result = await extractPdfScreenshots(tempPdfPath, [0]);
+          const totalPages = page0Result.total_pages;
+          const middlePage = Math.floor(totalPages / 2);
+
+          let screenshotResult: typeof page0Result;
+          if (middlePage > 0) {
+            // Clean up initial single-page screenshots before re-extracting
+            if (page0Result.screenshots.length > 0) {
+              await cleanupTempFiles(path.dirname(page0Result.screenshots[0]));
+            }
+            // Re-extract with both pages in one call
+            screenshotResult = await extractPdfScreenshots(tempPdfPath, [0, middlePage]);
+          } else {
+            screenshotResult = page0Result;
+          }
+          screenshotPaths = screenshotResult.screenshots;
+          if (screenshotPaths.length > 0) {
+            screenshotDir = path.dirname(screenshotPaths[0]);
+          }
+
+          // 3. GPT-4o vision analysis to determine difficulty
+          const analysis = await analyzePdfDifficulty(screenshotPaths);
+          console.log(`PDF analysis: difficulty=${analysis.difficulty}, handwriting=${analysis.handwritingType}`);
+
+          // 4. Choose and run OCR model based on analysis
+          let model = chooseOcrModel(analysis);
+          console.log(`Selected OCR model: ${model}`);
+
+          let ocrResult = await runOcr(tempPdfPath, model);
+          fullText = ocrResult.full_text;
+
+          // 5. Fallback: if PP-OCRv5 produces very little text, retry with VL
+          if (model === "ppocr" && fullText.replace(/\s/g, "").length < 50) {
+            console.log("PP-OCRv5 produced minimal text, retrying with PaddleOCR-VL");
+            ocrResult = await runOcr(tempPdfPath, "vl");
+            fullText = ocrResult.full_text;
+          }
+
+          // Clean up whitespace
+          fullText = fullText.replace(/\s+/g, " ").trim();
+        } finally {
+          // 6. Always clean up temp files
+          const cleanupPaths: string[] = [];
+          if (tempPdfPath) {
+            cleanupPaths.push(tempPdfPath, path.dirname(tempPdfPath));
+          }
+          if (screenshotDir) {
+            cleanupPaths.push(screenshotDir);
+          }
+          await cleanupTempFiles(...cleanupPaths);
         }
       } else {
         fullText = extractTextFromTxt(file.buffer.toString("utf-8"));

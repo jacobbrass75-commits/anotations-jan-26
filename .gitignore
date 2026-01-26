@@ -32,5 +32,10 @@ npm-debug.log*
 .config/
 .cache/
 
+# Python
+server/python/__pycache__/
+*.pyc
+.venv/
+
 # Database
 data/
