@@ -46,7 +46,9 @@ export function BatchUploadModal({
   const batchAdd = useBatchAddDocuments();
   const uploadMutation = useUploadDocument();
   
-  const [activeTab, setActiveTab] = useState<"library" | "upload">("library");
+  const [activeTab, setActiveTab] = useState<"library" | "upload">(
+    availableDocuments.length > 0 ? "library" : "upload"
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
   const [response, setResponse] = useState<BatchAddDocumentsResponse | null>(null);
@@ -68,7 +70,7 @@ export function BatchUploadModal({
       setSelectedIds(new Set());
       setResponse(null);
       setTargetFolderId(null);
-      setActiveTab("library");
+      setActiveTab(availableDocuments.length > 0 ? "library" : "upload");
       setFilesToUpload([]);
       setUploadedFiles([]);
       setIsUploading(false);

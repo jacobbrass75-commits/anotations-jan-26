@@ -546,7 +546,6 @@ export default function ProjectWorkspace() {
             <Button 
               variant="outline"
               onClick={() => setIsBatchUploadOpen(true)} 
-              disabled={availableDocuments.length === 0}
               data-testid="button-batch-upload"
             >
               <FolderUp className="h-4 w-4 mr-2" />
