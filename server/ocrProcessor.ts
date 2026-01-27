@@ -1,11 +1,15 @@
 import { spawn } from "child_process";
 import { writeFile, unlink, readFile, readdir, rm, mkdtemp } from "fs/promises";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { tmpdir } from "os";
 import OpenAI from "openai";
 import { storage } from "./storage";
 import { chunkTextV2 } from "./pipelineV2";
 import { generateDocumentSummary } from "./openai";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
