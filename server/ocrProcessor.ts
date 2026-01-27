@@ -196,7 +196,7 @@ export async function processWithVisionOcr(
                 content: [
                   {
                     type: "text",
-                    text: "Extract ALL text from this document page. Preserve the original layout, paragraphs, and formatting as much as possible. Output only the extracted text, nothing else.",
+                    text: "Extract ALL text from this scanned document page. Preserve paragraphs and reading order. For tables, render each row on its own line with columns separated by ' | '. For footnotes or marginalia, include them at the end marked with [Footnote] or [Margin]. Output only the extracted text, nothing else.",
                   },
                   {
                     type: "image_url",
@@ -208,7 +208,7 @@ export async function processWithVisionOcr(
                 ],
               },
             ],
-            max_tokens: 4096,
+            max_tokens: 8192,
           });
 
           return response.choices[0]?.message?.content || "";
