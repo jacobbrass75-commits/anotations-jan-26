@@ -546,6 +546,7 @@ export default function ProjectWorkspace() {
             <Button 
               variant="outline"
               onClick={() => setIsBatchUploadOpen(true)} 
+              disabled={availableDocuments.length === 0}
               data-testid="button-batch-upload"
             >
               <FolderUp className="h-4 w-4 mr-2" />
@@ -764,7 +765,7 @@ export default function ProjectWorkspace() {
                 onClick={async () => {
                   if (!uploadFile) return;
                   try {
-                    const doc = await uploadDocument.mutateAsync(uploadFile);
+                    const doc = await uploadDocument.mutateAsync({ file: uploadFile, ocrMode: "standard" });
                     await addDocument.mutateAsync({
                       projectId,
                       data: {

@@ -4,9 +4,16 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface FileUploadProps {
-  onUpload: (file: File) => Promise<void>;
+  onUpload: (file: File, ocrMode: string) => Promise<void>;
   isUploading: boolean;
   uploadProgress: number;
 }
@@ -14,6 +21,7 @@ interface FileUploadProps {
 export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUploadProps) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [ocrMode, setOcrMode] = useState<string>("standard");
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -55,8 +63,9 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
 
   const handleUpload = async () => {
     if (selectedFile) {
-      await onUpload(selectedFile);
+      await onUpload(selectedFile, ocrMode);
       setSelectedFile(null);
+      setOcrMode("standard");
     }
   };
 
@@ -82,20 +91,24 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
     );
   }
 
+  const isPdf = selectedFile
+    ? selectedFile.type === "application/pdf" || selectedFile.name.endsWith(".pdf")
+    : false;
+
   if (selectedFile) {
     return (
       <Card className="p-6">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-primary/10 rounded-lg">
-            <FileText className="h-8 w-8 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{selectedFile.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {(selectedFile.size / 1024).toFixed(1)} KB
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-primary/10 rounded-lg">
+              <FileText className="h-8 w-8 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{selectedFile.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {(selectedFile.size / 1024).toFixed(1)} KB
+              </p>
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -105,6 +118,30 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
             >
               <X className="h-4 w-4" />
             </Button>
+          </div>
+          {isPdf && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Text Extraction Mode
+              </label>
+              <Select value={ocrMode} onValueChange={setOcrMode}>
+                <SelectTrigger className="w-full" data-testid="select-ocr-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
+                  <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
+                  <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {ocrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
+                {ocrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
+                {ocrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+              </p>
+            </div>
+          )}
+          <div className="flex justify-end">
             <Button onClick={handleUpload} data-testid="button-upload-file">
               Upload
             </Button>
@@ -141,7 +178,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
               Drop PDF or TXT file, or click to browse
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Maximum file size: 10MB
+              Maximum file size: 50MB
             </p>
           </div>
           <div className="flex gap-2">

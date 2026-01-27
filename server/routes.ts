@@ -1,16 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import path from "path";
 import multer from "multer";
+import { PDFParse } from "pdf-parse";
 import { storage } from "./storage";
 import { extractTextFromTxt } from "./chunker";
-import {
-  saveTempPdf,
-  extractPdfScreenshots,
-  runOcr,
-  cleanupTempFiles,
-} from "./ocrBridge";
-import { analyzePdfDifficulty, chooseOcrModel } from "./visionAnalysis";
 import {
   getEmbedding,
   analyzeChunkForIntent,
@@ -31,6 +24,37 @@ import {
 } from "./pipelineV2";
 import { registerProjectRoutes } from "./projectRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
+import { saveTempPdf, processWithPaddleOcr, processWithVisionOcr } from "./ocrProcessor";
+
+// Detect garbled text from failed PDF extraction
+// Checks for high ratio of non-word characters or unusual patterns
+function isGarbledText(text: string): boolean {
+  if (!text || text.length < 100) return false;
+  
+  // Sample the first 2000 characters for analysis
+  const sample = text.slice(0, 2000);
+  
+  // Count normal words (sequences of 3+ alphabetic characters)
+  const words = sample.match(/[a-zA-Z]{3,}/g) || [];
+  
+  // Count special/unusual character patterns
+  const specialChars = sample.match(/[^\w\s.,;:!?'"()-]/g) || [];
+  const brackets = sample.match(/[\[\]{}\\|^~`@#$%&*+=<>]/g) || [];
+  
+  // Calculate ratios
+  const wordChars = words.join("").length;
+  const totalChars = sample.replace(/\s/g, "").length;
+  const wordRatio = totalChars > 0 ? wordChars / totalChars : 0;
+  const bracketRatio = totalChars > 0 ? brackets.length / totalChars : 0;
+  
+  // Text is likely garbled if:
+  // - Less than 40% of non-space characters form recognizable words
+  // - Or more than 10% are unusual bracket/symbol characters
+  // - Or average "word" length is very short (fragmented characters)
+  const avgWordLen = words.length > 0 ? wordChars / words.length : 0;
+  
+  return wordRatio < 0.4 || bracketRatio > 0.1 || (words.length > 10 && avgWordLen < 3);
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -60,116 +84,117 @@ export async function registerRoutes(
       }
 
       const file = req.file;
-      let fullText: string;
+      const ocrMode = (req.body.ocrMode as string) || "standard";
+      const isPdf = file.mimetype === "application/pdf" || file.originalname.endsWith(".pdf");
 
-      // Extract text based on file type
-      if (file.mimetype === "application/pdf" || file.originalname.endsWith(".pdf")) {
-        // OCR pipeline: save temp file → screenshots → vision analysis → OCR
-        let tempPdfPath: string | undefined;
-        let screenshotPaths: string[] = [];
-        let screenshotDir: string | undefined;
+      // For non-PDF files or standard mode, use synchronous processing
+      if (!isPdf || ocrMode === "standard") {
+        let fullText: string;
 
-        try {
-          // 1. Save buffer to temp file
-          tempPdfPath = await saveTempPdf(file.buffer);
-
-          // 2. Extract screenshots for vision analysis (page 0 + middle page)
-          // Extract page 0 first to learn total page count, then include middle page
-          const page0Result = await extractPdfScreenshots(tempPdfPath, [0]);
-          const totalPages = page0Result.total_pages;
-          const middlePage = Math.floor(totalPages / 2);
-
-          let screenshotResult: typeof page0Result;
-          if (middlePage > 0) {
-            // Clean up initial single-page screenshots before re-extracting
-            if (page0Result.screenshots.length > 0) {
-              await cleanupTempFiles(path.dirname(page0Result.screenshots[0]));
-            }
-            // Re-extract with both pages in one call
-            screenshotResult = await extractPdfScreenshots(tempPdfPath, [0, middlePage]);
-          } else {
-            screenshotResult = page0Result;
-          }
-          screenshotPaths = screenshotResult.screenshots;
-          if (screenshotPaths.length > 0) {
-            screenshotDir = path.dirname(screenshotPaths[0]);
-          }
-
-          // 3. GPT-4o vision analysis to determine difficulty
-          const analysis = await analyzePdfDifficulty(screenshotPaths);
-          console.log(`PDF analysis: difficulty=${analysis.difficulty}, handwriting=${analysis.handwritingType}`);
-
-          // 4. Choose and run OCR model based on analysis
-          let model = chooseOcrModel(analysis);
-          console.log(`Selected OCR model: ${model}`);
-
-          let ocrResult = await runOcr(tempPdfPath, model);
-          fullText = ocrResult.full_text;
-
-          // 5. Fallback: if PP-OCRv5 produces very little text, retry with VL
-          if (model === "ppocr" && fullText.replace(/\s/g, "").length < 50) {
-            console.log("PP-OCRv5 produced minimal text, retrying with PaddleOCR-VL");
-            ocrResult = await runOcr(tempPdfPath, "vl");
-            fullText = ocrResult.full_text;
-          }
-
+        if (isPdf) {
+          // Use pdf-parse to properly extract text from PDF
+          const parser = new PDFParse({ data: file.buffer });
+          const textResult = await parser.getText();
+          fullText = textResult.text;
+          await parser.destroy();
           // Clean up whitespace
           fullText = fullText.replace(/\s+/g, " ").trim();
-        } finally {
-          // 6. Always clean up temp files
-          const cleanupPaths: string[] = [];
-          if (tempPdfPath) {
-            cleanupPaths.push(tempPdfPath, path.dirname(tempPdfPath));
+
+          // Check if extracted text appears garbled (common with scanned PDFs or custom fonts)
+          if (isGarbledText(fullText)) {
+            return res.status(400).json({
+              message: "This PDF appears to be scanned or uses custom fonts that cannot be read. Please try: (1) Using a PDF with selectable text, (2) Copy the text content into a .txt file and upload that instead, or (3) Re-upload with Advanced OCR or Vision OCR mode."
+            });
           }
-          if (screenshotDir) {
-            cleanupPaths.push(screenshotDir);
-          }
-          await cleanupTempFiles(...cleanupPaths);
+        } else {
+          fullText = extractTextFromTxt(file.buffer.toString("utf-8"));
         }
-      } else {
-        fullText = extractTextFromTxt(file.buffer.toString("utf-8"));
+
+        if (!fullText || fullText.length < 10) {
+          return res.status(400).json({ message: "Could not extract text from file" });
+        }
+
+        // Create document
+        const doc = await storage.createDocument({
+          filename: file.originalname,
+          fullText,
+        });
+
+        // Chunk the text using V2 chunking (with noise filtering and larger chunks)
+        const chunks = chunkTextV2(fullText);
+
+        // Store chunks (don't generate embeddings yet - do it during analysis)
+        for (const chunk of chunks) {
+          await storage.createChunk({
+            documentId: doc.id,
+            text: chunk.text,
+            startPosition: chunk.originalStartPosition,
+            endPosition: chunk.originalStartPosition + chunk.text.length,
+          });
+        }
+
+        // Update document with chunk count
+        await storage.updateDocument(doc.id, { chunkCount: chunks.length });
+
+        // Generate summary in background
+        generateDocumentSummary(fullText).then(async (summaryData) => {
+          await storage.updateDocument(doc.id, {
+            summary: summaryData.summary,
+            mainArguments: summaryData.mainArguments,
+            keyConcepts: summaryData.keyConcepts,
+          });
+        });
+
+        const updatedDoc = await storage.getDocument(doc.id);
+        return res.json(updatedDoc);
       }
 
-      if (!fullText || fullText.length < 10) {
-        return res.status(400).json({ message: "Could not extract text from file" });
-      }
+      // OCR modes: save temp PDF, create doc in processing state, fire-and-forget
+      const tempPdfPath = await saveTempPdf(file.buffer);
 
-      // Create document
       const doc = await storage.createDocument({
         filename: file.originalname,
-        fullText,
+        fullText: "",
       });
+      await storage.updateDocument(doc.id, { status: "processing" });
 
-      // Chunk the text using V2 chunking (with noise filtering and larger chunks)
-      const chunks = chunkTextV2(fullText);
+      const updatedDoc = await storage.getDocument(doc.id);
 
-      // Store chunks (don't generate embeddings yet - do it during analysis)
-      for (const chunk of chunks) {
-        await storage.createChunk({
-          documentId: doc.id,
-          text: chunk.text,
-          startPosition: chunk.originalStartPosition,
-          endPosition: chunk.originalStartPosition + chunk.text.length,
+      // Fire-and-forget background processing
+      if (ocrMode === "advanced") {
+        processWithPaddleOcr(doc.id, tempPdfPath).catch((err) => {
+          console.error("Background PaddleOCR error:", err);
+        });
+      } else if (ocrMode === "vision") {
+        processWithVisionOcr(doc.id, tempPdfPath).catch((err) => {
+          console.error("Background Vision OCR error:", err);
         });
       }
 
-      // Update document with chunk count
-      await storage.updateDocument(doc.id, { chunkCount: chunks.length });
-
-      // Generate summary in background
-      generateDocumentSummary(fullText).then(async (summaryData) => {
-        await storage.updateDocument(doc.id, {
-          summary: summaryData.summary,
-          mainArguments: summaryData.mainArguments,
-          keyConcepts: summaryData.keyConcepts,
-        });
-      });
-
-      const updatedDoc = await storage.getDocument(doc.id);
-      res.json(updatedDoc);
+      return res.status(202).json(updatedDoc);
     } catch (error) {
       console.error("Upload error:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
+    }
+  });
+
+  // Get document processing status (for polling)
+  app.get("/api/documents/:id/status", async (req: Request, res: Response) => {
+    try {
+      const doc = await storage.getDocument(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      res.json({
+        id: doc.id,
+        status: doc.status,
+        processingError: doc.processingError,
+        filename: doc.filename,
+        chunkCount: doc.chunkCount,
+      });
+    } catch (error) {
+      console.error("Error fetching document status:", error);
+      res.status(500).json({ message: "Failed to fetch document status" });
     }
   });
 
@@ -213,6 +238,13 @@ export async function registerRoutes(
       const doc = await storage.getDocument(req.params.id);
       if (!doc) {
         return res.status(404).json({ message: "Document not found" });
+      }
+
+      if (doc.status === "processing") {
+        return res.status(409).json({ message: "Document is still processing. Please wait until processing completes." });
+      }
+      if (doc.status === "error") {
+        return res.status(409).json({ message: "Document processing failed. Please re-upload the document." });
       }
 
       // Update document with intent

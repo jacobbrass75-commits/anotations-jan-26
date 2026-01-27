@@ -1,7 +1,6 @@
 import { useRef, useEffect } from "react";
-import { FileText, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { FileText, Loader2, AlertCircle } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HighlightedText } from "./HighlightedText";
@@ -77,6 +76,34 @@ export function DocumentViewer({
           <h3 className="text-lg font-semibold text-foreground mb-2">No Document Loaded</h3>
           <p className="text-sm text-muted-foreground">
             Upload a PDF or TXT file to start annotating and analyzing your research materials.
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  if (document.status === "processing") {
+    return (
+      <Card className="h-full flex flex-col items-center justify-center">
+        <div className="text-center p-8 max-w-sm">
+          <Loader2 className="mx-auto h-12 w-12 text-primary animate-spin mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">Processing Document</h3>
+          <p className="text-sm text-muted-foreground">
+            Extracting text from your scanned PDF. This may take a moment...
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  if (document.status === "error") {
+    return (
+      <Card className="h-full flex flex-col items-center justify-center">
+        <div className="text-center p-8 max-w-sm">
+          <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">Processing Failed</h3>
+          <p className="text-sm text-muted-foreground">
+            {document.processingError || "Could not extract text from this PDF."}
           </p>
         </div>
       </Card>

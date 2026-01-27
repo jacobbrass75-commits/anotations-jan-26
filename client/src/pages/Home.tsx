@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { BookOpen, Upload, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { DocumentSummary } from "@/components/DocumentSummary";
 import { ManualAnnotationDialog } from "@/components/ManualAnnotationDialog";
 import {
   useDocument,
+  useDocumentStatus,
   useAnnotations,
   useUploadDocument,
   useSetIntent,
@@ -21,10 +22,12 @@ import {
   useDeleteAnnotation,
   useSearchDocument,
 } from "@/hooks/useDocument";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Annotation, AnnotationCategory, SearchResult } from "@shared/schema";
 
 export default function Home() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(null);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -38,6 +41,7 @@ export default function Home() {
   } | null>(null);
 
   const { data: document, isLoading: isDocumentLoading } = useDocument(currentDocumentId);
+  const { data: documentStatus } = useDocumentStatus(currentDocumentId);
   const { data: annotations = [], isLoading: isAnnotationsLoading } = useAnnotations(currentDocumentId);
 
   const uploadMutation = useUploadDocument();
@@ -47,14 +51,38 @@ export default function Home() {
   const deleteAnnotationMutation = useDeleteAnnotation();
   const searchMutation = useSearchDocument();
 
-  const handleUpload = useCallback(async (file: File) => {
+  // Track previous status to detect transitions
+  const prevStatusRef = useRef<string | undefined>();
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current;
+    const currentStatus = documentStatus?.status;
+    prevStatusRef.current = currentStatus;
+
+    if (prevStatus === "processing" && currentStatus === "ready") {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents", currentDocumentId] });
+      toast({
+        title: "Processing complete",
+        description: `${documentStatus?.filename} is ready for analysis.`,
+      });
+    }
+    if (prevStatus === "processing" && currentStatus === "error") {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents", currentDocumentId] });
+      toast({
+        title: "Processing failed",
+        description: documentStatus?.processingError || "Could not process the PDF.",
+        variant: "destructive",
+      });
+    }
+  }, [documentStatus?.status, currentDocumentId, queryClient, toast, documentStatus?.filename, documentStatus?.processingError]);
+
+  const handleUpload = useCallback(async (file: File, ocrMode: string) => {
     setUploadProgress(10);
     try {
       const interval = setInterval(() => {
         setUploadProgress((prev) => Math.min(prev + 10, 90));
       }, 300);
 
-      const result = await uploadMutation.mutateAsync(file);
+      const result = await uploadMutation.mutateAsync({ file, ocrMode });
       clearInterval(interval);
       setUploadProgress(100);
 
@@ -62,10 +90,17 @@ export default function Home() {
       setShowUpload(false);
       setHasAnalyzed(false);
 
-      toast({
-        title: "Document uploaded",
-        description: `${result.filename} is ready for analysis.`,
-      });
+      if (result.status === "processing") {
+        toast({
+          title: "Document uploaded",
+          description: `Processing ${result.filename}. This may take a moment...`,
+        });
+      } else {
+        toast({
+          title: "Document uploaded",
+          description: `${result.filename} is ready for analysis.`,
+        });
+      }
     } catch (error) {
       toast({
         title: "Upload failed",

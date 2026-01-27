@@ -84,7 +84,7 @@ export function MultiPromptPanel({
   isSavingTemplate = false,
 }: MultiPromptPanelProps) {
   const [prompts, setPrompts] = useState<Prompt[]>([
-    { id: crypto.randomUUID(), text: "", color: getPromptColor(0) },
+    { id: Math.random().toString(36).slice(2), text: "", color: getPromptColor(0) },
   ]);
   const [thoroughness, setThoroughness] =
     useState<ThoroughnessLevel>("standard");
@@ -96,7 +96,7 @@ export function MultiPromptPanel({
     setPrompts((prev) => [
       ...prev,
       {
-        id: crypto.randomUUID(),
+        id: Math.random().toString(36).slice(2),
         text: "",
         color: getPromptColor(newIndex),
       },
@@ -138,7 +138,7 @@ export function MultiPromptPanel({
   const handleLoadTemplate = useCallback(
     (template: PromptTemplate) => {
       const loadedPrompts = template.prompts.map((p, i) => ({
-        id: crypto.randomUUID(),
+        id: Math.random().toString(36).slice(2),
         text: p.text,
         color: p.color || getPromptColor(i),
       }));

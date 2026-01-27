@@ -46,9 +46,7 @@ export function BatchUploadModal({
   const batchAdd = useBatchAddDocuments();
   const uploadMutation = useUploadDocument();
   
-  const [activeTab, setActiveTab] = useState<"library" | "upload">(
-    availableDocuments.length > 0 ? "library" : "upload"
-  );
+  const [activeTab, setActiveTab] = useState<"library" | "upload">("library");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
   const [response, setResponse] = useState<BatchAddDocumentsResponse | null>(null);
@@ -70,7 +68,7 @@ export function BatchUploadModal({
       setSelectedIds(new Set());
       setResponse(null);
       setTargetFolderId(null);
-      setActiveTab(availableDocuments.length > 0 ? "library" : "upload");
+      setActiveTab("library");
       setFilesToUpload([]);
       setUploadedFiles([]);
       setIsUploading(false);
@@ -179,7 +177,7 @@ export function BatchUploadModal({
       setUploadProgress(Math.round((i / filesToUpload.length) * 100));
 
       try {
-        const doc = await uploadMutation.mutateAsync(file);
+        const doc = await uploadMutation.mutateAsync({ file, ocrMode: "standard" });
         uploadedDocIds.push(doc.id);
         setUploadedFiles(prev => prev.map((f, idx) => 
           idx === i ? { ...f, status: "success", documentId: doc.id } : f

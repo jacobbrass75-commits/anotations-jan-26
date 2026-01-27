@@ -15,6 +15,29 @@ export function useDocument(id: string | null) {
   });
 }
 
+export interface DocumentStatus {
+  id: string;
+  status: string;
+  processingError: string | null;
+  filename: string;
+  chunkCount: number;
+}
+
+export function useDocumentStatus(id: string | null) {
+  return useQuery<DocumentStatus>({
+    queryKey: ["/api/documents", id, "status"],
+    enabled: !!id,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data && (data.status === "ready" || data.status === "error")) {
+        return false;
+      }
+      return 2000;
+    },
+    staleTime: 0,
+  });
+}
+
 export function useAnnotations(documentId: string | null) {
   return useQuery<Annotation[]>({
     queryKey: ["/api/documents", documentId, "annotations"],
@@ -26,9 +49,10 @@ export function useUploadDocument() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, ocrMode }: { file: File; ocrMode: string }) => {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("ocrMode", ocrMode);
 
       const response = await fetch("/api/upload", {
         method: "POST",

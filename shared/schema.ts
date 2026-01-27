@@ -29,6 +29,8 @@ export const documents = sqliteTable("documents", {
   mainArguments: text("main_arguments", { mode: "json" }).$type<string[]>(),
   keyConcepts: text("key_concepts", { mode: "json" }).$type<string[]>(),
   chunkCount: integer("chunk_count").default(0).notNull(),
+  status: text("status").notNull().default("ready"),
+  processingError: text("processing_error"),
 });
 
 export const documentsRelations = relations(documents, ({ many }) => ({
@@ -85,7 +87,9 @@ export const annotationsRelations = relations(annotations, ({ one }) => ({
 export const insertDocumentSchema = createInsertSchema(documents).omit({
   id: true,
   uploadDate: true,
-  chunkCount: true
+  chunkCount: true,
+  status: true,
+  processingError: true,
 });
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
