@@ -56,6 +56,7 @@ export function BatchUploadModal({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
+  const [batchOcrMode, setBatchOcrMode] = useState<string>("standard");
 
   useEffect(() => {
     if (open) {
@@ -73,6 +74,7 @@ export function BatchUploadModal({
       setUploadedFiles([]);
       setIsUploading(false);
       setUploadProgress(0);
+      setBatchOcrMode("standard");
     }
   }, [open]);
 
@@ -177,7 +179,7 @@ export function BatchUploadModal({
       setUploadProgress(Math.round((i / filesToUpload.length) * 100));
 
       try {
-        const doc = await uploadMutation.mutateAsync({ file, ocrMode: "standard" });
+        const doc = await uploadMutation.mutateAsync({ file, ocrMode: batchOcrMode });
         uploadedDocIds.push(doc.id);
         setUploadedFiles(prev => prev.map((f, idx) => 
           idx === i ? { ...f, status: "success", documentId: doc.id } : f
@@ -416,7 +418,7 @@ export function BatchUploadModal({
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-medium">Drop files here or click to browse</p>
-                          <p className="text-xs text-muted-foreground mt-1">PDF and TXT files, max 10MB each</p>
+                          <p className="text-xs text-muted-foreground mt-1">PDF and TXT files, max 50MB each</p>
                         </div>
                         <div className="flex gap-2">
                           <Badge variant="secondary">PDF</Badge>
@@ -455,6 +457,27 @@ export function BatchUploadModal({
                           ))}
                         </div>
                       </ScrollArea>
+                    </div>
+                  )}
+
+                  {filesToUpload.some(f => f.type === "application/pdf" || f.name.endsWith(".pdf")) && (
+                    <div className="space-y-2">
+                      <Label>Text Extraction Mode (for PDFs)</Label>
+                      <Select value={batchOcrMode} onValueChange={setBatchOcrMode}>
+                        <SelectTrigger data-testid="select-batch-ocr-mode">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
+                          <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
+                          <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {batchOcrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
+                        {batchOcrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
+                        {batchOcrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+                      </p>
                     </div>
                   )}
 

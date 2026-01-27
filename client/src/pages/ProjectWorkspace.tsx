@@ -254,6 +254,7 @@ export default function ProjectWorkspace() {
   const [generatingCitationFor, setGeneratingCitationFor] = useState<string | null>(null);
   const [generatingFootnoteFor, setGeneratingFootnoteFor] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadOcrMode, setUploadOcrMode] = useState<string>("standard");
   const [addDocTab, setAddDocTab] = useState<"library" | "upload">("library");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadDocument = useUploadDocument();
@@ -680,6 +681,7 @@ export default function ProjectWorkspace() {
         setIsAddDocOpen(open);
         if (!open) {
           setUploadFile(null);
+          setUploadOcrMode("standard");
           setSelectedDocId("");
           setAddDocTab("library");
         }
@@ -743,10 +745,30 @@ export default function ProjectWorkspace() {
                 ) : (
                   <>
                     <p className="text-sm text-muted-foreground">Click to select a PDF or TXT file</p>
-                    <p className="text-xs text-muted-foreground mt-1">Max 10MB</p>
+                    <p className="text-xs text-muted-foreground mt-1">Max 50MB</p>
                   </>
                 )}
               </div>
+              {uploadFile && (uploadFile.type === "application/pdf" || uploadFile.name.endsWith(".pdf")) && (
+                <div className="space-y-1.5">
+                  <Label>Text Extraction Mode</Label>
+                  <Select value={uploadOcrMode} onValueChange={setUploadOcrMode}>
+                    <SelectTrigger data-testid="select-ocr-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
+                      <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
+                      <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {uploadOcrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
+                    {uploadOcrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
+                    {uploadOcrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+                  </p>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
           <DialogFooter>
@@ -765,7 +787,7 @@ export default function ProjectWorkspace() {
                 onClick={async () => {
                   if (!uploadFile) return;
                   try {
-                    const doc = await uploadDocument.mutateAsync({ file: uploadFile, ocrMode: "standard" });
+                    const doc = await uploadDocument.mutateAsync({ file: uploadFile, ocrMode: uploadOcrMode });
                     await addDocument.mutateAsync({
                       projectId,
                       data: {
