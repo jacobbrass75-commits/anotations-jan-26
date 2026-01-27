@@ -30,7 +30,7 @@ SourceAnnotator is a document annotation tool that uses AI (OpenAI) to automatic
 
 | Table | Purpose | Key Fields |
 |-------|---------|------------|
-| `documents` | Main document storage | id, filename, fullText, uploadDate, userIntent, summary, mainArguments, keyConcepts, chunkCount |
+| `documents` | Main document storage | id, filename, fullText, uploadDate, userIntent, summary, mainArguments, keyConcepts, chunkCount, status, processingError |
 | `textChunks` | Text segmentation | id, documentId, text, startPosition, endPosition, sectionTitle, embedding |
 | `annotations` | Document annotations | id, documentId, chunkId, positions, highlightedText, category, note, isAiGenerated, confidenceScore |
 | `users` | Legacy user table | username, password |
@@ -67,18 +67,20 @@ SourceAnnotator is a document annotation tool that uses AI (OpenAI) to automatic
 | `index.ts` | Express app entry point | `log()` function |
 | `db.ts` | SQLite/Drizzle database init | `db`, `sqlite` |
 | `storage.ts` | Document/chunk/annotation CRUD | `DatabaseStorage` class |
-| `routes.ts` | Core document API routes | Route handlers |
+| `routes.ts` | Core document API routes (upload with OCR modes, analysis, annotations) | Route handlers |
 | `projectRoutes.ts` | Project management routes | Route handlers |
 | `projectStorage.ts` | Project/folder/doc CRUD | `ProjectStorage` class |
+| `ocrProcessor.ts` | Background OCR processing (PaddleOCR + GPT-4o Vision) | `saveTempPdf()`, `processWithPaddleOcr()`, `processWithVisionOcr()` |
 
 ### API Routes (`routes.ts`)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/upload` | POST | Upload PDF/TXT file |
+| `/api/upload` | POST | Upload PDF/TXT file (accepts `ocrMode`: standard, advanced, vision) |
 | `/api/documents` | GET | List all documents |
 | `/api/documents/:id` | GET | Get single document |
-| `/api/documents/:id/set-intent` | POST | Trigger AI analysis |
+| `/api/documents/:id/status` | GET | Poll document processing status (for OCR modes) |
+| `/api/documents/:id/set-intent` | POST | Trigger AI analysis (rejects if processing/error) |
 | `/api/documents/:id/annotations` | GET | Get annotations |
 | `/api/documents/:id/annotate` | POST | Create manual annotation |
 | `/api/annotations/:id` | PUT/DELETE | Update/delete annotation |
@@ -110,11 +112,56 @@ SourceAnnotator is a document annotation tool that uses AI (OpenAI) to automatic
 | `openai.ts` | OpenAI API integration | `getEmbedding()`, `analyzeChunkForIntent()`, `generateDocumentSummary()`, `searchDocument()`, `extractCitationMetadata()` |
 | `chunker.ts` | Text segmentation | `chunkText()`, `extractTextFromTxt()` |
 | `pipelineV2.ts` | Three-phase annotation pipeline | `filterTextNoise()`, `chunkTextV2()`, Generator/Verifier/Refiner phases |
+| `ocrProcessor.ts` | Background OCR processing | `saveTempPdf()`, `processWithPaddleOcr()`, `processWithVisionOcr()`, `cleanupTempFiles()` |
 | `contextGenerator.ts` | Retrieval context generation | `generateRetrievalContext()`, `generateProjectContextSummary()`, `embedText()` |
 | `citationGenerator.ts` | Chicago citation formatting | `generateChicagoFootnote()`, `generateChicagoBibliography()`, `generateInlineCitation()` |
 | `projectSearch.ts` | Project-wide search | `globalSearch()` |
 
-### Pipeline V2 Architecture
+### OCR Pipeline (`ocrProcessor.ts` + `server/python/`)
+
+```
+Upload (POST /api/upload with ocrMode)
+      ↓
+┌─────────────── ocrMode? ───────────────┐
+│                                        │
+│  "standard"        "advanced"         "vision"
+│  pdf-parse (JS)    PaddleOCR (Py)     GPT-4o Vision
+│  sync, 200         async, 202         async, 202
+│       ↓                 ↓                  ↓
+│  Return doc      Save temp PDF       Save temp PDF
+│  immediately     status=processing   status=processing
+│                       ↓                  ↓
+│                  pdf_pipeline.py     pdf_to_images.py
+│                  --mode=ocr          (PyMuPDF, 200 DPI)
+│                  --model=ppocr            ↓
+│                       ↓             GPT-4o Vision x N pages
+│                  OCR text out       (p-limit concurrency=5)
+│                       ↓             tables → pipe-delimited
+│                       └──────┬───────────┘
+│                              ↓
+│                     Update fullText + chunk
+│                     status → "ready" or "error"
+│                     Generate summary (background)
+│                              ↓
+│                     Client polls /status → stops
+└────────────────────────────────────────┘
+```
+
+**Python Scripts:**
+
+| File | Purpose |
+|------|---------|
+| `server/python/pdf_to_images.py` | Convert PDF pages to PNG images at given DPI using PyMuPDF |
+| `server/python/pdf_pipeline.py` | PaddleOCR pipeline: renders pages, runs OCR, outputs text to stdout |
+
+**Document Status Lifecycle:**
+- `ready` — text extracted, available for analysis
+- `processing` — OCR running in background
+- `error` — OCR failed (message in `processingError`)
+
+On server restart, stuck `processing` docs are automatically set to `error`.
+
+### Pipeline V2 Architecture (Annotation)
 
 ```
 Document Upload
@@ -174,7 +221,8 @@ Store with absolute positions
 - `useDocuments()` - Query all documents
 - `useDocument(id)` - Fetch single document
 - `useAnnotations(documentId)` - Fetch annotations
-- `useUploadDocument()` - Upload file mutation
+- `useUploadDocument()` - Upload file mutation (accepts `{ file, ocrMode }`)
+- `useDocumentStatus(id)` - Poll document processing status (auto-stops on ready/error)
 - `useSetIntent()` - Trigger analysis with thoroughness
 - `useAddAnnotation()` - Create annotation
 - `useSearchDocument()` - Search within document
@@ -192,7 +240,7 @@ Store with absolute positions
 
 | Component | Purpose |
 |-----------|---------|
-| `FileUpload.tsx` | Drag-and-drop file upload with progress |
+| `FileUpload.tsx` | Drag-and-drop file upload with progress; OCR mode dropdown (standard/advanced/vision) for PDFs |
 | `DocumentViewer.tsx` | Text display with highlight rendering |
 | `AnnotationSidebar.tsx` | Annotation list with filtering |
 | `IntentPanel.tsx` | Research intent input + thoroughness selector |
@@ -200,7 +248,7 @@ Store with absolute positions
 | `SearchPanel.tsx` | Search interface with results |
 | `DocumentSummary.tsx` | Summary/arguments/concepts display |
 | `BatchAnalysisModal.tsx` | Batch analysis configuration |
-| `BatchUploadModal.tsx` | Batch document upload |
+| `BatchUploadModal.tsx` | Batch document upload with OCR mode selector |
 | `HighlightedText.tsx` | Text rendering with highlights |
 | `ThemeToggle.tsx` | Dark/light mode toggle |
 | `ui/*` | 50+ Shadcn UI components |
@@ -227,8 +275,13 @@ Store with absolute positions
 ## KEY FEATURES
 
 ### Document Analysis
-- Upload PDF or TXT files
-- Automatic text extraction (with garbled text detection)
+- Upload PDF or TXT files (max 50MB)
+- Three text extraction modes for PDFs:
+  - **Standard**: pdf-parse (JS), fast, digital PDFs only
+  - **Advanced OCR**: PaddleOCR at 200 DPI, async background processing for scanned PDFs
+  - **Vision OCR**: GPT-4o Vision per page (5 concurrent), best for tables and complex layouts
+- Garbled text detection for standard mode
+- Async processing with status polling for OCR modes
 - Chunking with sentence boundary detection
 - AI-powered annotation extraction
 
@@ -266,9 +319,14 @@ Store with absolute positions
 - Express.js (HTTP server)
 - Drizzle ORM (database)
 - SQLite (data storage)
-- OpenAI API (AI analysis)
-- Multer (file uploads)
-- P-Limit (concurrency control)
+- OpenAI API (AI analysis + Vision OCR)
+- pdf-parse (digital PDF text extraction)
+- Multer (file uploads, 50MB limit)
+- P-Limit (concurrency control for Vision OCR)
+
+**Python (OCR):**
+- PyMuPDF (PDF to image conversion)
+- PaddleOCR (optical character recognition)
 
 **Frontend:**
 - React 18
@@ -299,4 +357,4 @@ Store with absolute positions
 
 ---
 
-*Generated: January 2026*
+*Last updated: January 27, 2026 — Added OCR pipeline (Standard/Advanced/Vision modes)*
