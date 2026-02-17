@@ -39,10 +39,12 @@ export function DocumentViewer({
         `[data-testid="highlight-${selectedAnnotationId}"]`
       );
       if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        requestAnimationFrame(() => {
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
       }
     }
-  }, [selectedAnnotationId]);
+  }, [selectedAnnotationId, annotations.length, document?.id]);
 
   if (isLoading) {
     return (

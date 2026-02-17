@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   useProject,
@@ -75,6 +75,7 @@ const SOURCE_TYPES = [
 
 export default function ProjectDocumentPage() {
   const [, params] = useRoute("/projects/:projectId/documents/:docId");
+  const [location] = useLocation();
   const projectId = params?.projectId || "";
   const projectDocId = params?.docId || "";
   const { toast } = useToast();
@@ -99,6 +100,7 @@ export default function ProjectDocumentPage() {
     bibliography: string;
   } | null>(null);
   const [isAutoFilling, setIsAutoFilling] = useState(false);
+  const [hasAppliedDeepLink, setHasAppliedDeepLink] = useState(false);
 
   // Queries
   const { data: project } = useProject(projectId);
@@ -120,6 +122,24 @@ export default function ProjectDocumentPage() {
 
   const { data: projectAnnotations = [], isLoading: annotationsLoading } =
     useProjectAnnotations(projectDocId);
+
+  const deepLinkQuery = useMemo(() => {
+    const queryFromLocation = location.includes("?") ? location.slice(location.indexOf("?")) : "";
+    if (queryFromLocation) return queryFromLocation;
+    if (typeof window === "undefined") return "";
+    return window.location.search || "";
+  }, [location]);
+
+  const { deepLinkAnnotationId, deepLinkStartPosition } = useMemo(() => {
+    const params = new URLSearchParams(deepLinkQuery);
+    const annotationId = params.get("annotationId");
+    const startRaw = params.get("start");
+    const parsedStart = startRaw ? Number(startRaw) : null;
+    return {
+      deepLinkAnnotationId: annotationId,
+      deepLinkStartPosition: Number.isFinite(parsedStart) ? parsedStart : null,
+    };
+  }, [deepLinkQuery]);
 
   // Mutations
   const createAnnotation = useCreateProjectAnnotation();
@@ -184,6 +204,43 @@ export default function ProjectDocumentPage() {
       setHasAnalyzed(true);
     }
   }, [projectAnnotations.length]);
+
+  // If we arrive from global search with an annotation target, select it once data is loaded.
+  useEffect(() => {
+    if (hasAppliedDeepLink) return;
+
+    if (!deepLinkAnnotationId && deepLinkStartPosition === null) {
+      setHasAppliedDeepLink(true);
+      return;
+    }
+
+    if (annotations.length === 0) {
+      if (!annotationsLoading) {
+        setHasAppliedDeepLink(true);
+      }
+      return;
+    }
+
+    const targetById = deepLinkAnnotationId
+      ? annotations.find((a) => a.id === deepLinkAnnotationId)
+      : undefined;
+    const targetByStart =
+      deepLinkStartPosition !== null
+        ? annotations.find((a) => a.startPosition === deepLinkStartPosition)
+        : undefined;
+    const target = targetById || targetByStart;
+
+    if (target) {
+      setSelectedAnnotationId(target.id);
+    }
+    setHasAppliedDeepLink(true);
+  }, [
+    hasAppliedDeepLink,
+    deepLinkAnnotationId,
+    deepLinkStartPosition,
+    annotations,
+    annotationsLoading,
+  ]);
 
   // Handlers
   const handleAnalyze = useCallback(

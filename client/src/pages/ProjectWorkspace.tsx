@@ -400,7 +400,15 @@ export default function ProjectWorkspace() {
     }
     const projectDoc = projectDocuments.find(pd => pd.documentId === result.documentId);
     if (projectDoc) {
-      setLocation(`/projects/${projectId}/documents/${projectDoc.id}`);
+      const params = new URLSearchParams();
+      if (result.annotationId) {
+        params.set("annotationId", result.annotationId);
+      }
+      if (typeof result.startPosition === "number") {
+        params.set("start", String(result.startPosition));
+      }
+      const query = params.toString();
+      setLocation(`/projects/${projectId}/documents/${projectDoc.id}${query ? `?${query}` : ""}`);
     } else {
       toast({ title: "Document Not Found", description: "The document may have been removed from this project", variant: "destructive" });
     }
@@ -814,7 +822,7 @@ export default function ProjectWorkspace() {
       </Dialog>
 
       <Dialog open={!!citationModal} onOpenChange={() => setCitationModal(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Chicago Citation</DialogTitle>
             <DialogDescription>
