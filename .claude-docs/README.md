@@ -6,6 +6,7 @@ This folder contains comprehensive documentation of the SourceAnnotator codebase
 
 | File | Description |
 |------|-------------|
+| [milestone-reference-2026-02-17.md](milestone-reference-2026-02-17.md) | Consolidated milestone snapshot + quick operational/runbook reference |
 | [overview.md](overview.md) | High-level project overview, tech stack, and architecture |
 | [database-schema.md](database-schema.md) | Complete database schema with all tables, columns, types, and relationships |
 | [server-api.md](server-api.md) | All API endpoints with request/response shapes |
@@ -23,4 +24,4 @@ This folder contains comprehensive documentation of the SourceAnnotator codebase
 
 ## Last Updated
 
-2026-01-26 - Initial documentation generation
+2026-02-17 - Added milestone reference snapshot
