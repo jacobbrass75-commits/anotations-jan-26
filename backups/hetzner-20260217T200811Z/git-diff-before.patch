@@ -1,0 +1,145 @@
+diff --git a/client/src/components/DocumentViewer.tsx b/client/src/components/DocumentViewer.tsx
+index 6038c48..f784381 100644
+--- a/client/src/components/DocumentViewer.tsx
++++ b/client/src/components/DocumentViewer.tsx
+@@ -39,10 +39,12 @@ export function DocumentViewer({
+         `[data-testid="highlight-${selectedAnnotationId}"]`
+       );
+       if (element) {
+-        element.scrollIntoView({ behavior: "smooth", block: "center" });
++        requestAnimationFrame(() => {
++          element.scrollIntoView({ behavior: "smooth", block: "center" });
++        });
+       }
+     }
+-  }, [selectedAnnotationId]);
++  }, [selectedAnnotationId, annotations.length, document?.id]);
+ 
+   if (isLoading) {
+     return (
+diff --git a/client/src/pages/ProjectDocument.tsx b/client/src/pages/ProjectDocument.tsx
+index 8f4b639..a8619f6 100644
+--- a/client/src/pages/ProjectDocument.tsx
++++ b/client/src/pages/ProjectDocument.tsx
+@@ -1,5 +1,5 @@
+ import { useState, useEffect, useCallback, useMemo } from "react";
+-import { Link, useRoute } from "wouter";
++import { Link, useRoute, useLocation } from "wouter";
+ import { useQuery } from "@tanstack/react-query";
+ import {
+   useProject,
+@@ -75,6 +75,7 @@ const SOURCE_TYPES = [
+ 
+ export default function ProjectDocumentPage() {
+   const [, params] = useRoute("/projects/:projectId/documents/:docId");
++  const [location] = useLocation();
+   const projectId = params?.projectId || "";
+   const projectDocId = params?.docId || "";
+   const { toast } = useToast();
+@@ -99,6 +100,7 @@ export default function ProjectDocumentPage() {
+     bibliography: string;
+   } | null>(null);
+   const [isAutoFilling, setIsAutoFilling] = useState(false);
++  const [hasAppliedDeepLink, setHasAppliedDeepLink] = useState(false);
+ 
+   // Queries
+   const { data: project } = useProject(projectId);
+@@ -121,6 +123,24 @@ export default function ProjectDocumentPage() {
+   const { data: projectAnnotations = [], isLoading: annotationsLoading } =
+     useProjectAnnotations(projectDocId);
+ 
++  const deepLinkQuery = useMemo(() => {
++    const queryFromLocation = location.includes("?") ? location.slice(location.indexOf("?")) : "";
++    if (queryFromLocation) return queryFromLocation;
++    if (typeof window === "undefined") return "";
++    return window.location.search || "";
++  }, [location]);
++
++  const { deepLinkAnnotationId, deepLinkStartPosition } = useMemo(() => {
++    const params = new URLSearchParams(deepLinkQuery);
++    const annotationId = params.get("annotationId");
++    const startRaw = params.get("start");
++    const parsedStart = startRaw ? Number(startRaw) : null;
++    return {
++      deepLinkAnnotationId: annotationId,
++      deepLinkStartPosition: Number.isFinite(parsedStart) ? parsedStart : null,
++    };
++  }, [deepLinkQuery]);
++
+   // Mutations
+   const createAnnotation = useCreateProjectAnnotation();
+   const deleteAnnotation = useDeleteProjectAnnotation();
+@@ -185,6 +205,43 @@ export default function ProjectDocumentPage() {
+     }
+   }, [projectAnnotations.length]);
+ 
++  // If we arrive from global search with an annotation target, select it once data is loaded.
++  useEffect(() => {
++    if (hasAppliedDeepLink) return;
++
++    if (!deepLinkAnnotationId && deepLinkStartPosition === null) {
++      setHasAppliedDeepLink(true);
++      return;
++    }
++
++    if (annotations.length === 0) {
++      if (!annotationsLoading) {
++        setHasAppliedDeepLink(true);
++      }
++      return;
++    }
++
++    const targetById = deepLinkAnnotationId
++      ? annotations.find((a) => a.id === deepLinkAnnotationId)
++      : undefined;
++    const targetByStart =
++      deepLinkStartPosition !== null
++        ? annotations.find((a) => a.startPosition === deepLinkStartPosition)
++        : undefined;
++    const target = targetById || targetByStart;
++
++    if (target) {
++      setSelectedAnnotationId(target.id);
++    }
++    setHasAppliedDeepLink(true);
++  }, [
++    hasAppliedDeepLink,
++    deepLinkAnnotationId,
++    deepLinkStartPosition,
++    annotations,
++    annotationsLoading,
++  ]);
++
+   // Handlers
+   const handleAnalyze = useCallback(
+     async (
+diff --git a/client/src/pages/ProjectWorkspace.tsx b/client/src/pages/ProjectWorkspace.tsx
+index 26ae7e2..bab8cb0 100644
+--- a/client/src/pages/ProjectWorkspace.tsx
++++ b/client/src/pages/ProjectWorkspace.tsx
+@@ -400,7 +400,15 @@ export default function ProjectWorkspace() {
+     }
+     const projectDoc = projectDocuments.find(pd => pd.documentId === result.documentId);
+     if (projectDoc) {
+-      setLocation(`/projects/${projectId}/documents/${projectDoc.id}`);
++      const params = new URLSearchParams();
++      if (result.annotationId) {
++        params.set("annotationId", result.annotationId);
++      }
++      if (typeof result.startPosition === "number") {
++        params.set("start", String(result.startPosition));
++      }
++      const query = params.toString();
++      setLocation(`/projects/${projectId}/documents/${projectDoc.id}${query ? `?${query}` : ""}`);
+     } else {
+       toast({ title: "Document Not Found", description: "The document may have been removed from this project", variant: "destructive" });
+     }
+@@ -814,7 +822,7 @@ export default function ProjectWorkspace() {
+       </Dialog>
+ 
+       <Dialog open={!!citationModal} onOpenChange={() => setCitationModal(null)}>
+-        <DialogContent>
++        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+           <DialogHeader>
+             <DialogTitle>Chicago Citation</DialogTitle>
+             <DialogDescription>

@@ -1,0 +1,7 @@
+## master...origin/master
+ M client/src/components/DocumentViewer.tsx
+ M client/src/pages/ProjectDocument.tsx
+ M client/src/pages/ProjectWorkspace.tsx
+?? client/src/components/._DocumentViewer.tsx
+?? client/src/pages/._ProjectDocument.tsx
+?? client/src/pages/._ProjectWorkspace.tsx
