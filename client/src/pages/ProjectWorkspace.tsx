@@ -19,6 +19,7 @@ import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDow
 import { BatchAnalysisModal } from "@/components/BatchAnalysisModal";
 import { BatchUploadModal } from "@/components/BatchUploadModal";
 import { useToast } from "@/hooks/use-toast";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Folder as FolderType, GlobalSearchResult, Document } from "@shared/schema";
 
 function FolderTree({ 
@@ -414,9 +415,17 @@ export default function ProjectWorkspace() {
     }
   };
 
-  const handleCopyQuote = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copied", description: "Quote copied to clipboard" });
+  const handleCopyQuote = async (text: string) => {
+    try {
+      await copyTextToClipboard(text);
+      toast({ title: "Copied", description: "Quote copied to clipboard" });
+    } catch (error) {
+      toast({
+        title: "Copy failed",
+        description: "Clipboard access is unavailable. Try selecting the quote text manually.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCopyFootnote = async (result: GlobalSearchResult) => {
@@ -444,7 +453,7 @@ export default function ProjectWorkspace() {
         if (!res.ok) throw new Error("Failed to generate footnote");
 
         const data = await res.json();
-        await navigator.clipboard.writeText(data.footnoteWithQuote);
+        await copyTextToClipboard(data.footnoteWithQuote);
         toast({
           title: "Footnote Copied",
           description: "Chicago-style footnote with quote copied to clipboard",
@@ -453,14 +462,18 @@ export default function ProjectWorkspace() {
         // Fallback: just copy the quote with document name
         const docName = result.documentFilename || "Unknown document";
         const footnote = `${docName}: "${quoteText}"`;
-        await navigator.clipboard.writeText(footnote);
+        await copyTextToClipboard(footnote);
         toast({
           title: "Quote Copied",
           description: "Quote with document name copied (no citation data available)",
         });
       }
     } catch (error) {
-      toast({ title: "Error", description: "Failed to generate footnote", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to generate or copy footnote",
+        variant: "destructive",
+      });
     } finally {
       setGeneratingFootnoteFor(null);
     }
@@ -840,9 +853,17 @@ export default function ProjectWorkspace() {
                   variant="outline"
                   size="sm"
                   className="mt-2"
-                  onClick={() => {
-                    navigator.clipboard.writeText(citationModal.footnote);
-                    toast({ title: "Copied", description: "Footnote copied to clipboard" });
+                  onClick={async () => {
+                    try {
+                      await copyTextToClipboard(citationModal.footnote);
+                      toast({ title: "Copied", description: "Footnote copied to clipboard" });
+                    } catch {
+                      toast({
+                        title: "Copy failed",
+                        description: "Clipboard access is unavailable in this browser context",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                   data-testid="button-copy-footnote"
                 >
@@ -860,9 +881,17 @@ export default function ProjectWorkspace() {
                   variant="outline"
                   size="sm"
                   className="mt-2"
-                  onClick={() => {
-                    navigator.clipboard.writeText(citationModal.bibliography);
-                    toast({ title: "Copied", description: "Bibliography copied to clipboard" });
+                  onClick={async () => {
+                    try {
+                      await copyTextToClipboard(citationModal.bibliography);
+                      toast({ title: "Copied", description: "Bibliography copied to clipboard" });
+                    } catch {
+                      toast({
+                        title: "Copy failed",
+                        description: "Clipboard access is unavailable in this browser context",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                   data-testid="button-copy-bibliography"
                 >

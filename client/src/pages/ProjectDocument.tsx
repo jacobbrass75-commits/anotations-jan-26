@@ -14,7 +14,8 @@ import {
   useCreatePromptTemplate,
 } from "@/hooks/useProjects";
 import { useGenerateCitation } from "@/hooks/useProjectSearch";
-import { queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -390,11 +391,7 @@ export default function ProjectDocumentPage() {
   const handleUpdateAnnotation = useCallback(
     async (annotationId: string, note: string, category: AnnotationCategory) => {
       try {
-        await fetch(`/api/project-annotations/${annotationId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ note, category }),
-        });
+        await apiRequest("PUT", `/api/project-annotations/${annotationId}`, { note, category });
 
         queryClient.invalidateQueries({
           queryKey: ["/api/project-documents", projectDocId, "annotations"],
@@ -493,7 +490,7 @@ export default function ProjectDocumentPage() {
         }
 
         const data = await res.json();
-        await navigator.clipboard.writeText(data.footnoteWithQuote);
+        await copyTextToClipboard(data.footnoteWithQuote);
         toast({
           title: "Footnote Copied",
           description: "Chicago-style footnote with quote copied to clipboard",
@@ -502,6 +499,25 @@ export default function ProjectDocumentPage() {
         toast({
           title: "Error",
           description: "Failed to generate footnote",
+          variant: "destructive",
+        });
+      }
+    },
+    [toast]
+  );
+
+  const handleCopyQuote = useCallback(
+    async (quote: string) => {
+      try {
+        await copyTextToClipboard(quote);
+        toast({
+          title: "Copied",
+          description: "Quote copied to clipboard",
+        });
+      } catch (error) {
+        toast({
+          title: "Copy failed",
+          description: "Clipboard access is unavailable. Try selecting the quote text manually.",
           variant: "destructive",
         });
       }
@@ -771,6 +787,7 @@ export default function ProjectDocumentPage() {
               onUpdate={handleUpdateAnnotation}
               onAddManual={handleAddManualAnnotation}
               canAddManual={!!projectDocId}
+              onCopyQuote={handleCopyQuote}
               showFootnoteButton={true}
               onCopyFootnote={handleCopyFootnote}
             />
@@ -1047,9 +1064,17 @@ export default function ProjectDocumentPage() {
                       variant="outline"
                       size="sm"
                       className="mt-2"
-                      onClick={() => {
-                        navigator.clipboard.writeText(citationPreview.footnote);
-                        toast({ title: "Copied" });
+                      onClick={async () => {
+                        try {
+                          await copyTextToClipboard(citationPreview.footnote);
+                          toast({ title: "Copied" });
+                        } catch {
+                          toast({
+                            title: "Copy failed",
+                            description: "Clipboard access is unavailable in this browser context",
+                            variant: "destructive",
+                          });
+                        }
                       }}
                     >
                       <Copy className="h-3 w-3 mr-2" />
@@ -1068,11 +1093,17 @@ export default function ProjectDocumentPage() {
                       variant="outline"
                       size="sm"
                       className="mt-2"
-                      onClick={() => {
-                        navigator.clipboard.writeText(
-                          citationPreview.bibliography
-                        );
-                        toast({ title: "Copied" });
+                      onClick={async () => {
+                        try {
+                          await copyTextToClipboard(citationPreview.bibliography);
+                          toast({ title: "Copied" });
+                        } catch {
+                          toast({
+                            title: "Copy failed",
+                            description: "Clipboard access is unavailable in this browser context",
+                            variant: "destructive",
+                          });
+                        }
                       }}
                     >
                       <Copy className="h-3 w-3 mr-2" />
@@ -1098,7 +1129,7 @@ export default function ProjectDocumentPage() {
                   const citation = await generateCitation.mutateAsync({
                     citationData: citationForm,
                   });
-                  await navigator.clipboard.writeText(citation.footnote);
+                  await copyTextToClipboard(citation.footnote);
                   toast({
                     title: "Copied",
                     description: "Footnote copied to clipboard",

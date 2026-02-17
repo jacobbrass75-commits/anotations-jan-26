@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { MessageSquare, Bot, User, Trash2, Edit2, Filter, Plus, Quote } from "lucide-react";
+import { MessageSquare, Bot, User, Trash2, Edit2, Filter, Plus, Quote, Copy } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,7 @@ interface AnnotationSidebarProps {
   onUpdate: (annotationId: string, note: string, category: AnnotationCategory) => void;
   onAddManual: () => void;
   canAddManual: boolean;
+  onCopyQuote?: (quote: string) => void;
   showFootnoteButton?: boolean;
   onCopyFootnote?: (annotationId: string) => void;
 }
@@ -72,6 +73,7 @@ export function AnnotationSidebar({
   onUpdate,
   onAddManual,
   canAddManual,
+  onCopyQuote,
   showFootnoteButton = false,
   onCopyFootnote,
 }: AnnotationSidebarProps) {
@@ -257,7 +259,7 @@ export function AnnotationSidebar({
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => e.key === "Enter" && onSelect(annotation)}
-                    className={`w-full text-left p-3 rounded-lg border transition-all duration-150 cursor-pointer hover-elevate ${
+                    className={`group w-full text-left p-3 rounded-lg border transition-all duration-150 cursor-pointer hover-elevate ${
                       selectedAnnotationId === annotation.id
                         ? "border-primary bg-primary/5"
                         : "border-transparent bg-muted/50 hover:bg-muted"
@@ -303,7 +305,22 @@ export function AnnotationSidebar({
 
                     <p className="text-sm text-foreground line-clamp-2">{annotation.note}</p>
 
-                    <div className="flex items-center justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className={`flex items-center justify-end gap-1 mt-2 transition-opacity ${selectedAnnotationId === annotation.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                      {onCopyQuote && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Copy Quote"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCopyQuote(annotation.highlightedText);
+                          }}
+                          data-testid={`button-copy-quote-${annotation.id}`}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       {showFootnoteButton && onCopyFootnote && (
                         <Button
                           variant="ghost"
