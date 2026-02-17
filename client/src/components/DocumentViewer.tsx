@@ -1,10 +1,12 @@
-import { useRef, useEffect } from "react";
-import { FileText, Loader2, AlertCircle } from "lucide-react";
+import { useRef, useEffect, useState } from "react";
+import { FileText, Loader2, AlertCircle, ExternalLink, FileImage } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { HighlightedText } from "./HighlightedText";
 import type { Annotation, Document } from "@shared/schema";
+import type { DocumentSourceMeta } from "@/hooks/useDocument";
 
 // Extended annotation type with prompt fields
 interface AnnotationWithPrompt extends Omit<Annotation, 'promptText' | 'promptIndex' | 'promptColor'> {
@@ -17,6 +19,7 @@ interface DocumentViewerProps {
   document: Document | null;
   annotations: AnnotationWithPrompt[];
   isLoading: boolean;
+  sourceMeta?: DocumentSourceMeta | null;
   selectedAnnotationId: string | null;
   onAnnotationClick: (annotation: AnnotationWithPrompt) => void;
   onTextSelect?: (selection: { text: string; start: number; end: number }) => void;
@@ -26,11 +29,15 @@ export function DocumentViewer({
   document,
   annotations,
   isLoading,
+  sourceMeta,
   selectedAnnotationId,
   onAnnotationClick,
   onTextSelect,
 }: DocumentViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [viewMode, setViewMode] = useState<"transcript" | "source">("transcript");
+  const sourceAvailable = !!sourceMeta?.available && !!sourceMeta?.sourceUrl;
+  const sourceIsImage = (sourceMeta?.mimeType || "").startsWith("image/");
 
   // Scroll to selected annotation
   useEffect(() => {
@@ -45,6 +52,10 @@ export function DocumentViewer({
       }
     }
   }, [selectedAnnotationId, annotations.length, document?.id]);
+
+  useEffect(() => {
+    setViewMode("transcript");
+  }, [document?.id]);
 
   if (isLoading) {
     return (
@@ -119,24 +130,80 @@ export function DocumentViewer({
           <FileText className="h-5 w-5 text-primary shrink-0" />
           <h2 className="text-lg font-semibold truncate">{document.filename}</h2>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground mr-2">
             {document.fullText.length.toLocaleString()} characters
           </span>
+          <Button
+            variant={viewMode === "transcript" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("transcript")}
+            data-testid="button-view-transcript"
+          >
+            Transcript
+          </Button>
+          <Button
+            variant={viewMode === "source" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("source")}
+            disabled={!sourceAvailable}
+            data-testid="button-view-source"
+          >
+            Original
+          </Button>
+          {sourceAvailable && sourceMeta?.sourceUrl && (
+            <Button variant="ghost" size="icon" asChild data-testid="button-open-source-new-tab">
+              <a href={sourceMeta.sourceUrl} target="_blank" rel="noreferrer" title="Open original source">
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="flex-1 p-0 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div ref={scrollRef} className="p-6 max-w-4xl mx-auto">
-            <HighlightedText
-              text={document.fullText}
-              annotations={annotations}
-              onAnnotationClick={onAnnotationClick}
-              selectedAnnotationId={selectedAnnotationId}
-              onTextSelect={onTextSelect}
+        {viewMode === "transcript" ? (
+          <ScrollArea className="h-full">
+            <div ref={scrollRef} className="p-6 max-w-4xl mx-auto">
+              <HighlightedText
+                text={document.fullText}
+                annotations={annotations}
+                onAnnotationClick={onAnnotationClick}
+                selectedAnnotationId={selectedAnnotationId}
+                onTextSelect={onTextSelect}
+              />
+            </div>
+          </ScrollArea>
+        ) : sourceAvailable && sourceMeta?.sourceUrl ? (
+          sourceIsImage ? (
+            <ScrollArea className="h-full">
+              <div className="p-4">
+                <img
+                  src={sourceMeta.sourceUrl}
+                  alt={`Original source: ${document.filename}`}
+                  className="max-w-full h-auto mx-auto rounded-md border"
+                />
+              </div>
+            </ScrollArea>
+          ) : (
+            <iframe
+              src={sourceMeta.sourceUrl}
+              className="h-full w-full border-0"
+              title={`Original source for ${document.filename}`}
             />
+          )
+        ) : (
+          <div className="h-full flex items-center justify-center p-8 text-center">
+            <div className="max-w-sm">
+              <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <FileImage className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-sm font-semibold mb-1">Original Source Unavailable</h3>
+              <p className="text-sm text-muted-foreground">
+                This document does not have a saved source file yet. The transcript view is still available.
+              </p>
+            </div>
           </div>
-        </ScrollArea>
+        )}
       </CardContent>
     </Card>
   );

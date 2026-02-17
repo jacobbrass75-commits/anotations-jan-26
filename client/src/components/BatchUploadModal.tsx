@@ -471,12 +471,14 @@ export function BatchUploadModal({
                           <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
                           <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
                           <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
+                          <SelectItem value="vision_batch">Vision OCR Batch (long scanned PDFs, faster)</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
                         {batchOcrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
                         {batchOcrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
                         {batchOcrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+                        {batchOcrMode === "vision_batch" && "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
                       </p>
                     </div>
                   )}

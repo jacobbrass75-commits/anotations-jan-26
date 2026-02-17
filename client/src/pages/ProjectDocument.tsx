@@ -14,6 +14,7 @@ import {
   useCreatePromptTemplate,
 } from "@/hooks/useProjects";
 import { useGenerateCitation } from "@/hooks/useProjectSearch";
+import { useDocumentSourceMeta } from "@/hooks/useDocument";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
@@ -120,6 +121,7 @@ export default function ProjectDocumentPage() {
     queryKey: ["/api/documents", projectDoc?.documentId],
     enabled: !!projectDoc?.documentId,
   });
+  const { data: sourceMeta } = useDocumentSourceMeta(projectDoc?.documentId || null);
 
   const { data: projectAnnotations = [], isLoading: annotationsLoading } =
     useProjectAnnotations(projectDocId);
@@ -764,6 +766,7 @@ export default function ProjectDocumentPage() {
                 document={document}
                 annotations={annotations}
                 isLoading={docLoading}
+                sourceMeta={sourceMeta}
                 selectedAnnotationId={selectedAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
                 onTextSelect={handleTextSelect}

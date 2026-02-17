@@ -23,6 +23,14 @@ export interface DocumentStatus {
   chunkCount: number;
 }
 
+export interface DocumentSourceMeta {
+  documentId: string;
+  filename: string;
+  available: boolean;
+  mimeType: string;
+  sourceUrl: string | null;
+}
+
 export function useDocumentStatus(id: string | null) {
   return useQuery<DocumentStatus>({
     queryKey: ["/api/documents", id, "status"],
@@ -35,6 +43,13 @@ export function useDocumentStatus(id: string | null) {
       return 2000;
     },
     staleTime: 0,
+  });
+}
+
+export function useDocumentSourceMeta(id: string | null) {
+  return useQuery<DocumentSourceMeta>({
+    queryKey: ["/api/documents", id, "source-meta"],
+    enabled: !!id,
   });
 }
 

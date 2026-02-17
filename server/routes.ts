@@ -25,6 +25,12 @@ import {
 import { registerProjectRoutes } from "./projectRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
 import { saveTempPdf, processWithPaddleOcr, processWithVisionOcr } from "./ocrProcessor";
+import {
+  getDocumentSourcePath,
+  hasDocumentSource,
+  inferDocumentSourceMimeType,
+  saveDocumentSource,
+} from "./sourceFiles";
 
 // Detect garbled text from failed PDF extraction
 // Checks for high ratio of non-word characters or unusual patterns
@@ -76,6 +82,18 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const persistSourceFile = async (
+    documentId: string,
+    filename: string,
+    fileBuffer: Buffer
+  ): Promise<void> => {
+    try {
+      await saveDocumentSource(documentId, filename, fileBuffer);
+    } catch (error) {
+      console.error(`[Upload] Failed to persist original source for document ${documentId}:`, error);
+    }
+  };
+
   // Upload document
   app.post("/api/upload", upload.single("file"), async (req: Request, res: Response) => {
     try {
@@ -84,7 +102,13 @@ export async function registerRoutes(
       }
 
       const file = req.file;
-      const ocrMode = (req.body.ocrMode as string) || "standard";
+      const requestedOcrMode = ((req.body.ocrMode as string) || "standard").toLowerCase();
+      const ocrMode =
+        requestedOcrMode === "vision-batch"
+          ? "vision_batch"
+          : ["standard", "advanced", "vision", "vision_batch"].includes(requestedOcrMode)
+          ? requestedOcrMode
+          : "standard";
       const isPdf = file.mimetype === "application/pdf" || file.originalname.endsWith(".pdf");
 
       // For non-PDF files or standard mode, use synchronous processing
@@ -103,7 +127,7 @@ export async function registerRoutes(
           // Check if extracted text appears garbled (common with scanned PDFs or custom fonts)
           if (isGarbledText(fullText)) {
             return res.status(400).json({
-              message: "This PDF appears to be scanned or uses custom fonts that cannot be read. Please try: (1) Using a PDF with selectable text, (2) Copy the text content into a .txt file and upload that instead, or (3) Re-upload with Advanced OCR or Vision OCR mode."
+              message: "This PDF appears to be scanned or uses custom fonts that cannot be read. Please try: (1) Using a PDF with selectable text, (2) Copy the text content into a .txt file and upload that instead, or (3) Re-upload with Advanced OCR, Vision OCR, or Vision OCR Batch mode."
             });
           }
         } else {
@@ -119,6 +143,7 @@ export async function registerRoutes(
           filename: file.originalname,
           fullText,
         });
+        await persistSourceFile(doc.id, file.originalname, file.buffer);
 
         // Chunk the text using V2 chunking (with noise filtering and larger chunks)
         const chunks = chunkTextV2(fullText);
@@ -156,6 +181,7 @@ export async function registerRoutes(
         filename: file.originalname,
         fullText: "",
       });
+      await persistSourceFile(doc.id, file.originalname, file.buffer);
       await storage.updateDocument(doc.id, { status: "processing" });
 
       const updatedDoc = await storage.getDocument(doc.id);
@@ -168,6 +194,10 @@ export async function registerRoutes(
       } else if (ocrMode === "vision") {
         processWithVisionOcr(doc.id, tempPdfPath).catch((err) => {
           console.error("Background Vision OCR error:", err);
+        });
+      } else if (ocrMode === "vision_batch") {
+        processWithVisionOcr(doc.id, tempPdfPath, { batchMode: true }).catch((err) => {
+          console.error("Background Vision Batch OCR error:", err);
         });
       }
 
@@ -220,6 +250,58 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching document:", error);
       res.status(500).json({ message: "Failed to fetch document" });
+    }
+  });
+
+  // Get original source metadata for a document
+  app.get("/api/documents/:id/source-meta", async (req: Request, res: Response) => {
+    try {
+      const doc = await storage.getDocument(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      const available = await hasDocumentSource(doc.id, doc.filename);
+      res.json({
+        documentId: doc.id,
+        filename: doc.filename,
+        available,
+        mimeType: inferDocumentSourceMimeType(doc.filename),
+        sourceUrl: available ? `/api/documents/${doc.id}/source` : null,
+      });
+    } catch (error) {
+      console.error("Error fetching source metadata:", error);
+      res.status(500).json({ message: "Failed to fetch source metadata" });
+    }
+  });
+
+  // Stream original uploaded source file for side-by-side reference
+  app.get("/api/documents/:id/source", async (req: Request, res: Response) => {
+    try {
+      const doc = await storage.getDocument(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      const available = await hasDocumentSource(doc.id, doc.filename);
+      if (!available) {
+        return res.status(404).json({ message: "Original source file is not available for this document" });
+      }
+
+      const sourcePath = getDocumentSourcePath(doc.id, doc.filename);
+      const mimeType = inferDocumentSourceMimeType(doc.filename);
+      const safeFilename = doc.filename.replace(/"/g, "");
+
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Disposition", `inline; filename="${safeFilename}"`);
+      res.sendFile(sourcePath, (error) => {
+        if (error && !res.headersSent) {
+          res.status(500).json({ message: "Failed to stream source file" });
+        }
+      });
+    } catch (error) {
+      console.error("Error streaming source document:", error);
+      res.status(500).json({ message: "Failed to stream source document" });
     }
   });
 

@@ -132,12 +132,14 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
                   <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
                   <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
                   <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
+                  <SelectItem value="vision_batch">Vision OCR Batch (long scanned PDFs, faster)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 {ocrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
                 {ocrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
                 {ocrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+                {ocrMode === "vision_batch" && "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
               </p>
             </div>
           )}

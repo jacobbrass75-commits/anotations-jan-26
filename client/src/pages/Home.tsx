@@ -14,6 +14,7 @@ import { ManualAnnotationDialog } from "@/components/ManualAnnotationDialog";
 import {
   useDocument,
   useDocumentStatus,
+  useDocumentSourceMeta,
   useAnnotations,
   useUploadDocument,
   useSetIntent,
@@ -42,6 +43,7 @@ export default function Home() {
 
   const { data: document, isLoading: isDocumentLoading } = useDocument(currentDocumentId);
   const { data: documentStatus } = useDocumentStatus(currentDocumentId);
+  const { data: sourceMeta } = useDocumentSourceMeta(currentDocumentId);
   const { data: annotations = [], isLoading: isAnnotationsLoading } = useAnnotations(currentDocumentId);
 
   const uploadMutation = useUploadDocument();
@@ -333,6 +335,7 @@ export default function Home() {
                   document={document ?? null}
                   annotations={annotations}
                   isLoading={isDocumentLoading}
+                  sourceMeta={sourceMeta}
                   selectedAnnotationId={selectedAnnotationId}
                   onAnnotationClick={handleAnnotationClick}
                   onTextSelect={handleTextSelect}
