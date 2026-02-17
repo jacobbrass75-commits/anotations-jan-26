@@ -51,6 +51,7 @@ import {
   FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { MultiPromptPanel, type Prompt } from "@/components/MultiPromptPanel";
 import { SearchPanel } from "@/components/SearchPanel";
 import { DocumentViewer } from "@/components/DocumentViewer";
@@ -705,10 +706,13 @@ export default function ProjectDocumentPage() {
               )}
             </div>
           </div>
-          <Button onClick={() => setIsCitationOpen(true)} data-testid="button-edit-citation">
-            <BookOpen className="h-4 w-4 mr-2" />
-            Citation
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setIsCitationOpen(true)} data-testid="button-edit-citation">
+              <BookOpen className="h-4 w-4 mr-2" />
+              Citation
+            </Button>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
