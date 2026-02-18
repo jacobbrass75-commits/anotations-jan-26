@@ -4,9 +4,11 @@ import { join, dirname, extname } from "path";
 import { fileURLToPath } from "url";
 import { tmpdir } from "os";
 import OpenAI from "openai";
+import { PDFDocument } from "pdf-lib";
 import { storage } from "./storage";
 import { chunkTextV2 } from "./pipelineV2";
 import { generateDocumentSummary } from "./openai";
+import { saveDocumentSource } from "./sourceFiles";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -284,9 +286,21 @@ function parseBatchVisionResponse(raw: string, expectedCount: number): string[] 
   return null;
 }
 
+function inferImageMimeType(imagePath: string): string {
+  const extension = extname(imagePath).toLowerCase();
+  if (extension === ".png") return "image/png";
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+  if (extension === ".webp") return "image/webp";
+  if (extension === ".gif") return "image/gif";
+  if (extension === ".bmp") return "image/bmp";
+  if (extension === ".tif" || extension === ".tiff") return "image/tiff";
+  return "image/png";
+}
+
 async function readImageAsDataUrl(imagePath: string): Promise<string> {
   const imageBuffer = await readFile(imagePath);
-  return `data:image/png;base64,${imageBuffer.toString("base64")}`;
+  const mimeType = inferImageMimeType(imagePath);
+  return `data:${mimeType};base64,${imageBuffer.toString("base64")}`;
 }
 
 async function extractVisionTextForPage(
@@ -647,6 +661,33 @@ async function saveVisionOcrResult(
   return { fullText, chunkCount: chunks.length };
 }
 
+async function createPdfFromImagePaths(imagePaths: string[]): Promise<Buffer> {
+  const pdf = await PDFDocument.create();
+
+  for (const imagePath of imagePaths) {
+    const extension = extname(imagePath).toLowerCase();
+    const imageBytes = await readFile(imagePath);
+
+    const embedded =
+      extension === ".png"
+        ? await pdf.embedPng(imageBytes)
+        : extension === ".jpg" || extension === ".jpeg"
+        ? await pdf.embedJpg(imageBytes)
+        : null;
+
+    if (!embedded) {
+      throw new Error(`Unsupported image format for PDF export: ${extension || "(none)"}`);
+    }
+
+    const { width, height } = embedded.scale(1);
+    const page = pdf.addPage([width, height]);
+    page.drawImage(embedded, { x: 0, y: 0, width, height });
+  }
+
+  const bytes = await pdf.save();
+  return Buffer.from(bytes);
+}
+
 /**
  * Process a PDF with OpenAI Vision OCR (background, async).
  * Converts pages to images, sends each to GPT-4o Vision.
@@ -776,6 +817,118 @@ export async function processImageWithVisionOcr(
     await cleanupTempFiles(tempImagePath, dirname(tempImagePath));
     if (extractedImageDir) {
       await cleanupTempFiles(extractedImageDir);
+    }
+  }
+}
+
+/**
+ * Process multiple uploaded image files as a single multi-page document.
+ * Preserves page order based on upload order.
+ */
+export async function processImageGroupWithVisionOcr(
+  docId: string,
+  uploads: Array<{ buffer: Buffer; originalFilename: string }>,
+  combinedSourceFilename: string,
+  options: VisionOcrOptions = {}
+): Promise<void> {
+  const tempUploadPaths: string[] = [];
+  const extractedImageDirs: string[] = [];
+
+  try {
+    if (!Array.isArray(uploads) || uploads.length === 0) {
+      throw new Error("No image files were provided for combined upload.");
+    }
+
+    // Write uploaded buffers to temp files (preserving extensions).
+    for (const upload of uploads) {
+      const tempPath = await saveTempUpload(upload.buffer, upload.originalFilename);
+      tempUploadPaths.push(tempPath);
+    }
+
+    // Expand each upload into one or more page images for OCR/PDF export.
+    const pageImagePaths: string[] = [];
+    for (let index = 0; index < uploads.length; index++) {
+      const originalFilename = uploads[index].originalFilename;
+      const uploadPath = tempUploadPaths[index];
+      const extension = extname(originalFilename).toLowerCase();
+
+      if (HEIC_EXTENSIONS.has(extension)) {
+        const extractedDir = await mkdtemp(join(tmpdir(), "vision-heic-group-"));
+        extractedImageDirs.push(extractedDir);
+        const inputBuffer = await readFile(uploadPath);
+
+        const heicConvert = await import("heic-convert");
+        const convertAll = heicConvert.all || heicConvert.default?.all;
+        if (typeof convertAll !== "function") {
+          throw new Error("HEIC conversion is unavailable (missing convert.all)");
+        }
+
+        const images = (await convertAll({
+          buffer: inputBuffer,
+          format: "PNG",
+        })) as Array<{ convert: () => Promise<Buffer> }>;
+
+        if (!Array.isArray(images) || images.length === 0) {
+          throw new Error(`No images found in HEIC/HEIF file: ${originalFilename}`);
+        }
+
+        for (let frame = 0; frame < images.length; frame++) {
+          const convertedBuffer = await images[frame].convert();
+          const outputPath = join(extractedDir, `page_${index + 1}_${frame + 1}.png`);
+          await writeFile(outputPath, convertedBuffer);
+          pageImagePaths.push(outputPath);
+        }
+      } else if (extension === ".png" || extension === ".jpg" || extension === ".jpeg") {
+        pageImagePaths.push(uploadPath);
+      } else {
+        throw new Error(
+          `Unsupported image format for combined upload: ${originalFilename}. Please convert to PNG/JPG or upload as separate documents.`
+        );
+      }
+    }
+
+    if (pageImagePaths.length === 0) {
+      throw new Error("No readable images were found in the uploaded files.");
+    }
+
+    // Save a combined PDF source for convenient viewing in the UI.
+    try {
+      const pdfBuffer = await createPdfFromImagePaths(pageImagePaths);
+      await saveDocumentSource(docId, combinedSourceFilename, pdfBuffer);
+    } catch (sourceError) {
+      console.warn(`[Vision OCR] Failed to save combined PDF source for doc ${docId}:`, sourceError);
+    }
+
+    const groupOptions: VisionOcrOptions = {
+      ...options,
+      batchMode: options.batchMode ?? pageImagePaths.length > 1,
+    };
+
+    console.log(`[Vision OCR] Processing ${pageImagePaths.length} page(s) for combined doc ${docId}`);
+    const pageTexts = await extractVisionTextsFromImagePaths(docId, pageImagePaths, groupOptions);
+    const { fullText, chunkCount } = await saveVisionOcrResult(
+      docId,
+      pageTexts,
+      "Vision OCR could not extract readable text from these image files."
+    );
+    if (!fullText) return;
+
+    console.log(
+      `[Vision OCR] Complete for combined image doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`
+    );
+  } catch (error) {
+    console.error(`[Vision OCR] Combined image processing failed for doc ${docId}:`, error);
+    await storage.updateDocument(docId, {
+      status: "error",
+      processingError: error instanceof Error ? error.message : "Combined image OCR processing failed",
+    });
+  } finally {
+    // Cleanup temp uploads and any extracted HEIC frames.
+    for (const tempPath of tempUploadPaths) {
+      await cleanupTempFiles(tempPath, dirname(tempPath));
+    }
+    for (const dir of extractedImageDirs) {
+      await cleanupTempFiles(dir);
     }
   }
 }

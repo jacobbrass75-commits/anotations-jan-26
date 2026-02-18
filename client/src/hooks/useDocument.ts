@@ -98,6 +98,46 @@ export function useUploadDocument() {
   });
 }
 
+export function useUploadDocumentGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      files,
+      ocrMode,
+      ocrModel,
+    }: {
+      files: File[];
+      ocrMode: string;
+      ocrModel?: string;
+    }) => {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append("files", file);
+      }
+      formData.append("ocrMode", ocrMode);
+      if (ocrModel) {
+        formData.append("ocrModel", ocrModel);
+      }
+
+      const response = await fetch("/api/upload-group", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error((error as any)?.message || "Upload failed");
+      }
+
+      return response.json() as Promise<Document>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+    },
+  });
+}
+
 export function useSetIntent() {
   const queryClient = useQueryClient();
 

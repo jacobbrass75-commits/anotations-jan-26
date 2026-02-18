@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useProject, useFolders, useProjectDocuments, useCreateFolder, useDeleteFolder, useAddDocumentToProject, useRemoveDocumentFromProject } from "@/hooks/useProjects";
 import { useGlobalSearch, useGenerateCitation } from "@/hooks/useProjectSearch";
-import { useUploadDocument } from "@/hooks/useDocument";
+import { useUploadDocument, useUploadDocumentGroup } from "@/hooks/useDocument";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Loader2, Upload, Quote } from "lucide-react";
@@ -243,6 +244,8 @@ const IMAGE_EXTENSIONS = new Set([
   ".heif",
 ]);
 
+const COMBINABLE_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".heic", ".heif"]);
+
 function isPdfFile(file: File | null): boolean {
   if (!file) return false;
   return file.type === "application/pdf" || getFileExtension(file.name) === ".pdf";
@@ -260,6 +263,11 @@ function isSupportedUploadFile(file: File): boolean {
   const isTxt = file.type === "text/plain" || extension === ".txt";
   const isImage = isImageFile(file);
   return isPdf || isTxt || isImage;
+}
+
+function isCombinableImageFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  return isImageFile(file) && COMBINABLE_IMAGE_EXTENSIONS.has(extension);
 }
 
 export default function ProjectWorkspace() {
@@ -297,9 +305,11 @@ export default function ProjectWorkspace() {
   const [uploadOcrMode, setUploadOcrMode] = useState<string>("standard");
   const [uploadOcrModel, setUploadOcrModel] = useState<string>("gpt-4o");
   const [isUploadingAndAdding, setIsUploadingAndAdding] = useState(false);
+  const [combineImageUploads, setCombineImageUploads] = useState(true);
   const [addDocTab, setAddDocTab] = useState<"library" | "upload">("library");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadDocument = useUploadDocument();
+  const uploadDocumentGroup = useUploadDocumentGroup();
   
   const filteredDocuments = useMemo(() => {
     if (selectedFolderId === null) return projectDocuments;
@@ -315,6 +325,8 @@ export default function ProjectWorkspace() {
   const hasImageUploadFiles = uploadFiles.some((file) => isImageFile(file));
   const shouldShowVisionModelSelector =
     hasImageUploadFiles || (hasPdfUploadFiles && (uploadOcrMode === "vision" || uploadOcrMode === "vision_batch"));
+  const canCombineSelectedImages =
+    uploadFiles.length > 1 && uploadFiles.every((file) => isCombinableImageFile(file));
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -426,6 +438,31 @@ export default function ProjectWorkspace() {
     let firstErrorMessage = "";
 
     try {
+      if (canCombineSelectedImages && combineImageUploads) {
+        const doc = await uploadDocumentGroup.mutateAsync({
+          files: uploadFiles,
+          // Combined image documents always use Vision OCR; batch mode is recommended for speed.
+          ocrMode: "vision_batch",
+          ocrModel: uploadOcrModel,
+        });
+
+        await addDocument.mutateAsync({
+          projectId,
+          data: {
+            documentId: doc.id,
+            folderId: selectedFolderId || undefined,
+          },
+        });
+
+        toast({
+          title: "Document added",
+          description: `Uploaded ${uploadFiles.length} images as one document.`,
+        });
+        setIsAddDocOpen(false);
+        setUploadFiles([]);
+        return;
+      }
+
       for (const file of uploadFiles) {
         try {
           const doc = await uploadDocument.mutateAsync({
@@ -829,6 +866,7 @@ export default function ProjectWorkspace() {
           setUploadOcrMode("standard");
           setUploadOcrModel("gpt-4o");
           setIsUploadingAndAdding(false);
+          setCombineImageUploads(true);
           setSelectedDocId("");
           setAddDocTab("library");
         }
@@ -927,6 +965,18 @@ export default function ProjectWorkspace() {
                   </div>
                 </ScrollArea>
               )}
+              {canCombineSelectedImages && (
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    checked={combineImageUploads}
+                    onCheckedChange={(checked) => setCombineImageUploads(Boolean(checked))}
+                    data-testid="checkbox-combine-image-uploads"
+                  />
+                  <span className="leading-5">
+                    Combine selected images into one document (keeps upload order)
+                  </span>
+                </label>
+              )}
               {hasPdfUploadFiles && (
                 <div className="space-y-1.5">
                   <Label>Text Extraction Mode</Label>
@@ -986,7 +1036,11 @@ export default function ProjectWorkspace() {
                 data-testid="button-upload-add"
               >
                 {isUploadingAndAdding && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Upload & Add {uploadFiles.length > 0 ? uploadFiles.length : ""} {uploadFiles.length === 1 ? "File" : "Files"}
+                {canCombineSelectedImages && combineImageUploads
+                  ? "Upload & Add 1 Document"
+                  : `Upload & Add ${uploadFiles.length > 0 ? uploadFiles.length : ""} ${
+                      uploadFiles.length === 1 ? "File" : "Files"
+                    }`}
               </Button>
             )}
           </DialogFooter>

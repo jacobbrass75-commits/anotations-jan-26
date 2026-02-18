@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express as ExpressApp, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import { PDFParse } from "pdf-parse";
@@ -30,6 +30,7 @@ import {
   processWithPaddleOcr,
   processWithVisionOcr,
   processImageWithVisionOcr,
+  processImageGroupWithVisionOcr,
   SUPPORTED_VISION_OCR_MODELS,
   type VisionOcrModel,
 } from "./ocrProcessor";
@@ -119,7 +120,7 @@ const upload = multer({
 
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  app: ExpressApp
 ): Promise<Server> {
   const persistSourceFile = async (
     documentId: string,
@@ -288,6 +289,78 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Unsupported OCR mode for this file type" });
     } catch (error) {
       console.error("Upload error:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
+    }
+  });
+
+  // Upload multiple images as a single combined document (preserves upload order).
+  app.post("/api/upload-group", upload.array("files", 100), async (req: Request, res: Response) => {
+    try {
+      const files = (req.files as Express.Multer.File[] | undefined) || [];
+      if (!files.length) {
+        return res.status(400).json({ message: "No files uploaded" });
+      }
+
+      const requestedOcrMode = ((req.body.ocrMode as string) || "standard").toLowerCase();
+      const ocrMode =
+        requestedOcrMode === "vision-batch"
+          ? "vision_batch"
+          : ["standard", "vision", "vision_batch"].includes(requestedOcrMode)
+          ? requestedOcrMode
+          : "standard";
+      const requestedOcrModel = ((req.body.ocrModel as string) || "").toLowerCase();
+      const ocrModel: VisionOcrModel = SUPPORTED_VISION_OCR_MODELS.includes(
+        requestedOcrModel as VisionOcrModel
+      )
+        ? (requestedOcrModel as VisionOcrModel)
+        : "gpt-4o";
+
+      const supportedCombinedExtensions = new Set([".png", ".jpg", ".jpeg", ".heic", ".heif"]);
+      for (const file of files) {
+        const ext = getFileExtension(file.originalname);
+        const image = isImageFile(file.mimetype, ext);
+        if (!image) {
+          return res.status(400).json({
+            message: "Combined uploads currently support images only.",
+          });
+        }
+        if (!supportedCombinedExtensions.has(ext)) {
+          return res.status(400).json({
+            message:
+              `Unsupported image format for combined upload: ${file.originalname}. Please convert to PNG/JPG or upload separately.`,
+          });
+        }
+      }
+
+      const primaryName = files[0].originalname || "image-upload";
+      const baseName = primaryName.replace(/\.[^/.]+$/, "");
+      const combinedFilename = `${baseName} (${files.length} images).pdf`;
+
+      const doc = await storage.createDocument({
+        filename: combinedFilename,
+        fullText: "",
+      });
+      await storage.updateDocument(doc.id, { status: "processing" });
+
+      const updatedDoc = await storage.getDocument(doc.id);
+
+      const groupOptions =
+        ocrMode === "vision"
+          ? { batchMode: false, model: ocrModel }
+          : { batchMode: true, model: ocrModel };
+
+      processImageGroupWithVisionOcr(
+        doc.id,
+        files.map((file) => ({ buffer: file.buffer, originalFilename: file.originalname })),
+        combinedFilename,
+        groupOptions
+      ).catch((err) => {
+        console.error("Background combined image OCR error:", err);
+      });
+
+      return res.status(202).json(updatedDoc);
+    } catch (error) {
+      console.error("Upload-group error:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
     }
   });
