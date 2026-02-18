@@ -15,16 +15,28 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+export const SUPPORTED_VISION_OCR_MODELS = ["gpt-4o", "gpt-4o-mini"] as const;
+export type VisionOcrModel = (typeof SUPPORTED_VISION_OCR_MODELS)[number];
+
 interface VisionOcrOptions {
   batchMode?: boolean;
   batchSize?: number;
   concurrency?: number;
+  model?: VisionOcrModel;
 }
 
 const HEIC_EXTENSIONS = new Set([".heic", ".heif"]);
 
 const SINGLE_PAGE_OCR_PROMPT =
   "Extract ALL text from this scanned document page. Preserve paragraphs and reading order. For tables, render each row on its own line with columns separated by ' | '. For footnotes or marginalia, include them at the end marked with [Footnote] or [Margin]. Output only the extracted text, nothing else.";
+
+function resolveVisionOcrModel(requestedModel: string | undefined): VisionOcrModel {
+  const normalized = (requestedModel || "").toLowerCase();
+  if (SUPPORTED_VISION_OCR_MODELS.includes(normalized as VisionOcrModel)) {
+    return normalized as VisionOcrModel;
+  }
+  return "gpt-4o";
+}
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -52,6 +64,7 @@ const VISION_MIN_REQUEST_GAP_MS = parsePositiveInt(
   process.env.VISION_OCR_MIN_REQUEST_GAP_MS,
   Math.ceil((60_000 * VISION_ESTIMATED_TOKENS_PER_REQUEST) / VISION_TPM_LIMIT)
 );
+const DEFAULT_VISION_MODEL = resolveVisionOcrModel(process.env.VISION_OCR_MODEL);
 
 let visionRequestSchedule: Promise<void> = Promise.resolve();
 let nextVisionRequestAt = 0;
@@ -279,14 +292,15 @@ async function readImageAsDataUrl(imagePath: string): Promise<string> {
 async function extractVisionTextForPage(
   imagePath: string,
   pageNumber: number,
-  totalPages: number
+  totalPages: number,
+  model: VisionOcrModel
 ): Promise<string> {
-  console.log(`[Vision OCR] Processing page ${pageNumber}/${totalPages}`);
+  console.log(`[Vision OCR] Processing page ${pageNumber}/${totalPages} with model=${model}`);
   const imageUrl = await readImageAsDataUrl(imagePath);
 
   const response = await runVisionRequestWithRetry(`page ${pageNumber}/${totalPages}`, () =>
     openai.chat.completions.create({
-      model: "gpt-4o",
+      model,
       messages: [
         {
           role: "user",
@@ -315,11 +329,12 @@ async function extractVisionTextForPage(
 async function extractVisionTextForBatch(
   imagePaths: string[],
   startPageIndex: number,
-  totalPages: number
+  totalPages: number,
+  model: VisionOcrModel
 ): Promise<string[]> {
   const startPage = startPageIndex + 1;
   const endPage = startPageIndex + imagePaths.length;
-  console.log(`[Vision OCR] Processing pages ${startPage}-${endPage}/${totalPages} in batch`);
+  console.log(`[Vision OCR] Processing pages ${startPage}-${endPage}/${totalPages} in batch with model=${model}`);
 
   const imageUrls = await Promise.all(imagePaths.map((imagePath) => readImageAsDataUrl(imagePath)));
 
@@ -339,7 +354,7 @@ async function extractVisionTextForBatch(
 
   const response = await runVisionRequestWithRetry(`batch ${startPage}-${endPage}/${totalPages}`, () =>
     openai.chat.completions.create({
-      model: "gpt-4o",
+      model,
       messages: [{ role: "user", content }],
       response_format: { type: "json_object" },
       max_tokens: 8192,
@@ -529,9 +544,10 @@ async function extractVisionTextsFromImagePaths(
   const singlePageConcurrency = options.concurrency ?? DEFAULT_VISION_PAGE_CONCURRENCY;
   const batchConcurrency = options.concurrency ?? DEFAULT_VISION_BATCH_CONCURRENCY;
   const batchSize = Math.max(1, options.batchSize ?? DEFAULT_VISION_BATCH_SIZE);
+  const model = options.model ?? DEFAULT_VISION_MODEL;
 
   console.log(
-    `[Vision OCR] Mode=${useBatchMode ? "batch" : "page"} pages=${totalPages} batchSize=${batchSize} minGapMs=${VISION_MIN_REQUEST_GAP_MS} doc=${docId}`
+    `[Vision OCR] Mode=${useBatchMode ? "batch" : "page"} pages=${totalPages} batchSize=${batchSize} model=${model} minGapMs=${VISION_MIN_REQUEST_GAP_MS} doc=${docId}`
   );
 
   if (useBatchMode) {
@@ -549,7 +565,8 @@ async function extractVisionTextsFromImagePaths(
             const batchTexts = await extractVisionTextForBatch(
               batchImagePaths,
               batchStartIndex,
-              totalPages
+              totalPages,
+              model
             );
             batch.forEach((item, offset) => {
               pageTexts[item.index] = batchTexts[offset] || "";
@@ -564,7 +581,8 @@ async function extractVisionTextsFromImagePaths(
               pageTexts[item.index] = await extractVisionTextForPage(
                 item.imagePath,
                 item.index + 1,
-                totalPages
+                totalPages,
+                model
               );
             }
           }
@@ -578,7 +596,7 @@ async function extractVisionTextsFromImagePaths(
   const limit = pLimit(singlePageConcurrency);
   return Promise.all(
     imagePaths.map((imagePath, index) =>
-      limit(() => extractVisionTextForPage(imagePath, index + 1, totalPages))
+      limit(() => extractVisionTextForPage(imagePath, index + 1, totalPages, model))
     )
   );
 }

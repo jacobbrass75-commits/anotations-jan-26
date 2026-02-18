@@ -57,11 +57,16 @@ function isPdfFile(file: File): boolean {
   return file.type === "application/pdf" || getFileExtension(file.name) === ".pdf";
 }
 
+function isImageFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  return file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(extension);
+}
+
 function isSupportedUploadFile(file: File): boolean {
   const extension = getFileExtension(file.name);
   const isPdf = isPdfFile(file);
   const isTxt = file.type === "text/plain" || extension === ".txt";
-  const isImage = file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(extension);
+  const isImage = isImageFile(file);
   return isPdf || isTxt || isImage;
 }
 
@@ -88,6 +93,12 @@ export function BatchUploadModal({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [batchOcrMode, setBatchOcrMode] = useState<string>("standard");
+  const [batchOcrModel, setBatchOcrModel] = useState<string>("gpt-4o");
+
+  const hasPdfFiles = filesToUpload.some((file) => isPdfFile(file));
+  const hasImageFiles = filesToUpload.some((file) => isImageFile(file));
+  const shouldShowOcrModelSelector =
+    hasImageFiles || (hasPdfFiles && (batchOcrMode === "vision" || batchOcrMode === "vision_batch"));
 
   useEffect(() => {
     if (open) {
@@ -106,6 +117,7 @@ export function BatchUploadModal({
       setIsUploading(false);
       setUploadProgress(0);
       setBatchOcrMode("standard");
+      setBatchOcrModel("gpt-4o");
     }
   }, [open]);
 
@@ -209,7 +221,11 @@ export function BatchUploadModal({
       setUploadProgress(Math.round((i / filesToUpload.length) * 100));
 
       try {
-        const doc = await uploadMutation.mutateAsync({ file, ocrMode: batchOcrMode });
+        const doc = await uploadMutation.mutateAsync({
+          file,
+          ocrMode: batchOcrMode,
+          ocrModel: batchOcrModel,
+        });
         uploadedDocIds.push(doc.id);
         setUploadedFiles(prev => prev.map((f, idx) => 
           idx === i ? { ...f, status: "success", documentId: doc.id } : f
@@ -492,7 +508,7 @@ export function BatchUploadModal({
                     </div>
                   )}
 
-                  {filesToUpload.some((file) => isPdfFile(file)) && (
+                  {hasPdfFiles && (
                     <div className="space-y-2">
                       <Label>Text Extraction Mode (for PDFs)</Label>
                       <Select value={batchOcrMode} onValueChange={setBatchOcrMode}>
@@ -511,6 +527,23 @@ export function BatchUploadModal({
                         {batchOcrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
                         {batchOcrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
                         {batchOcrMode === "vision_batch" && "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
+                      </p>
+                    </div>
+                  )}
+                  {shouldShowOcrModelSelector && (
+                    <div className="space-y-2">
+                      <Label>AI OCR Model</Label>
+                      <Select value={batchOcrModel} onValueChange={setBatchOcrModel}>
+                        <SelectTrigger data-testid="select-batch-ocr-model">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="gpt-4o">GPT-4o (best OCR quality)</SelectItem>
+                          <SelectItem value="gpt-4o-mini">GPT-4o mini (faster, lower cost)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Used for HEIC/image uploads and Vision OCR PDF modes.
                       </p>
                     </div>
                   )}

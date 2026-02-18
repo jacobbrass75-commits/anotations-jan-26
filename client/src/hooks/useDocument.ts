@@ -64,10 +64,21 @@ export function useUploadDocument() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ file, ocrMode }: { file: File; ocrMode: string }) => {
+    mutationFn: async ({
+      file,
+      ocrMode,
+      ocrModel,
+    }: {
+      file: File;
+      ocrMode: string;
+      ocrModel?: string;
+    }) => {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("ocrMode", ocrMode);
+      if (ocrModel) {
+        formData.append("ocrModel", ocrModel);
+      }
 
       const response = await fetch("/api/upload", {
         method: "POST",

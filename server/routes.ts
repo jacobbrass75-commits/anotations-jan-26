@@ -30,6 +30,8 @@ import {
   processWithPaddleOcr,
   processWithVisionOcr,
   processImageWithVisionOcr,
+  SUPPORTED_VISION_OCR_MODELS,
+  type VisionOcrModel,
 } from "./ocrProcessor";
 import {
   getDocumentSourcePath,
@@ -146,6 +148,12 @@ export async function registerRoutes(
           : ["standard", "advanced", "vision", "vision_batch"].includes(requestedOcrMode)
           ? requestedOcrMode
           : "standard";
+      const requestedOcrModel = ((req.body.ocrModel as string) || "").toLowerCase();
+      const ocrModel: VisionOcrModel = SUPPORTED_VISION_OCR_MODELS.includes(
+        requestedOcrModel as VisionOcrModel
+      )
+        ? (requestedOcrModel as VisionOcrModel)
+        : "gpt-4o";
       const fileExtension = getFileExtension(file.originalname);
       const isPdf = file.mimetype === "application/pdf" || fileExtension === ".pdf";
       const isTxt = file.mimetype === "text/plain" || fileExtension === ".txt";
@@ -239,11 +247,11 @@ export async function registerRoutes(
             console.error("Background PaddleOCR error:", err);
           });
         } else if (ocrMode === "vision") {
-          processWithVisionOcr(doc.id, tempPdfPath).catch((err) => {
+          processWithVisionOcr(doc.id, tempPdfPath, { model: ocrModel }).catch((err) => {
             console.error("Background Vision OCR error:", err);
           });
         } else if (ocrMode === "vision_batch") {
-          processWithVisionOcr(doc.id, tempPdfPath, { batchMode: true }).catch((err) => {
+          processWithVisionOcr(doc.id, tempPdfPath, { batchMode: true, model: ocrModel }).catch((err) => {
             console.error("Background Vision Batch OCR error:", err);
           });
         }
@@ -265,10 +273,10 @@ export async function registerRoutes(
         const updatedDoc = await storage.getDocument(doc.id);
         const imageOcrOptions =
           ocrMode === "vision_batch"
-            ? { batchMode: true }
+            ? { batchMode: true, model: ocrModel }
             : ocrMode === "vision"
-            ? { batchMode: false }
-            : {};
+            ? { batchMode: false, model: ocrModel }
+            : { model: ocrModel };
 
         processImageWithVisionOcr(doc.id, tempImagePath, file.originalname, imageOcrOptions).catch((err) => {
           console.error("Background image Vision OCR error:", err);

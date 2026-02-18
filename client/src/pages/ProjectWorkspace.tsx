@@ -230,9 +230,36 @@ function getFileExtension(filename: string): string {
   return filename.slice(extStart).toLowerCase();
 }
 
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".tif",
+  ".tiff",
+  ".heic",
+  ".heif",
+]);
+
 function isPdfFile(file: File | null): boolean {
   if (!file) return false;
   return file.type === "application/pdf" || getFileExtension(file.name) === ".pdf";
+}
+
+function isImageFile(file: File | null): boolean {
+  if (!file) return false;
+  const extension = getFileExtension(file.name);
+  return file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(extension);
+}
+
+function isSupportedUploadFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  const isPdf = isPdfFile(file);
+  const isTxt = file.type === "text/plain" || extension === ".txt";
+  const isImage = isImageFile(file);
+  return isPdf || isTxt || isImage;
 }
 
 export default function ProjectWorkspace() {
@@ -266,8 +293,10 @@ export default function ProjectWorkspace() {
   const [isBatchUploadOpen, setIsBatchUploadOpen] = useState(false);
   const [generatingCitationFor, setGeneratingCitationFor] = useState<string | null>(null);
   const [generatingFootnoteFor, setGeneratingFootnoteFor] = useState<string | null>(null);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadOcrMode, setUploadOcrMode] = useState<string>("standard");
+  const [uploadOcrModel, setUploadOcrModel] = useState<string>("gpt-4o");
+  const [isUploadingAndAdding, setIsUploadingAndAdding] = useState(false);
   const [addDocTab, setAddDocTab] = useState<"library" | "upload">("library");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadDocument = useUploadDocument();
@@ -281,6 +310,11 @@ export default function ProjectWorkspace() {
     const addedDocIds = new Set(projectDocuments.map(pd => pd.documentId));
     return allDocuments.filter(doc => !addedDocIds.has(doc.id));
   }, [allDocuments, projectDocuments]);
+
+  const hasPdfUploadFiles = uploadFiles.some((file) => isPdfFile(file));
+  const hasImageUploadFiles = uploadFiles.some((file) => isImageFile(file));
+  const shouldShowVisionModelSelector =
+    hasImageUploadFiles || (hasPdfUploadFiles && (uploadOcrMode === "vision" || uploadOcrMode === "vision_batch"));
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -362,6 +396,83 @@ export default function ProjectWorkspace() {
       toast({ title: "Success", description: "Document removed" });
     } catch (error) {
       toast({ title: "Error", description: "Failed to remove document", variant: "destructive" });
+    }
+  };
+
+  const handleUploadFileSelect = (files: FileList | null) => {
+    if (!files) return;
+    const selectedFiles = Array.from(files).filter((file) => isSupportedUploadFile(file));
+    if (selectedFiles.length === 0) return;
+
+    setUploadFiles((prev) => {
+      const existingKeys = new Set(prev.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+      const newFiles = selectedFiles.filter(
+        (file) => !existingKeys.has(`${file.name}:${file.size}:${file.lastModified}`)
+      );
+      return [...prev, ...newFiles];
+    });
+  };
+
+  const removeUploadFile = (index: number) => {
+    setUploadFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
+  };
+
+  const handleUploadAndAddDocuments = async () => {
+    if (uploadFiles.length === 0) return;
+    setIsUploadingAndAdding(true);
+
+    let addedCount = 0;
+    let failedCount = 0;
+    let firstErrorMessage = "";
+
+    try {
+      for (const file of uploadFiles) {
+        try {
+          const doc = await uploadDocument.mutateAsync({
+            file,
+            ocrMode: uploadOcrMode,
+            ocrModel: uploadOcrModel,
+          });
+
+          await addDocument.mutateAsync({
+            projectId,
+            data: {
+              documentId: doc.id,
+              folderId: selectedFolderId || undefined,
+            },
+          });
+
+          addedCount += 1;
+        } catch (error) {
+          failedCount += 1;
+          if (!firstErrorMessage) {
+            firstErrorMessage = error instanceof Error ? error.message : "Upload failed";
+          }
+        }
+      }
+
+      if (addedCount > 0 && failedCount === 0) {
+        toast({
+          title: "Documents added",
+          description: `Uploaded and added ${addedCount} document${addedCount === 1 ? "" : "s"} to the project.`,
+        });
+        setIsAddDocOpen(false);
+        setUploadFiles([]);
+      } else if (addedCount > 0 && failedCount > 0) {
+        toast({
+          title: "Partial success",
+          description: `Added ${addedCount} document${addedCount === 1 ? "" : "s"}, ${failedCount} failed.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Upload failed",
+          description: firstErrorMessage || "Could not upload the selected files.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsUploadingAndAdding(false);
     }
   };
 
@@ -714,8 +825,10 @@ export default function ProjectWorkspace() {
       <Dialog open={isAddDocOpen} onOpenChange={(open) => {
         setIsAddDocOpen(open);
         if (!open) {
-          setUploadFile(null);
+          setUploadFiles([]);
           setUploadOcrMode("standard");
+          setUploadOcrModel("gpt-4o");
+          setIsUploadingAndAdding(false);
           setSelectedDocId("");
           setAddDocTab("library");
         }
@@ -765,7 +878,11 @@ export default function ProjectWorkspace() {
                 type="file"
                 accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,application/pdf,text/plain,image/*"
                 className="hidden"
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                multiple
+                onChange={(e) => {
+                  handleUploadFileSelect(e.target.files);
+                  e.target.value = "";
+                }}
                 data-testid="input-file-upload"
               />
               <div
@@ -774,16 +891,43 @@ export default function ProjectWorkspace() {
                 data-testid="dropzone-upload"
               >
                 <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                {uploadFile ? (
-                  <p className="text-sm font-medium">{uploadFile.name}</p>
+                {uploadFiles.length > 0 ? (
+                  <p className="text-sm font-medium">
+                    {uploadFiles.length} file{uploadFiles.length === 1 ? "" : "s"} selected
+                  </p>
                 ) : (
                   <>
-                    <p className="text-sm text-muted-foreground">Click to select a PDF, TXT, or image file</p>
+                    <p className="text-sm text-muted-foreground">Click to select one or more PDF, TXT, or image files</p>
                     <p className="text-xs text-muted-foreground mt-1">Max 50MB</p>
                   </>
                 )}
               </div>
-              {isPdfFile(uploadFile) && (
+              {uploadFiles.length > 0 && (
+                <ScrollArea className="h-28 border rounded-md p-2">
+                  <div className="space-y-2">
+                    {uploadFiles.map((file, index) => (
+                      <div
+                        key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                        className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5"
+                        data-testid={`selected-upload-file-${index}`}
+                      >
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm flex-1 truncate">{file.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => removeUploadFile(index)}
+                          data-testid={`button-remove-upload-file-${index}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+              {hasPdfUploadFiles && (
                 <div className="space-y-1.5">
                   <Label>Text Extraction Mode</Label>
                   <Select value={uploadOcrMode} onValueChange={setUploadOcrMode}>
@@ -805,6 +949,23 @@ export default function ProjectWorkspace() {
                   </p>
                 </div>
               )}
+              {shouldShowVisionModelSelector && (
+                <div className="space-y-1.5">
+                  <Label>AI OCR Model</Label>
+                  <Select value={uploadOcrModel} onValueChange={setUploadOcrModel}>
+                    <SelectTrigger data-testid="select-ocr-model">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gpt-4o">GPT-4o (best OCR quality)</SelectItem>
+                      <SelectItem value="gpt-4o-mini">GPT-4o mini (faster, lower cost)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Used for HEIC/image transcription and Vision OCR PDF modes.
+                  </p>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
           <DialogFooter>
@@ -820,29 +981,12 @@ export default function ProjectWorkspace() {
               </Button>
             ) : (
               <Button 
-                onClick={async () => {
-                  if (!uploadFile) return;
-                  try {
-                    const doc = await uploadDocument.mutateAsync({ file: uploadFile, ocrMode: uploadOcrMode });
-                    await addDocument.mutateAsync({
-                      projectId,
-                      data: {
-                        documentId: doc.id,
-                        folderId: selectedFolderId || undefined,
-                      },
-                    });
-                    setIsAddDocOpen(false);
-                    setUploadFile(null);
-                    toast({ title: "Document added", description: `${doc.filename} uploaded and added to project` });
-                  } catch (error: any) {
-                    toast({ title: "Error", description: error.message, variant: "destructive" });
-                  }
-                }}
-                disabled={!uploadFile || uploadDocument.isPending || addDocument.isPending}
+                onClick={handleUploadAndAddDocuments}
+                disabled={uploadFiles.length === 0 || isUploadingAndAdding}
                 data-testid="button-upload-add"
               >
-                {(uploadDocument.isPending || addDocument.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Upload & Add
+                {isUploadingAndAdding && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Upload & Add {uploadFiles.length > 0 ? uploadFiles.length : ""} {uploadFiles.length === 1 ? "File" : "Files"}
               </Button>
             )}
           </DialogFooter>

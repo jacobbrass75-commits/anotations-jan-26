@@ -77,14 +77,14 @@ export default function Home() {
     }
   }, [documentStatus?.status, currentDocumentId, queryClient, toast, documentStatus?.filename, documentStatus?.processingError]);
 
-  const handleUpload = useCallback(async (file: File, ocrMode: string) => {
+  const handleUpload = useCallback(async (file: File, ocrMode: string, ocrModel?: string) => {
     setUploadProgress(10);
     try {
       const interval = setInterval(() => {
         setUploadProgress((prev) => Math.min(prev + 10, 90));
       }, 300);
 
-      const result = await uploadMutation.mutateAsync({ file, ocrMode });
+      const result = await uploadMutation.mutateAsync({ file, ocrMode, ocrModel });
       clearInterval(interval);
       setUploadProgress(100);
 

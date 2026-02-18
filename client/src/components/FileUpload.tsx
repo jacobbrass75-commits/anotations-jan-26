@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 
 interface FileUploadProps {
-  onUpload: (file: File, ocrMode: string) => Promise<void>;
+  onUpload: (file: File, ocrMode: string, ocrModel?: string) => Promise<void>;
   isUploading: boolean;
   uploadProgress: number;
 }
@@ -41,14 +41,20 @@ function isSupportedUploadFile(file: File): boolean {
   const extension = getFileExtension(file.name);
   const isPdf = file.type === "application/pdf" || extension === ".pdf";
   const isTxt = file.type === "text/plain" || extension === ".txt";
-  const isImage = file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(extension);
+  const isImage = isImageFile(file);
   return isPdf || isTxt || isImage;
+}
+
+function isImageFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  return file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(extension);
 }
 
 export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUploadProps) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [ocrMode, setOcrMode] = useState<string>("standard");
+  const [ocrModel, setOcrModel] = useState<string>("gpt-4o");
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -89,9 +95,10 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
 
   const handleUpload = async () => {
     if (selectedFile) {
-      await onUpload(selectedFile, ocrMode);
+      await onUpload(selectedFile, ocrMode, ocrModel);
       setSelectedFile(null);
       setOcrMode("standard");
+      setOcrModel("gpt-4o");
     }
   };
 
@@ -120,6 +127,9 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
   const isPdf = selectedFile
     ? selectedFile.type === "application/pdf" || getFileExtension(selectedFile.name) === ".pdf"
     : false;
+  const isImage = selectedFile ? isImageFile(selectedFile) : false;
+  const shouldShowOcrModel =
+    isImage || (isPdf && (ocrMode === "vision" || ocrMode === "vision_batch"));
 
   if (selectedFile) {
     return (
@@ -166,6 +176,25 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
                 {ocrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
                 {ocrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
                 {ocrMode === "vision_batch" && "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
+              </p>
+            </div>
+          )}
+          {shouldShowOcrModel && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">
+                AI OCR Model
+              </label>
+              <Select value={ocrModel} onValueChange={setOcrModel}>
+                <SelectTrigger className="w-full" data-testid="select-ocr-model">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gpt-4o">GPT-4o (best OCR quality)</SelectItem>
+                  <SelectItem value="gpt-4o-mini">GPT-4o mini (faster, lower cost)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Used for image/HEIC transcription and Vision OCR PDF modes.
               </p>
             </div>
           )}
