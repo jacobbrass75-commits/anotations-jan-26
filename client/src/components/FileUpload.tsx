@@ -18,6 +18,33 @@ interface FileUploadProps {
   uploadProgress: number;
 }
 
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".tif",
+  ".tiff",
+  ".heic",
+  ".heif",
+]);
+
+function getFileExtension(filename: string): string {
+  const extStart = filename.lastIndexOf(".");
+  if (extStart < 0) return "";
+  return filename.slice(extStart).toLowerCase();
+}
+
+function isSupportedUploadFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  const isPdf = file.type === "application/pdf" || extension === ".pdf";
+  const isTxt = file.type === "text/plain" || extension === ".txt";
+  const isImage = file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(extension);
+  return isPdf || isTxt || isImage;
+}
+
 export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUploadProps) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -57,8 +84,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
   }, []);
 
   const isValidFile = (file: File) => {
-    const validTypes = ["application/pdf", "text/plain"];
-    return validTypes.includes(file.type) || file.name.endsWith(".txt") || file.name.endsWith(".pdf");
+    return isSupportedUploadFile(file);
   };
 
   const handleUpload = async () => {
@@ -92,7 +118,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
   }
 
   const isPdf = selectedFile
-    ? selectedFile.type === "application/pdf" || selectedFile.name.endsWith(".pdf")
+    ? selectedFile.type === "application/pdf" || getFileExtension(selectedFile.name) === ".pdf"
     : false;
 
   if (selectedFile) {
@@ -167,7 +193,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
         <input
           type="file"
           className="hidden"
-          accept=".pdf,.txt,application/pdf,text/plain"
+          accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,application/pdf,text/plain,image/*"
           onChange={handleChange}
           data-testid="input-file-upload"
         />
@@ -177,7 +203,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
           </div>
           <div className="text-center">
             <p className="text-sm font-medium text-foreground">
-              Drop PDF or TXT file, or click to browse
+              Drop PDF, TXT, or image file, or click to browse
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Maximum file size: 50MB
@@ -186,6 +212,8 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
           <div className="flex gap-2">
             <Badge variant="secondary">PDF</Badge>
             <Badge variant="secondary">TXT</Badge>
+            <Badge variant="secondary">HEIC</Badge>
+            <Badge variant="secondary">Images</Badge>
           </div>
         </div>
       </label>

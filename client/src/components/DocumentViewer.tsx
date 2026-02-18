@@ -88,7 +88,7 @@ export function DocumentViewer({
           </div>
           <h3 className="text-lg font-semibold text-foreground mb-2">No Document Loaded</h3>
           <p className="text-sm text-muted-foreground">
-            Upload a PDF or TXT file to start annotating and analyzing your research materials.
+            Upload a PDF, TXT, or image file to start annotating and analyzing your research materials.
           </p>
         </div>
       </Card>
@@ -102,7 +102,7 @@ export function DocumentViewer({
           <Loader2 className="mx-auto h-12 w-12 text-primary animate-spin mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2">Processing Document</h3>
           <p className="text-sm text-muted-foreground">
-            Extracting text from your scanned PDF. This may take a moment...
+            Extracting text from your source file. This may take a moment...
           </p>
         </div>
       </Card>
@@ -116,7 +116,7 @@ export function DocumentViewer({
           <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2">Processing Failed</h3>
           <p className="text-sm text-muted-foreground">
-            {document.processingError || "Could not extract text from this PDF."}
+            {document.processingError || "Could not extract text from this file."}
           </p>
         </div>
       </Card>

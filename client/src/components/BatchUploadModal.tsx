@@ -34,6 +34,37 @@ interface UploadedFile {
   documentId?: string;
 }
 
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".tif",
+  ".tiff",
+  ".heic",
+  ".heif",
+]);
+
+function getFileExtension(filename: string): string {
+  const extStart = filename.lastIndexOf(".");
+  if (extStart < 0) return "";
+  return filename.slice(extStart).toLowerCase();
+}
+
+function isPdfFile(file: File): boolean {
+  return file.type === "application/pdf" || getFileExtension(file.name) === ".pdf";
+}
+
+function isSupportedUploadFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  const isPdf = isPdfFile(file);
+  const isTxt = file.type === "text/plain" || extension === ".txt";
+  const isImage = file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(extension);
+  return isPdf || isTxt || isImage;
+}
+
 export function BatchUploadModal({
   open,
   onOpenChange,
@@ -121,8 +152,7 @@ export function BatchUploadModal({
   };
 
   const isValidFile = (file: File) => {
-    const validTypes = ["application/pdf", "text/plain"];
-    return validTypes.includes(file.type) || file.name.endsWith(".txt") || file.name.endsWith(".pdf");
+    return isSupportedUploadFile(file);
   };
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -407,7 +437,7 @@ export function BatchUploadModal({
                       <input
                         type="file"
                         className="hidden"
-                        accept=".pdf,.txt,application/pdf,text/plain"
+                        accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,application/pdf,text/plain,image/*"
                         multiple
                         onChange={handleFileSelect}
                         data-testid="input-file-upload-batch"
@@ -418,11 +448,13 @@ export function BatchUploadModal({
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-medium">Drop files here or click to browse</p>
-                          <p className="text-xs text-muted-foreground mt-1">PDF and TXT files, max 50MB each</p>
+                          <p className="text-xs text-muted-foreground mt-1">PDF, TXT, and image files, max 50MB each</p>
                         </div>
                         <div className="flex gap-2">
                           <Badge variant="secondary">PDF</Badge>
                           <Badge variant="secondary">TXT</Badge>
+                          <Badge variant="secondary">HEIC</Badge>
+                          <Badge variant="secondary">Images</Badge>
                         </div>
                       </div>
                     </label>
@@ -460,7 +492,7 @@ export function BatchUploadModal({
                     </div>
                   )}
 
-                  {filesToUpload.some(f => f.type === "application/pdf" || f.name.endsWith(".pdf")) && (
+                  {filesToUpload.some((file) => isPdfFile(file)) && (
                     <div className="space-y-2">
                       <Label>Text Extraction Mode (for PDFs)</Label>
                       <Select value={batchOcrMode} onValueChange={setBatchOcrMode}>

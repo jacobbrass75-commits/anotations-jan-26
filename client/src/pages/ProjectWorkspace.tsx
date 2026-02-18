@@ -224,6 +224,17 @@ function SearchResultCard({
   );
 }
 
+function getFileExtension(filename: string): string {
+  const extStart = filename.lastIndexOf(".");
+  if (extStart < 0) return "";
+  return filename.slice(extStart).toLowerCase();
+}
+
+function isPdfFile(file: File | null): boolean {
+  if (!file) return false;
+  return file.type === "application/pdf" || getFileExtension(file.name) === ".pdf";
+}
+
 export default function ProjectWorkspace() {
   const [, params] = useRoute("/projects/:id");
   const [, setLocation] = useLocation();
@@ -752,7 +763,7 @@ export default function ProjectWorkspace() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.txt"
+                accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,application/pdf,text/plain,image/*"
                 className="hidden"
                 onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
                 data-testid="input-file-upload"
@@ -767,12 +778,12 @@ export default function ProjectWorkspace() {
                   <p className="text-sm font-medium">{uploadFile.name}</p>
                 ) : (
                   <>
-                    <p className="text-sm text-muted-foreground">Click to select a PDF or TXT file</p>
+                    <p className="text-sm text-muted-foreground">Click to select a PDF, TXT, or image file</p>
                     <p className="text-xs text-muted-foreground mt-1">Max 50MB</p>
                   </>
                 )}
               </div>
-              {uploadFile && (uploadFile.type === "application/pdf" || uploadFile.name.endsWith(".pdf")) && (
+              {isPdfFile(uploadFile) && (
                 <div className="space-y-1.5">
                   <Label>Text Extraction Mode</Label>
                   <Select value={uploadOcrMode} onValueChange={setUploadOcrMode}>

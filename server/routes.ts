@@ -24,13 +24,49 @@ import {
 } from "./pipelineV2";
 import { registerProjectRoutes } from "./projectRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
-import { saveTempPdf, processWithPaddleOcr, processWithVisionOcr } from "./ocrProcessor";
+import {
+  saveTempPdf,
+  saveTempUpload,
+  processWithPaddleOcr,
+  processWithVisionOcr,
+  processImageWithVisionOcr,
+} from "./ocrProcessor";
 import {
   getDocumentSourcePath,
   hasDocumentSource,
   inferDocumentSourceMimeType,
   saveDocumentSource,
 } from "./sourceFiles";
+
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".tif",
+  ".tiff",
+  ".heic",
+  ".heif",
+]);
+
+const IMAGE_MIME_TYPES = new Set([
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
+]);
+
+function getFileExtension(filename: string): string {
+  const extStart = filename.lastIndexOf(".");
+  if (extStart < 0) return "";
+  return filename.slice(extStart).toLowerCase();
+}
+
+function isImageFile(mimeType: string, extension: string): boolean {
+  return mimeType.startsWith("image/") || IMAGE_MIME_TYPES.has(mimeType) || IMAGE_EXTENSIONS.has(extension);
+}
 
 // Detect garbled text from failed PDF extraction
 // Checks for high ratio of non-word characters or unusual patterns
@@ -66,14 +102,15 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["application/pdf", "text/plain"];
-    const allowedExtensions = [".pdf", ".txt"];
-    const ext = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf("."));
-    
-    if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+    const ext = getFileExtension(file.originalname);
+    const isPdf = file.mimetype === "application/pdf" || ext === ".pdf";
+    const isTxt = file.mimetype === "text/plain" || ext === ".txt";
+    const isImage = isImageFile(file.mimetype, ext);
+
+    if (isPdf || isTxt || isImage) {
       cb(null, true);
     } else {
-      cb(new Error("Only PDF and TXT files are allowed"));
+      cb(new Error("Only PDF, TXT, and image files (including HEIC/HEIF) are allowed"));
     }
   },
 });
@@ -109,10 +146,19 @@ export async function registerRoutes(
           : ["standard", "advanced", "vision", "vision_batch"].includes(requestedOcrMode)
           ? requestedOcrMode
           : "standard";
-      const isPdf = file.mimetype === "application/pdf" || file.originalname.endsWith(".pdf");
+      const fileExtension = getFileExtension(file.originalname);
+      const isPdf = file.mimetype === "application/pdf" || fileExtension === ".pdf";
+      const isTxt = file.mimetype === "text/plain" || fileExtension === ".txt";
+      const isImage = isImageFile(file.mimetype, fileExtension);
 
-      // For non-PDF files or standard mode, use synchronous processing
-      if (!isPdf || ocrMode === "standard") {
+      if (!isPdf && !isTxt && !isImage) {
+        return res.status(400).json({
+          message: "Unsupported file type. Please upload a PDF, TXT, or image file (including HEIC/HEIF).",
+        });
+      }
+
+      // For TXT files and standard PDF mode, use synchronous processing
+      if (isTxt || (isPdf && ocrMode === "standard")) {
         let fullText: string;
 
         if (isPdf) {
@@ -174,34 +220,64 @@ export async function registerRoutes(
         return res.json(updatedDoc);
       }
 
-      // OCR modes: save temp PDF, create doc in processing state, fire-and-forget
-      const tempPdfPath = await saveTempPdf(file.buffer);
+      if (isPdf) {
+        // OCR modes for PDFs: save temp PDF, create doc in processing state, fire-and-forget
+        const tempPdfPath = await saveTempPdf(file.buffer);
 
-      const doc = await storage.createDocument({
-        filename: file.originalname,
-        fullText: "",
-      });
-      await persistSourceFile(doc.id, file.originalname, file.buffer);
-      await storage.updateDocument(doc.id, { status: "processing" });
+        const doc = await storage.createDocument({
+          filename: file.originalname,
+          fullText: "",
+        });
+        await persistSourceFile(doc.id, file.originalname, file.buffer);
+        await storage.updateDocument(doc.id, { status: "processing" });
 
-      const updatedDoc = await storage.getDocument(doc.id);
+        const updatedDoc = await storage.getDocument(doc.id);
 
-      // Fire-and-forget background processing
-      if (ocrMode === "advanced") {
-        processWithPaddleOcr(doc.id, tempPdfPath).catch((err) => {
-          console.error("Background PaddleOCR error:", err);
-        });
-      } else if (ocrMode === "vision") {
-        processWithVisionOcr(doc.id, tempPdfPath).catch((err) => {
-          console.error("Background Vision OCR error:", err);
-        });
-      } else if (ocrMode === "vision_batch") {
-        processWithVisionOcr(doc.id, tempPdfPath, { batchMode: true }).catch((err) => {
-          console.error("Background Vision Batch OCR error:", err);
-        });
+        // Fire-and-forget background processing
+        if (ocrMode === "advanced") {
+          processWithPaddleOcr(doc.id, tempPdfPath).catch((err) => {
+            console.error("Background PaddleOCR error:", err);
+          });
+        } else if (ocrMode === "vision") {
+          processWithVisionOcr(doc.id, tempPdfPath).catch((err) => {
+            console.error("Background Vision OCR error:", err);
+          });
+        } else if (ocrMode === "vision_batch") {
+          processWithVisionOcr(doc.id, tempPdfPath, { batchMode: true }).catch((err) => {
+            console.error("Background Vision Batch OCR error:", err);
+          });
+        }
+
+        return res.status(202).json(updatedDoc);
       }
 
-      return res.status(202).json(updatedDoc);
+      if (isImage) {
+        // Image OCR always runs through Vision OCR (supports HEIC multi-image files).
+        const tempImagePath = await saveTempUpload(file.buffer, file.originalname);
+
+        const doc = await storage.createDocument({
+          filename: file.originalname,
+          fullText: "",
+        });
+        await persistSourceFile(doc.id, file.originalname, file.buffer);
+        await storage.updateDocument(doc.id, { status: "processing" });
+
+        const updatedDoc = await storage.getDocument(doc.id);
+        const imageOcrOptions =
+          ocrMode === "vision_batch"
+            ? { batchMode: true }
+            : ocrMode === "vision"
+            ? { batchMode: false }
+            : {};
+
+        processImageWithVisionOcr(doc.id, tempImagePath, file.originalname, imageOcrOptions).catch((err) => {
+          console.error("Background image Vision OCR error:", err);
+        });
+
+        return res.status(202).json(updatedDoc);
+      }
+
+      return res.status(400).json({ message: "Unsupported OCR mode for this file type" });
     } catch (error) {
       console.error("Upload error:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
