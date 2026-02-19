@@ -340,6 +340,8 @@ export default function ProjectWorkspace() {
   const combinedUploadChunks = canCombineSelectedImages
     ? chunkFiles(uploadFiles, MAX_COMBINED_UPLOAD_FILES_PER_DOC)
     : [];
+  const exceedsSafeCombinedThreshold =
+    canCombineSelectedImages && uploadFiles.length > MAX_COMBINED_UPLOAD_FILES_PER_DOC;
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -1020,6 +1022,11 @@ export default function ProjectWorkspace() {
                     Combine selected images into document batches (keeps upload order, max {MAX_COMBINED_UPLOAD_FILES_PER_DOC} images per document)
                   </span>
                 </label>
+              )}
+              {exceedsSafeCombinedThreshold && combineImageUploads && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Large image sets are automatically split into {combinedUploadChunks.length} documents to prevent OCR failures and restarts.
+                </p>
               )}
               {hasPdfUploadFiles && (
                 <div className="space-y-1.5">

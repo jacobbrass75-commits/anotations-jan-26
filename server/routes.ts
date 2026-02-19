@@ -60,6 +60,9 @@ const IMAGE_MIME_TYPES = new Set([
   "image/heic-sequence",
   "image/heif-sequence",
 ]);
+const MAX_COMBINED_UPLOAD_FILES = Number.isFinite(Number(process.env.MAX_COMBINED_UPLOAD_FILES))
+  ? Math.max(1, Math.floor(Number(process.env.MAX_COMBINED_UPLOAD_FILES)))
+  : 25;
 
 function getFileExtension(filename: string): string {
   const extStart = filename.lastIndexOf(".");
@@ -299,6 +302,13 @@ export async function registerRoutes(
       const files = (req.files as Express.Multer.File[] | undefined) || [];
       if (!files.length) {
         return res.status(400).json({ message: "No files uploaded" });
+      }
+      if (files.length > MAX_COMBINED_UPLOAD_FILES) {
+        return res.status(400).json({
+          message:
+            `Too many images in one combined upload (${files.length}). ` +
+            `Limit is ${MAX_COMBINED_UPLOAD_FILES}. Split into smaller batches for reliability.`,
+        });
       }
 
       const requestedOcrMode = ((req.body.ocrMode as string) || "standard").toLowerCase();
