@@ -55,6 +55,15 @@ const DEFAULT_VISION_AUTO_BATCH_THRESHOLD = parsePositiveInt(
   process.env.VISION_OCR_AUTO_BATCH_THRESHOLD,
   8
 );
+const DEFAULT_HEIC_PAGE_CHUNK_SIZE = parsePositiveInt(process.env.VISION_HEIC_PAGE_CHUNK_SIZE, 30);
+const DEFAULT_HEIC_MAX_DIMENSION = parsePositiveInt(process.env.VISION_HEIC_MAX_DIMENSION, 2200);
+const DEFAULT_HEIC_JPEG_QUALITY = parsePositiveInt(process.env.VISION_HEIC_JPEG_QUALITY, 80);
+const DEFAULT_HEIC_ROTATE_THRESHOLD_PCT = parsePositiveInt(
+  process.env.VISION_HEIC_ROTATE_THRESHOLD_PCT,
+  130
+);
+const DEFAULT_HEIC_CONTRAST_GAIN = Number(process.env.VISION_HEIC_CONTRAST_GAIN || "1.08");
+const DEFAULT_HEIC_CONTRAST_BIAS = Number(process.env.VISION_HEIC_CONTRAST_BIAS || "-6");
 const VISION_MAX_RETRIES = parsePositiveInt(process.env.VISION_OCR_MAX_RETRIES, 8);
 const VISION_DEFAULT_RETRY_DELAY_MS = parsePositiveInt(process.env.VISION_OCR_RETRY_DELAY_MS, 1000);
 const VISION_TPM_LIMIT = parsePositiveInt(process.env.VISION_OCR_TPM_LIMIT, 30000);
@@ -392,6 +401,88 @@ function chunkBySize<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(i, i + size));
   }
   return chunks;
+}
+
+async function preprocessImageForVision(
+  inputPath: string,
+  outputDir: string,
+  outputName: string
+): Promise<string> {
+  try {
+    const sharpModule = await import("sharp");
+    const sharpFactory = (sharpModule as { default?: any }).default || (sharpModule as any);
+
+    const metadata = await sharpFactory(inputPath, { failOnError: false }).metadata();
+    const width = metadata.width ?? 0;
+    const height = metadata.height ?? 0;
+
+    let pipeline = sharpFactory(inputPath, { failOnError: false }).rotate();
+
+    // Phone captures often arrive landscape even for portrait documents.
+    if (
+      width > 0 &&
+      height > 0 &&
+      width * 100 >= height * DEFAULT_HEIC_ROTATE_THRESHOLD_PCT
+    ) {
+      pipeline = pipeline.rotate(90);
+    }
+
+    if (DEFAULT_HEIC_MAX_DIMENSION > 0) {
+      pipeline = pipeline.resize({
+        width: DEFAULT_HEIC_MAX_DIMENSION,
+        height: DEFAULT_HEIC_MAX_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+    }
+
+    pipeline = pipeline.normalize().sharpen();
+
+    if (
+      Number.isFinite(DEFAULT_HEIC_CONTRAST_GAIN) &&
+      Number.isFinite(DEFAULT_HEIC_CONTRAST_BIAS)
+    ) {
+      pipeline = pipeline.linear(DEFAULT_HEIC_CONTRAST_GAIN, DEFAULT_HEIC_CONTRAST_BIAS);
+    }
+
+    const outputPath = join(outputDir, `${outputName}.jpg`);
+    const jpegQuality = Math.max(50, Math.min(95, DEFAULT_HEIC_JPEG_QUALITY));
+    const outputBuffer = await pipeline
+      .jpeg({ quality: jpegQuality, mozjpeg: true, chromaSubsampling: "4:4:4" })
+      .toBuffer();
+
+    await writeFile(outputPath, outputBuffer);
+    return outputPath;
+  } catch (error) {
+    console.warn(`[Vision OCR] HEIC preprocessing failed for ${inputPath}, using original image`, error);
+    return inputPath;
+  }
+}
+
+async function extractVisionTextsWithChunking(
+  docId: string,
+  imagePaths: string[],
+  options: VisionOcrOptions = {}
+): Promise<string[]> {
+  if (imagePaths.length <= DEFAULT_HEIC_PAGE_CHUNK_SIZE) {
+    return extractVisionTextsFromImagePaths(docId, imagePaths, options);
+  }
+
+  const chunks = chunkBySize(imagePaths, DEFAULT_HEIC_PAGE_CHUNK_SIZE);
+  const results: string[] = [];
+
+  for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+    const chunk = chunks[chunkIndex];
+    const startPage = chunkIndex * DEFAULT_HEIC_PAGE_CHUNK_SIZE + 1;
+    const endPage = startPage + chunk.length - 1;
+    console.log(
+      `[Vision OCR] Processing chunk ${chunkIndex + 1}/${chunks.length} pages ${startPage}-${endPage} for doc ${docId}`
+    );
+    const chunkTexts = await extractVisionTextsFromImagePaths(docId, chunk, options);
+    results.push(...chunkTexts);
+  }
+
+  return results;
 }
 
 /**
@@ -749,6 +840,7 @@ export async function processImageWithVisionOcr(
   options: VisionOcrOptions = {}
 ): Promise<void> {
   let extractedImageDir: string | null = null;
+  let preprocessedImageDir: string | null = null;
 
   try {
     const extension = extname(originalFilename).toLowerCase();
@@ -756,6 +848,7 @@ export async function processImageWithVisionOcr(
 
     if (HEIC_EXTENSIONS.has(extension)) {
       extractedImageDir = await mkdtemp(join(tmpdir(), "vision-heic-"));
+      preprocessedImageDir = await mkdtemp(join(tmpdir(), "vision-heic-pre-"));
       const inputBuffer = await readFile(tempImagePath);
 
       const heicConvert = await import("heic-convert");
@@ -766,7 +859,7 @@ export async function processImageWithVisionOcr(
 
       const images = (await convertAll({
         buffer: inputBuffer,
-        format: "PNG",
+        format: "JPEG",
       })) as Array<{ convert: () => Promise<Buffer> }>;
 
       if (!Array.isArray(images) || images.length === 0) {
@@ -776,9 +869,14 @@ export async function processImageWithVisionOcr(
       imagePaths = [];
       for (let index = 0; index < images.length; index++) {
         const convertedBuffer = await images[index].convert();
-        const outputPath = join(extractedImageDir, `image_${index + 1}.png`);
+        const outputPath = join(extractedImageDir, `image_${index + 1}.jpg`);
         await writeFile(outputPath, convertedBuffer);
-        imagePaths.push(outputPath);
+        const preprocessedPath = await preprocessImageForVision(
+          outputPath,
+          preprocessedImageDir,
+          `image_${index + 1}`
+        );
+        imagePaths.push(preprocessedPath);
       }
 
       console.log(`[Vision OCR] Extracted ${imagePaths.length} image(s) from ${extension} for doc ${docId}`);
@@ -798,7 +896,7 @@ export async function processImageWithVisionOcr(
     };
 
     console.log(`[Vision OCR] Processing ${imagePaths.length} image(s) for doc ${docId}`);
-    const pageTexts = await extractVisionTextsFromImagePaths(docId, imagePaths, imageOptions);
+    const pageTexts = await extractVisionTextsWithChunking(docId, imagePaths, imageOptions);
     const { fullText, chunkCount } = await saveVisionOcrResult(
       docId,
       pageTexts,
@@ -818,6 +916,9 @@ export async function processImageWithVisionOcr(
     if (extractedImageDir) {
       await cleanupTempFiles(extractedImageDir);
     }
+    if (preprocessedImageDir) {
+      await cleanupTempFiles(preprocessedImageDir);
+    }
   }
 }
 
@@ -833,6 +934,7 @@ export async function processImageGroupWithVisionOcr(
 ): Promise<void> {
   const tempUploadPaths: string[] = [];
   const extractedImageDirs: string[] = [];
+  const preprocessedImageDirs: string[] = [];
 
   try {
     if (!Array.isArray(uploads) || uploads.length === 0) {
@@ -855,6 +957,8 @@ export async function processImageGroupWithVisionOcr(
       if (HEIC_EXTENSIONS.has(extension)) {
         const extractedDir = await mkdtemp(join(tmpdir(), "vision-heic-group-"));
         extractedImageDirs.push(extractedDir);
+        const preprocessedDir = await mkdtemp(join(tmpdir(), "vision-heic-group-pre-"));
+        preprocessedImageDirs.push(preprocessedDir);
         const inputBuffer = await readFile(uploadPath);
 
         const heicConvert = await import("heic-convert");
@@ -865,7 +969,7 @@ export async function processImageGroupWithVisionOcr(
 
         const images = (await convertAll({
           buffer: inputBuffer,
-          format: "PNG",
+          format: "JPEG",
         })) as Array<{ convert: () => Promise<Buffer> }>;
 
         if (!Array.isArray(images) || images.length === 0) {
@@ -874,9 +978,14 @@ export async function processImageGroupWithVisionOcr(
 
         for (let frame = 0; frame < images.length; frame++) {
           const convertedBuffer = await images[frame].convert();
-          const outputPath = join(extractedDir, `page_${index + 1}_${frame + 1}.png`);
+          const outputPath = join(extractedDir, `page_${index + 1}_${frame + 1}.jpg`);
           await writeFile(outputPath, convertedBuffer);
-          pageImagePaths.push(outputPath);
+          const preprocessedPath = await preprocessImageForVision(
+            outputPath,
+            preprocessedDir,
+            `page_${index + 1}_${frame + 1}`
+          );
+          pageImagePaths.push(preprocessedPath);
         }
       } else if (extension === ".png" || extension === ".jpg" || extension === ".jpeg") {
         pageImagePaths.push(uploadPath);
@@ -905,7 +1014,7 @@ export async function processImageGroupWithVisionOcr(
     };
 
     console.log(`[Vision OCR] Processing ${pageImagePaths.length} page(s) for combined doc ${docId}`);
-    const pageTexts = await extractVisionTextsFromImagePaths(docId, pageImagePaths, groupOptions);
+    const pageTexts = await extractVisionTextsWithChunking(docId, pageImagePaths, groupOptions);
     const { fullText, chunkCount } = await saveVisionOcrResult(
       docId,
       pageTexts,
@@ -928,6 +1037,9 @@ export async function processImageGroupWithVisionOcr(
       await cleanupTempFiles(tempPath, dirname(tempPath));
     }
     for (const dir of extractedImageDirs) {
+      await cleanupTempFiles(dir);
+    }
+    for (const dir of preprocessedImageDirs) {
       await cleanupTempFiles(dir);
     }
   }

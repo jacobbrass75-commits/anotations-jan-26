@@ -245,6 +245,7 @@ const IMAGE_EXTENSIONS = new Set([
 ]);
 
 const COMBINABLE_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".heic", ".heif"]);
+const MAX_COMBINED_UPLOAD_FILES_PER_DOC = 20;
 
 function isPdfFile(file: File | null): boolean {
   if (!file) return false;
@@ -268,6 +269,15 @@ function isSupportedUploadFile(file: File): boolean {
 function isCombinableImageFile(file: File): boolean {
   const extension = getFileExtension(file.name);
   return isImageFile(file) && COMBINABLE_IMAGE_EXTENSIONS.has(extension);
+}
+
+function chunkFiles<T>(items: T[], chunkSize: number): T[][] {
+  if (chunkSize <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
 }
 
 export default function ProjectWorkspace() {
@@ -327,6 +337,9 @@ export default function ProjectWorkspace() {
     hasImageUploadFiles || (hasPdfUploadFiles && (uploadOcrMode === "vision" || uploadOcrMode === "vision_batch"));
   const canCombineSelectedImages =
     uploadFiles.length > 1 && uploadFiles.every((file) => isCombinableImageFile(file));
+  const combinedUploadChunks = canCombineSelectedImages
+    ? chunkFiles(uploadFiles, MAX_COMBINED_UPLOAD_FILES_PER_DOC)
+    : [];
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -439,27 +452,58 @@ export default function ProjectWorkspace() {
 
     try {
       if (canCombineSelectedImages && combineImageUploads) {
-        const doc = await uploadDocumentGroup.mutateAsync({
-          files: uploadFiles,
-          // Combined image documents always use Vision OCR; batch mode is recommended for speed.
-          ocrMode: "vision_batch",
-          ocrModel: uploadOcrModel,
-        });
+        let docsCreated = 0;
+        let chunkFailures = 0;
 
-        await addDocument.mutateAsync({
-          projectId,
-          data: {
-            documentId: doc.id,
-            folderId: selectedFolderId || undefined,
-          },
-        });
+        for (const chunk of combinedUploadChunks) {
+          try {
+            const doc = await uploadDocumentGroup.mutateAsync({
+              files: chunk,
+              // Combined image documents always use Vision OCR; batch mode is recommended for speed.
+              ocrMode: "vision_batch",
+              ocrModel: uploadOcrModel,
+            });
+
+            await addDocument.mutateAsync({
+              projectId,
+              data: {
+                documentId: doc.id,
+                folderId: selectedFolderId || undefined,
+              },
+            });
+            docsCreated += 1;
+          } catch (error) {
+            chunkFailures += 1;
+            if (!firstErrorMessage) {
+              firstErrorMessage = error instanceof Error ? error.message : "Upload failed";
+            }
+          }
+        }
+
+        if (docsCreated > 0 && chunkFailures === 0) {
+          toast({
+            title: "Documents added",
+            description: `Uploaded ${uploadFiles.length} images as ${docsCreated} document${docsCreated === 1 ? "" : "s"} (chunked for reliability).`,
+          });
+          setIsAddDocOpen(false);
+          setUploadFiles([]);
+          return;
+        }
+
+        if (docsCreated > 0 && chunkFailures > 0) {
+          toast({
+            title: "Partial success",
+            description: `Created ${docsCreated} combined document${docsCreated === 1 ? "" : "s"}, ${chunkFailures} chunk${chunkFailures === 1 ? "" : "s"} failed.`,
+            variant: "destructive",
+          });
+          return;
+        }
 
         toast({
-          title: "Document added",
-          description: `Uploaded ${uploadFiles.length} images as one document.`,
+          title: "Upload failed",
+          description: firstErrorMessage || "Could not upload the selected files.",
+          variant: "destructive",
         });
-        setIsAddDocOpen(false);
-        setUploadFiles([]);
         return;
       }
 
@@ -973,7 +1017,7 @@ export default function ProjectWorkspace() {
                     data-testid="checkbox-combine-image-uploads"
                   />
                   <span className="leading-5">
-                    Combine selected images into one document (keeps upload order)
+                    Combine selected images into document batches (keeps upload order, max {MAX_COMBINED_UPLOAD_FILES_PER_DOC} images per document)
                   </span>
                 </label>
               )}
@@ -1037,7 +1081,7 @@ export default function ProjectWorkspace() {
               >
                 {isUploadingAndAdding && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {canCombineSelectedImages && combineImageUploads
-                  ? "Upload & Add 1 Document"
+                  ? `Upload & Add ${combinedUploadChunks.length} Document${combinedUploadChunks.length === 1 ? "" : "s"}`
                   : `Upload & Add ${uploadFiles.length > 0 ? uploadFiles.length : ""} ${
                       uploadFiles.length === 1 ? "File" : "Files"
                     }`}
