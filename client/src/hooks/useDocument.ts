@@ -94,6 +94,7 @@ export function useUploadDocument() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/documents/meta"] });
     },
   });
 }
@@ -134,6 +135,7 @@ export function useUploadDocumentGroup() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/documents/meta"] });
     },
   });
 }

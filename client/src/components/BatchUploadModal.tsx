@@ -17,11 +17,13 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import type { Document, Folder, BatchAddDocumentsResponse, BatchAddDocumentResult } from "@shared/schema";
 
+type DocumentLibraryItem = Pick<Document, "id" | "filename">;
+
 interface BatchUploadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
-  availableDocuments: Document[];
+  availableDocuments: DocumentLibraryItem[];
   folders: Folder[];
   currentFolderId: string | null;
 }
@@ -253,6 +255,7 @@ export function BatchUploadModal({
         });
         
         queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/documents/meta"] });
         queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "documents"] });
         
         setResponse(result);

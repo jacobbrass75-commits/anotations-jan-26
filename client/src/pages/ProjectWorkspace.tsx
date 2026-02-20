@@ -24,6 +24,8 @@ import { useToast } from "@/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Folder as FolderType, GlobalSearchResult, Document } from "@shared/schema";
 
+type DocumentLibraryItem = Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">;
+
 function FolderTree({ 
   folders, 
   selectedFolderId, 
@@ -289,7 +291,9 @@ export default function ProjectWorkspace() {
   const { data: project, isLoading: projectLoading } = useProject(projectId);
   const { data: folders = [] } = useFolders(projectId);
   const { data: projectDocuments = [] } = useProjectDocuments(projectId);
-  const { data: allDocuments = [] } = useQuery<Document[]>({ queryKey: ["/api/documents"] });
+  const { data: allDocuments = [] } = useQuery<DocumentLibraryItem[]>({
+    queryKey: ["/api/documents/meta"],
+  });
   
   const createFolder = useCreateFolder();
   const deleteFolder = useDeleteFolder();

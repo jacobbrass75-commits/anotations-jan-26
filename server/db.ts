@@ -22,8 +22,28 @@ sqlite.pragma("foreign_keys = ON");
 // Export the drizzle database instance
 export const db = drizzle(sqlite, { schema });
 
-// Recovery: mark any stuck "processing" documents as "error" on startup
-sqlite.exec(`UPDATE documents SET status = 'error', processing_error = 'Server restarted during processing. Please re-upload.' WHERE status = 'processing'`);
+// Persistent OCR queue for crash-safe background processing.
+sqlite.exec(`
+CREATE TABLE IF NOT EXISTS ocr_jobs (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL,
+  job_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  payload TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  last_error TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  started_at INTEGER,
+  finished_at INTEGER,
+  FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ocr_jobs_status_created ON ocr_jobs(status, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ocr_jobs_document_active
+ON ocr_jobs(document_id)
+WHERE status IN ('queued', 'running');
+`);
 
 // Export the raw sqlite connection for direct queries if needed
 export { sqlite };

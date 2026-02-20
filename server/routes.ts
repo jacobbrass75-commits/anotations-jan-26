@@ -25,15 +25,15 @@ import {
 import { registerProjectRoutes } from "./projectRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
 import {
-  saveTempPdf,
-  saveTempUpload,
-  processWithPaddleOcr,
-  processWithVisionOcr,
-  processImageWithVisionOcr,
-  processImageGroupWithVisionOcr,
+  createCombinedPdfFromImageUploads,
   SUPPORTED_VISION_OCR_MODELS,
   type VisionOcrModel,
 } from "./ocrProcessor";
+import {
+  enqueueImageOcrJob,
+  enqueuePdfOcrJob,
+  initializeOcrQueue,
+} from "./ocrQueue";
 import {
   getDocumentSourcePath,
   hasDocumentSource,
@@ -125,17 +125,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: ExpressApp
 ): Promise<Server> {
-  const persistSourceFile = async (
-    documentId: string,
-    filename: string,
-    fileBuffer: Buffer
-  ): Promise<void> => {
-    try {
-      await saveDocumentSource(documentId, filename, fileBuffer);
-    } catch (error) {
-      console.error(`[Upload] Failed to persist original source for document ${documentId}:`, error);
-    }
-  };
+  await initializeOcrQueue();
 
   // Upload document
   app.post("/api/upload", upload.single("file"), async (req: Request, res: Response) => {
@@ -201,7 +191,7 @@ export async function registerRoutes(
           filename: file.originalname,
           fullText,
         });
-        await persistSourceFile(doc.id, file.originalname, file.buffer);
+        await saveDocumentSource(doc.id, file.originalname, file.buffer);
 
         // Chunk the text using V2 chunking (with noise filtering and larger chunks)
         const chunks = chunkTextV2(fullText);
@@ -233,59 +223,41 @@ export async function registerRoutes(
       }
 
       if (isPdf) {
-        // OCR modes for PDFs: save temp PDF, create doc in processing state, fire-and-forget
-        const tempPdfPath = await saveTempPdf(file.buffer);
-
+        // OCR modes for PDFs: queue durable background OCR against persisted source.
         const doc = await storage.createDocument({
           filename: file.originalname,
           fullText: "",
         });
-        await persistSourceFile(doc.id, file.originalname, file.buffer);
+        await saveDocumentSource(doc.id, file.originalname, file.buffer);
         await storage.updateDocument(doc.id, { status: "processing" });
+        await enqueuePdfOcrJob({
+          documentId: doc.id,
+          sourceFilename: file.originalname,
+          ocrMode: ocrMode as "advanced" | "vision" | "vision_batch",
+          ocrModel,
+        });
 
         const updatedDoc = await storage.getDocument(doc.id);
-
-        // Fire-and-forget background processing
-        if (ocrMode === "advanced") {
-          processWithPaddleOcr(doc.id, tempPdfPath).catch((err) => {
-            console.error("Background PaddleOCR error:", err);
-          });
-        } else if (ocrMode === "vision") {
-          processWithVisionOcr(doc.id, tempPdfPath, { model: ocrModel }).catch((err) => {
-            console.error("Background Vision OCR error:", err);
-          });
-        } else if (ocrMode === "vision_batch") {
-          processWithVisionOcr(doc.id, tempPdfPath, { batchMode: true, model: ocrModel }).catch((err) => {
-            console.error("Background Vision Batch OCR error:", err);
-          });
-        }
-
         return res.status(202).json(updatedDoc);
       }
 
       if (isImage) {
-        // Image OCR always runs through Vision OCR (supports HEIC multi-image files).
-        const tempImagePath = await saveTempUpload(file.buffer, file.originalname);
-
+        // Image OCR runs as a durable queued job.
         const doc = await storage.createDocument({
           filename: file.originalname,
           fullText: "",
         });
-        await persistSourceFile(doc.id, file.originalname, file.buffer);
+        await saveDocumentSource(doc.id, file.originalname, file.buffer);
         await storage.updateDocument(doc.id, { status: "processing" });
-
-        const updatedDoc = await storage.getDocument(doc.id);
-        const imageOcrOptions =
-          ocrMode === "vision_batch"
-            ? { batchMode: true, model: ocrModel }
-            : ocrMode === "vision"
-            ? { batchMode: false, model: ocrModel }
-            : { model: ocrModel };
-
-        processImageWithVisionOcr(doc.id, tempImagePath, file.originalname, imageOcrOptions).catch((err) => {
-          console.error("Background image Vision OCR error:", err);
+        const imageOcrMode = ocrMode === "vision_batch" ? "vision_batch" : "vision";
+        await enqueueImageOcrJob({
+          documentId: doc.id,
+          sourceFilename: file.originalname,
+          ocrMode: imageOcrMode,
+          ocrModel,
         });
 
+        const updatedDoc = await storage.getDocument(doc.id);
         return res.status(202).json(updatedDoc);
       }
 
@@ -351,23 +323,20 @@ export async function registerRoutes(
         fullText: "",
       });
       await storage.updateDocument(doc.id, { status: "processing" });
+      const combinedPdfBuffer = await createCombinedPdfFromImageUploads(
+        files.map((file) => ({ buffer: file.buffer, originalFilename: file.originalname }))
+      );
+      await saveDocumentSource(doc.id, combinedFilename, combinedPdfBuffer);
 
-      const updatedDoc = await storage.getDocument(doc.id);
-
-      const groupOptions =
-        ocrMode === "vision"
-          ? { batchMode: false, model: ocrModel }
-          : { batchMode: true, model: ocrModel };
-
-      processImageGroupWithVisionOcr(
-        doc.id,
-        files.map((file) => ({ buffer: file.buffer, originalFilename: file.originalname })),
-        combinedFilename,
-        groupOptions
-      ).catch((err) => {
-        console.error("Background combined image OCR error:", err);
+      const combinedOcrMode = ocrMode === "vision" ? "vision" : "vision_batch";
+      await enqueuePdfOcrJob({
+        documentId: doc.id,
+        sourceFilename: combinedFilename,
+        ocrMode: combinedOcrMode,
+        ocrModel,
       });
 
+      const updatedDoc = await storage.getDocument(doc.id);
       return res.status(202).json(updatedDoc);
     } catch (error) {
       console.error("Upload-group error:", error);
@@ -403,6 +372,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching documents:", error);
       res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+
+  // Get lightweight document metadata list (avoids returning fullText for every document)
+  app.get("/api/documents/meta", async (req: Request, res: Response) => {
+    try {
+      const docs = await storage.getAllDocumentMeta();
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching document metadata:", error);
+      res.status(500).json({ message: "Failed to fetch document metadata" });
     }
   });
 

@@ -779,6 +779,76 @@ async function createPdfFromImagePaths(imagePaths: string[]): Promise<Buffer> {
   return Buffer.from(bytes);
 }
 
+interface UploadFrame {
+  format: "png" | "jpeg";
+  buffer: Buffer;
+}
+
+async function expandUploadToPdfFrames(
+  upload: { buffer: Buffer; originalFilename: string }
+): Promise<UploadFrame[]> {
+  const extension = extname(upload.originalFilename).toLowerCase();
+
+  if (extension === ".png") {
+    return [{ format: "png", buffer: upload.buffer }];
+  }
+
+  if (extension === ".jpg" || extension === ".jpeg") {
+    return [{ format: "jpeg", buffer: upload.buffer }];
+  }
+
+  if (HEIC_EXTENSIONS.has(extension)) {
+    const heicConvert = await import("heic-convert");
+    const convertAll = heicConvert.all || heicConvert.default?.all;
+    if (typeof convertAll !== "function") {
+      throw new Error("HEIC conversion is unavailable (missing convert.all)");
+    }
+
+    const images = (await convertAll({
+      buffer: upload.buffer,
+      format: "JPEG",
+    })) as Array<{ convert: () => Promise<Buffer> }>;
+
+    if (!Array.isArray(images) || images.length === 0) {
+      throw new Error(`No images found in HEIC/HEIF file: ${upload.originalFilename}`);
+    }
+
+    const frames: UploadFrame[] = [];
+    for (const image of images) {
+      frames.push({
+        format: "jpeg",
+        buffer: await image.convert(),
+      });
+    }
+    return frames;
+  }
+
+  throw new Error(
+    `Unsupported image format for combined upload: ${upload.originalFilename}. Please convert to PNG/JPG or upload separately.`
+  );
+}
+
+export async function createCombinedPdfFromImageUploads(
+  uploads: Array<{ buffer: Buffer; originalFilename: string }>
+): Promise<Buffer> {
+  const pdf = await PDFDocument.create();
+
+  for (const upload of uploads) {
+    const frames = await expandUploadToPdfFrames(upload);
+
+    for (const frame of frames) {
+      const embedded =
+        frame.format === "png" ? await pdf.embedPng(frame.buffer) : await pdf.embedJpg(frame.buffer);
+      const { width, height } = embedded.scale(1);
+      const page = pdf.addPage([width, height]);
+      page.drawImage(embedded, { x: 0, y: 0, width, height });
+    }
+  }
+
+  const bytes = await pdf.save();
+  return Buffer.from(bytes);
+}
+
 /**
  * Process a PDF with OpenAI Vision OCR (background, async).
  * Converts pages to images, sends each to GPT-4o Vision.

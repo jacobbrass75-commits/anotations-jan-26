@@ -17,6 +17,7 @@ export interface IStorage {
   // Documents
   getDocument(id: string): Promise<Document | undefined>;
   getAllDocuments(): Promise<Document[]>;
+  getAllDocumentMeta(): Promise<Array<Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">>>;
   createDocument(doc: InsertDocument): Promise<Document>;
   updateDocument(id: string, updates: Partial<Document>): Promise<Document | undefined>;
   deleteDocument(id: string): Promise<void>;
@@ -44,6 +45,27 @@ export class DatabaseStorage implements IStorage {
 
   async getAllDocuments(): Promise<Document[]> {
     return db.select().from(documents);
+  }
+
+  async getAllDocumentMeta(): Promise<
+    Array<
+      Pick<
+        Document,
+        "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError"
+      >
+    >
+  > {
+    return db
+      .select({
+        id: documents.id,
+        filename: documents.filename,
+        uploadDate: documents.uploadDate,
+        summary: documents.summary,
+        chunkCount: documents.chunkCount,
+        status: documents.status,
+        processingError: documents.processingError,
+      })
+      .from(documents);
   }
 
   async createDocument(doc: InsertDocument): Promise<Document> {
