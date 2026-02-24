@@ -1,4 +1,4 @@
-import { FileText, Lightbulb, Tag, Loader2 } from "lucide-react";
+import { FileText, Lightbulb, Tag } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,10 +12,10 @@ interface DocumentSummaryProps {
 export function DocumentSummary({ document, isLoading }: DocumentSummaryProps) {
   if (isLoading) {
     return (
-      <Card>
+      <Card className="eva-corner-decor">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <div className="eva-hex-spinner" style={{ width: "1.5rem", height: "1.5rem" }} />
             <span className="text-sm font-medium">Generating summary...</span>
           </div>
         </CardHeader>
@@ -33,11 +33,11 @@ export function DocumentSummary({ document, isLoading }: DocumentSummaryProps) {
   }
 
   return (
-    <Card>
+    <Card className="eva-corner-decor">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">Document Summary</h3>
+          <h3 className="eva-section-title text-sm">DOCUMENT ANALYSIS</h3>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -74,7 +74,7 @@ export function DocumentSummary({ document, isLoading }: DocumentSummaryProps) {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {document.keyConcepts.map((concept, i) => (
-                <Badge key={i} variant="secondary" className="text-xs">
+                <Badge key={i} variant="secondary" className="bg-eva-purple/30 text-eva-cyan border border-eva-cyan/20 font-mono text-xs">
                   {concept}
                 </Badge>
               ))}

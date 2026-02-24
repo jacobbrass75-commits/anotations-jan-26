@@ -47,7 +47,6 @@ import {
   Plus,
   Trash2,
   Sparkles,
-  Loader2,
   FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -691,7 +690,7 @@ export default function ProjectDocumentPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+      <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link href={`/projects/${projectId}`}>
@@ -700,14 +699,14 @@ export default function ProjectDocumentPage() {
               </Button>
             </Link>
             <div>
-              <h1 className="font-semibold">{document.filename}</h1>
+              <h1 className="font-semibold font-mono text-sm">{document.filename}</h1>
               {project && (
                 <p className="text-xs text-muted-foreground">{project.name}</p>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={() => setIsCitationOpen(true)} data-testid="button-edit-citation">
+            <Button className="uppercase tracking-wider text-xs" onClick={() => setIsCitationOpen(true)} data-testid="button-edit-citation">
               <BookOpen className="h-4 w-4 mr-2" />
               Citation
             </Button>
@@ -717,7 +716,7 @@ export default function ProjectDocumentPage() {
       </header>
 
       {/* Main Content - 4 Column Grid */}
-      <main className="flex-1 container mx-auto px-4 py-6">
+      <main className="flex-1 container mx-auto px-4 py-6 pb-8 eva-grid-bg">
         <div className="grid lg:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
           {/* Left Sidebar: Multi-Prompt Panel + Citation Info */}
           <div className="lg:col-span-1 flex flex-col gap-4 overflow-hidden">
@@ -812,19 +811,20 @@ export default function ProjectDocumentPage() {
 
       {/* Citation Dialog */}
       <Dialog open={isCitationOpen} onOpenChange={setIsCitationOpen}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto eva-grid-bg">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-2">
               <span>Citation Metadata</span>
               <Button
                 variant="outline"
                 size="sm"
+                className="text-eva-cyan uppercase tracking-wider text-xs"
                 onClick={handleAutoFill}
                 disabled={isAutoFilling}
                 data-testid="button-autofill-citation"
               >
                 {isAutoFilling ? (
-                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                  <div className="eva-hex-spinner mr-1.5" style={{ width: "0.75rem", height: "0.75rem" }} />
                 ) : (
                   <Sparkles className="h-3 w-3 mr-1.5" />
                 )}
@@ -890,7 +890,7 @@ export default function ProjectDocumentPage() {
                       onChange={(e) =>
                         updateAuthor(idx, "firstName", e.target.value)
                       }
-                      className="flex-1"
+                      className="flex-1 font-mono"
                       data-testid={`input-author-first-${idx}`}
                     />
                     <Input
@@ -899,7 +899,7 @@ export default function ProjectDocumentPage() {
                       onChange={(e) =>
                         updateAuthor(idx, "lastName", e.target.value)
                       }
-                      className="flex-1"
+                      className="flex-1 font-mono"
                       data-testid={`input-author-last-${idx}`}
                     />
                     {citationForm.authors.length > 1 && (
@@ -924,6 +924,7 @@ export default function ProjectDocumentPage() {
                     setCitationForm({ ...citationForm, title: e.target.value })
                   }
                   placeholder="Title of the work"
+                  className="font-mono"
                   data-testid="input-title"
                 />
               </div>
@@ -940,6 +941,7 @@ export default function ProjectDocumentPage() {
                       })
                     }
                     placeholder="Publisher name"
+                    className="font-mono"
                     data-testid="input-publisher"
                   />
                 </div>
@@ -954,6 +956,7 @@ export default function ProjectDocumentPage() {
                       })
                     }
                     placeholder="YYYY or YYYY-MM-DD"
+                    className="font-mono"
                     data-testid="input-pub-date"
                   />
                 </div>
@@ -971,6 +974,7 @@ export default function ProjectDocumentPage() {
                       })
                     }
                     placeholder="City of publication"
+                    className="font-mono"
                     data-testid="input-pub-place"
                   />
                 </div>
@@ -982,6 +986,7 @@ export default function ProjectDocumentPage() {
                       setCitationForm({ ...citationForm, url: e.target.value })
                     }
                     placeholder="https://..."
+                    className="font-mono"
                     data-testid="input-url"
                   />
                 </div>
@@ -1009,6 +1014,7 @@ export default function ProjectDocumentPage() {
                           ? "Journal name"
                           : "Book containing this chapter"
                       }
+                      className="font-mono"
                       data-testid="input-container"
                     />
                   </div>
@@ -1023,6 +1029,7 @@ export default function ProjectDocumentPage() {
                             volume: e.target.value,
                           })
                         }
+                        className="font-mono"
                         data-testid="input-volume"
                       />
                     </div>
@@ -1036,6 +1043,7 @@ export default function ProjectDocumentPage() {
                             issue: e.target.value,
                           })
                         }
+                        className="font-mono"
                         data-testid="input-issue"
                       />
                     </div>
@@ -1050,6 +1058,7 @@ export default function ProjectDocumentPage() {
                           })
                         }
                         placeholder="1-20"
+                        className="font-mono"
                         data-testid="input-pages"
                       />
                     </div>

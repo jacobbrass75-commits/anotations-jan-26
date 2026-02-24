@@ -265,15 +265,16 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+      <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <BookOpen className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-semibold">ScholarMark</h1>
+            <BookOpen className="h-6 w-6 text-eva-orange" />
+            <h1 className="font-sans uppercase tracking-[0.2em] font-bold text-eva-orange">SCHOLARMARK</h1>
+            <div className="eva-status-active" />
           </div>
           <div className="flex items-center gap-2">
             <Link href="/projects">
-              <Button variant="outline" size="sm" data-testid="button-projects">
+              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-projects">
                 <FolderOpen className="h-4 w-4 mr-2" />
                 Projects
               </Button>
@@ -295,11 +296,11 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-6">
+      <main className="flex-1 container mx-auto px-4 py-6 pb-8 eva-grid-bg">
         {showUpload ? (
-          <div className="max-w-xl mx-auto space-y-6">
+          <div className="max-w-xl mx-auto space-y-6 eva-corner-decor p-4 rounded-md">
             <div className="text-center">
-              <h2 className="text-2xl font-semibold mb-2">Upload Your Document</h2>
+              <h2 className="eva-section-title text-sm mb-2">AWAITING DOCUMENT INPUT</h2>
               <p className="text-muted-foreground">
                 Upload an academic PDF or text file to start annotating and analyzing.
               </p>

@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Loader2, ChevronDown, FileText, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Sparkles, ChevronDown, FileText, CheckCircle, XCircle, Clock } from "lucide-react";
 import { useBatchAnalyze } from "@/hooks/useProjects";
 import { useToast } from "@/hooks/use-toast";
 import type { ProjectDocument, BatchAnalysisResponse, BatchDocumentResult, AnnotationCategory } from "@shared/schema";
@@ -138,11 +138,11 @@ export function BatchAnalysisModal({
   const getStatusIcon = (status: BatchDocumentResult["status"]) => {
     switch (status) {
       case "completed":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-eva-green" />;
       case "failed":
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="h-4 w-4 text-eva-red" />;
       case "processing":
-        return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+        return <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />;
       default:
         return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
@@ -153,11 +153,11 @@ export function BatchAnalysisModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto eva-grid-bg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            Batch AI Analysis
+            <span className="eva-section-title text-sm">BATCH ANALYSIS // MAGI PROTOCOL</span>
           </DialogTitle>
           <DialogDescription>
             Analyze multiple documents with the same research focus
@@ -183,7 +183,7 @@ export function BatchAnalysisModal({
                   {documents.map((doc) => (
                     <label
                       key={doc.id}
-                      className="flex items-center gap-3 p-2 hover-elevate rounded-md cursor-pointer"
+                      className="flex items-center gap-3 p-2 hover-elevate rounded-md cursor-pointer font-mono text-sm"
                       data-testid={`row-doc-${doc.id}`}
                     >
                       <Checkbox
@@ -213,7 +213,7 @@ export function BatchAnalysisModal({
 
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
               <CollapsibleTrigger asChild>
-                <Button variant="ghost" className="w-full justify-between" data-testid="button-advanced-options">
+                <Button variant="ghost" className="w-full justify-between uppercase tracking-wider text-xs" data-testid="button-advanced-options">
                   Advanced Options
                   <ChevronDown className={`h-4 w-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
                 </Button>
@@ -283,7 +283,7 @@ export function BatchAnalysisModal({
                 {response.results.map((result) => (
                   <div
                     key={result.projectDocumentId}
-                    className="flex items-center gap-3 p-2 rounded-md"
+                    className="flex items-center gap-3 p-2 rounded-md eva-clip-sm"
                     data-testid={`result-${result.projectDocumentId}`}
                   >
                     {getStatusIcon(result.status)}
@@ -304,7 +304,7 @@ export function BatchAnalysisModal({
         {isAnalyzing && (
           <div className="space-y-2">
             <Progress value={50} className="animate-pulse" />
-            <p className="text-sm text-center text-muted-foreground">
+            <p className="text-sm text-center text-muted-foreground font-mono">
               Analyzing documents... This may take a few minutes.
             </p>
           </div>
@@ -321,10 +321,10 @@ export function BatchAnalysisModal({
               data-testid="button-start-batch"
             >
               {isAnalyzing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Analyzing...
-                </>
+                <span className="flex items-center gap-2">
+                  <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
+                  ANALYZING...
+                </span>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />

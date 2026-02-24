@@ -53,11 +53,11 @@ export function ManualAnnotationDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] eva-grid-bg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 eva-section-title text-base">
             <Highlighter className="h-5 w-5 text-primary" />
-            Add Annotation
+            MANUAL ANNOTATION
           </DialogTitle>
           <DialogDescription>
             Create a note for the selected text passage.
@@ -66,34 +66,34 @@ export function ManualAnnotationDialog({
 
         <div className="space-y-4 py-4">
           {selectedText && (
-            <div className="p-3 bg-muted/50 rounded-lg border">
+            <div className="p-3 bg-eva-dark/50 rounded-lg border border-eva-orange/20 border-l-2 border-l-eva-orange">
               <Label className="text-xs text-muted-foreground mb-1 block">Selected Text</Label>
-              <p className="text-sm font-mono line-clamp-4">"{selectedText.text}"</p>
+              <p className="text-sm font-serif line-clamp-4">"{selectedText.text}"</p>
             </div>
           )}
 
           <div className="space-y-2">
             <Label htmlFor="category">Category</Label>
             <Select value={category} onValueChange={(v) => setCategory(v as AnnotationCategory)}>
-              <SelectTrigger id="category" data-testid="select-manual-category">
+              <SelectTrigger id="category" className="eva-focus-glow" data-testid="select-manual-category">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="key_quote">
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#FF6A00]" />
                     Key Quote
                   </div>
                 </SelectItem>
                 <SelectItem value="evidence">
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#00FF41]" />
                     Evidence
                   </div>
                 </SelectItem>
                 <SelectItem value="argument">
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#00D4FF]" />
                     Argument
                   </div>
                 </SelectItem>
@@ -105,7 +105,7 @@ export function ManualAnnotationDialog({
                 </SelectItem>
                 <SelectItem value="user_added">
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#CC0000]" />
                     Your Note
                   </div>
                 </SelectItem>
@@ -127,10 +127,10 @@ export function ManualAnnotationDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" className="uppercase tracking-wider" onClick={handleClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!note.trim()} data-testid="button-save-manual-annotation">
+          <Button className="uppercase tracking-wider" onClick={handleSave} disabled={!note.trim()} data-testid="button-save-manual-annotation">
             Save Annotation
           </Button>
         </DialogFooter>

@@ -21,29 +21,29 @@ interface HighlightedTextProps {
 
 const categoryColors: Record<AnnotationCategory, { bg: string; border: string; hover: string }> = {
   key_quote: {
-    bg: "bg-yellow-500/20 dark:bg-yellow-400/20",
-    border: "border-l-4 border-yellow-500",
-    hover: "hover:bg-yellow-500/30 dark:hover:bg-yellow-400/30",
+    bg: "bg-[#FF6A00]/20",
+    border: "border-l-4 border-[#FF6A00]",
+    hover: "hover:bg-[#FF6A00]/30",
   },
   evidence: {
-    bg: "bg-green-500/20 dark:bg-green-400/20",
-    border: "border-l-4 border-green-500",
-    hover: "hover:bg-green-500/30 dark:hover:bg-green-400/30",
+    bg: "bg-[#00FF41]/15",
+    border: "border-l-4 border-[#00FF41]",
+    hover: "hover:bg-[#00FF41]/25",
   },
   argument: {
-    bg: "bg-blue-500/20 dark:bg-blue-400/20",
-    border: "border-l-4 border-blue-500",
-    hover: "hover:bg-blue-500/30 dark:hover:bg-blue-400/30",
+    bg: "bg-[#00D4FF]/15",
+    border: "border-l-4 border-[#00D4FF]",
+    hover: "hover:bg-[#00D4FF]/25",
   },
   methodology: {
-    bg: "bg-purple-500/20 dark:bg-purple-400/20",
-    border: "border-l-4 border-purple-500",
-    hover: "hover:bg-purple-500/30 dark:hover:bg-purple-400/30",
+    bg: "bg-[#8B5CF6]/20",
+    border: "border-l-4 border-[#8B5CF6]",
+    hover: "hover:bg-[#8B5CF6]/30",
   },
   user_added: {
-    bg: "bg-orange-500/20 dark:bg-orange-400/20",
-    border: "border-l-4 border-orange-500",
-    hover: "hover:bg-orange-500/30 dark:hover:bg-orange-400/30",
+    bg: "bg-[#CC0000]/15",
+    border: "border-l-4 border-[#CC0000]",
+    hover: "hover:bg-[#CC0000]/25",
   },
 };
 
@@ -222,8 +222,8 @@ export function HighlightedText({
           key={segment.annotation.id}
           className={`
             cursor-pointer rounded-sm px-0.5 -mx-0.5 transition-all duration-150
-            ${!promptColor ? `${colors.bg} ${colors.hover}` : "hover:opacity-80"}
-            ${isSelected && !promptColor ? `ring-2 ring-offset-1 ring-primary ${colors.bg.replace("/20", "/40")}` : ""}
+            ${!promptColor ? `${colors.bg} ${colors.border} ${colors.hover}` : "hover:opacity-80"}
+            ${isSelected && !promptColor ? "ring-2 ring-offset-1 ring-primary" : ""}
           `}
           style={highlightStyle}
           onClick={(e) => handleHighlightClick(e, segment.annotation!)}
@@ -255,7 +255,7 @@ export function HighlightedText({
           className="absolute z-50 animate-in fade-in-0 zoom-in-95"
           style={{ top: popoverPosition.top, left: popoverPosition.left }}
         >
-          <Card className="w-80 p-4 shadow-lg">
+          <Card className="w-80 p-4 shadow-lg eva-clip-sm bg-card">
             <div className="flex items-start justify-between gap-2 mb-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <div

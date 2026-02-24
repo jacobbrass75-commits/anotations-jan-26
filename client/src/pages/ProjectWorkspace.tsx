@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Loader2, Upload, Quote } from "lucide-react";
+import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Upload, Quote } from "lucide-react";
 import { BatchAnalysisModal } from "@/components/BatchAnalysisModal";
 import { BatchUploadModal } from "@/components/BatchUploadModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -66,7 +66,7 @@ function FolderTree({
       <div key={folder.id}>
         <div
           className={`flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer group ${
-            isSelected ? "bg-accent" : "hover-elevate"
+            isSelected ? "text-eva-orange bg-eva-orange/10 border-l-2 border-eva-orange" : "hover-elevate"
           }`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
           onClick={() => onSelectFolder(folder.id)}
@@ -84,7 +84,7 @@ function FolderTree({
             <span className="w-4" />
           )}
           <Folder className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm flex-1 truncate">{folder.name}</span>
+          <span className="font-mono text-xs uppercase tracking-wider flex-1 truncate">{folder.name}</span>
           <button
             className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive"
             onClick={(e) => {
@@ -109,13 +109,13 @@ function FolderTree({
     <div className="space-y-0.5">
       <div
         className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer ${
-          selectedFolderId === null ? "bg-accent" : "hover-elevate"
+          selectedFolderId === null ? "text-eva-orange bg-eva-orange/10 border-l-2 border-eva-orange" : "hover-elevate"
         }`}
         onClick={() => onSelectFolder(null)}
         data-testid="folder-root"
       >
         <Folder className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm">All Documents</span>
+        <span className="font-mono text-xs uppercase tracking-wider">All Documents</span>
       </div>
       {rootFolders.map(folder => renderFolder(folder, 0))}
     </div>
@@ -140,17 +140,22 @@ function SearchResultCard({
   isGeneratingFootnote?: boolean;
 }) {
   const categoryColors: Record<string, string> = {
-    key_quote: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300",
-    evidence: "bg-green-500/20 text-green-700 dark:text-green-300",
-    argument: "bg-blue-500/20 text-blue-700 dark:text-blue-300",
-    methodology: "bg-purple-500/20 text-purple-700 dark:text-purple-300",
-    user_added: "bg-orange-500/20 text-orange-700 dark:text-orange-300",
+    key_quote: "bg-[#FF6A00]/20 text-[#FF6A00] border border-[#FF6A00]/30",
+    evidence: "bg-[#00FF41]/15 text-[#00FF41] border border-[#00FF41]/30",
+    argument: "bg-[#00D4FF]/15 text-[#00D4FF] border border-[#00D4FF]/30",
+    methodology: "bg-[#8B5CF6]/20 text-[#8B5CF6] border border-[#8B5CF6]/30",
+    user_added: "bg-[#CC0000]/15 text-[#CC0000] border border-[#CC0000]/30",
     document_context: "bg-gray-500/20 text-gray-700 dark:text-gray-300",
+  };
+  const relevanceClasses: Record<string, string> = {
+    high: "bg-eva-green/15 text-eva-green border border-eva-green/30",
+    medium: "bg-eva-orange/15 text-eva-orange border border-eva-orange/30",
+    low: "bg-muted text-muted-foreground border border-muted",
   };
 
   return (
     <Card 
-      className="hover-elevate cursor-pointer" 
+      className="hover-elevate cursor-pointer eva-clip-sm" 
       data-testid={`search-result-${result.annotationId || result.documentId}`}
       onClick={onNavigateToDocument}
     >
@@ -160,7 +165,7 @@ function SearchResultCard({
             <Badge variant="outline" className={categoryColors[result.category || result.type] || ""}>
               {result.category?.replace("_", " ") || result.type.replace("_", " ")}
             </Badge>
-            <Badge variant={result.relevanceLevel === "high" ? "default" : "outline"}>
+            <Badge variant="outline" className={relevanceClasses[result.relevanceLevel] || relevanceClasses.low}>
               {Math.round(result.similarityScore * 100)}% match
             </Badge>
           </div>
@@ -177,7 +182,7 @@ function SearchResultCard({
               title="Copy footnote with quote"
             >
               {isGeneratingFootnote ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
               ) : (
                 <Quote className="h-4 w-4" />
               )}
@@ -191,7 +196,7 @@ function SearchResultCard({
               title="Generate full citation"
             >
               {isGeneratingCitation ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
               ) : (
                 <BookOpen className="h-4 w-4" />
               )}
@@ -712,7 +717,7 @@ export default function ProjectWorkspace() {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <aside className="w-64 border-r bg-muted/30 flex flex-col">
+      <aside className="w-64 border-r bg-muted/30 eva-grid-bg flex flex-col">
         <div className="p-4 border-b">
           <Link href="/projects">
             <Button variant="ghost" size="sm" className="mb-2" data-testid="button-back-projects">
@@ -720,7 +725,7 @@ export default function ProjectWorkspace() {
               Back
             </Button>
           </Link>
-          <h2 className="font-semibold text-lg truncate">{project.name}</h2>
+          <h2 className="font-semibold text-lg truncate font-mono uppercase tracking-wider">{project.name}</h2>
           {project.thesis && (
             <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{project.thesis}</p>
           )}
@@ -749,8 +754,8 @@ export default function ProjectWorkspace() {
         </ScrollArea>
       </aside>
 
-      <main className="flex-1 flex flex-col">
-        <header className="border-b p-4">
+      <main className="flex-1 flex flex-col eva-grid-bg">
+        <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md p-4">
           <div className="flex items-center gap-4">
             <div className="flex-1 flex gap-2">
               <Input
@@ -768,6 +773,7 @@ export default function ProjectWorkspace() {
             </div>
             <Button 
               variant="outline" 
+              className="uppercase tracking-wider text-xs"
               onClick={() => setIsBatchModalOpen(true)} 
               disabled={projectDocuments.length === 0}
               data-testid="button-batch-analyze"
@@ -777,6 +783,7 @@ export default function ProjectWorkspace() {
             </Button>
             <Button 
               variant="outline"
+              className="uppercase tracking-wider text-xs"
               onClick={() => setIsBatchUploadOpen(true)} 
               disabled={availableDocuments.length === 0}
               data-testid="button-batch-upload"
@@ -784,7 +791,7 @@ export default function ProjectWorkspace() {
               <FolderUp className="h-4 w-4 mr-2" />
               Batch Add
             </Button>
-            <Button onClick={() => setIsAddDocOpen(true)} data-testid="button-add-document">
+            <Button className="uppercase tracking-wider text-xs" onClick={() => setIsAddDocOpen(true)} data-testid="button-add-document">
               <Plus className="h-4 w-4 mr-2" />
               Add Document
             </Button>
@@ -792,11 +799,11 @@ export default function ProjectWorkspace() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 pb-8 eva-grid-bg">
           {searchResults.length > 0 ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Search Results ({searchResults.length})</h3>
+                <h3 className="eva-section-title text-sm">SEARCH RESULTS ({searchResults.length})</h3>
                 <Button variant="ghost" size="sm" onClick={() => setSearchResults([])}>
                   Clear Results
                 </Button>
@@ -819,7 +826,7 @@ export default function ProjectWorkspace() {
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">
+                <h3 className="font-semibold font-mono text-sm uppercase tracking-wider">
                   {selectedFolderId ? folders.find(f => f.id === selectedFolderId)?.name : "All Documents"}
                   <span className="text-muted-foreground font-normal ml-2">({filteredDocuments.length})</span>
                 </h3>
@@ -840,7 +847,7 @@ export default function ProjectWorkspace() {
                     <Card key={pd.id} className="group hover-elevate" data-testid={`doc-card-${pd.id}`}>
                       <CardHeader className="pb-2">
                         <div className="flex items-start justify-between gap-2">
-                          <CardTitle className="text-base line-clamp-1">{pd.document.filename}</CardTitle>
+                          <CardTitle className="text-base line-clamp-1 font-mono text-sm">{pd.document.filename}</CardTitle>
                           <div className="flex gap-1">
                             <Link href={`/projects/${projectId}/documents/${pd.id}`}>
                               <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-view-doc-${pd.id}`}>
@@ -1081,7 +1088,7 @@ export default function ProjectWorkspace() {
                 disabled={!selectedDocId || addDocument.isPending} 
                 data-testid="button-confirm-add-doc"
               >
-                {addDocument.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {addDocument.isPending && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
                 Add
               </Button>
             ) : (
@@ -1090,7 +1097,7 @@ export default function ProjectWorkspace() {
                 disabled={uploadFiles.length === 0 || isUploadingAndAdding}
                 data-testid="button-upload-add"
               >
-                {isUploadingAndAdding && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {isUploadingAndAdding && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
                 {canCombineSelectedImages && combineImageUploads
                   ? `Upload & Add ${combinedUploadChunks.length} Document${combinedUploadChunks.length === 1 ? "" : "s"}`
                   : `Upload & Add ${uploadFiles.length > 0 ? uploadFiles.length : ""} ${

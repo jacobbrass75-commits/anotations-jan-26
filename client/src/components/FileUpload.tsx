@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Upload, FileText, X, Loader2 } from "lucide-react";
+import { Upload, FileText, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -110,14 +110,14 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
     return (
       <Card className="p-8">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 text-primary animate-spin" />
+          <div className="eva-hex-spinner" />
           <div className="text-center">
-            <p className="text-sm font-medium text-foreground">Processing document...</p>
+            <p className="text-sm font-medium text-foreground eva-section-title">DOCUMENT INSERTION</p>
             <p className="text-xs text-muted-foreground mt-1">Extracting text and preparing for analysis</p>
           </div>
           <div className="w-full max-w-xs">
             <Progress value={uploadProgress} className="h-2" />
-            <p className="text-xs text-muted-foreground text-center mt-2">{uploadProgress}% complete</p>
+            <p className="text-xs text-muted-foreground text-center mt-2 font-mono">{uploadProgress}% complete</p>
           </div>
         </div>
       </Card>
@@ -161,7 +161,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
                 Text Extraction Mode
               </label>
               <Select value={ocrMode} onValueChange={setOcrMode}>
-                <SelectTrigger className="w-full" data-testid="select-ocr-mode">
+                <SelectTrigger className="w-full eva-focus-glow" data-testid="select-ocr-mode">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -185,7 +185,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
                 AI OCR Model
               </label>
               <Select value={ocrModel} onValueChange={setOcrModel}>
-                <SelectTrigger className="w-full" data-testid="select-ocr-model">
+                <SelectTrigger className="w-full eva-focus-glow" data-testid="select-ocr-model">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -210,8 +210,8 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
 
   return (
     <Card
-      className={`p-8 border-2 border-dashed transition-colors duration-200 ${
-        dragActive ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"
+      className={`p-8 border-2 border-dashed eva-clip-panel transition-colors duration-200 ${
+        dragActive ? "border-eva-orange bg-eva-orange/5" : "border-eva-orange/30 hover:border-eva-orange/60"
       }`}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
@@ -228,17 +228,15 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
         />
         <div className="flex flex-col items-center gap-4">
           <div className="p-4 bg-muted rounded-full">
-            <Upload className="h-8 w-8 text-muted-foreground" />
+            <Upload className="h-8 w-8 text-eva-orange" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium text-foreground">
-              Drop PDF, TXT, or image file, or click to browse
-            </p>
+            <p className="eva-section-title text-sm font-medium text-foreground">DOCUMENT INSERTION</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Maximum file size: 50MB
+              Drag and drop or select file for analysis
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 font-mono text-xs text-muted-foreground">
             <Badge variant="secondary">PDF</Badge>
             <Badge variant="secondary">TXT</Badge>
             <Badge variant="secondary">HEIC</Badge>

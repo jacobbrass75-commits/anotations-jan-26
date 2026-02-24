@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Card } from "@/components/ui/card";
-import { FileText, Loader2, CheckCircle, XCircle, AlertCircle, Plus, Upload, X, Library } from "lucide-react";
+import { FileText, CheckCircle, XCircle, AlertCircle, Plus, Upload, X, Library } from "lucide-react";
 import { useBatchAddDocuments } from "@/hooks/useProjects";
 import { useUploadDocument } from "@/hooks/useDocument";
 import { useToast } from "@/hooks/use-toast";
@@ -285,11 +285,11 @@ export function BatchUploadModal({
   const getStatusIcon = (status: BatchAddDocumentResult["status"]) => {
     switch (status) {
       case "added":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-eva-green" />;
       case "already_exists":
         return <AlertCircle className="h-4 w-4 text-yellow-500" />;
       case "failed":
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="h-4 w-4 text-eva-red" />;
     }
   };
 
@@ -307,11 +307,11 @@ export function BatchUploadModal({
   const getUploadStatusIcon = (status: UploadedFile["status"]) => {
     switch (status) {
       case "success":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-eva-green" />;
       case "error":
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="h-4 w-4 text-eva-red" />;
       case "uploading":
-        return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+        return <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />;
       default:
         return <FileText className="h-4 w-4 text-muted-foreground" />;
     }
@@ -326,7 +326,7 @@ export function BatchUploadModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5" />
-            Add Documents to Project
+            <span className="eva-section-title text-sm">BATCH DOCUMENT INSERTION</span>
           </DialogTitle>
           <DialogDescription>
             Select from your library or upload new files
@@ -336,11 +336,11 @@ export function BatchUploadModal({
         {!isComplete ? (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "library" | "upload")}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="library" data-testid="tab-library">
+              <TabsTrigger value="library" className="uppercase tracking-wider" data-testid="tab-library">
                 <Library className="h-4 w-4 mr-2" />
                 From Library
               </TabsTrigger>
-              <TabsTrigger value="upload" data-testid="tab-upload">
+              <TabsTrigger value="upload" className="uppercase tracking-wider" data-testid="tab-upload">
                 <Upload className="h-4 w-4 mr-2" />
                 Upload New
               </TabsTrigger>
@@ -373,7 +373,7 @@ export function BatchUploadModal({
                         {availableDocuments.map((doc) => (
                           <label
                             key={doc.id}
-                            className="flex items-center gap-3 p-2 hover-elevate rounded-md cursor-pointer"
+                            className="flex items-center gap-3 p-2 hover-elevate rounded-md cursor-pointer font-mono text-sm"
                             data-testid={`row-doc-${doc.id}`}
                           >
                             <Checkbox
@@ -422,12 +422,12 @@ export function BatchUploadModal({
                   <Progress value={uploadProgress} />
                   <ScrollArea className="h-48 border rounded-md p-2">
                     <div className="space-y-2">
-                      {uploadedFiles.map((file) => (
-                        <div
-                          key={file.id}
-                          className="flex items-center gap-3 p-2 rounded-md"
-                          data-testid={`upload-status-${file.id}`}
-                        >
+                          {uploadedFiles.map((file) => (
+                            <div
+                              key={file.id}
+                              className="flex items-center gap-3 p-2 rounded-md font-mono text-sm"
+                              data-testid={`upload-status-${file.id}`}
+                            >
                           {getUploadStatusIcon(file.status)}
                           <span className="text-sm flex-1 truncate">{file.filename}</span>
                           {file.status === "success" && (
@@ -444,8 +444,8 @@ export function BatchUploadModal({
               ) : (
                 <>
                   <Card
-                    className={`p-6 border-2 border-dashed transition-colors ${
-                      dragActive ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"
+                    className={`p-6 border-2 border-dashed eva-clip-panel transition-colors ${
+                      dragActive ? "border-eva-orange bg-eva-orange/5" : "border-eva-orange/30 hover:border-eva-orange/60"
                     }`}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
@@ -463,7 +463,7 @@ export function BatchUploadModal({
                       />
                       <div className="flex flex-col items-center gap-3">
                         <div className="p-3 bg-muted rounded-full">
-                          <Upload className="h-6 w-6 text-muted-foreground" />
+                          <Upload className="h-6 w-6 text-eva-orange" />
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-medium">Drop files here or click to browse</p>
@@ -487,7 +487,7 @@ export function BatchUploadModal({
                           {filesToUpload.map((file, index) => (
                             <div
                               key={`${file.name}-${index}`}
-                              className="flex items-center gap-3 p-2 rounded-md bg-muted/50"
+                              className="flex items-center gap-3 p-2 rounded-md bg-muted/50 font-mono text-sm"
                               data-testid={`file-pending-${index}`}
                             >
                               <FileText className="h-4 w-4 text-muted-foreground" />
@@ -619,10 +619,10 @@ export function BatchUploadModal({
               data-testid="button-add-from-library"
             >
               {isAdding ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Adding...
-                </>
+                <span className="flex items-center gap-2">
+                  <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
+                  ADDING...
+                </span>
               ) : (
                 <>
                   <Plus className="h-4 w-4 mr-2" />

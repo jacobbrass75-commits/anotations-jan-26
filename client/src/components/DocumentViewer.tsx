@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from "react";
-import { FileText, Loader2, AlertCircle, ExternalLink, FileImage } from "lucide-react";
+import { FileText, AlertCircle, ExternalLink, FileImage } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -102,8 +102,11 @@ export function DocumentViewer({
     return (
       <Card className="h-full flex flex-col items-center justify-center">
         <div className="text-center p-8 max-w-sm">
-          <Loader2 className="mx-auto h-12 w-12 text-primary animate-spin mb-4" />
-          <h3 className="text-lg font-semibold text-foreground mb-2">Processing Document</h3>
+          <div className="mx-auto mb-4 eva-hex-spinner" />
+          <div className="mb-2 flex items-center justify-center gap-2">
+            <div className="eva-status-warning" />
+            <h3 className="eva-section-title text-eva-orange">PROCESSING DOCUMENT...</h3>
+          </div>
           <p className="text-sm text-muted-foreground">
             Extracting text from your source file. This may take a moment...
           </p>
@@ -114,9 +117,9 @@ export function DocumentViewer({
 
   if (document.status === "error") {
     return (
-      <Card className="h-full flex flex-col items-center justify-center">
+      <Card className="h-full flex flex-col items-center justify-center eva-warning-stripes">
         <div className="text-center p-8 max-w-sm">
-          <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-4" />
+          <AlertCircle className="mx-auto h-12 w-12 text-eva-red mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2">Processing Failed</h3>
           <p className="text-sm text-muted-foreground">
             {document.processingError || "Could not extract text from this file."}
@@ -127,11 +130,11 @@ export function DocumentViewer({
   }
 
   return (
-    <Card className="h-full flex flex-col overflow-hidden">
+    <Card className="h-full flex flex-col overflow-hidden eva-corner-decor">
       <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4 border-b shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <FileText className="h-5 w-5 text-primary shrink-0" />
-          <h2 className="text-lg font-semibold truncate">{document.filename}</h2>
+          <h2 className="eva-section-title text-sm font-semibold truncate">{document.filename}</h2>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground mr-2">
@@ -141,6 +144,7 @@ export function DocumentViewer({
             variant={viewMode === "transcript" ? "secondary" : "ghost"}
             size="sm"
             onClick={() => setViewMode("transcript")}
+            className="uppercase text-xs tracking-widest"
             data-testid="button-view-transcript"
           >
             Transcript
@@ -150,6 +154,7 @@ export function DocumentViewer({
             size="sm"
             onClick={() => setViewMode("source")}
             disabled={!sourceAvailable}
+            className="uppercase text-xs tracking-widest"
             data-testid="button-view-source"
           >
             Original
@@ -165,8 +170,11 @@ export function DocumentViewer({
       </CardHeader>
       <CardContent className="flex-1 p-0 overflow-hidden">
         {viewMode === "transcript" ? (
-          <ScrollArea className="h-full">
-            <div ref={scrollRef} className="p-6 max-w-4xl mx-auto">
+          <ScrollArea className="h-full eva-grid-bg">
+            <div
+              ref={scrollRef}
+              className="p-6 max-w-4xl mx-auto border-l-2 border-eva-orange/20 eva-materialize"
+            >
               <HighlightedText
                 text={document.fullText}
                 annotations={annotations}
