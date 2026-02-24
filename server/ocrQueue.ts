@@ -1,6 +1,8 @@
 import { randomUUID } from "crypto";
 import { readFile } from "fs/promises";
 import {
+  extractImageUploadsFromZip,
+  processImageGroupWithVisionOcr,
   processImageWithVisionOcr,
   processWithPaddleOcr,
   processWithVisionOcr,
@@ -12,7 +14,7 @@ import { getDocumentSourcePath } from "./sourceFiles";
 import { sqlite } from "./db";
 import { storage } from "./storage";
 
-type OcrJobType = "pdf" | "image";
+type OcrJobType = "pdf" | "image" | "image_bundle";
 type OcrJobStatus = "queued" | "running" | "completed" | "failed";
 type PdfOcrMode = "advanced" | "vision" | "vision_batch";
 type ImageOcrMode = "vision" | "vision_batch";
@@ -31,6 +33,11 @@ interface OcrJobRow {
   payload: string;
   attempt_count: number;
   max_attempts: number;
+}
+
+interface OcrPageResultRow {
+  page_number: number;
+  text: string;
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -86,6 +93,33 @@ const markJobFailed = sqlite.prepare(
    WHERE id = ?`
 );
 
+const selectJobPageResults = sqlite.prepare(
+  `SELECT page_number, text
+   FROM ocr_page_results
+   WHERE job_id = ?
+   ORDER BY page_number ASC`
+);
+
+const upsertJobPageResult = sqlite.prepare(
+  `INSERT INTO ocr_page_results (
+     id,
+     job_id,
+     document_id,
+     page_number,
+     text,
+     created_at,
+     updated_at
+   ) VALUES (?, ?, ?, ?, ?, ?, ?)
+   ON CONFLICT(job_id, page_number)
+   DO UPDATE SET
+     text = excluded.text,
+     updated_at = excluded.updated_at`
+);
+
+const deleteJobPageResults = sqlite.prepare(
+  `DELETE FROM ocr_page_results WHERE job_id = ?`
+);
+
 function getUnixSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
@@ -102,6 +136,35 @@ function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string" && error) return error;
   return "Background OCR processing failed.";
+}
+
+function loadPageCheckpoints(jobId: string): string[] {
+  const rows = selectJobPageResults.all(jobId) as OcrPageResultRow[];
+  const pageTexts: string[] = [];
+  for (const row of rows) {
+    if (!Number.isFinite(row.page_number) || row.page_number < 1) continue;
+    pageTexts[row.page_number - 1] = row.text ?? "";
+  }
+  return pageTexts;
+}
+
+function persistPageCheckpoint(
+  jobId: string,
+  documentId: string,
+  pageNumber: number,
+  text: string
+): void {
+  if (!Number.isFinite(pageNumber) || pageNumber < 1) return;
+  const now = getUnixSeconds();
+  upsertJobPageResult.run(
+    randomUUID(),
+    jobId,
+    documentId,
+    Math.floor(pageNumber),
+    text,
+    now,
+    now
+  );
 }
 
 function validatePayload(jobType: OcrJobType, payload: unknown): OcrJobPayload {
@@ -146,30 +209,57 @@ function claimNextQueuedJob(): OcrJobRow | null {
 async function runJob(job: OcrJobRow): Promise<void> {
   const parsedPayload = JSON.parse(job.payload) as unknown;
   const payload = validatePayload(job.job_type, parsedPayload);
+  const checkpointedPageTexts = loadPageCheckpoints(job.id);
 
   const sourcePath = getDocumentSourcePath(job.document_id, payload.sourceFilename);
   const sourceBuffer = await readFile(sourcePath);
-  const tempSourcePath = await saveTempUpload(sourceBuffer, payload.sourceFilename);
 
   await storage.updateDocument(job.document_id, {
     status: "processing",
     processingError: null,
   });
 
-  if (job.job_type === "pdf") {
-    if (payload.ocrMode === "advanced") {
-      await processWithPaddleOcr(job.document_id, tempSourcePath);
-    } else {
-      await processWithVisionOcr(job.document_id, tempSourcePath, {
+  if (job.job_type === "image_bundle") {
+    const uploads = await extractImageUploadsFromZip(sourceBuffer);
+    await processImageGroupWithVisionOcr(
+      job.document_id,
+      uploads,
+      payload.sourceFilename,
+      {
         batchMode: payload.ocrMode === "vision_batch",
         model: normalizeVisionModel(payload.ocrModel),
+        existingPageTexts: checkpointedPageTexts,
+        onPageProcessed: async (pageNumber, text) => {
+          persistPageCheckpoint(job.id, job.document_id, pageNumber, text);
+        },
+        skipSourceSave: true,
+      }
+    );
+  } else {
+    const tempSourcePath = await saveTempUpload(sourceBuffer, payload.sourceFilename);
+    if (job.job_type === "pdf") {
+      if (payload.ocrMode === "advanced") {
+        await processWithPaddleOcr(job.document_id, tempSourcePath);
+      } else {
+        await processWithVisionOcr(job.document_id, tempSourcePath, {
+          batchMode: payload.ocrMode === "vision_batch",
+          model: normalizeVisionModel(payload.ocrModel),
+          existingPageTexts: checkpointedPageTexts,
+          onPageProcessed: async (pageNumber, text) => {
+            persistPageCheckpoint(job.id, job.document_id, pageNumber, text);
+          },
+        });
+      }
+    } else {
+      await processImageWithVisionOcr(job.document_id, tempSourcePath, payload.sourceFilename, {
+        batchMode: payload.ocrMode === "vision_batch",
+        model: normalizeVisionModel(payload.ocrModel),
+        existingPageTexts: checkpointedPageTexts,
+        onPageProcessed: async (pageNumber, text) => {
+          persistPageCheckpoint(job.id, job.document_id, pageNumber, text);
+        },
       });
     }
-  } else {
-    await processImageWithVisionOcr(job.document_id, tempSourcePath, payload.sourceFilename, {
-      batchMode: payload.ocrMode === "vision_batch",
-      model: normalizeVisionModel(payload.ocrModel),
-    });
   }
 
   const updatedDoc = await storage.getDocument(job.document_id);
@@ -194,6 +284,7 @@ async function processQueue(): Promise<void> {
         await runJob(job);
         const now = getUnixSeconds();
         markJobCompleted.run(now, now, job.id);
+        deleteJobPageResults.run(job.id);
       } catch (error) {
         const message = toErrorMessage(error);
         const now = getUnixSeconds();
@@ -334,4 +425,14 @@ export async function enqueueImageOcrJob(input: {
   maxAttempts?: number;
 }): Promise<void> {
   enqueueJob("image", input);
+}
+
+export async function enqueueImageBundleOcrJob(input: {
+  documentId: string;
+  sourceFilename: string;
+  ocrMode: ImageOcrMode;
+  ocrModel?: VisionOcrModel;
+  maxAttempts?: number;
+}): Promise<void> {
+  enqueueJob("image_bundle", input);
 }

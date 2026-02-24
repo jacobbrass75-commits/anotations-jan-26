@@ -25,11 +25,12 @@ import {
 import { registerProjectRoutes } from "./projectRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
 import {
-  createCombinedPdfFromImageUploads,
+  createZipFromImageUploads,
   SUPPORTED_VISION_OCR_MODELS,
   type VisionOcrModel,
 } from "./ocrProcessor";
 import {
+  enqueueImageBundleOcrJob,
   enqueueImageOcrJob,
   enqueuePdfOcrJob,
   initializeOcrQueue,
@@ -316,20 +317,20 @@ export async function registerRoutes(
 
       const primaryName = files[0].originalname || "image-upload";
       const baseName = primaryName.replace(/\.[^/.]+$/, "");
-      const combinedFilename = `${baseName} (${files.length} images).pdf`;
+      const combinedFilename = `${baseName} (${files.length} images).zip`;
 
       const doc = await storage.createDocument({
         filename: combinedFilename,
         fullText: "",
       });
       await storage.updateDocument(doc.id, { status: "processing" });
-      const combinedPdfBuffer = await createCombinedPdfFromImageUploads(
+      const combinedZipBuffer = await createZipFromImageUploads(
         files.map((file) => ({ buffer: file.buffer, originalFilename: file.originalname }))
       );
-      await saveDocumentSource(doc.id, combinedFilename, combinedPdfBuffer);
+      await saveDocumentSource(doc.id, combinedFilename, combinedZipBuffer);
 
       const combinedOcrMode = ocrMode === "vision" ? "vision" : "vision_batch";
-      await enqueuePdfOcrJob({
+      await enqueueImageBundleOcrJob({
         documentId: doc.id,
         sourceFilename: combinedFilename,
         ocrMode: combinedOcrMode,
@@ -438,9 +439,10 @@ export async function registerRoutes(
       const sourcePath = getDocumentSourcePath(doc.id, doc.filename);
       const mimeType = inferDocumentSourceMimeType(doc.filename);
       const safeFilename = doc.filename.replace(/"/g, "");
+      const dispositionType = mimeType === "application/zip" ? "attachment" : "inline";
 
       res.setHeader("Content-Type", mimeType);
-      res.setHeader("Content-Disposition", `inline; filename="${safeFilename}"`);
+      res.setHeader("Content-Disposition", `${dispositionType}; filename="${safeFilename}"`);
       res.sendFile(sourcePath, (error) => {
         if (error && !res.headersSent) {
           res.status(500).json({ message: "Failed to stream source file" });

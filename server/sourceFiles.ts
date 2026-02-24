@@ -18,6 +18,7 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   ".tiff": "image/tiff",
   ".heic": "image/heic",
   ".heif": "image/heif",
+  ".zip": "application/zip",
 };
 
 function normalizeExtension(filename: string): string {

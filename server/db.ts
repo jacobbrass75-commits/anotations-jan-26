@@ -43,6 +43,21 @@ CREATE INDEX IF NOT EXISTS idx_ocr_jobs_status_created ON ocr_jobs(status, creat
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ocr_jobs_document_active
 ON ocr_jobs(document_id)
 WHERE status IN ('queued', 'running');
+
+CREATE TABLE IF NOT EXISTS ocr_page_results (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL,
+  document_id TEXT NOT NULL,
+  page_number INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  FOREIGN KEY (job_id) REFERENCES ocr_jobs(id) ON DELETE CASCADE,
+  FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+  UNIQUE(job_id, page_number)
+);
+CREATE INDEX IF NOT EXISTS idx_ocr_page_results_job_page
+ON ocr_page_results(job_id, page_number);
 `);
 
 // Export the raw sqlite connection for direct queries if needed

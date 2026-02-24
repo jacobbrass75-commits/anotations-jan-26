@@ -38,6 +38,9 @@ export function DocumentViewer({
   const [viewMode, setViewMode] = useState<"transcript" | "source">("transcript");
   const sourceAvailable = !!sourceMeta?.available && !!sourceMeta?.sourceUrl;
   const sourceIsImage = (sourceMeta?.mimeType || "").startsWith("image/");
+  const sourceIsZip =
+    sourceMeta?.mimeType === "application/zip" ||
+    (sourceMeta?.filename || "").toLowerCase().endsWith(".zip");
 
   // Scroll to selected annotation
   useEffect(() => {
@@ -184,6 +187,20 @@ export function DocumentViewer({
                 />
               </div>
             </ScrollArea>
+          ) : sourceIsZip ? (
+            <div className="h-full flex items-center justify-center p-8 text-center">
+              <div className="max-w-sm space-y-3">
+                <h3 className="text-sm font-semibold">Original Source Is a ZIP Archive</h3>
+                <p className="text-sm text-muted-foreground">
+                  Combined image sources are stored as ZIP to reduce server storage. Download and open locally when needed.
+                </p>
+                <Button asChild>
+                  <a href={sourceMeta.sourceUrl} download={sourceMeta.filename}>
+                    Download ZIP
+                  </a>
+                </Button>
+              </div>
+            </div>
           ) : (
             <iframe
               src={sourceMeta.sourceUrl}

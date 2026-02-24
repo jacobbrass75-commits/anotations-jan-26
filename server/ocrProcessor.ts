@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { tmpdir } from "os";
 import OpenAI from "openai";
 import { PDFDocument } from "pdf-lib";
+import JSZip from "jszip";
 import { storage } from "./storage";
 import { chunkTextV2 } from "./pipelineV2";
 import { generateDocumentSummary } from "./openai";
@@ -25,12 +26,22 @@ interface VisionOcrOptions {
   batchSize?: number;
   concurrency?: number;
   model?: VisionOcrModel;
+  existingPageTexts?: string[];
+  onPageProcessed?: (pageNumber: number, text: string) => Promise<void> | void;
+  startPageNumber?: number;
+  totalPageCount?: number;
+  skipSourceSave?: boolean;
 }
 
 const HEIC_EXTENSIONS = new Set([".heic", ".heif"]);
 
 const SINGLE_PAGE_OCR_PROMPT =
   "Extract ALL text from this scanned document page. Preserve paragraphs and reading order. For tables, render each row on its own line with columns separated by ' | '. For footnotes or marginalia, include them at the end marked with [Footnote] or [Margin]. Output only the extracted text, nothing else.";
+
+function hasPageCheckpoint(pageTexts: string[] | undefined, zeroBasedIndex: number): boolean {
+  if (!pageTexts) return false;
+  return Object.prototype.hasOwnProperty.call(pageTexts, zeroBasedIndex);
+}
 
 function resolveVisionOcrModel(requestedModel: string | undefined): VisionOcrModel {
   const normalized = (requestedModel || "").toLowerCase();
@@ -464,25 +475,38 @@ async function extractVisionTextsWithChunking(
   imagePaths: string[],
   options: VisionOcrOptions = {}
 ): Promise<string[]> {
+  const checkpointedPageTexts = options.existingPageTexts ?? [];
+
   if (imagePaths.length <= DEFAULT_HEIC_PAGE_CHUNK_SIZE) {
-    return extractVisionTextsFromImagePaths(docId, imagePaths, options);
+    return extractVisionTextsFromImagePaths(docId, imagePaths, {
+      ...options,
+      existingPageTexts: checkpointedPageTexts,
+      startPageNumber: 1,
+      totalPageCount: imagePaths.length,
+    });
   }
 
   const chunks = chunkBySize(imagePaths, DEFAULT_HEIC_PAGE_CHUNK_SIZE);
-  const results: string[] = [];
 
   for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
     const chunk = chunks[chunkIndex];
-    const startPage = chunkIndex * DEFAULT_HEIC_PAGE_CHUNK_SIZE + 1;
+    const chunkStartIndex = chunkIndex * DEFAULT_HEIC_PAGE_CHUNK_SIZE;
+    const startPage = chunkStartIndex + 1;
     const endPage = startPage + chunk.length - 1;
     console.log(
       `[Vision OCR] Processing chunk ${chunkIndex + 1}/${chunks.length} pages ${startPage}-${endPage} for doc ${docId}`
     );
-    const chunkTexts = await extractVisionTextsFromImagePaths(docId, chunk, options);
-    results.push(...chunkTexts);
+    await extractVisionTextsFromImagePaths(docId, chunk, {
+      ...options,
+      existingPageTexts: checkpointedPageTexts,
+      startPageNumber: startPage,
+      totalPageCount: imagePaths.length,
+    });
   }
 
-  return results;
+  return imagePaths.map((_, index) =>
+    hasPageCheckpoint(checkpointedPageTexts, index) ? checkpointedPageTexts[index] ?? "" : ""
+  );
 }
 
 /**
@@ -636,59 +660,96 @@ async function extractVisionTextsFromImagePaths(
   imagePaths: string[],
   options: VisionOcrOptions = {}
 ): Promise<string[]> {
-  const totalPages = imagePaths.length;
-  if (totalPages === 0) {
+  const localPageCount = imagePaths.length;
+  if (localPageCount === 0) {
     return [];
   }
+
+  const startPageNumber = options.startPageNumber ?? 1;
+  const totalPageCount = options.totalPageCount ?? localPageCount;
+  const checkpointedPageTexts = options.existingPageTexts;
+  const pageTexts = imagePaths.map((_, localIndex) => {
+    const globalIndex = startPageNumber + localIndex - 1;
+    if (!hasPageCheckpoint(checkpointedPageTexts, globalIndex)) {
+      return "";
+    }
+    return checkpointedPageTexts?.[globalIndex] ?? "";
+  });
+  const pendingImages = imagePaths
+    .map((imagePath, index) => ({ imagePath, index }))
+    .filter(({ index }) => {
+      const globalIndex = startPageNumber + index - 1;
+      return !hasPageCheckpoint(checkpointedPageTexts, globalIndex);
+    });
+
+  if (pendingImages.length === 0) {
+    return pageTexts;
+  }
+
+  const applyPageText = async (localIndex: number, rawText: string): Promise<void> => {
+    const normalizedText = normalizeOcrText(rawText);
+    const globalIndex = startPageNumber + localIndex - 1;
+    const pageNumber = globalIndex + 1;
+
+    pageTexts[localIndex] = normalizedText;
+    if (checkpointedPageTexts) {
+      checkpointedPageTexts[globalIndex] = normalizedText;
+    }
+
+    if (options.onPageProcessed) {
+      await options.onPageProcessed(pageNumber, normalizedText);
+    }
+  };
 
   // Use dynamic import for p-limit (ESM module)
   const pLimit = (await import("p-limit")).default;
   const useBatchMode =
     options.batchMode === true ||
-    (options.batchMode !== false && totalPages >= DEFAULT_VISION_AUTO_BATCH_THRESHOLD);
+    (options.batchMode !== false && localPageCount >= DEFAULT_VISION_AUTO_BATCH_THRESHOLD);
   const singlePageConcurrency = options.concurrency ?? DEFAULT_VISION_PAGE_CONCURRENCY;
   const batchConcurrency = options.concurrency ?? DEFAULT_VISION_BATCH_CONCURRENCY;
   const batchSize = Math.max(1, options.batchSize ?? DEFAULT_VISION_BATCH_SIZE);
   const model = options.model ?? DEFAULT_VISION_MODEL;
 
   console.log(
-    `[Vision OCR] Mode=${useBatchMode ? "batch" : "page"} pages=${totalPages} batchSize=${batchSize} model=${model} minGapMs=${VISION_MIN_REQUEST_GAP_MS} doc=${docId}`
+    `[Vision OCR] Mode=${useBatchMode ? "batch" : "page"} pages=${localPageCount} pending=${pendingImages.length} batchSize=${batchSize} model=${model} minGapMs=${VISION_MIN_REQUEST_GAP_MS} doc=${docId}`
   );
 
   if (useBatchMode) {
-    const indexedImages = imagePaths.map((imagePath, index) => ({ imagePath, index }));
-    const batches = chunkBySize(indexedImages, batchSize);
+    const batches = chunkBySize(pendingImages, batchSize);
     const limit = pLimit(batchConcurrency);
-    const pageTexts = new Array(totalPages).fill("");
 
     await Promise.all(
       batches.map((batch) =>
         limit(async () => {
           const batchStartIndex = batch[0]?.index ?? 0;
+          const batchStartPageZeroBased = startPageNumber + batchStartIndex - 1;
           const batchImagePaths = batch.map((item) => item.imagePath);
           try {
             const batchTexts = await extractVisionTextForBatch(
               batchImagePaths,
-              batchStartIndex,
-              totalPages,
+              batchStartPageZeroBased,
+              totalPageCount,
               model
             );
-            batch.forEach((item, offset) => {
-              pageTexts[item.index] = batchTexts[offset] || "";
-            });
+            for (let offset = 0; offset < batch.length; offset++) {
+              const item = batch[offset];
+              await applyPageText(item.index, batchTexts[offset] || "");
+            }
           } catch (batchError) {
             console.warn(
-              `[Vision OCR] Batch ${batchStartIndex + 1}-${batchStartIndex + batch.length} failed, retrying per-page`,
+              `[Vision OCR] Batch ${startPageNumber + batchStartIndex}-${startPageNumber + batchStartIndex + batch.length - 1} failed, retrying per-page`,
               batchError
             );
 
             for (const item of batch) {
-              pageTexts[item.index] = await extractVisionTextForPage(
+              const pageText = await extractVisionTextForPage(
                 item.imagePath,
-                item.index + 1,
-                totalPages,
+                startPageNumber + item.index,
+                totalPageCount,
                 model
               );
+              await applyPageText(item.index, pageText);
             }
           }
         })
@@ -699,11 +760,21 @@ async function extractVisionTextsFromImagePaths(
   }
 
   const limit = pLimit(singlePageConcurrency);
-  return Promise.all(
-    imagePaths.map((imagePath, index) =>
-      limit(() => extractVisionTextForPage(imagePath, index + 1, totalPages, model))
+  await Promise.all(
+    pendingImages.map((item) =>
+      limit(async () => {
+        const pageText = await extractVisionTextForPage(
+          item.imagePath,
+          startPageNumber + item.index,
+          totalPageCount,
+          model
+        );
+        await applyPageText(item.index, pageText);
+      })
     )
   );
+
+  return pageTexts;
 }
 
 async function saveVisionOcrResult(
@@ -784,6 +855,21 @@ interface UploadFrame {
   buffer: Buffer;
 }
 
+interface ZipManifestEntry {
+  order: number;
+  originalFilename: string;
+  storedFilename: string;
+}
+
+interface ZipManifest {
+  version: 1;
+  entries: ZipManifestEntry[];
+}
+
+function sanitizeZipEntryName(filename: string): string {
+  return filename.replace(/[\\/:*?"<>|]/g, "_");
+}
+
 async function expandUploadToPdfFrames(
   upload: { buffer: Buffer; originalFilename: string }
 ): Promise<UploadFrame[]> {
@@ -847,6 +933,87 @@ export async function createCombinedPdfFromImageUploads(
 
   const bytes = await pdf.save();
   return Buffer.from(bytes);
+}
+
+export async function createZipFromImageUploads(
+  uploads: Array<{ buffer: Buffer; originalFilename: string }>
+): Promise<Buffer> {
+  const zip = new JSZip();
+  const manifestEntries: ZipManifestEntry[] = [];
+
+  for (let index = 0; index < uploads.length; index++) {
+    const upload = uploads[index];
+    const safeName = sanitizeZipEntryName(upload.originalFilename || `image-${index + 1}`);
+    const storedFilename = `${String(index + 1).padStart(4, "0")}-${safeName}`;
+    zip.file(storedFilename, upload.buffer);
+    manifestEntries.push({
+      order: index + 1,
+      originalFilename: upload.originalFilename,
+      storedFilename,
+    });
+  }
+
+  const manifest: ZipManifest = { version: 1, entries: manifestEntries };
+  zip.file("manifest.json", JSON.stringify(manifest, null, 2));
+
+  return zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+  });
+}
+
+export async function extractImageUploadsFromZip(
+  zipBuffer: Buffer
+): Promise<Array<{ buffer: Buffer; originalFilename: string }>> {
+  const zip = await JSZip.loadAsync(zipBuffer);
+  const manifestEntry = zip.file("manifest.json");
+
+  const manifestFallbackEntries = Object.values(zip.files)
+    .filter((entry) => !entry.dir && entry.name !== "manifest.json")
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((entry, index) => ({
+      order: index + 1,
+      originalFilename: entry.name.replace(/^\d{4}-/, "") || entry.name,
+      storedFilename: entry.name,
+    }));
+
+  let entries: ZipManifestEntry[] = manifestFallbackEntries;
+  if (manifestEntry) {
+    try {
+      const rawManifest = await manifestEntry.async("string");
+      const parsed = JSON.parse(rawManifest) as Partial<ZipManifest>;
+      if (Array.isArray(parsed.entries) && parsed.entries.length > 0) {
+        entries = parsed.entries
+          .filter(
+            (entry): entry is ZipManifestEntry =>
+              typeof entry?.storedFilename === "string" &&
+              typeof entry?.originalFilename === "string" &&
+              typeof entry?.order === "number"
+          )
+          .sort((a, b) => a.order - b.order);
+      }
+    } catch (error) {
+      console.warn("[Vision OCR] Failed to parse ZIP manifest, falling back to filename order", error);
+    }
+  }
+
+  const uploads: Array<{ buffer: Buffer; originalFilename: string }> = [];
+  for (const entry of entries) {
+    const zipEntry = zip.file(entry.storedFilename);
+    if (!zipEntry || zipEntry.dir) continue;
+    const fileBuffer = await zipEntry.async("nodebuffer");
+    uploads.push({
+      buffer: Buffer.from(fileBuffer),
+      originalFilename: entry.originalFilename,
+    });
+  }
+
+  if (!uploads.length) {
+    throw new Error("ZIP archive does not contain readable image files.");
+  }
+
+  return uploads;
 }
 
 /**
@@ -1070,12 +1237,14 @@ export async function processImageGroupWithVisionOcr(
       throw new Error("No readable images were found in the uploaded files.");
     }
 
-    // Save a combined PDF source for convenient viewing in the UI.
-    try {
-      const pdfBuffer = await createPdfFromImagePaths(pageImagePaths);
-      await saveDocumentSource(docId, combinedSourceFilename, pdfBuffer);
-    } catch (sourceError) {
-      console.warn(`[Vision OCR] Failed to save combined PDF source for doc ${docId}:`, sourceError);
+    // Save a combined PDF source for convenient viewing in the UI when enabled.
+    if (!options.skipSourceSave) {
+      try {
+        const pdfBuffer = await createPdfFromImagePaths(pageImagePaths);
+        await saveDocumentSource(docId, combinedSourceFilename, pdfBuffer);
+      } catch (sourceError) {
+        console.warn(`[Vision OCR] Failed to save combined PDF source for doc ${docId}:`, sourceError);
+      }
     }
 
     const groupOptions: VisionOcrOptions = {
