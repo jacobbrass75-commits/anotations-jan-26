@@ -23,6 +23,7 @@ import {
   PIPELINE_V2_CONFIG,
 } from "./pipelineV2";
 import { registerProjectRoutes } from "./projectRoutes";
+import { registerWebClipRoutes } from "./webClipRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
 import {
   createZipFromImageUploads,
@@ -732,6 +733,7 @@ export async function registerRoutes(
 
   // Register project routes
   registerProjectRoutes(app);
+  registerWebClipRoutes(app);
 
   // Register A/B test routes
   // registerABTestRoutes(app); // TODO: Not implemented yet

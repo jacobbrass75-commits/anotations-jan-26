@@ -10,6 +10,7 @@ import Home from "@/pages/Home";
 import Projects from "@/pages/Projects";
 import ProjectWorkspace from "@/pages/ProjectWorkspace";
 import ProjectDocument from "@/pages/ProjectDocument";
+import WebClips from "@/pages/WebClips";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/projects" component={Projects} />
+      <Route path="/web-clips" component={WebClips} />
       <Route path="/projects/:id" component={ProjectWorkspace} />
       <Route path="/projects/:projectId/documents/:docId" component={ProjectDocument} />
       <Route component={NotFound} />

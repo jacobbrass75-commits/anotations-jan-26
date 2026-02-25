@@ -24,6 +24,31 @@ export const db = drizzle(sqlite, { schema });
 
 // Persistent OCR queue for crash-safe background processing.
 sqlite.exec(`
+CREATE TABLE IF NOT EXISTS web_clips (
+  id TEXT PRIMARY KEY,
+  highlighted_text TEXT NOT NULL,
+  note TEXT,
+  category TEXT NOT NULL DEFAULT 'key_quote',
+  source_url TEXT NOT NULL,
+  page_title TEXT NOT NULL,
+  site_name TEXT,
+  author_name TEXT,
+  publish_date TEXT,
+  citation_data TEXT,
+  footnote TEXT,
+  bibliography TEXT,
+  project_id TEXT,
+  project_document_id TEXT,
+  surrounding_context TEXT,
+  tags TEXT,
+  created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  FOREIGN KEY (project_document_id) REFERENCES project_documents(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_web_clips_created_at ON web_clips(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_web_clips_project_id ON web_clips(project_id);
+CREATE INDEX IF NOT EXISTS idx_web_clips_source_url ON web_clips(source_url);
+
 CREATE TABLE IF NOT EXISTS ocr_jobs (
   id TEXT PRIMARY KEY,
   document_id TEXT NOT NULL,

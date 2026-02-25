@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ScholarMark Web Clipper Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="options-container">
+      <h1>ScholarMark Web Clipper Settings</h1>
+
+      <div class="field">
+        <label for="server-url">ScholarMark Server URL</label>
+        <input type="url" id="server-url" placeholder="http://localhost:5001" />
+        <p class="hint">The URL where your ScholarMark instance is running.</p>
+      </div>
+
+      <div class="field">
+        <label for="default-project">Default Project</label>
+        <select id="default-project">
+          <option value="">No project (inbox)</option>
+        </select>
+        <p class="hint">New clips are assigned to this project by default.</p>
+      </div>
+
+      <div class="field">
+        <label for="default-category">Default Category</label>
+        <select id="default-category">
+          <option value="key_quote">Key Quote</option>
+          <option value="evidence">Evidence</option>
+          <option value="argument">Argument</option>
+          <option value="methodology">Methodology</option>
+        </select>
+      </div>
+
+      <button id="save-btn" class="btn-primary">Save Settings</button>
+      <span id="save-status"></span>
+
+      <hr />
+
+      <h2>Connection Test</h2>
+      <button id="test-btn" class="btn-secondary">Test Connection</button>
+      <div id="test-result"></div>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -87,76 +87,84 @@ export default function Projects() {
             </Link>
             <h1 className="eva-section-title text-lg">RESEARCH PROJECTS</h1>
           </div>
-          
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button className="uppercase tracking-wider" data-testid="button-create-project">
-                <Plus className="h-4 w-4 mr-2" />
-                New Project
+
+          <div className="flex items-center gap-2">
+            <Link href="/web-clips">
+              <Button variant="outline" className="uppercase tracking-wider" data-testid="button-open-web-clips">
+                Web Clips
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Create New Project</DialogTitle>
-                <DialogDescription>
-                  Define your research project. The thesis and scope help optimize AI-assisted search.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Project Name</Label>
-                  <Input
-                    id="name"
-                    value={newProject.name}
-                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                    placeholder="e.g., Victorian Literature Analysis"
-                    data-testid="input-project-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description (optional)</Label>
-                  <Textarea
-                    id="description"
-                    value={newProject.description}
-                    onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                    placeholder="Brief description of your research project"
-                    className="resize-none"
-                    data-testid="input-project-description"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="thesis">Research Thesis / Question</Label>
-                  <Textarea
-                    id="thesis"
-                    value={newProject.thesis}
-                    onChange={(e) => setNewProject({ ...newProject, thesis: e.target.value })}
-                    placeholder="What is your main research question or thesis statement?"
-                    className="resize-none"
-                    data-testid="input-project-thesis"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="scope">Scope</Label>
-                  <Textarea
-                    id="scope"
-                    value={newProject.scope}
-                    onChange={(e) => setNewProject({ ...newProject, scope: e.target.value })}
-                    placeholder="Define the boundaries of your research"
-                    className="resize-none"
-                    data-testid="input-project-scope"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateOpen(false)} data-testid="button-cancel-create">
-                  Cancel
+            </Link>
+
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button className="uppercase tracking-wider" data-testid="button-create-project">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Project
                 </Button>
-                <Button onClick={handleCreate} disabled={createProject.isPending} data-testid="button-confirm-create">
-                  {createProject.isPending ? "Creating..." : "Create Project"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Create New Project</DialogTitle>
+                  <DialogDescription>
+                    Define your research project. The thesis and scope help optimize AI-assisted search.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Project Name</Label>
+                    <Input
+                      id="name"
+                      value={newProject.name}
+                      onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                      placeholder="e.g., Victorian Literature Analysis"
+                      data-testid="input-project-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description (optional)</Label>
+                    <Textarea
+                      id="description"
+                      value={newProject.description}
+                      onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                      placeholder="Brief description of your research project"
+                      className="resize-none"
+                      data-testid="input-project-description"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="thesis">Research Thesis / Question</Label>
+                    <Textarea
+                      id="thesis"
+                      value={newProject.thesis}
+                      onChange={(e) => setNewProject({ ...newProject, thesis: e.target.value })}
+                      placeholder="What is your main research question or thesis statement?"
+                      className="resize-none"
+                      data-testid="input-project-thesis"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="scope">Scope</Label>
+                    <Textarea
+                      id="scope"
+                      value={newProject.scope}
+                      onChange={(e) => setNewProject({ ...newProject, scope: e.target.value })}
+                      placeholder="Define the boundaries of your research"
+                      className="resize-none"
+                      data-testid="input-project-scope"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)} data-testid="button-cancel-create">
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreate} disabled={createProject.isPending} data-testid="button-confirm-create">
+                    {createProject.isPending ? "Creating..." : "Create Project"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </header>
 

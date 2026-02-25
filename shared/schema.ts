@@ -347,11 +347,33 @@ export const projectAnnotations = sqliteTable("project_annotations", {
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
 });
 
+// Web clips table (saved browser highlights with source metadata + citations)
+export const webClips = sqliteTable("web_clips", {
+  id: text("id").primaryKey().$defaultFn(genId),
+  highlightedText: text("highlighted_text").notNull(),
+  note: text("note"),
+  category: text("category").notNull().default("key_quote"),
+  sourceUrl: text("source_url").notNull(),
+  pageTitle: text("page_title").notNull(),
+  siteName: text("site_name"),
+  authorName: text("author_name"),
+  publishDate: text("publish_date"),
+  citationData: text("citation_data", { mode: "json" }).$type<CitationData>(),
+  footnote: text("footnote"),
+  bibliography: text("bibliography"),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+  projectDocumentId: text("project_document_id").references(() => projectDocuments.id, { onDelete: "set null" }),
+  surroundingContext: text("surrounding_context"),
+  tags: text("tags", { mode: "json" }).$type<string[]>(),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+});
+
 // Relations declared after all tables to avoid reference errors
 export const projectsRelations = relations(projects, ({ many }) => ({
   folders: many(folders),
   projectDocuments: many(projectDocuments),
   promptTemplates: many(promptTemplates),
+  webClips: many(webClips),
 }));
 
 export const promptTemplatesRelations = relations(promptTemplates, ({ one }) => ({
@@ -389,11 +411,23 @@ export const projectDocumentsRelations = relations(projectDocuments, ({ one, man
     references: [folders.id],
   }),
   projectAnnotations: many(projectAnnotations),
+  webClips: many(webClips),
 }));
 
 export const projectAnnotationsRelations = relations(projectAnnotations, ({ one }) => ({
   projectDocument: one(projectDocuments, {
     fields: [projectAnnotations.projectDocumentId],
+    references: [projectDocuments.id],
+  }),
+}));
+
+export const webClipsRelations = relations(webClips, ({ one }) => ({
+  project: one(projects, {
+    fields: [webClips.projectId],
+    references: [projects.id],
+  }),
+  projectDocument: one(projectDocuments, {
+    fields: [webClips.projectDocumentId],
     references: [projectDocuments.id],
   }),
 }));
@@ -442,6 +476,16 @@ export const insertProjectAnnotationSchema = createInsertSchema(projectAnnotatio
 });
 export type InsertProjectAnnotation = z.infer<typeof insertProjectAnnotationSchema>;
 export type ProjectAnnotation = typeof projectAnnotations.$inferSelect;
+
+export const insertWebClipSchema = createInsertSchema(webClips).omit({
+  id: true,
+  createdAt: true,
+  footnote: true,
+  bibliography: true,
+  citationData: true,
+});
+export type InsertWebClip = z.infer<typeof insertWebClipSchema>;
+export type WebClip = typeof webClips.$inferSelect;
 
 // Global search result type
 export const globalSearchResultSchema = z.object({
@@ -525,4 +569,3 @@ export const batchAddDocumentsResponseSchema = z.object({
   results: z.array(batchAddDocumentResultSchema),
 });
 export type BatchAddDocumentsResponse = z.infer<typeof batchAddDocumentsResponseSchema>;
-

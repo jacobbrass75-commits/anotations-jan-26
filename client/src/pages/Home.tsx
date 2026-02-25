@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { BookOpen, Upload, FolderOpen } from "lucide-react";
+import { BookOpen, Upload, FolderOpen, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -277,6 +277,12 @@ export default function Home() {
               <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-projects">
                 <FolderOpen className="h-4 w-4 mr-2" />
                 Projects
+              </Button>
+            </Link>
+            <Link href="/web-clips">
+              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-web-clips">
+                <Link2 className="h-4 w-4 mr-2" />
+                Web Clips
               </Button>
             </Link>
             {!showUpload && (

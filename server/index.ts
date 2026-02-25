@@ -1,6 +1,7 @@
 // Load environment variables first
 import "dotenv/config";
 
+import cors from "cors";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -9,11 +10,38 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+function isAllowedOrigin(origin?: string): boolean {
+  if (!origin) return true;
+  if (origin.startsWith("chrome-extension://")) return true;
+  if (/^https?:\/\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/i.test(origin)) return true;
+  if (/^https?:\/\/89\\.167\\.10\\.34(:\\d+)?$/i.test(origin)) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  return false;
+}
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
+    credentials: true,
+  }),
+);
 
 app.use(
   express.json({
