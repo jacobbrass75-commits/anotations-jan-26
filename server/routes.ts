@@ -1,8 +1,11 @@
 import type { Express as ExpressApp, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import { readdir, stat } from "fs/promises";
+import { join } from "path";
 import multer from "multer";
 import { PDFParse } from "pdf-parse";
 import { storage } from "./storage";
+import { db } from "./db";
 import { extractTextFromTxt } from "./chunker";
 import {
   getEmbedding,
@@ -42,6 +45,8 @@ import {
   inferDocumentSourceMimeType,
   saveDocumentSource,
 } from "./sourceFiles";
+import { annotations, documents, projectAnnotations, projects } from "@shared/schema";
+import { sql } from "drizzle-orm";
 
 const IMAGE_EXTENSIONS = new Set([
   ".png",
@@ -65,6 +70,8 @@ const IMAGE_MIME_TYPES = new Set([
 const MAX_COMBINED_UPLOAD_FILES = Number.isFinite(Number(process.env.MAX_COMBINED_UPLOAD_FILES))
   ? Math.max(1, Math.floor(Number(process.env.MAX_COMBINED_UPLOAD_FILES)))
   : 25;
+const DATABASE_PATH = join(process.cwd(), "data", "sourceannotator.db");
+const SOURCE_UPLOADS_PATH = join(process.cwd(), "data", "uploads");
 
 function getFileExtension(filename: string): string {
   const extStart = filename.lastIndexOf(".");
@@ -74,6 +81,35 @@ function getFileExtension(filename: string): string {
 
 function isImageFile(mimeType: string, extension: string): boolean {
   return mimeType.startsWith("image/") || IMAGE_MIME_TYPES.has(mimeType) || IMAGE_EXTENSIONS.has(extension);
+}
+
+async function getFileSizeBytes(path: string): Promise<number> {
+  try {
+    const metadata = await stat(path);
+    return metadata.size;
+  } catch {
+    return 0;
+  }
+}
+
+async function getDirectorySizeBytes(path: string): Promise<number> {
+  try {
+    const entries = await readdir(path, { withFileTypes: true });
+    let total = 0;
+
+    for (const entry of entries) {
+      const entryPath = join(path, entry.name);
+      if (entry.isDirectory()) {
+        total += await getDirectorySizeBytes(entryPath);
+      } else if (entry.isFile()) {
+        total += await getFileSizeBytes(entryPath);
+      }
+    }
+
+    return total;
+  } catch {
+    return 0;
+  }
 }
 
 // Detect garbled text from failed PDF extraction
@@ -128,6 +164,72 @@ export async function registerRoutes(
   app: ExpressApp
 ): Promise<Server> {
   await initializeOcrQueue();
+
+  app.get("/api/system/status", async (_req: Request, res: Response) => {
+    try {
+      const [projectCountRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(projects);
+      const [documentCountRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(documents);
+      const [annotationCountRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(annotations);
+      const [projectAnnotationCountRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(projectAnnotations);
+
+      const documentMeta = await storage.getAllDocumentMeta();
+      const statusBreakdown = {
+        ready: 0,
+        processing: 0,
+        error: 0,
+        other: 0,
+      };
+
+      for (const doc of documentMeta) {
+        if (doc.status === "ready") {
+          statusBreakdown.ready += 1;
+        } else if (doc.status === "processing") {
+          statusBreakdown.processing += 1;
+        } else if (doc.status === "error") {
+          statusBreakdown.error += 1;
+        } else {
+          statusBreakdown.other += 1;
+        }
+      }
+
+      const dbBytes = await getFileSizeBytes(DATABASE_PATH);
+      const sourceFilesBytes = await getDirectorySizeBytes(SOURCE_UPLOADS_PATH);
+      const heapUsage = process.memoryUsage();
+
+      return res.json({
+        counts: {
+          projects: projectCountRow?.count ?? 0,
+          documents: documentCountRow?.count ?? 0,
+          annotations: (annotationCountRow?.count ?? 0) + (projectAnnotationCountRow?.count ?? 0),
+        },
+        storage: {
+          databaseBytes: dbBytes,
+          sourceFilesBytes,
+          totalBytes: dbBytes + sourceFilesBytes,
+        },
+        system: {
+          uptimeSeconds: Math.floor(process.uptime()),
+          nodeVersion: process.version,
+          platform: `${process.platform}/${process.arch}`,
+          heapUsedBytes: heapUsage.heapUsed,
+          heapTotalBytes: Math.max(heapUsage.heapTotal, 1),
+        },
+        documentsByStatus: statusBreakdown,
+        capturedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error("Error fetching system status:", error);
+      return res.status(500).json({ message: "Failed to fetch system status" });
+    }
+  });
 
   // Upload document
   app.post("/api/upload", upload.single("file"), async (req: Request, res: Response) => {
