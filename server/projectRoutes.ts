@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { projectStorage } from "./projectStorage";
 import { globalSearch, searchProjectDocument } from "./projectSearch";
-import { generateChicagoFootnote, generateChicagoBibliography, generateFootnoteWithQuote, generateInlineCitation } from "./citationGenerator";
+import { generateChicagoFootnote, generateChicagoBibliography, generateFootnoteWithQuote, generateInlineCitation, generateFootnote, generateInTextCitation, generateBibliographyEntry } from "./citationGenerator";
 import { generateRetrievalContext, generateProjectContextSummary, generateFolderContextSummary, generateSearchableContent, embedText } from "./contextGenerator";
 import { storage } from "./storage";
 import {
@@ -24,7 +24,9 @@ import {
   citationDataSchema,
   batchAnalysisRequestSchema,
   batchAddDocumentsRequestSchema,
+  citationStyles,
   type CitationData,
+  type CitationStyle,
   type AnnotationCategory,
   type BatchDocumentResult,
   type BatchAnalysisResponse,
@@ -1039,13 +1041,15 @@ export function registerProjectRoutes(app: Express): void {
 
   app.post("/api/citations/generate", async (req: Request, res: Response) => {
     try {
-      const { citationData, pageNumber, isSubsequent } = req.body;
+      const { citationData, style = "chicago", pageNumber, isSubsequent } = req.body;
       const validated = citationDataSchema.parse(citationData);
-      
-      const footnote = generateChicagoFootnote(validated, pageNumber, isSubsequent);
-      const bibliography = generateChicagoBibliography(validated);
-      
-      res.json({ footnote, bibliography });
+      const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
+
+      const footnote = generateFootnote(validated, validStyle, pageNumber, isSubsequent);
+      const bibliography = generateBibliographyEntry(validated, validStyle);
+      const inlineCitation = generateInTextCitation(validated, validStyle, pageNumber);
+
+      res.json({ footnote, bibliography, inlineCitation, style: validStyle });
     } catch (error) {
       console.error("Error generating citation:", error);
       res.status(400).json({ error: "Failed to generate citation" });
@@ -1054,30 +1058,31 @@ export function registerProjectRoutes(app: Express): void {
 
   app.post("/api/citations/ai", async (req: Request, res: Response) => {
     try {
-      const { documentId, highlightedText } = req.body;
-      
+      const { documentId, highlightedText, style = "chicago" } = req.body;
+      const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
+
       if (!documentId) {
         return res.status(400).json({ error: "Document ID is required" });
       }
-      
+
       const document = await storage.getDocument(documentId);
       if (!document) {
         return res.status(404).json({ error: "Document not found" });
       }
-      
+
       const citationData = await extractCitationMetadata(document.fullText, highlightedText);
-      
+
       if (!citationData) {
-        return res.status(422).json({ 
+        return res.status(422).json({
           error: "Unable to extract citation metadata from document",
           footnote: `"${highlightedText?.substring(0, 100) || 'Quote'}..." (Source: ${document.filename})`,
           bibliography: `${document.filename}. [Citation metadata unavailable]`
         });
       }
-      
-      const footnote = generateChicagoFootnote(citationData);
-      const bibliography = generateChicagoBibliography(citationData);
-      
+
+      const footnote = generateFootnote(citationData, validStyle);
+      const bibliography = generateBibliographyEntry(citationData, validStyle);
+
       res.json({ footnote, bibliography, citationData });
     } catch (error) {
       console.error("Error generating AI citation:", error);
@@ -1088,7 +1093,8 @@ export function registerProjectRoutes(app: Express): void {
   // Generate footnote with embedded quote for an annotation
   app.post("/api/citations/footnote-with-quote", async (req: Request, res: Response) => {
     try {
-      const { citationData, quote, pageNumber } = req.body;
+      const { citationData, quote, pageNumber, style = "chicago" } = req.body;
+      const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
 
       if (!quote) {
         return res.status(400).json({ error: "Quote text is required" });
@@ -1110,10 +1116,10 @@ export function registerProjectRoutes(app: Express): void {
 
       const validated = citationDataSchema.parse(citationData);
 
-      const footnote = generateChicagoFootnote(validated, pageNumber);
+      const footnote = generateFootnote(validated, validStyle, pageNumber);
       const footnoteWithQuote = generateFootnoteWithQuote(validated, quote, pageNumber);
-      const inlineCitation = generateInlineCitation(validated, pageNumber);
-      const bibliography = generateChicagoBibliography(validated);
+      const inlineCitation = generateInTextCitation(validated, validStyle, pageNumber);
+      const bibliography = generateBibliographyEntry(validated, validStyle);
 
       res.json({
         footnote,
@@ -1140,7 +1146,8 @@ export function registerProjectRoutes(app: Express): void {
         return res.status(404).json({ error: "Project document not found" });
       }
 
-      const { pageNumber } = req.body;
+      const { pageNumber, style = "chicago" } = req.body;
+      const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
 
       // Use citation data from the project document
       const citationData = projectDoc.citationData;
@@ -1155,9 +1162,9 @@ export function registerProjectRoutes(app: Express): void {
             await projectStorage.updateProjectDocument(projectDoc.id, { citationData: extractedCitation });
 
             const footnoteWithQuote = generateFootnoteWithQuote(extractedCitation, annotation.highlightedText, pageNumber);
-            const footnote = generateChicagoFootnote(extractedCitation, pageNumber);
-            const inlineCitation = generateInlineCitation(extractedCitation, pageNumber);
-            const bibliography = generateChicagoBibliography(extractedCitation);
+            const footnote = generateFootnote(extractedCitation, validStyle, pageNumber);
+            const inlineCitation = generateInTextCitation(extractedCitation, validStyle, pageNumber);
+            const bibliography = generateBibliographyEntry(extractedCitation, validStyle);
 
             return res.json({
               footnote,
@@ -1185,10 +1192,10 @@ export function registerProjectRoutes(app: Express): void {
         });
       }
 
-      const footnoteWithQuote = generateFootnoteWithQuote(citationData as any, annotation.highlightedText, pageNumber);
-      const footnote = generateChicagoFootnote(citationData as any, pageNumber);
-      const inlineCitation = generateInlineCitation(citationData as any, pageNumber);
-      const bibliography = generateChicagoBibliography(citationData as any);
+      const footnoteWithQuote = generateFootnoteWithQuote(citationData as CitationData, annotation.highlightedText, pageNumber);
+      const footnote = generateFootnote(citationData as CitationData, validStyle, pageNumber);
+      const inlineCitation = generateInTextCitation(citationData as CitationData, validStyle, pageNumber);
+      const bibliography = generateBibliographyEntry(citationData as CitationData, validStyle);
 
       res.json({
         footnote,
