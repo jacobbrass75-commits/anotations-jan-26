@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Loader2, ChevronUp, ChevronDown, MapPin, Sparkles } from "lucide-react";
+import { Search, ChevronUp, ChevronDown, MapPin, Sparkles } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,8 +15,8 @@ interface SearchPanelProps {
 }
 
 const relevanceColors = {
-  high: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-  medium: "bg-chart-4/10 text-chart-4 border-chart-4/20",
+  high: "bg-eva-green/15 text-eva-green border border-eva-green/30",
+  medium: "bg-eva-orange/15 text-eva-orange border border-eva-orange/30",
   low: "bg-muted text-muted-foreground border-muted",
 };
 
@@ -48,12 +48,12 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <Card className="border-t-2 border-t-primary/20">
+      <Card className="border-t-2 border-t-primary/20 eva-corner-decor bg-card">
         <CollapsibleTrigger asChild>
           <CardHeader className="cursor-pointer flex flex-row items-center justify-between gap-4 py-3 hover:bg-muted/50 transition-colors">
             <div className="flex items-center gap-2">
               <Search className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold">Search Document</h2>
+              <h2 className="eva-section-title text-sm">SEMANTIC SEARCH // MAGI</h2>
               {results.length > 0 && (
                 <Badge variant="secondary" className="text-xs">
                   {results.length} results
@@ -75,19 +75,22 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Ask about this document..."
+                  placeholder="ENTER SEARCH QUERY..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="pl-9"
+                  className="pl-9 font-mono bg-eva-dark/50 text-eva-green eva-focus-glow border-eva-orange/30"
                   disabled={!documentId || isSearching}
                   data-testid="input-search"
                 />
                 {isSearching && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                  <div
+                    className="absolute right-3 top-1/2 -translate-y-1/2 eva-hex-spinner"
+                    style={{ width: "1rem", height: "1rem" }}
+                  />
                 )}
               </div>
               <Button type="submit" disabled={!documentId || !query.trim() || isSearching} data-testid="button-search">
-                <Sparkles className="h-4 w-4 mr-2" />
+                <Sparkles className="h-4 w-4 mr-2 text-eva-orange eva-glitch" />
                 Search
               </Button>
             </form>
@@ -104,7 +107,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                   <button
                     key={suggestion}
                     type="button"
-                    className="px-2 py-1 bg-muted rounded-md hover:bg-muted/80 transition-colors"
+                    className="px-2 py-1 font-mono text-xs uppercase tracking-wider bg-secondary rounded-md hover:bg-eva-orange/10 hover:text-eva-orange transition-colors"
                     onClick={() => setQuery(suggestion)}
                     disabled={!documentId}
                   >
@@ -120,7 +123,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                   {displayedResults.map((result, index) => (
                     <Card
                       key={index}
-                      className="p-4 hover-elevate cursor-pointer"
+                      className="p-4 hover-elevate cursor-pointer eva-clip-sm"
                       onClick={() => onJumpToPosition(result.startPosition, result.endPosition)}
                       data-testid={`search-result-${index}`}
                     >
@@ -131,7 +134,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                         >
                           {result.relevance} relevance
                         </Badge>
-                        <button className="text-primary hover:text-primary/80 flex items-center gap-1 text-xs">
+                        <button className="text-eva-cyan hover:text-eva-cyan/80 flex items-center gap-1 uppercase text-xs tracking-wider">
                           <MapPin className="h-3 w-3" />
                           Jump to
                         </button>

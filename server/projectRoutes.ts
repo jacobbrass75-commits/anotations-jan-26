@@ -146,17 +146,12 @@ async function analyzeProjectDocument(
   console.log(`Analyzing ${topChunks.length} of ${chunks.length} chunks (${thoroughness} mode)`);
 
   const existingAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
-  const userAnnotations = existingAnnotations
-    .filter(a => !a.isAiGenerated)
+  const existingAnnotationPositions = existingAnnotations
     .map(a => ({
       startPosition: a.startPosition,
       endPosition: a.endPosition,
       confidenceScore: a.confidenceScore,
     }));
-
-  for (const ann of existingAnnotations.filter(a => a.isAiGenerated)) {
-    await projectStorage.deleteProjectAnnotation(ann.id);
-  }
 
   // Use V2 pipeline for improved annotation quality
   let pipelineAnnotations = await processChunksWithPipelineV2(
@@ -164,7 +159,7 @@ async function analyzeProjectDocument(
     fullIntent,
     doc.id,
     doc.fullText,
-    userAnnotations
+    existingAnnotationPositions
   );
 
   if (constraints?.categories && constraints.categories.length > 0) {
@@ -842,27 +837,30 @@ export function registerProjectRoutes(app: Express): void {
         }));
       }
 
-      // Get existing user annotations (keep them), delete AI annotations
+      // Keep both user and prior AI annotations so analyses can accumulate over time.
       const existingAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
-      const userAnnotations = existingAnnotations
-        .filter(a => !a.isAiGenerated)
+      const existingAnnotationPositions = existingAnnotations
         .map(a => ({
           startPosition: a.startPosition,
           endPosition: a.endPosition,
           confidenceScore: a.confidenceScore,
         }));
 
-      for (const ann of existingAnnotations.filter(a => a.isAiGenerated)) {
-        await projectStorage.deleteProjectAnnotation(ann.id);
-      }
+      // Ensure prompt indices continue across runs so prior prompt groups remain distinct.
+      const maxExistingPromptIndex = existingAnnotations.reduce((max, ann) => {
+        if (ann.promptIndex == null) return max;
+        return ann.promptIndex > max ? ann.promptIndex : max;
+      }, -1);
+      const promptIndexBase = maxExistingPromptIndex + 1;
 
       // Prepare prompts with colors and indices
-      const promptsWithMeta = prompts.map((p: { text: string; color?: string }, index: number) => ({
+      const promptsWithMeta = prompts.map((p: { text: string; color?: string }, localIndex: number) => ({
         text: project?.thesis
           ? `Project thesis: ${project.thesis}\n\nResearch focus: ${p.text}`
           : p.text,
-        color: p.color || getDefaultPromptColor(index),
-        index,
+        color: p.color || getDefaultPromptColor(promptIndexBase + localIndex),
+        index: promptIndexBase + localIndex,
+        localIndex,
       }));
 
       // Generate analysis run ID
@@ -876,7 +874,7 @@ export function registerProjectRoutes(app: Express): void {
         promptsWithMeta,
         doc.id,
         doc.fullText,
-        userAnnotations
+        existingAnnotationPositions
       );
 
       // Create annotations with prompt metadata
@@ -884,7 +882,9 @@ export function registerProjectRoutes(app: Express): void {
       let totalAnnotations = 0;
 
       for (const [promptIndex, annotations] of Array.from(resultsMap.entries())) {
-        const originalPrompt = prompts[promptIndex];
+        const promptMeta = promptsWithMeta.find((p) => p.index === promptIndex);
+        if (!promptMeta) continue;
+        const originalPrompt = prompts[promptMeta.localIndex];
         let created = 0;
 
         for (const ann of annotations) {
@@ -899,7 +899,7 @@ export function registerProjectRoutes(app: Express): void {
             confidenceScore: ann.confidence,
             promptText: originalPrompt.text,
             promptIndex,
-            promptColor: promptsWithMeta[promptIndex].color,
+            promptColor: promptMeta.color,
             analysisRunId,
           });
           created++;

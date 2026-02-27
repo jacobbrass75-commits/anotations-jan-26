@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useProject, useFolders, useProjectDocuments, useCreateFolder, useDeleteFolder, useAddDocumentToProject, useRemoveDocumentFromProject } from "@/hooks/useProjects";
 import { useGlobalSearch, useGenerateCitation } from "@/hooks/useProjectSearch";
-import { useUploadDocument } from "@/hooks/useDocument";
+import { useUploadDocument, useUploadDocumentGroup } from "@/hooks/useDocument";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,13 +13,18 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Loader2, Upload, Quote } from "lucide-react";
+import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Upload, Quote } from "lucide-react";
 import { BatchAnalysisModal } from "@/components/BatchAnalysisModal";
 import { BatchUploadModal } from "@/components/BatchUploadModal";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Folder as FolderType, GlobalSearchResult, Document } from "@shared/schema";
+
+type DocumentLibraryItem = Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">;
 
 function FolderTree({ 
   folders, 
@@ -61,7 +66,7 @@ function FolderTree({
       <div key={folder.id}>
         <div
           className={`flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer group ${
-            isSelected ? "bg-accent" : "hover-elevate"
+            isSelected ? "text-eva-orange bg-eva-orange/10 border-l-2 border-eva-orange" : "hover-elevate"
           }`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
           onClick={() => onSelectFolder(folder.id)}
@@ -79,7 +84,7 @@ function FolderTree({
             <span className="w-4" />
           )}
           <Folder className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm flex-1 truncate">{folder.name}</span>
+          <span className="font-mono text-xs uppercase tracking-wider flex-1 truncate">{folder.name}</span>
           <button
             className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive"
             onClick={(e) => {
@@ -104,13 +109,13 @@ function FolderTree({
     <div className="space-y-0.5">
       <div
         className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer ${
-          selectedFolderId === null ? "bg-accent" : "hover-elevate"
+          selectedFolderId === null ? "text-eva-orange bg-eva-orange/10 border-l-2 border-eva-orange" : "hover-elevate"
         }`}
         onClick={() => onSelectFolder(null)}
         data-testid="folder-root"
       >
         <Folder className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm">All Documents</span>
+        <span className="font-mono text-xs uppercase tracking-wider">All Documents</span>
       </div>
       {rootFolders.map(folder => renderFolder(folder, 0))}
     </div>
@@ -135,17 +140,22 @@ function SearchResultCard({
   isGeneratingFootnote?: boolean;
 }) {
   const categoryColors: Record<string, string> = {
-    key_quote: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300",
-    evidence: "bg-green-500/20 text-green-700 dark:text-green-300",
-    argument: "bg-blue-500/20 text-blue-700 dark:text-blue-300",
-    methodology: "bg-purple-500/20 text-purple-700 dark:text-purple-300",
-    user_added: "bg-orange-500/20 text-orange-700 dark:text-orange-300",
+    key_quote: "bg-[#FF6A00]/20 text-[#FF6A00] border border-[#FF6A00]/30",
+    evidence: "bg-[#00FF41]/15 text-[#00FF41] border border-[#00FF41]/30",
+    argument: "bg-[#00D4FF]/15 text-[#00D4FF] border border-[#00D4FF]/30",
+    methodology: "bg-[#8B5CF6]/20 text-[#8B5CF6] border border-[#8B5CF6]/30",
+    user_added: "bg-[#CC0000]/15 text-[#CC0000] border border-[#CC0000]/30",
     document_context: "bg-gray-500/20 text-gray-700 dark:text-gray-300",
+  };
+  const relevanceClasses: Record<string, string> = {
+    high: "bg-eva-green/15 text-eva-green border border-eva-green/30",
+    medium: "bg-eva-orange/15 text-eva-orange border border-eva-orange/30",
+    low: "bg-muted text-muted-foreground border border-muted",
   };
 
   return (
     <Card 
-      className="hover-elevate cursor-pointer" 
+      className="hover-elevate cursor-pointer eva-clip-sm" 
       data-testid={`search-result-${result.annotationId || result.documentId}`}
       onClick={onNavigateToDocument}
     >
@@ -155,7 +165,7 @@ function SearchResultCard({
             <Badge variant="outline" className={categoryColors[result.category || result.type] || ""}>
               {result.category?.replace("_", " ") || result.type.replace("_", " ")}
             </Badge>
-            <Badge variant={result.relevanceLevel === "high" ? "default" : "outline"}>
+            <Badge variant="outline" className={relevanceClasses[result.relevanceLevel] || relevanceClasses.low}>
               {Math.round(result.similarityScore * 100)}% match
             </Badge>
           </div>
@@ -172,7 +182,7 @@ function SearchResultCard({
               title="Copy footnote with quote"
             >
               {isGeneratingFootnote ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
               ) : (
                 <Quote className="h-4 w-4" />
               )}
@@ -186,7 +196,7 @@ function SearchResultCard({
               title="Generate full citation"
             >
               {isGeneratingCitation ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
               ) : (
                 <BookOpen className="h-4 w-4" />
               )}
@@ -222,6 +232,61 @@ function SearchResultCard({
   );
 }
 
+function getFileExtension(filename: string): string {
+  const extStart = filename.lastIndexOf(".");
+  if (extStart < 0) return "";
+  return filename.slice(extStart).toLowerCase();
+}
+
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".tif",
+  ".tiff",
+  ".heic",
+  ".heif",
+]);
+
+const COMBINABLE_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".heic", ".heif"]);
+const MAX_COMBINED_UPLOAD_FILES_PER_DOC = 20;
+
+function isPdfFile(file: File | null): boolean {
+  if (!file) return false;
+  return file.type === "application/pdf" || getFileExtension(file.name) === ".pdf";
+}
+
+function isImageFile(file: File | null): boolean {
+  if (!file) return false;
+  const extension = getFileExtension(file.name);
+  return file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(extension);
+}
+
+function isSupportedUploadFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  const isPdf = isPdfFile(file);
+  const isTxt = file.type === "text/plain" || extension === ".txt";
+  const isImage = isImageFile(file);
+  return isPdf || isTxt || isImage;
+}
+
+function isCombinableImageFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  return isImageFile(file) && COMBINABLE_IMAGE_EXTENSIONS.has(extension);
+}
+
+function chunkFiles<T>(items: T[], chunkSize: number): T[][] {
+  if (chunkSize <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
 export default function ProjectWorkspace() {
   const [, params] = useRoute("/projects/:id");
   const [, setLocation] = useLocation();
@@ -231,7 +296,9 @@ export default function ProjectWorkspace() {
   const { data: project, isLoading: projectLoading } = useProject(projectId);
   const { data: folders = [] } = useFolders(projectId);
   const { data: projectDocuments = [] } = useProjectDocuments(projectId);
-  const { data: allDocuments = [] } = useQuery<Document[]>({ queryKey: ["/api/documents"] });
+  const { data: allDocuments = [] } = useQuery<DocumentLibraryItem[]>({
+    queryKey: ["/api/documents/meta"],
+  });
   
   const createFolder = useCreateFolder();
   const deleteFolder = useDeleteFolder();
@@ -253,11 +320,15 @@ export default function ProjectWorkspace() {
   const [isBatchUploadOpen, setIsBatchUploadOpen] = useState(false);
   const [generatingCitationFor, setGeneratingCitationFor] = useState<string | null>(null);
   const [generatingFootnoteFor, setGeneratingFootnoteFor] = useState<string | null>(null);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadOcrMode, setUploadOcrMode] = useState<string>("standard");
+  const [uploadOcrModel, setUploadOcrModel] = useState<string>("gpt-4o");
+  const [isUploadingAndAdding, setIsUploadingAndAdding] = useState(false);
+  const [combineImageUploads, setCombineImageUploads] = useState(true);
   const [addDocTab, setAddDocTab] = useState<"library" | "upload">("library");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadDocument = useUploadDocument();
+  const uploadDocumentGroup = useUploadDocumentGroup();
   
   const filteredDocuments = useMemo(() => {
     if (selectedFolderId === null) return projectDocuments;
@@ -268,6 +339,18 @@ export default function ProjectWorkspace() {
     const addedDocIds = new Set(projectDocuments.map(pd => pd.documentId));
     return allDocuments.filter(doc => !addedDocIds.has(doc.id));
   }, [allDocuments, projectDocuments]);
+
+  const hasPdfUploadFiles = uploadFiles.some((file) => isPdfFile(file));
+  const hasImageUploadFiles = uploadFiles.some((file) => isImageFile(file));
+  const shouldShowVisionModelSelector =
+    hasImageUploadFiles || (hasPdfUploadFiles && (uploadOcrMode === "vision" || uploadOcrMode === "vision_batch"));
+  const canCombineSelectedImages =
+    uploadFiles.length > 1 && uploadFiles.every((file) => isCombinableImageFile(file));
+  const combinedUploadChunks = canCombineSelectedImages
+    ? chunkFiles(uploadFiles, MAX_COMBINED_UPLOAD_FILES_PER_DOC)
+    : [];
+  const exceedsSafeCombinedThreshold =
+    canCombineSelectedImages && uploadFiles.length > MAX_COMBINED_UPLOAD_FILES_PER_DOC;
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -352,6 +435,139 @@ export default function ProjectWorkspace() {
     }
   };
 
+  const handleUploadFileSelect = (files: FileList | null) => {
+    if (!files) return;
+    const selectedFiles = Array.from(files).filter((file) => isSupportedUploadFile(file));
+    if (selectedFiles.length === 0) return;
+
+    setUploadFiles((prev) => {
+      const existingKeys = new Set(prev.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+      const newFiles = selectedFiles.filter(
+        (file) => !existingKeys.has(`${file.name}:${file.size}:${file.lastModified}`)
+      );
+      return [...prev, ...newFiles];
+    });
+  };
+
+  const removeUploadFile = (index: number) => {
+    setUploadFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
+  };
+
+  const handleUploadAndAddDocuments = async () => {
+    if (uploadFiles.length === 0) return;
+    setIsUploadingAndAdding(true);
+
+    let addedCount = 0;
+    let failedCount = 0;
+    let firstErrorMessage = "";
+
+    try {
+      if (canCombineSelectedImages && combineImageUploads) {
+        let docsCreated = 0;
+        let chunkFailures = 0;
+
+        for (const chunk of combinedUploadChunks) {
+          try {
+            const doc = await uploadDocumentGroup.mutateAsync({
+              files: chunk,
+              // Combined image documents always use Vision OCR; batch mode is recommended for speed.
+              ocrMode: "vision_batch",
+              ocrModel: uploadOcrModel,
+            });
+
+            await addDocument.mutateAsync({
+              projectId,
+              data: {
+                documentId: doc.id,
+                folderId: selectedFolderId || undefined,
+              },
+            });
+            docsCreated += 1;
+          } catch (error) {
+            chunkFailures += 1;
+            if (!firstErrorMessage) {
+              firstErrorMessage = error instanceof Error ? error.message : "Upload failed";
+            }
+          }
+        }
+
+        if (docsCreated > 0 && chunkFailures === 0) {
+          toast({
+            title: "Documents added",
+            description: `Uploaded ${uploadFiles.length} images as ${docsCreated} document${docsCreated === 1 ? "" : "s"} (chunked for reliability).`,
+          });
+          setIsAddDocOpen(false);
+          setUploadFiles([]);
+          return;
+        }
+
+        if (docsCreated > 0 && chunkFailures > 0) {
+          toast({
+            title: "Partial success",
+            description: `Created ${docsCreated} combined document${docsCreated === 1 ? "" : "s"}, ${chunkFailures} chunk${chunkFailures === 1 ? "" : "s"} failed.`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        toast({
+          title: "Upload failed",
+          description: firstErrorMessage || "Could not upload the selected files.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      for (const file of uploadFiles) {
+        try {
+          const doc = await uploadDocument.mutateAsync({
+            file,
+            ocrMode: uploadOcrMode,
+            ocrModel: uploadOcrModel,
+          });
+
+          await addDocument.mutateAsync({
+            projectId,
+            data: {
+              documentId: doc.id,
+              folderId: selectedFolderId || undefined,
+            },
+          });
+
+          addedCount += 1;
+        } catch (error) {
+          failedCount += 1;
+          if (!firstErrorMessage) {
+            firstErrorMessage = error instanceof Error ? error.message : "Upload failed";
+          }
+        }
+      }
+
+      if (addedCount > 0 && failedCount === 0) {
+        toast({
+          title: "Documents added",
+          description: `Uploaded and added ${addedCount} document${addedCount === 1 ? "" : "s"} to the project.`,
+        });
+        setIsAddDocOpen(false);
+        setUploadFiles([]);
+      } else if (addedCount > 0 && failedCount > 0) {
+        toast({
+          title: "Partial success",
+          description: `Added ${addedCount} document${addedCount === 1 ? "" : "s"}, ${failedCount} failed.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Upload failed",
+          description: firstErrorMessage || "Could not upload the selected files.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsUploadingAndAdding(false);
+    }
+  };
+
   const handleGenerateCitation = async (result: GlobalSearchResult) => {
     const resultKey = result.annotationId || result.documentId || "";
     setGeneratingCitationFor(resultKey);
@@ -400,15 +616,31 @@ export default function ProjectWorkspace() {
     }
     const projectDoc = projectDocuments.find(pd => pd.documentId === result.documentId);
     if (projectDoc) {
-      setLocation(`/projects/${projectId}/documents/${projectDoc.id}`);
+      const params = new URLSearchParams();
+      if (result.annotationId) {
+        params.set("annotationId", result.annotationId);
+      }
+      if (typeof result.startPosition === "number") {
+        params.set("start", String(result.startPosition));
+      }
+      const query = params.toString();
+      setLocation(`/projects/${projectId}/documents/${projectDoc.id}${query ? `?${query}` : ""}`);
     } else {
       toast({ title: "Document Not Found", description: "The document may have been removed from this project", variant: "destructive" });
     }
   };
 
-  const handleCopyQuote = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copied", description: "Quote copied to clipboard" });
+  const handleCopyQuote = async (text: string) => {
+    try {
+      await copyTextToClipboard(text);
+      toast({ title: "Copied", description: "Quote copied to clipboard" });
+    } catch (error) {
+      toast({
+        title: "Copy failed",
+        description: "Clipboard access is unavailable. Try selecting the quote text manually.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCopyFootnote = async (result: GlobalSearchResult) => {
@@ -436,7 +668,7 @@ export default function ProjectWorkspace() {
         if (!res.ok) throw new Error("Failed to generate footnote");
 
         const data = await res.json();
-        await navigator.clipboard.writeText(data.footnoteWithQuote);
+        await copyTextToClipboard(data.footnoteWithQuote);
         toast({
           title: "Footnote Copied",
           description: "Chicago-style footnote with quote copied to clipboard",
@@ -445,14 +677,18 @@ export default function ProjectWorkspace() {
         // Fallback: just copy the quote with document name
         const docName = result.documentFilename || "Unknown document";
         const footnote = `${docName}: "${quoteText}"`;
-        await navigator.clipboard.writeText(footnote);
+        await copyTextToClipboard(footnote);
         toast({
           title: "Quote Copied",
           description: "Quote with document name copied (no citation data available)",
         });
       }
     } catch (error) {
-      toast({ title: "Error", description: "Failed to generate footnote", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to generate or copy footnote",
+        variant: "destructive",
+      });
     } finally {
       setGeneratingFootnoteFor(null);
     }
@@ -481,7 +717,7 @@ export default function ProjectWorkspace() {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <aside className="w-64 border-r bg-muted/30 flex flex-col">
+      <aside className="w-64 border-r bg-muted/30 eva-grid-bg flex flex-col">
         <div className="p-4 border-b">
           <Link href="/projects">
             <Button variant="ghost" size="sm" className="mb-2" data-testid="button-back-projects">
@@ -489,7 +725,7 @@ export default function ProjectWorkspace() {
               Back
             </Button>
           </Link>
-          <h2 className="font-semibold text-lg truncate">{project.name}</h2>
+          <h2 className="font-semibold text-lg truncate font-mono uppercase tracking-wider">{project.name}</h2>
           {project.thesis && (
             <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{project.thesis}</p>
           )}
@@ -518,8 +754,8 @@ export default function ProjectWorkspace() {
         </ScrollArea>
       </aside>
 
-      <main className="flex-1 flex flex-col">
-        <header className="border-b p-4">
+      <main className="flex-1 flex flex-col eva-grid-bg">
+        <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md p-4">
           <div className="flex items-center gap-4">
             <div className="flex-1 flex gap-2">
               <Input
@@ -537,6 +773,7 @@ export default function ProjectWorkspace() {
             </div>
             <Button 
               variant="outline" 
+              className="uppercase tracking-wider text-xs"
               onClick={() => setIsBatchModalOpen(true)} 
               disabled={projectDocuments.length === 0}
               data-testid="button-batch-analyze"
@@ -546,6 +783,7 @@ export default function ProjectWorkspace() {
             </Button>
             <Button 
               variant="outline"
+              className="uppercase tracking-wider text-xs"
               onClick={() => setIsBatchUploadOpen(true)} 
               disabled={availableDocuments.length === 0}
               data-testid="button-batch-upload"
@@ -553,18 +791,19 @@ export default function ProjectWorkspace() {
               <FolderUp className="h-4 w-4 mr-2" />
               Batch Add
             </Button>
-            <Button onClick={() => setIsAddDocOpen(true)} data-testid="button-add-document">
+            <Button className="uppercase tracking-wider text-xs" onClick={() => setIsAddDocOpen(true)} data-testid="button-add-document">
               <Plus className="h-4 w-4 mr-2" />
               Add Document
             </Button>
+            <ThemeToggle />
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 pb-8 eva-grid-bg">
           {searchResults.length > 0 ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Search Results ({searchResults.length})</h3>
+                <h3 className="eva-section-title text-sm">SEARCH RESULTS ({searchResults.length})</h3>
                 <Button variant="ghost" size="sm" onClick={() => setSearchResults([])}>
                   Clear Results
                 </Button>
@@ -587,7 +826,7 @@ export default function ProjectWorkspace() {
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">
+                <h3 className="font-semibold font-mono text-sm uppercase tracking-wider">
                   {selectedFolderId ? folders.find(f => f.id === selectedFolderId)?.name : "All Documents"}
                   <span className="text-muted-foreground font-normal ml-2">({filteredDocuments.length})</span>
                 </h3>
@@ -608,7 +847,7 @@ export default function ProjectWorkspace() {
                     <Card key={pd.id} className="group hover-elevate" data-testid={`doc-card-${pd.id}`}>
                       <CardHeader className="pb-2">
                         <div className="flex items-start justify-between gap-2">
-                          <CardTitle className="text-base line-clamp-1">{pd.document.filename}</CardTitle>
+                          <CardTitle className="text-base line-clamp-1 font-mono text-sm">{pd.document.filename}</CardTitle>
                           <div className="flex gap-1">
                             <Link href={`/projects/${projectId}/documents/${pd.id}`}>
                               <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-view-doc-${pd.id}`}>
@@ -680,8 +919,11 @@ export default function ProjectWorkspace() {
       <Dialog open={isAddDocOpen} onOpenChange={(open) => {
         setIsAddDocOpen(open);
         if (!open) {
-          setUploadFile(null);
+          setUploadFiles([]);
           setUploadOcrMode("standard");
+          setUploadOcrModel("gpt-4o");
+          setIsUploadingAndAdding(false);
+          setCombineImageUploads(true);
           setSelectedDocId("");
           setAddDocTab("library");
         }
@@ -729,9 +971,13 @@ export default function ProjectWorkspace() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.txt"
+                accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,application/pdf,text/plain,image/*"
                 className="hidden"
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                multiple
+                onChange={(e) => {
+                  handleUploadFileSelect(e.target.files);
+                  e.target.value = "";
+                }}
                 data-testid="input-file-upload"
               />
               <div
@@ -740,16 +986,60 @@ export default function ProjectWorkspace() {
                 data-testid="dropzone-upload"
               >
                 <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                {uploadFile ? (
-                  <p className="text-sm font-medium">{uploadFile.name}</p>
+                {uploadFiles.length > 0 ? (
+                  <p className="text-sm font-medium">
+                    {uploadFiles.length} file{uploadFiles.length === 1 ? "" : "s"} selected
+                  </p>
                 ) : (
                   <>
-                    <p className="text-sm text-muted-foreground">Click to select a PDF or TXT file</p>
+                    <p className="text-sm text-muted-foreground">Click to select one or more PDF, TXT, or image files</p>
                     <p className="text-xs text-muted-foreground mt-1">Max 50MB</p>
                   </>
                 )}
               </div>
-              {uploadFile && (uploadFile.type === "application/pdf" || uploadFile.name.endsWith(".pdf")) && (
+              {uploadFiles.length > 0 && (
+                <ScrollArea className="h-28 border rounded-md p-2">
+                  <div className="space-y-2">
+                    {uploadFiles.map((file, index) => (
+                      <div
+                        key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                        className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5"
+                        data-testid={`selected-upload-file-${index}`}
+                      >
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm flex-1 truncate">{file.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => removeUploadFile(index)}
+                          data-testid={`button-remove-upload-file-${index}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+              {canCombineSelectedImages && (
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    checked={combineImageUploads}
+                    onCheckedChange={(checked) => setCombineImageUploads(Boolean(checked))}
+                    data-testid="checkbox-combine-image-uploads"
+                  />
+                  <span className="leading-5">
+                    Combine selected images into document batches (keeps upload order, max {MAX_COMBINED_UPLOAD_FILES_PER_DOC} images per document)
+                  </span>
+                </label>
+              )}
+              {exceedsSafeCombinedThreshold && combineImageUploads && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Large image sets are automatically split into {combinedUploadChunks.length} documents to prevent OCR failures and restarts.
+                </p>
+              )}
+              {hasPdfUploadFiles && (
                 <div className="space-y-1.5">
                   <Label>Text Extraction Mode</Label>
                   <Select value={uploadOcrMode} onValueChange={setUploadOcrMode}>
@@ -760,12 +1050,31 @@ export default function ProjectWorkspace() {
                       <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
                       <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
                       <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
+                      <SelectItem value="vision_batch">Vision OCR Batch (long scanned PDFs, faster)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     {uploadOcrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
                     {uploadOcrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
                     {uploadOcrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+                    {uploadOcrMode === "vision_batch" && "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
+                  </p>
+                </div>
+              )}
+              {shouldShowVisionModelSelector && (
+                <div className="space-y-1.5">
+                  <Label>AI OCR Model</Label>
+                  <Select value={uploadOcrModel} onValueChange={setUploadOcrModel}>
+                    <SelectTrigger data-testid="select-ocr-model">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gpt-4o">GPT-4o (best OCR quality)</SelectItem>
+                      <SelectItem value="gpt-4o-mini">GPT-4o mini (faster, lower cost)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Used for HEIC/image transcription and Vision OCR PDF modes.
                   </p>
                 </div>
               )}
@@ -779,34 +1088,21 @@ export default function ProjectWorkspace() {
                 disabled={!selectedDocId || addDocument.isPending} 
                 data-testid="button-confirm-add-doc"
               >
-                {addDocument.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {addDocument.isPending && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
                 Add
               </Button>
             ) : (
               <Button 
-                onClick={async () => {
-                  if (!uploadFile) return;
-                  try {
-                    const doc = await uploadDocument.mutateAsync({ file: uploadFile, ocrMode: uploadOcrMode });
-                    await addDocument.mutateAsync({
-                      projectId,
-                      data: {
-                        documentId: doc.id,
-                        folderId: selectedFolderId || undefined,
-                      },
-                    });
-                    setIsAddDocOpen(false);
-                    setUploadFile(null);
-                    toast({ title: "Document added", description: `${doc.filename} uploaded and added to project` });
-                  } catch (error: any) {
-                    toast({ title: "Error", description: error.message, variant: "destructive" });
-                  }
-                }}
-                disabled={!uploadFile || uploadDocument.isPending || addDocument.isPending}
+                onClick={handleUploadAndAddDocuments}
+                disabled={uploadFiles.length === 0 || isUploadingAndAdding}
                 data-testid="button-upload-add"
               >
-                {(uploadDocument.isPending || addDocument.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Upload & Add
+                {isUploadingAndAdding && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
+                {canCombineSelectedImages && combineImageUploads
+                  ? `Upload & Add ${combinedUploadChunks.length} Document${combinedUploadChunks.length === 1 ? "" : "s"}`
+                  : `Upload & Add ${uploadFiles.length > 0 ? uploadFiles.length : ""} ${
+                      uploadFiles.length === 1 ? "File" : "Files"
+                    }`}
               </Button>
             )}
           </DialogFooter>
@@ -814,7 +1110,7 @@ export default function ProjectWorkspace() {
       </Dialog>
 
       <Dialog open={!!citationModal} onOpenChange={() => setCitationModal(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Chicago Citation</DialogTitle>
             <DialogDescription>
@@ -832,9 +1128,17 @@ export default function ProjectWorkspace() {
                   variant="outline"
                   size="sm"
                   className="mt-2"
-                  onClick={() => {
-                    navigator.clipboard.writeText(citationModal.footnote);
-                    toast({ title: "Copied", description: "Footnote copied to clipboard" });
+                  onClick={async () => {
+                    try {
+                      await copyTextToClipboard(citationModal.footnote);
+                      toast({ title: "Copied", description: "Footnote copied to clipboard" });
+                    } catch {
+                      toast({
+                        title: "Copy failed",
+                        description: "Clipboard access is unavailable in this browser context",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                   data-testid="button-copy-footnote"
                 >
@@ -852,9 +1156,17 @@ export default function ProjectWorkspace() {
                   variant="outline"
                   size="sm"
                   className="mt-2"
-                  onClick={() => {
-                    navigator.clipboard.writeText(citationModal.bibliography);
-                    toast({ title: "Copied", description: "Bibliography copied to clipboard" });
+                  onClick={async () => {
+                    try {
+                      await copyTextToClipboard(citationModal.bibliography);
+                      toast({ title: "Copied", description: "Bibliography copied to clipboard" });
+                    } catch {
+                      toast({
+                        title: "Copy failed",
+                        description: "Clipboard access is unavailable in this browser context",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                   data-testid="button-copy-bibliography"
                 >

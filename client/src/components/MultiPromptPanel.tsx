@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Plus, X, Sparkles, Save, FolderOpen, Loader2 } from "lucide-react";
+import { Plus, X, Sparkles, Save, FolderOpen } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,12 +153,12 @@ export function MultiPromptPanel({
 
   return (
     <>
-      <Card className="h-full flex flex-col">
+      <Card className="h-full flex flex-col eva-corner-decor">
         <CardHeader className="pb-3 border-b shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold">Research Prompts</h2>
+              <h2 className="eva-section-title text-sm">MULTI-PROMPT ANALYSIS</h2>
             </div>
             {hasAnalyzed && (
               <Badge variant="secondary">{annotationCount} annotations</Badge>
@@ -179,14 +179,14 @@ export function MultiPromptPanel({
                   value={prompt.text}
                   onChange={(e) => updatePromptText(prompt.id, e.target.value)}
                   placeholder={`Prompt ${index + 1}: e.g., "Find evidence about..."`}
-                  className="flex-1"
+                  className="flex-1 font-mono eva-focus-glow"
                   disabled={isAnalyzing}
                 />
                 {prompts.length > 1 && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 shrink-0"
+                    className="h-8 w-8 shrink-0 uppercase tracking-wider text-xs"
                     onClick={() => removePrompt(prompt.id)}
                     disabled={isAnalyzing}
                   >
@@ -208,7 +208,7 @@ export function MultiPromptPanel({
             size="sm"
             onClick={addPrompt}
             disabled={isAnalyzing || prompts.length >= 8}
-            className="w-full"
+            className="w-full uppercase tracking-wider text-xs"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Prompt
@@ -239,7 +239,7 @@ export function MultiPromptPanel({
             {projectId && onSaveTemplate && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={isAnalyzing}>
+                  <Button variant="outline" size="sm" disabled={isAnalyzing} className="eva-focus-glow uppercase tracking-wider text-xs">
                     <FolderOpen className="h-4 w-4 mr-1" />
                     Templates
                   </Button>
@@ -272,13 +272,13 @@ export function MultiPromptPanel({
             <Button
               onClick={handleAnalyze}
               disabled={!canAnalyze}
-              className="flex-1"
+              className="flex-1 uppercase tracking-wider text-xs"
             >
               {isAnalyzing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Analyzing...
-                </>
+                <span className="flex items-center gap-2">
+                  <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
+                  ANALYZING...
+                </span>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
@@ -324,7 +324,7 @@ export function MultiPromptPanel({
               disabled={!templateName.trim() || isSavingTemplate}
             >
               {isSavingTemplate ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}

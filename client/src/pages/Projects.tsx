@@ -60,7 +60,7 @@ export default function Projects() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-6">
+      <div className="min-h-screen bg-background p-6 eva-grid-bg">
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-4">
             <div className="h-8 w-48 bg-muted rounded" />
@@ -77,7 +77,7 @@ export default function Projects() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
+      <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link href="/">
@@ -85,90 +85,98 @@ export default function Projects() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <h1 className="text-2xl font-semibold">Research Projects</h1>
+            <h1 className="eva-section-title text-lg">RESEARCH PROJECTS</h1>
           </div>
-          
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-create-project">
-                <Plus className="h-4 w-4 mr-2" />
-                New Project
+
+          <div className="flex items-center gap-2">
+            <Link href="/web-clips">
+              <Button variant="outline" className="uppercase tracking-wider" data-testid="button-open-web-clips">
+                Web Clips
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Create New Project</DialogTitle>
-                <DialogDescription>
-                  Define your research project. The thesis and scope help optimize AI-assisted search.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Project Name</Label>
-                  <Input
-                    id="name"
-                    value={newProject.name}
-                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                    placeholder="e.g., Victorian Literature Analysis"
-                    data-testid="input-project-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description (optional)</Label>
-                  <Textarea
-                    id="description"
-                    value={newProject.description}
-                    onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                    placeholder="Brief description of your research project"
-                    className="resize-none"
-                    data-testid="input-project-description"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="thesis">Research Thesis / Question</Label>
-                  <Textarea
-                    id="thesis"
-                    value={newProject.thesis}
-                    onChange={(e) => setNewProject({ ...newProject, thesis: e.target.value })}
-                    placeholder="What is your main research question or thesis statement?"
-                    className="resize-none"
-                    data-testid="input-project-thesis"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="scope">Scope</Label>
-                  <Textarea
-                    id="scope"
-                    value={newProject.scope}
-                    onChange={(e) => setNewProject({ ...newProject, scope: e.target.value })}
-                    placeholder="Define the boundaries of your research"
-                    className="resize-none"
-                    data-testid="input-project-scope"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateOpen(false)} data-testid="button-cancel-create">
-                  Cancel
+            </Link>
+
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button className="uppercase tracking-wider" data-testid="button-create-project">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Project
                 </Button>
-                <Button onClick={handleCreate} disabled={createProject.isPending} data-testid="button-confirm-create">
-                  {createProject.isPending ? "Creating..." : "Create Project"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Create New Project</DialogTitle>
+                  <DialogDescription>
+                    Define your research project. The thesis and scope help optimize AI-assisted search.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Project Name</Label>
+                    <Input
+                      id="name"
+                      value={newProject.name}
+                      onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                      placeholder="e.g., Victorian Literature Analysis"
+                      data-testid="input-project-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description (optional)</Label>
+                    <Textarea
+                      id="description"
+                      value={newProject.description}
+                      onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                      placeholder="Brief description of your research project"
+                      className="resize-none"
+                      data-testid="input-project-description"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="thesis">Research Thesis / Question</Label>
+                    <Textarea
+                      id="thesis"
+                      value={newProject.thesis}
+                      onChange={(e) => setNewProject({ ...newProject, thesis: e.target.value })}
+                      placeholder="What is your main research question or thesis statement?"
+                      className="resize-none"
+                      data-testid="input-project-thesis"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="scope">Scope</Label>
+                    <Textarea
+                      id="scope"
+                      value={newProject.scope}
+                      onChange={(e) => setNewProject({ ...newProject, scope: e.target.value })}
+                      placeholder="Define the boundaries of your research"
+                      className="resize-none"
+                      data-testid="input-project-scope"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)} data-testid="button-cancel-create">
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreate} disabled={createProject.isPending} data-testid="button-confirm-create">
+                    {createProject.isPending ? "Creating..." : "Create Project"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-6">
+      <main className="max-w-6xl mx-auto p-6 pb-8 eva-grid-bg">
         {projects && projects.length === 0 ? (
           <div className="text-center py-16 space-y-4">
-            <FolderOpen className="h-16 w-16 mx-auto text-muted-foreground" />
-            <h2 className="text-xl font-semibold">No Projects Yet</h2>
+            <FolderOpen className="h-16 w-16 mx-auto text-eva-orange" />
+            <h2 className="eva-section-title text-base">NO ACTIVE PROJECTS</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
               Create a research project to organize your documents, annotations, and enable global search across your entire collection.
             </p>
-            <Button onClick={() => setIsCreateOpen(true)} data-testid="button-create-first-project">
+            <Button className="uppercase tracking-wider" onClick={() => setIsCreateOpen(true)} data-testid="button-create-first-project">
               <Plus className="h-4 w-4 mr-2" />
               Create Your First Project
             </Button>
@@ -177,10 +185,10 @@ export default function Projects() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects?.map((project) => (
               <Link key={project.id} href={`/projects/${project.id}`}>
-                <Card className="h-full hover-elevate cursor-pointer group" data-testid={`card-project-${project.id}`}>
+                <Card className="h-full hover-elevate cursor-pointer group eva-clip-panel eva-corner-decor hover:shadow-[0_0_20px_rgba(255,106,0,0.15)] transition-all duration-200" data-testid={`card-project-${project.id}`}>
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-lg line-clamp-1">{project.name}</CardTitle>
+                      <CardTitle className="text-lg line-clamp-1 font-sans uppercase tracking-wider">{project.name}</CardTitle>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -188,7 +196,7 @@ export default function Projects() {
                         onClick={(e) => handleDelete(project.id, e)}
                         data-testid={`button-delete-project-${project.id}`}
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 className="h-4 w-4 text-eva-red hover:text-eva-red/80" />
                       </Button>
                     </div>
                     {project.description && (

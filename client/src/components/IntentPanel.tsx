@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles, Target, Loader2, CheckCircle2 } from "lucide-react";
+import { Sparkles, Target, CheckCircle2 } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,10 +50,10 @@ export function IntentPanel({
   const canSubmit = research.trim() && goals.trim() && !isDisabled;
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="h-full flex flex-col eva-corner-decor">
       <CardHeader className="flex flex-row items-center gap-2 pb-4">
         <Target className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-semibold">Research Intent</h2>
+        <h2 className="eva-section-title text-sm">RESEARCH INTENT</h2>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col gap-4">
@@ -63,10 +63,10 @@ export function IntentPanel({
             </Label>
             <Textarea
               id="research"
-              placeholder="Describe your research topic, thesis, or area of study..."
+              placeholder="DESCRIBE YOUR RESEARCH TOPIC, THESIS, OR AREA OF STUDY..."
               value={research}
               onChange={(e) => setResearch(e.target.value)}
-              className="h-28 resize-none"
+              className="h-28 resize-none eva-focus-glow font-mono text-sm"
               disabled={isDisabled}
               data-testid="textarea-research"
             />
@@ -78,17 +78,17 @@ export function IntentPanel({
             </Label>
             <Textarea
               id="goals"
-              placeholder="Key quotes, evidence, arguments, methodology references..."
+              placeholder="KEY QUOTES, EVIDENCE, ARGUMENTS, METHODOLOGY REFERENCES..."
               value={goals}
               onChange={(e) => setGoals(e.target.value)}
-              className="h-24 resize-none"
+              className="h-24 resize-none eva-focus-glow font-mono text-sm"
               disabled={isDisabled}
               data-testid="textarea-goals"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="thoroughness" className="text-sm font-medium">
+            <Label htmlFor="thoroughness" className="text-xs uppercase tracking-wider font-medium">
               Analysis Depth
             </Label>
             <Select
@@ -100,10 +100,10 @@ export function IntentPanel({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="quick">Quick - {thoroughnessDescriptions.quick}</SelectItem>
-                <SelectItem value="standard">Standard - {thoroughnessDescriptions.standard}</SelectItem>
-                <SelectItem value="thorough">Thorough - {thoroughnessDescriptions.thorough}</SelectItem>
-                <SelectItem value="exhaustive">Exhaustive - {thoroughnessDescriptions.exhaustive}</SelectItem>
+                <SelectItem value="quick">QUICK - {thoroughnessDescriptions.quick.toUpperCase()}</SelectItem>
+                <SelectItem value="standard">STANDARD - {thoroughnessDescriptions.standard.toUpperCase()}</SelectItem>
+                <SelectItem value="thorough">THOROUGH - {thoroughnessDescriptions.thorough.toUpperCase()}</SelectItem>
+                <SelectItem value="exhaustive">EXHAUSTIVE - {thoroughnessDescriptions.exhaustive.toUpperCase()}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -111,15 +111,15 @@ export function IntentPanel({
           <div className="mt-auto pt-4">
             <Button
               type="submit"
-              className="w-full"
+              className="w-full uppercase tracking-widest font-semibold"
               disabled={!canSubmit}
               data-testid="button-analyze"
             >
               {isAnalyzing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Analyzing Document...
-                </>
+                <span className="flex items-center gap-2">
+                  <div className="eva-status-warning" />
+                  ANALYZING...
+                </span>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
@@ -130,8 +130,8 @@ export function IntentPanel({
           </div>
 
           {hasAnalyzed && (
-            <div className="flex items-center gap-2 p-3 bg-chart-2/10 rounded-lg border border-chart-2/20">
-              <CheckCircle2 className="h-4 w-4 text-chart-2" />
+            <div className="flex items-center gap-2 p-3 bg-eva-green/10 rounded-lg border border-eva-green/30">
+              <CheckCircle2 className="h-4 w-4 text-eva-green" />
               <span className="text-sm text-foreground">Analysis complete</span>
               <Badge variant="secondary" className="ml-auto">
                 {annotationCount} highlights

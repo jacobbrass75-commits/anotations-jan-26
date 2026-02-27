@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { MessageSquare, Bot, User, Trash2, Edit2, Filter, Plus, Quote } from "lucide-react";
+import { MessageSquare, Bot, User, Trash2, Edit2, Filter, Plus, Quote, Copy } from "lucide-react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,7 @@ interface AnnotationSidebarProps {
   onUpdate: (annotationId: string, note: string, category: AnnotationCategory) => void;
   onAddManual: () => void;
   canAddManual: boolean;
+  onCopyQuote?: (quote: string) => void;
   showFootnoteButton?: boolean;
   onCopyFootnote?: (annotationId: string) => void;
 }
@@ -48,11 +49,11 @@ type FilterType = "all" | "ai" | "manual" | AnnotationCategory;
 type PromptFilterType = "all" | number; // "all" or prompt index
 
 const categoryColors: Record<AnnotationCategory, string> = {
-  key_quote: "bg-yellow-500",
-  evidence: "bg-green-500",
-  argument: "bg-blue-500",
-  methodology: "bg-purple-500",
-  user_added: "bg-orange-500",
+  key_quote: "bg-[#FF6A00]",
+  evidence: "bg-[#00FF41]",
+  argument: "bg-[#00D4FF]",
+  methodology: "bg-[#8B5CF6]",
+  user_added: "bg-[#CC0000]",
 };
 
 const categoryLabels: Record<AnnotationCategory, string> = {
@@ -72,6 +73,7 @@ export function AnnotationSidebar({
   onUpdate,
   onAddManual,
   canAddManual,
+  onCopyQuote,
   showFootnoteButton = false,
   onCopyFootnote,
 }: AnnotationSidebarProps) {
@@ -144,10 +146,10 @@ export function AnnotationSidebar({
 
   if (isLoading) {
     return (
-      <Card className="h-full flex flex-col">
+      <Card className="h-full flex flex-col eva-corner-decor">
         <CardHeader className="flex flex-row items-center gap-2 pb-4 border-b">
           <MessageSquare className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Annotations</h2>
+          <h2 className="eva-section-title text-sm">ANNOTATIONS</h2>
         </CardHeader>
         <CardContent className="flex-1 p-4">
           <div className="space-y-4">
@@ -165,19 +167,19 @@ export function AnnotationSidebar({
 
   return (
     <>
-      <Card className="h-full flex flex-col overflow-hidden">
+      <Card className="h-full flex flex-col overflow-hidden eva-corner-decor">
         <CardHeader className="flex flex-col gap-3 pb-4 border-b shrink-0">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold">Annotations</h2>
+              <h2 className="eva-section-title text-sm">ANNOTATIONS</h2>
             </div>
             <Badge variant="secondary">{annotations.length}</Badge>
           </div>
 
           <div className="flex items-center gap-2">
             <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
-              <SelectTrigger className="flex-1" data-testid="select-annotation-filter">
+              <SelectTrigger className="flex-1 eva-focus-glow" data-testid="select-annotation-filter">
                 <Filter className="h-3.5 w-3.5 mr-2" />
                 <SelectValue />
               </SelectTrigger>
@@ -201,7 +203,7 @@ export function AnnotationSidebar({
                 value={String(promptFilter)}
                 onValueChange={(v) => setPromptFilter(v === "all" ? "all" : Number(v))}
               >
-                <SelectTrigger className="flex-1" data-testid="select-prompt-filter">
+                <SelectTrigger className="flex-1 eva-focus-glow" data-testid="select-prompt-filter">
                   <SelectValue placeholder="All Prompts" />
                 </SelectTrigger>
                 <SelectContent>
@@ -225,7 +227,7 @@ export function AnnotationSidebar({
 
           <Button
             variant="outline"
-            className="w-full"
+            className="w-full uppercase tracking-widest text-xs"
             onClick={onAddManual}
             disabled={!canAddManual}
             data-testid="button-add-manual-annotation"
@@ -257,7 +259,7 @@ export function AnnotationSidebar({
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => e.key === "Enter" && onSelect(annotation)}
-                    className={`w-full text-left p-3 rounded-lg border transition-all duration-150 cursor-pointer hover-elevate ${
+                    className={`group w-full text-left p-3 rounded-lg border transition-all duration-200 cursor-pointer hover-elevate eva-clip-sm hover:shadow-[0_0_15px_rgba(255,106,0,0.1)] ${
                       selectedAnnotationId === annotation.id
                         ? "border-primary bg-primary/5"
                         : "border-transparent bg-muted/50 hover:bg-muted"
@@ -303,7 +305,22 @@ export function AnnotationSidebar({
 
                     <p className="text-sm text-foreground line-clamp-2">{annotation.note}</p>
 
-                    <div className="flex items-center justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className={`flex items-center justify-end gap-1 mt-2 transition-opacity ${selectedAnnotationId === annotation.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                      {onCopyQuote && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Copy Quote"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCopyQuote(annotation.highlightedText);
+                          }}
+                          data-testid={`button-copy-quote-${annotation.id}`}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       {showFootnoteButton && onCopyFootnote && (
                         <Button
                           variant="ghost"

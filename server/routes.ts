@@ -1,8 +1,11 @@
-import type { Express, Request, Response } from "express";
+import type { Express as ExpressApp, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import { readdir, stat } from "fs/promises";
+import { join } from "path";
 import multer from "multer";
 import { PDFParse } from "pdf-parse";
 import { storage } from "./storage";
+import { db } from "./db";
 import { extractTextFromTxt } from "./chunker";
 import {
   getEmbedding,
@@ -26,9 +29,92 @@ import { registerProjectRoutes } from "./projectRoutes";
 import { registerChatRoutes } from "./chatRoutes";
 import { registerWritingRoutes } from "./writingRoutes";
 import { registerExtensionRoutes } from "./extensionRoutes";
+import { registerWebClipRoutes } from "./webClipRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
-import { saveTempPdf, processWithPaddleOcr, processWithVisionOcr } from "./ocrProcessor";
+import {
+  createZipFromImageUploads,
+  SUPPORTED_VISION_OCR_MODELS,
+  type VisionOcrModel,
+} from "./ocrProcessor";
+import {
+  enqueueImageBundleOcrJob,
+  enqueueImageOcrJob,
+  enqueuePdfOcrJob,
+  initializeOcrQueue,
+} from "./ocrQueue";
+import {
+  getDocumentSourcePath,
+  hasDocumentSource,
+  inferDocumentSourceMimeType,
+  saveDocumentSource,
+} from "./sourceFiles";
+import { annotations, documents, projectAnnotations, projects } from "@shared/schema";
+import { sql } from "drizzle-orm";
 import { optionalAuth } from "./auth";
+
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".tif",
+  ".tiff",
+  ".heic",
+  ".heif",
+]);
+
+const IMAGE_MIME_TYPES = new Set([
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
+]);
+const MAX_COMBINED_UPLOAD_FILES = Number.isFinite(Number(process.env.MAX_COMBINED_UPLOAD_FILES))
+  ? Math.max(1, Math.floor(Number(process.env.MAX_COMBINED_UPLOAD_FILES)))
+  : 25;
+const DATABASE_PATH = join(process.cwd(), "data", "sourceannotator.db");
+const SOURCE_UPLOADS_PATH = join(process.cwd(), "data", "uploads");
+
+function getFileExtension(filename: string): string {
+  const extStart = filename.lastIndexOf(".");
+  if (extStart < 0) return "";
+  return filename.slice(extStart).toLowerCase();
+}
+
+function isImageFile(mimeType: string, extension: string): boolean {
+  return mimeType.startsWith("image/") || IMAGE_MIME_TYPES.has(mimeType) || IMAGE_EXTENSIONS.has(extension);
+}
+
+async function getFileSizeBytes(path: string): Promise<number> {
+  try {
+    const metadata = await stat(path);
+    return metadata.size;
+  } catch {
+    return 0;
+  }
+}
+
+async function getDirectorySizeBytes(path: string): Promise<number> {
+  try {
+    const entries = await readdir(path, { withFileTypes: true });
+    let total = 0;
+
+    for (const entry of entries) {
+      const entryPath = join(path, entry.name);
+      if (entry.isDirectory()) {
+        total += await getDirectorySizeBytes(entryPath);
+      } else if (entry.isFile()) {
+        total += await getFileSizeBytes(entryPath);
+      }
+    }
+
+    return total;
+  } catch {
+    return 0;
+  }
+}
 
 // Detect garbled text from failed PDF extraction
 // Checks for high ratio of non-word characters or unusual patterns
@@ -64,22 +150,91 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["application/pdf", "text/plain"];
-    const allowedExtensions = [".pdf", ".txt"];
-    const ext = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf("."));
-    
-    if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+    const ext = getFileExtension(file.originalname);
+    const isPdf = file.mimetype === "application/pdf" || ext === ".pdf";
+    const isTxt = file.mimetype === "text/plain" || ext === ".txt";
+    const isImage = isImageFile(file.mimetype, ext);
+
+    if (isPdf || isTxt || isImage) {
       cb(null, true);
     } else {
-      cb(new Error("Only PDF and TXT files are allowed"));
+      cb(new Error("Only PDF, TXT, and image files (including HEIC/HEIF) are allowed"));
     }
   },
 });
 
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  app: ExpressApp
 ): Promise<Server> {
+  await initializeOcrQueue();
+
+  app.get("/api/system/status", async (_req: Request, res: Response) => {
+    try {
+      const [projectCountRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(projects);
+      const [documentCountRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(documents);
+      const [annotationCountRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(annotations);
+      const [projectAnnotationCountRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(projectAnnotations);
+
+      const documentMeta = await storage.getAllDocumentMeta();
+      const statusBreakdown = {
+        ready: 0,
+        processing: 0,
+        error: 0,
+        other: 0,
+      };
+
+      for (const doc of documentMeta) {
+        if (doc.status === "ready") {
+          statusBreakdown.ready += 1;
+        } else if (doc.status === "processing") {
+          statusBreakdown.processing += 1;
+        } else if (doc.status === "error") {
+          statusBreakdown.error += 1;
+        } else {
+          statusBreakdown.other += 1;
+        }
+      }
+
+      const dbBytes = await getFileSizeBytes(DATABASE_PATH);
+      const sourceFilesBytes = await getDirectorySizeBytes(SOURCE_UPLOADS_PATH);
+      const heapUsage = process.memoryUsage();
+
+      return res.json({
+        counts: {
+          projects: projectCountRow?.count ?? 0,
+          documents: documentCountRow?.count ?? 0,
+          annotations: (annotationCountRow?.count ?? 0) + (projectAnnotationCountRow?.count ?? 0),
+        },
+        storage: {
+          databaseBytes: dbBytes,
+          sourceFilesBytes,
+          totalBytes: dbBytes + sourceFilesBytes,
+        },
+        system: {
+          uptimeSeconds: Math.floor(process.uptime()),
+          nodeVersion: process.version,
+          platform: `${process.platform}/${process.arch}`,
+          heapUsedBytes: heapUsage.heapUsed,
+          heapTotalBytes: Math.max(heapUsage.heapTotal, 1),
+        },
+        documentsByStatus: statusBreakdown,
+        capturedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error("Error fetching system status:", error);
+      return res.status(500).json({ message: "Failed to fetch system status" });
+    }
+  });
+
   // Upload document
   app.post("/api/upload", optionalAuth, upload.single("file"), async (req: Request, res: Response) => {
     try {
@@ -88,11 +243,32 @@ export async function registerRoutes(
       }
 
       const file = req.file;
-      const ocrMode = (req.body.ocrMode as string) || "standard";
-      const isPdf = file.mimetype === "application/pdf" || file.originalname.endsWith(".pdf");
+      const requestedOcrMode = ((req.body.ocrMode as string) || "standard").toLowerCase();
+      const ocrMode =
+        requestedOcrMode === "vision-batch"
+          ? "vision_batch"
+          : ["standard", "advanced", "vision", "vision_batch"].includes(requestedOcrMode)
+          ? requestedOcrMode
+          : "standard";
+      const requestedOcrModel = ((req.body.ocrModel as string) || "").toLowerCase();
+      const ocrModel: VisionOcrModel = SUPPORTED_VISION_OCR_MODELS.includes(
+        requestedOcrModel as VisionOcrModel
+      )
+        ? (requestedOcrModel as VisionOcrModel)
+        : "gpt-4o";
+      const fileExtension = getFileExtension(file.originalname);
+      const isPdf = file.mimetype === "application/pdf" || fileExtension === ".pdf";
+      const isTxt = file.mimetype === "text/plain" || fileExtension === ".txt";
+      const isImage = isImageFile(file.mimetype, fileExtension);
 
-      // For non-PDF files or standard mode, use synchronous processing
-      if (!isPdf || ocrMode === "standard") {
+      if (!isPdf && !isTxt && !isImage) {
+        return res.status(400).json({
+          message: "Unsupported file type. Please upload a PDF, TXT, or image file (including HEIC/HEIF).",
+        });
+      }
+
+      // For TXT files and standard PDF mode, use synchronous processing
+      if (isTxt || (isPdf && ocrMode === "standard")) {
         let fullText: string;
 
         if (isPdf) {
@@ -107,7 +283,7 @@ export async function registerRoutes(
           // Check if extracted text appears garbled (common with scanned PDFs or custom fonts)
           if (isGarbledText(fullText)) {
             return res.status(400).json({
-              message: "This PDF appears to be scanned or uses custom fonts that cannot be read. Please try: (1) Using a PDF with selectable text, (2) Copy the text content into a .txt file and upload that instead, or (3) Re-upload with Advanced OCR or Vision OCR mode."
+              message: "This PDF appears to be scanned or uses custom fonts that cannot be read. Please try: (1) Using a PDF with selectable text, (2) Copy the text content into a .txt file and upload that instead, or (3) Re-upload with Advanced OCR, Vision OCR, or Vision OCR Batch mode."
             });
           }
         } else {
@@ -123,6 +299,7 @@ export async function registerRoutes(
           filename: file.originalname,
           fullText,
         });
+        await saveDocumentSource(doc.id, file.originalname, file.buffer);
 
         // Chunk the text using V2 chunking (with noise filtering and larger chunks)
         const chunks = chunkTextV2(fullText);
@@ -153,31 +330,124 @@ export async function registerRoutes(
         return res.json(updatedDoc);
       }
 
-      // OCR modes: save temp PDF, create doc in processing state, fire-and-forget
-      const tempPdfPath = await saveTempPdf(file.buffer);
-
-      const doc = await storage.createDocument({
-        filename: file.originalname,
-        fullText: "",
-      });
-      await storage.updateDocument(doc.id, { status: "processing" });
-
-      const updatedDoc = await storage.getDocument(doc.id);
-
-      // Fire-and-forget background processing
-      if (ocrMode === "advanced") {
-        processWithPaddleOcr(doc.id, tempPdfPath).catch((err) => {
-          console.error("Background PaddleOCR error:", err);
+      if (isPdf) {
+        // OCR modes for PDFs: queue durable background OCR against persisted source.
+        const doc = await storage.createDocument({
+          filename: file.originalname,
+          fullText: "",
         });
-      } else if (ocrMode === "vision") {
-        processWithVisionOcr(doc.id, tempPdfPath).catch((err) => {
-          console.error("Background Vision OCR error:", err);
+        await saveDocumentSource(doc.id, file.originalname, file.buffer);
+        await storage.updateDocument(doc.id, { status: "processing" });
+        await enqueuePdfOcrJob({
+          documentId: doc.id,
+          sourceFilename: file.originalname,
+          ocrMode: ocrMode as "advanced" | "vision" | "vision_batch",
+          ocrModel,
+        });
+
+        const updatedDoc = await storage.getDocument(doc.id);
+        return res.status(202).json(updatedDoc);
+      }
+
+      if (isImage) {
+        // Image OCR runs as a durable queued job.
+        const doc = await storage.createDocument({
+          filename: file.originalname,
+          fullText: "",
+        });
+        await saveDocumentSource(doc.id, file.originalname, file.buffer);
+        await storage.updateDocument(doc.id, { status: "processing" });
+        const imageOcrMode = ocrMode === "vision_batch" ? "vision_batch" : "vision";
+        await enqueueImageOcrJob({
+          documentId: doc.id,
+          sourceFilename: file.originalname,
+          ocrMode: imageOcrMode,
+          ocrModel,
+        });
+
+        const updatedDoc = await storage.getDocument(doc.id);
+        return res.status(202).json(updatedDoc);
+      }
+
+      return res.status(400).json({ message: "Unsupported OCR mode for this file type" });
+    } catch (error) {
+      console.error("Upload error:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
+    }
+  });
+
+  // Upload multiple images as a single combined document (preserves upload order).
+  app.post("/api/upload-group", upload.array("files", 100), async (req: Request, res: Response) => {
+    try {
+      const files = (req.files as Express.Multer.File[] | undefined) || [];
+      if (!files.length) {
+        return res.status(400).json({ message: "No files uploaded" });
+      }
+      if (files.length > MAX_COMBINED_UPLOAD_FILES) {
+        return res.status(400).json({
+          message:
+            `Too many images in one combined upload (${files.length}). ` +
+            `Limit is ${MAX_COMBINED_UPLOAD_FILES}. Split into smaller batches for reliability.`,
         });
       }
 
+      const requestedOcrMode = ((req.body.ocrMode as string) || "standard").toLowerCase();
+      const ocrMode =
+        requestedOcrMode === "vision-batch"
+          ? "vision_batch"
+          : ["standard", "vision", "vision_batch"].includes(requestedOcrMode)
+          ? requestedOcrMode
+          : "standard";
+      const requestedOcrModel = ((req.body.ocrModel as string) || "").toLowerCase();
+      const ocrModel: VisionOcrModel = SUPPORTED_VISION_OCR_MODELS.includes(
+        requestedOcrModel as VisionOcrModel
+      )
+        ? (requestedOcrModel as VisionOcrModel)
+        : "gpt-4o";
+
+      const supportedCombinedExtensions = new Set([".png", ".jpg", ".jpeg", ".heic", ".heif"]);
+      for (const file of files) {
+        const ext = getFileExtension(file.originalname);
+        const image = isImageFile(file.mimetype, ext);
+        if (!image) {
+          return res.status(400).json({
+            message: "Combined uploads currently support images only.",
+          });
+        }
+        if (!supportedCombinedExtensions.has(ext)) {
+          return res.status(400).json({
+            message:
+              `Unsupported image format for combined upload: ${file.originalname}. Please convert to PNG/JPG or upload separately.`,
+          });
+        }
+      }
+
+      const primaryName = files[0].originalname || "image-upload";
+      const baseName = primaryName.replace(/\.[^/.]+$/, "");
+      const combinedFilename = `${baseName} (${files.length} images).zip`;
+
+      const doc = await storage.createDocument({
+        filename: combinedFilename,
+        fullText: "",
+      });
+      await storage.updateDocument(doc.id, { status: "processing" });
+      const combinedZipBuffer = await createZipFromImageUploads(
+        files.map((file) => ({ buffer: file.buffer, originalFilename: file.originalname }))
+      );
+      await saveDocumentSource(doc.id, combinedFilename, combinedZipBuffer);
+
+      const combinedOcrMode = ocrMode === "vision" ? "vision" : "vision_batch";
+      await enqueueImageBundleOcrJob({
+        documentId: doc.id,
+        sourceFilename: combinedFilename,
+        ocrMode: combinedOcrMode,
+        ocrModel,
+      });
+
+      const updatedDoc = await storage.getDocument(doc.id);
       return res.status(202).json(updatedDoc);
     } catch (error) {
-      console.error("Upload error:", error);
+      console.error("Upload-group error:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
     }
   });
@@ -213,6 +483,17 @@ export async function registerRoutes(
     }
   });
 
+  // Get lightweight document metadata list (avoids returning fullText for every document)
+  app.get("/api/documents/meta", async (req: Request, res: Response) => {
+    try {
+      const docs = await storage.getAllDocumentMeta();
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching document metadata:", error);
+      res.status(500).json({ message: "Failed to fetch document metadata" });
+    }
+  });
+
   // Get single document
   app.get("/api/documents/:id", optionalAuth, async (req: Request, res: Response) => {
     try {
@@ -224,6 +505,59 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching document:", error);
       res.status(500).json({ message: "Failed to fetch document" });
+    }
+  });
+
+  // Get original source metadata for a document
+  app.get("/api/documents/:id/source-meta", async (req: Request, res: Response) => {
+    try {
+      const doc = await storage.getDocument(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      const available = await hasDocumentSource(doc.id, doc.filename);
+      res.json({
+        documentId: doc.id,
+        filename: doc.filename,
+        available,
+        mimeType: inferDocumentSourceMimeType(doc.filename),
+        sourceUrl: available ? `/api/documents/${doc.id}/source` : null,
+      });
+    } catch (error) {
+      console.error("Error fetching source metadata:", error);
+      res.status(500).json({ message: "Failed to fetch source metadata" });
+    }
+  });
+
+  // Stream original uploaded source file for side-by-side reference
+  app.get("/api/documents/:id/source", async (req: Request, res: Response) => {
+    try {
+      const doc = await storage.getDocument(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      const available = await hasDocumentSource(doc.id, doc.filename);
+      if (!available) {
+        return res.status(404).json({ message: "Original source file is not available for this document" });
+      }
+
+      const sourcePath = getDocumentSourcePath(doc.id, doc.filename);
+      const mimeType = inferDocumentSourceMimeType(doc.filename);
+      const safeFilename = doc.filename.replace(/"/g, "");
+      const dispositionType = mimeType === "application/zip" ? "attachment" : "inline";
+
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Disposition", `${dispositionType}; filename="${safeFilename}"`);
+      res.sendFile(sourcePath, (error) => {
+        if (error && !res.headersSent) {
+          res.status(500).json({ message: "Failed to stream source file" });
+        }
+      });
+    } catch (error) {
+      console.error("Error streaming source document:", error);
+      res.status(500).json({ message: "Failed to stream source document" });
     }
   });
 
@@ -505,6 +839,7 @@ export async function registerRoutes(
 
   // Register project routes
   registerProjectRoutes(app);
+  registerWebClipRoutes(app);
 
   // Register chat routes
   registerChatRoutes(app);

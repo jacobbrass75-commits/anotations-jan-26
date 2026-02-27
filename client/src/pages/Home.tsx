@@ -1,374 +1,453 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { Link } from "wouter";
-import { BookOpen, Upload, FolderOpen } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { BookOpen, FileText, FolderOpen, Link2, Plus, Search, Upload } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { FileUpload } from "@/components/FileUpload";
-import { IntentPanel } from "@/components/IntentPanel";
-import { DocumentViewer } from "@/components/DocumentViewer";
-import { AnnotationSidebar } from "@/components/AnnotationSidebar";
-import { SearchPanel } from "@/components/SearchPanel";
-import { DocumentSummary } from "@/components/DocumentSummary";
-import { ManualAnnotationDialog } from "@/components/ManualAnnotationDialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  useDocument,
-  useDocumentStatus,
-  useAnnotations,
-  useUploadDocument,
-  useSetIntent,
-  useAddAnnotation,
-  useUpdateAnnotation,
-  useDeleteAnnotation,
-  useSearchDocument,
-} from "@/hooks/useDocument";
-import { useQueryClient } from "@tanstack/react-query";
-import type { Annotation, AnnotationCategory, SearchResult } from "@shared/schema";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { useCreateProject, useProjects } from "@/hooks/useProjects";
+
+interface DashboardStatus {
+  counts: {
+    projects: number;
+    documents: number;
+    annotations: number;
+  };
+  storage: {
+    databaseBytes: number;
+    sourceFilesBytes: number;
+    totalBytes: number;
+  };
+  system: {
+    uptimeSeconds: number;
+    nodeVersion: string;
+    platform: string;
+    heapUsedBytes: number;
+    heapTotalBytes: number;
+  };
+  documentsByStatus: {
+    ready: number;
+    processing: number;
+    error: number;
+    other: number;
+  };
+  capturedAt: number;
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, exponent);
+  return `${value.toFixed(exponent === 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[exponent]}`;
+}
+
+function formatUptime(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const days = Math.floor(safeSeconds / 86_400);
+  const hours = Math.floor((safeSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((safeSeconds % 3_600) / 60);
+  const seconds = safeSeconds % 60;
+
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+
+  if (days > 0) {
+    return `${days}d ${hh}:${mm}:${ss}`;
+  }
+  return `${hh}:${mm}:${ss}`;
+}
 
 export default function Home() {
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(null);
-  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [hasAnalyzed, setHasAnalyzed] = useState(false);
-  const [showUpload, setShowUpload] = useState(true);
-  const [manualDialogOpen, setManualDialogOpen] = useState(false);
-  const [pendingSelection, setPendingSelection] = useState<{
-    text: string;
-    start: number;
-    end: number;
-  } | null>(null);
+  const { data: projects = [], isLoading: projectsLoading } = useProjects();
+  const createProject = useCreateProject();
 
-  const { data: document, isLoading: isDocumentLoading } = useDocument(currentDocumentId);
-  const { data: documentStatus } = useDocumentStatus(currentDocumentId);
-  const { data: annotations = [], isLoading: isAnnotationsLoading } = useAnnotations(currentDocumentId);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [tickNow, setTickNow] = useState(Date.now());
+  const [newProject, setNewProject] = useState({
+    name: "",
+    description: "",
+    thesis: "",
+    scope: "",
+  });
 
-  const uploadMutation = useUploadDocument();
-  const intentMutation = useSetIntent();
-  const addAnnotationMutation = useAddAnnotation();
-  const updateAnnotationMutation = useUpdateAnnotation();
-  const deleteAnnotationMutation = useDeleteAnnotation();
-  const searchMutation = useSearchDocument();
+  const { data: dashboard, isLoading: dashboardLoading } = useQuery<DashboardStatus>({
+    queryKey: ["/api/system/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/system/status");
+      if (!res.ok) {
+        throw new Error("Failed to fetch system status");
+      }
+      return res.json();
+    },
+    refetchInterval: 15_000,
+  });
 
-  // Track previous status to detect transitions
-  const prevStatusRef = useRef<string | undefined>();
   useEffect(() => {
-    const prevStatus = prevStatusRef.current;
-    const currentStatus = documentStatus?.status;
-    prevStatusRef.current = currentStatus;
-
-    if (prevStatus === "processing" && currentStatus === "ready") {
-      queryClient.invalidateQueries({ queryKey: ["/api/documents", currentDocumentId] });
-      toast({
-        title: "Processing complete",
-        description: `${documentStatus?.filename} is ready for analysis.`,
-      });
-    }
-    if (prevStatus === "processing" && currentStatus === "error") {
-      queryClient.invalidateQueries({ queryKey: ["/api/documents", currentDocumentId] });
-      toast({
-        title: "Processing failed",
-        description: documentStatus?.processingError || "Could not process the PDF.",
-        variant: "destructive",
-      });
-    }
-  }, [documentStatus?.status, currentDocumentId, queryClient, toast, documentStatus?.filename, documentStatus?.processingError]);
-
-  const handleUpload = useCallback(async (file: File, ocrMode: string) => {
-    setUploadProgress(10);
-    try {
-      const interval = setInterval(() => {
-        setUploadProgress((prev) => Math.min(prev + 10, 90));
-      }, 300);
-
-      const result = await uploadMutation.mutateAsync({ file, ocrMode });
-      clearInterval(interval);
-      setUploadProgress(100);
-
-      setCurrentDocumentId(result.id);
-      setShowUpload(false);
-      setHasAnalyzed(false);
-
-      if (result.status === "processing") {
-        toast({
-          title: "Document uploaded",
-          description: `Processing ${result.filename}. This may take a moment...`,
-        });
-      } else {
-        toast({
-          title: "Document uploaded",
-          description: `${result.filename} is ready for analysis.`,
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : "Could not upload the document.",
-        variant: "destructive",
-      });
-    } finally {
-      setUploadProgress(0);
-    }
-  }, [uploadMutation, toast]);
-
-  const handleAnalyze = useCallback(async (
-    research: string,
-    goals: string,
-    thoroughness: 'quick' | 'standard' | 'thorough' | 'exhaustive' = 'standard'
-  ) => {
-    if (!currentDocumentId) return;
-
-    const intent = `Research topic: ${research}\n\nGoals: ${goals}`;
-
-    try {
-      await intentMutation.mutateAsync({ documentId: currentDocumentId, intent, thoroughness });
-      setHasAnalyzed(true);
-
-      toast({
-        title: "Analysis complete",
-        description: "AI has highlighted relevant passages in your document.",
-      });
-    } catch (error) {
-      toast({
-        title: "Analysis failed",
-        description: error instanceof Error ? error.message : "Could not analyze the document.",
-        variant: "destructive",
-      });
-    }
-  }, [currentDocumentId, intentMutation, toast]);
-
-  const handleAnnotationClick = useCallback((annotation: { id: string }) => {
-    setSelectedAnnotationId(annotation.id);
+    const timer = window.setInterval(() => setTickNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const handleTextSelect = useCallback((selection: { text: string; start: number; end: number }) => {
-    setPendingSelection(selection);
-    setManualDialogOpen(true);
-  }, []);
+  const recentProjects = useMemo(() => projects.slice(0, 3), [projects]);
 
-  const handleAddManualAnnotation = useCallback(() => {
-    setPendingSelection(null);
-    setManualDialogOpen(true);
-  }, []);
+  const liveUptimeSeconds = useMemo(() => {
+    if (!dashboard) return 0;
+    const elapsed = Math.max(0, Math.floor((tickNow - dashboard.capturedAt) / 1_000));
+    return dashboard.system.uptimeSeconds + elapsed;
+  }, [dashboard, tickNow]);
 
-  const handleSaveManualAnnotation = useCallback(async (note: string, category: AnnotationCategory) => {
-    if (!currentDocumentId || !pendingSelection) return;
+  const heapPercent = useMemo(() => {
+    if (!dashboard) return 0;
+    return Math.min(100, Math.round((dashboard.system.heapUsedBytes / dashboard.system.heapTotalBytes) * 100));
+  }, [dashboard]);
+
+  const storageDbPercent = useMemo(() => {
+    if (!dashboard || dashboard.storage.totalBytes <= 0) return 0;
+    return Math.round((dashboard.storage.databaseBytes / dashboard.storage.totalBytes) * 100);
+  }, [dashboard]);
+
+  const storageSourcePercent = useMemo(() => {
+    if (!dashboard || dashboard.storage.totalBytes <= 0) return 0;
+    return 100 - storageDbPercent;
+  }, [dashboard, storageDbPercent]);
+
+  const handleCreateProject = async () => {
+    if (!newProject.name.trim()) {
+      toast({
+        title: "Project name required",
+        description: "Add a project name before creating it.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
-      await addAnnotationMutation.mutateAsync({
-        documentId: currentDocumentId,
-        startPosition: pendingSelection.start,
-        endPosition: pendingSelection.end,
-        highlightedText: pendingSelection.text,
-        category,
-        note,
-        isAiGenerated: false,
-      });
-
-      toast({
-        title: "Annotation added",
-        description: "Your note has been saved.",
-      });
-
-      setPendingSelection(null);
+      const project = await createProject.mutateAsync(newProject);
+      setIsCreateOpen(false);
+      setNewProject({ name: "", description: "", thesis: "", scope: "" });
+      setLocation(`/projects/${project.id}`);
     } catch (error) {
       toast({
-        title: "Failed to add annotation",
-        description: error instanceof Error ? error.message : "Could not save the annotation.",
+        title: "Create failed",
+        description: error instanceof Error ? error.message : "Could not create project",
         variant: "destructive",
       });
     }
-  }, [currentDocumentId, pendingSelection, addAnnotationMutation, toast]);
+  };
 
-  const handleUpdateAnnotation = useCallback(async (annotationId: string, note: string, category: AnnotationCategory) => {
-    if (!currentDocumentId) return;
-
-    try {
-      await updateAnnotationMutation.mutateAsync({
-        annotationId,
-        documentId: currentDocumentId,
-        note,
-        category,
-      });
-
-      toast({
-        title: "Annotation updated",
-        description: "Your changes have been saved.",
-      });
-    } catch (error) {
-      toast({
-        title: "Update failed",
-        description: error instanceof Error ? error.message : "Could not update the annotation.",
-        variant: "destructive",
-      });
-    }
-  }, [currentDocumentId, updateAnnotationMutation, toast]);
-
-  const handleDeleteAnnotation = useCallback(async (annotationId: string) => {
-    if (!currentDocumentId) return;
-
-    try {
-      await deleteAnnotationMutation.mutateAsync({
-        annotationId,
-        documentId: currentDocumentId,
-      });
-
-      if (selectedAnnotationId === annotationId) {
-        setSelectedAnnotationId(null);
-      }
-
-      toast({
-        title: "Annotation deleted",
-        description: "The annotation has been removed.",
-      });
-    } catch (error) {
-      toast({
-        title: "Delete failed",
-        description: error instanceof Error ? error.message : "Could not delete the annotation.",
-        variant: "destructive",
-      });
-    }
-  }, [currentDocumentId, selectedAnnotationId, deleteAnnotationMutation, toast]);
-
-  const handleSearch = useCallback(async (query: string): Promise<SearchResult[]> => {
-    if (!currentDocumentId) return [];
-
-    try {
-      const results = await searchMutation.mutateAsync({
-        documentId: currentDocumentId,
-        query,
-      });
-      return results;
-    } catch (error) {
-      toast({
-        title: "Search failed",
-        description: error instanceof Error ? error.message : "Could not search the document.",
-        variant: "destructive",
-      });
-      return [];
-    }
-  }, [currentDocumentId, searchMutation, toast]);
-
-  const handleJumpToPosition = useCallback((start: number, end: number) => {
-    // Find annotation at this position, or create a temporary highlight
-    const matchingAnnotation = annotations.find(
-      (a) => a.startPosition === start && a.endPosition === end
-    );
-    if (matchingAnnotation) {
-      setSelectedAnnotationId(matchingAnnotation.id);
-    }
-  }, [annotations]);
+  const projectsCount = dashboard?.counts.projects ?? projects.length;
+  const documentsCount = dashboard?.counts.documents ?? 0;
+  const annotationsCount = dashboard?.counts.annotations ?? 0;
+  const totalStorageLabel = formatBytes(dashboard?.storage.totalBytes ?? 0);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+      <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <BookOpen className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-semibold">ScholarMark</h1>
+            <BookOpen className="h-6 w-6 text-eva-orange" />
+            <h1 className="font-sans uppercase tracking-[0.2em] font-bold text-eva-orange">SCHOLARMARK</h1>
+            <div className="eva-status-active" />
           </div>
           <div className="flex items-center gap-2">
             <Link href="/projects">
-              <Button variant="outline" size="sm" data-testid="button-projects">
+              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-projects">
                 <FolderOpen className="h-4 w-4 mr-2" />
                 Projects
               </Button>
             </Link>
-            {!showUpload && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowUpload(true)}
-                data-testid="button-upload-new"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload New
+            <Link href="/web-clips">
+              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-web-clips">
+                <Link2 className="h-4 w-4 mr-2" />
+                Web Clips
               </Button>
-            )}
+            </Link>
             <ThemeToggle />
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-6">
-        {showUpload ? (
-          <div className="max-w-xl mx-auto space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-semibold mb-2">Upload Your Document</h2>
-              <p className="text-muted-foreground">
-                Upload an academic PDF or text file to start annotating and analyzing.
-              </p>
-            </div>
-            <FileUpload
-              onUpload={handleUpload}
-              isUploading={uploadMutation.isPending}
-              uploadProgress={uploadProgress}
-            />
-          </div>
-        ) : (
-          <div className="grid lg:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
-            {/* Left Sidebar: Intent + Summary */}
-            <div className="lg:col-span-1 flex flex-col gap-4 overflow-hidden">
-              <div className="flex-1 min-h-0">
-                <IntentPanel
-                  documentId={currentDocumentId}
-                  onAnalyze={handleAnalyze}
-                  isAnalyzing={intentMutation.isPending}
-                  hasAnalyzed={hasAnalyzed}
-                  annotationCount={annotations.length}
-                />
+      <main className="flex-1 container mx-auto px-4 py-6 pb-8 space-y-6 eva-grid-bg">
+        <Card className="eva-clip-panel eva-corner-decor border-eva-orange/30 bg-card/80">
+          <CardContent className="pt-8 pb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div className="space-y-3">
+              <div className="eva-section-title">NERV Interface</div>
+              <h2 className="text-3xl md:text-4xl font-sans uppercase tracking-[0.12em] text-eva-orange leading-tight">
+                NERV RESEARCH COMMAND CENTER
+              </h2>
+              <div className="flex items-center gap-3 text-sm font-mono text-eva-green">
+                <div className="flex items-center gap-1.5">
+                  <div className="eva-status-active" />
+                  <div className="eva-status-active" />
+                  <div className="eva-status-active" />
+                </div>
+                <span>SYSTEM ONLINE</span>
               </div>
-              {document?.summary && (
-                <DocumentSummary document={document} isLoading={isDocumentLoading} />
+            </div>
+
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  className="h-14 px-8 text-sm font-mono uppercase tracking-[0.12em] bg-eva-orange text-black hover:bg-eva-orange/90"
+                  data-testid="button-initialize-project"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  INITIALIZE NEW PROJECT
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Create New Project</DialogTitle>
+                  <DialogDescription>
+                    Define your research project. Thesis and scope improve annotation quality and retrieval.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Project Name</Label>
+                    <Input
+                      id="name"
+                      value={newProject.name}
+                      onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                      placeholder="e.g., Cold War Brainwashing Research"
+                      data-testid="input-project-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={newProject.description}
+                      onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                      className="resize-none"
+                      data-testid="input-project-description"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="thesis">Thesis / Research Question</Label>
+                    <Textarea
+                      id="thesis"
+                      value={newProject.thesis}
+                      onChange={(e) => setNewProject({ ...newProject, thesis: e.target.value })}
+                      className="resize-none"
+                      data-testid="input-project-thesis"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="scope">Scope</Label>
+                    <Textarea
+                      id="scope"
+                      value={newProject.scope}
+                      onChange={(e) => setNewProject({ ...newProject, scope: e.target.value })}
+                      className="resize-none"
+                      data-testid="input-project-scope"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateProject} disabled={createProject.isPending}>
+                    {createProject.isPending ? "Creating..." : "Create Project"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </CardContent>
+        </Card>
+
+        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm eva-section-title flex items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-eva-orange" />
+                Projects
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="font-mono text-3xl text-eva-green">{projectsCount}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm eva-section-title flex items-center gap-2">
+                <FileText className="h-4 w-4 text-eva-orange" />
+                Documents
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="font-mono text-3xl text-eva-cyan">{documentsCount}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm eva-section-title flex items-center gap-2">
+                <Search className="h-4 w-4 text-eva-orange" />
+                Annotations
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="font-mono text-3xl text-eva-green">{annotationsCount}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm eva-section-title flex items-center gap-2">
+                <Upload className="h-4 w-4 text-eva-orange" />
+                Storage Used
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="font-mono text-3xl text-eva-orange">{totalStorageLabel}</div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <Card className="xl:col-span-2 eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="eva-section-title">Recent Projects</CardTitle>
+              <Link href="/projects">
+                <Button variant="ghost" className="text-xs uppercase tracking-[0.12em] font-mono text-eva-orange" data-testid="button-view-all-projects">
+                  VIEW ALL PROJECTS
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {projectsLoading ? (
+                <div className="text-sm text-muted-foreground font-mono">Loading projects...</div>
+              ) : recentProjects.length === 0 ? (
+                <div className="text-sm text-muted-foreground font-mono">No projects yet. Initialize your first project.</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {recentProjects.map((project) => (
+                    <Link key={project.id} href={`/projects/${project.id}`}>
+                      <Card className="cursor-pointer hover-elevate eva-corner-decor bg-background/40 border-eva-orange/20">
+                        <CardContent className="pt-4 pb-4 space-y-2">
+                          <div className="font-sans uppercase tracking-[0.1em] text-sm line-clamp-2">{project.name}</div>
+                          {project.description ? (
+                            <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No description</p>
+                          )}
+                          <div className="text-[11px] font-mono text-eva-cyan">
+                            {new Date(project.createdAt).toLocaleDateString()}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  ))}
+                </div>
               )}
-            </div>
+            </CardContent>
+          </Card>
 
-            {/* Center: Document Viewer + Search */}
-            <div className="lg:col-span-2 flex flex-col gap-4 overflow-hidden">
-              <div className="flex-1 min-h-0">
-                <DocumentViewer
-                  document={document ?? null}
-                  annotations={annotations}
-                  isLoading={isDocumentLoading}
-                  selectedAnnotationId={selectedAnnotationId}
-                  onAnnotationClick={handleAnnotationClick}
-                  onTextSelect={handleTextSelect}
-                />
-              </div>
-              <SearchPanel
-                documentId={currentDocumentId}
-                onSearch={handleSearch}
-                onJumpToPosition={handleJumpToPosition}
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+            <CardHeader>
+              <CardTitle className="eva-section-title">System Status</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm font-mono">
+              {dashboardLoading || !dashboard ? (
+                <div className="text-muted-foreground">Loading status...</div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-muted-foreground text-xs uppercase tracking-wider">Uptime</div>
+                      <div className="text-eva-green">{formatUptime(liveUptimeSeconds)}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground text-xs uppercase tracking-wider">Node</div>
+                      <div className="text-eva-cyan">{dashboard.system.nodeVersion}</div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-muted-foreground text-xs uppercase tracking-wider">Platform</div>
+                      <div className="text-eva-orange">{dashboard.system.platform}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground">
+                      <span>Heap Memory</span>
+                      <span>{heapPercent}%</span>
+                    </div>
+                    <div className="h-2 rounded bg-muted overflow-hidden">
+                      <div
+                        className="h-full bg-eva-cyan transition-all"
+                        style={{ width: `${heapPercent}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-eva-cyan">
+                      {formatBytes(dashboard.system.heapUsedBytes)} / {formatBytes(dashboard.system.heapTotalBytes)}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 text-xs">
+                    <div className="text-muted-foreground uppercase tracking-wider">Document Status</div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2"><span className="eva-status-active" />Ready</span>
+                      <span className="text-eva-green">{dashboard.documentsByStatus.ready}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2"><span className="eva-status-warning" />Processing</span>
+                      <span className="text-eva-orange">{dashboard.documentsByStatus.processing}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2"><span className="eva-status-error" />Error</span>
+                      <span className="text-eva-red">{dashboard.documentsByStatus.error}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+          <CardHeader>
+            <CardTitle className="eva-section-title">Storage Allocation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 font-mono text-xs">
+            <div className="h-5 rounded overflow-hidden border border-eva-orange/30 flex">
+              <div
+                className="h-full bg-eva-cyan/80"
+                style={{ width: `${storageDbPercent}%` }}
+                title="Database"
+              />
+              <div
+                className="h-full bg-eva-orange/80"
+                style={{ width: `${storageSourcePercent}%` }}
+                title="Source Files"
               />
             </div>
-
-            {/* Right Sidebar: Annotations */}
-            <div className="lg:col-span-1 overflow-hidden">
-              <AnnotationSidebar
-                annotations={annotations}
-                isLoading={isAnnotationsLoading}
-                selectedAnnotationId={selectedAnnotationId}
-                onSelect={handleAnnotationClick}
-                onDelete={handleDeleteAnnotation}
-                onUpdate={handleUpdateAnnotation}
-                onAddManual={handleAddManualAnnotation}
-                canAddManual={!!currentDocumentId}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="text-eva-cyan">DB: {formatBytes(dashboard?.storage.databaseBytes ?? 0)}</div>
+              <div className="text-eva-orange">Source Files: {formatBytes(dashboard?.storage.sourceFilesBytes ?? 0)}</div>
+              <div className="text-eva-green">Total: {formatBytes(dashboard?.storage.totalBytes ?? 0)}</div>
             </div>
-          </div>
-        )}
+          </CardContent>
+        </Card>
       </main>
-
-      {/* Manual Annotation Dialog */}
-      <ManualAnnotationDialog
-        open={manualDialogOpen}
-        onOpenChange={setManualDialogOpen}
-        selectedText={pendingSelection}
-        onSave={handleSaveManualAnnotation}
-      />
     </div>
   );
 }

@@ -23,6 +23,14 @@ export interface DocumentStatus {
   chunkCount: number;
 }
 
+export interface DocumentSourceMeta {
+  documentId: string;
+  filename: string;
+  available: boolean;
+  mimeType: string;
+  sourceUrl: string | null;
+}
+
 export function useDocumentStatus(id: string | null) {
   return useQuery<DocumentStatus>({
     queryKey: ["/api/documents", id, "status"],
@@ -38,6 +46,13 @@ export function useDocumentStatus(id: string | null) {
   });
 }
 
+export function useDocumentSourceMeta(id: string | null) {
+  return useQuery<DocumentSourceMeta>({
+    queryKey: ["/api/documents", id, "source-meta"],
+    enabled: !!id,
+  });
+}
+
 export function useAnnotations(documentId: string | null) {
   return useQuery<Annotation[]>({
     queryKey: ["/api/documents", documentId, "annotations"],
@@ -49,10 +64,21 @@ export function useUploadDocument() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ file, ocrMode }: { file: File; ocrMode: string }) => {
+    mutationFn: async ({
+      file,
+      ocrMode,
+      ocrModel,
+    }: {
+      file: File;
+      ocrMode: string;
+      ocrModel?: string;
+    }) => {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("ocrMode", ocrMode);
+      if (ocrModel) {
+        formData.append("ocrModel", ocrModel);
+      }
 
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -68,6 +94,48 @@ export function useUploadDocument() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/documents/meta"] });
+    },
+  });
+}
+
+export function useUploadDocumentGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      files,
+      ocrMode,
+      ocrModel,
+    }: {
+      files: File[];
+      ocrMode: string;
+      ocrModel?: string;
+    }) => {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append("files", file);
+      }
+      formData.append("ocrMode", ocrMode);
+      if (ocrModel) {
+        formData.append("ocrModel", ocrModel);
+      }
+
+      const response = await fetch("/api/upload-group", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error((error as any)?.message || "Upload failed");
+      }
+
+      return response.json() as Promise<Document>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/documents/meta"] });
     },
   });
 }

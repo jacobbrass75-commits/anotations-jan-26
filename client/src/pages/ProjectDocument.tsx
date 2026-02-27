@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   useProject,
@@ -14,7 +14,9 @@ import {
   useCreatePromptTemplate,
 } from "@/hooks/useProjects";
 import { useGenerateCitation } from "@/hooks/useProjectSearch";
-import { queryClient } from "@/lib/queryClient";
+import { useDocumentSourceMeta } from "@/hooks/useDocument";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -45,10 +47,10 @@ import {
   Plus,
   Trash2,
   Sparkles,
-  Loader2,
   FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { MultiPromptPanel, type Prompt } from "@/components/MultiPromptPanel";
 import { SearchPanel } from "@/components/SearchPanel";
 import { DocumentViewer } from "@/components/DocumentViewer";
@@ -76,6 +78,7 @@ const SOURCE_TYPES = [
 
 export default function ProjectDocumentPage() {
   const [, params] = useRoute("/projects/:projectId/documents/:docId");
+  const [location] = useLocation();
   const projectId = params?.projectId || "";
   const projectDocId = params?.docId || "";
   const { toast } = useToast();
@@ -103,6 +106,7 @@ export default function ProjectDocumentPage() {
     style?: CitationStyle;
   } | null>(null);
   const [isAutoFilling, setIsAutoFilling] = useState(false);
+  const [hasAppliedDeepLink, setHasAppliedDeepLink] = useState(false);
 
   // Queries
   const { data: project } = useProject(projectId);
@@ -121,9 +125,28 @@ export default function ProjectDocumentPage() {
     queryKey: ["/api/documents", projectDoc?.documentId],
     enabled: !!projectDoc?.documentId,
   });
+  const { data: sourceMeta } = useDocumentSourceMeta(projectDoc?.documentId || null);
 
   const { data: projectAnnotations = [], isLoading: annotationsLoading } =
     useProjectAnnotations(projectDocId);
+
+  const deepLinkQuery = useMemo(() => {
+    const queryFromLocation = location.includes("?") ? location.slice(location.indexOf("?")) : "";
+    if (queryFromLocation) return queryFromLocation;
+    if (typeof window === "undefined") return "";
+    return window.location.search || "";
+  }, [location]);
+
+  const { deepLinkAnnotationId, deepLinkStartPosition } = useMemo(() => {
+    const params = new URLSearchParams(deepLinkQuery);
+    const annotationId = params.get("annotationId");
+    const startRaw = params.get("start");
+    const parsedStart = startRaw ? Number(startRaw) : null;
+    return {
+      deepLinkAnnotationId: annotationId,
+      deepLinkStartPosition: Number.isFinite(parsedStart) ? parsedStart : null,
+    };
+  }, [deepLinkQuery]);
 
   // Mutations
   const createAnnotation = useCreateProjectAnnotation();
@@ -193,6 +216,43 @@ export default function ProjectDocumentPage() {
       setHasAnalyzed(true);
     }
   }, [projectAnnotations.length]);
+
+  // If we arrive from global search with an annotation target, select it once data is loaded.
+  useEffect(() => {
+    if (hasAppliedDeepLink) return;
+
+    if (!deepLinkAnnotationId && deepLinkStartPosition === null) {
+      setHasAppliedDeepLink(true);
+      return;
+    }
+
+    if (annotations.length === 0) {
+      if (!annotationsLoading) {
+        setHasAppliedDeepLink(true);
+      }
+      return;
+    }
+
+    const targetById = deepLinkAnnotationId
+      ? annotations.find((a) => a.id === deepLinkAnnotationId)
+      : undefined;
+    const targetByStart =
+      deepLinkStartPosition !== null
+        ? annotations.find((a) => a.startPosition === deepLinkStartPosition)
+        : undefined;
+    const target = targetById || targetByStart;
+
+    if (target) {
+      setSelectedAnnotationId(target.id);
+    }
+    setHasAppliedDeepLink(true);
+  }, [
+    hasAppliedDeepLink,
+    deepLinkAnnotationId,
+    deepLinkStartPosition,
+    annotations,
+    annotationsLoading,
+  ]);
 
   // Handlers
   const handleAnalyze = useCallback(
@@ -342,11 +402,7 @@ export default function ProjectDocumentPage() {
   const handleUpdateAnnotation = useCallback(
     async (annotationId: string, note: string, category: AnnotationCategory) => {
       try {
-        await fetch(`/api/project-annotations/${annotationId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ note, category }),
-        });
+        await apiRequest("PUT", `/api/project-annotations/${annotationId}`, { note, category });
 
         queryClient.invalidateQueries({
           queryKey: ["/api/project-documents", projectDocId, "annotations"],
@@ -448,7 +504,7 @@ export default function ProjectDocumentPage() {
         const styleLabel = citationStyle === "mla" ? "MLA" : citationStyle === "apa" ? "APA" : "Chicago";
         // For MLA/APA copy in-text citation; for Chicago copy footnoteWithQuote
         const textToCopy = citationStyle === "chicago" ? data.footnoteWithQuote : data.inlineCitation;
-        await navigator.clipboard.writeText(textToCopy);
+        await copyTextToClipboard(textToCopy);
         toast({
           title: "Citation Copied",
           description: `${styleLabel}-style citation copied to clipboard`,
@@ -462,6 +518,25 @@ export default function ProjectDocumentPage() {
       }
     },
     [toast, citationStyle]
+  );
+
+  const handleCopyQuote = useCallback(
+    async (quote: string) => {
+      try {
+        await copyTextToClipboard(quote);
+        toast({
+          title: "Copied",
+          description: "Quote copied to clipboard",
+        });
+      } catch (error) {
+        toast({
+          title: "Copy failed",
+          description: "Clipboard access is unavailable. Try selecting the quote text manually.",
+          variant: "destructive",
+        });
+      }
+    },
+    [toast]
   );
 
   // Citation handlers
@@ -628,7 +703,7 @@ export default function ProjectDocumentPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+      <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link href={`/projects/${projectId}`}>
@@ -637,21 +712,24 @@ export default function ProjectDocumentPage() {
               </Button>
             </Link>
             <div>
-              <h1 className="font-semibold">{document.filename}</h1>
+              <h1 className="font-semibold font-mono text-sm">{document.filename}</h1>
               {project && (
                 <p className="text-xs text-muted-foreground">{project.name}</p>
               )}
             </div>
           </div>
-          <Button onClick={() => setIsCitationOpen(true)} data-testid="button-edit-citation">
-            <BookOpen className="h-4 w-4 mr-2" />
-            Citation
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button className="uppercase tracking-wider text-xs" onClick={() => setIsCitationOpen(true)} data-testid="button-edit-citation">
+              <BookOpen className="h-4 w-4 mr-2" />
+              Citation
+            </Button>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
       {/* Main Content - 4 Column Grid */}
-      <main className="flex-1 container mx-auto px-4 py-6">
+      <main className="flex-1 container mx-auto px-4 py-6 pb-8 eva-grid-bg">
         <div className="grid lg:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
           {/* Left Sidebar: Multi-Prompt Panel + Citation Info */}
           <div className="lg:col-span-1 flex flex-col gap-4 overflow-hidden">
@@ -704,6 +782,7 @@ export default function ProjectDocumentPage() {
                 document={document}
                 annotations={annotations}
                 isLoading={docLoading}
+                sourceMeta={sourceMeta}
                 selectedAnnotationId={selectedAnnotationId}
                 onAnnotationClick={handleAnnotationClick}
                 onTextSelect={handleTextSelect}
@@ -727,6 +806,7 @@ export default function ProjectDocumentPage() {
               onUpdate={handleUpdateAnnotation}
               onAddManual={handleAddManualAnnotation}
               canAddManual={!!projectDocId}
+              onCopyQuote={handleCopyQuote}
               showFootnoteButton={true}
               onCopyFootnote={handleCopyFootnote}
             />
@@ -744,19 +824,20 @@ export default function ProjectDocumentPage() {
 
       {/* Citation Dialog */}
       <Dialog open={isCitationOpen} onOpenChange={setIsCitationOpen}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto eva-grid-bg">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-2">
               <span>Citation Metadata</span>
               <Button
                 variant="outline"
                 size="sm"
+                className="text-eva-cyan uppercase tracking-wider text-xs"
                 onClick={handleAutoFill}
                 disabled={isAutoFilling}
                 data-testid="button-autofill-citation"
               >
                 {isAutoFilling ? (
-                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                  <div className="eva-hex-spinner mr-1.5" style={{ width: "0.75rem", height: "0.75rem" }} />
                 ) : (
                   <Sparkles className="h-3 w-3 mr-1.5" />
                 )}
@@ -835,7 +916,7 @@ export default function ProjectDocumentPage() {
                       onChange={(e) =>
                         updateAuthor(idx, "firstName", e.target.value)
                       }
-                      className="flex-1"
+                      className="flex-1 font-mono"
                       data-testid={`input-author-first-${idx}`}
                     />
                     <Input
@@ -844,7 +925,7 @@ export default function ProjectDocumentPage() {
                       onChange={(e) =>
                         updateAuthor(idx, "lastName", e.target.value)
                       }
-                      className="flex-1"
+                      className="flex-1 font-mono"
                       data-testid={`input-author-last-${idx}`}
                     />
                     {citationForm.authors.length > 1 && (
@@ -869,6 +950,7 @@ export default function ProjectDocumentPage() {
                     setCitationForm({ ...citationForm, title: e.target.value })
                   }
                   placeholder="Title of the work"
+                  className="font-mono"
                   data-testid="input-title"
                 />
               </div>
@@ -885,6 +967,7 @@ export default function ProjectDocumentPage() {
                       })
                     }
                     placeholder="Publisher name"
+                    className="font-mono"
                     data-testid="input-publisher"
                   />
                 </div>
@@ -899,6 +982,7 @@ export default function ProjectDocumentPage() {
                       })
                     }
                     placeholder="YYYY or YYYY-MM-DD"
+                    className="font-mono"
                     data-testid="input-pub-date"
                   />
                 </div>
@@ -916,6 +1000,7 @@ export default function ProjectDocumentPage() {
                       })
                     }
                     placeholder="City of publication"
+                    className="font-mono"
                     data-testid="input-pub-place"
                   />
                 </div>
@@ -927,6 +1012,7 @@ export default function ProjectDocumentPage() {
                       setCitationForm({ ...citationForm, url: e.target.value })
                     }
                     placeholder="https://..."
+                    className="font-mono"
                     data-testid="input-url"
                   />
                 </div>
@@ -954,6 +1040,7 @@ export default function ProjectDocumentPage() {
                           ? "Journal name"
                           : "Book containing this chapter"
                       }
+                      className="font-mono"
                       data-testid="input-container"
                     />
                   </div>
@@ -968,6 +1055,7 @@ export default function ProjectDocumentPage() {
                             volume: e.target.value,
                           })
                         }
+                        className="font-mono"
                         data-testid="input-volume"
                       />
                     </div>
@@ -981,6 +1069,7 @@ export default function ProjectDocumentPage() {
                             issue: e.target.value,
                           })
                         }
+                        className="font-mono"
                         data-testid="input-issue"
                       />
                     </div>
@@ -995,6 +1084,7 @@ export default function ProjectDocumentPage() {
                           })
                         }
                         placeholder="1-20"
+                        className="font-mono"
                         data-testid="input-pages"
                       />
                     </div>
@@ -1016,9 +1106,17 @@ export default function ProjectDocumentPage() {
                       variant="outline"
                       size="sm"
                       className="mt-2"
-                      onClick={() => {
-                        navigator.clipboard.writeText(citationPreview.inlineCitation || citationPreview.footnote);
-                        toast({ title: "Copied" });
+                      onClick={async () => {
+                        try {
+                          await copyTextToClipboard(citationPreview.inlineCitation || citationPreview.footnote);
+                          toast({ title: "Copied" });
+                        } catch {
+                          toast({
+                            title: "Copy failed",
+                            description: "Clipboard access is unavailable in this browser context",
+                            variant: "destructive",
+                          });
+                        }
                       }}
                     >
                       <Copy className="h-3 w-3 mr-2" />
@@ -1037,11 +1135,17 @@ export default function ProjectDocumentPage() {
                       variant="outline"
                       size="sm"
                       className="mt-2"
-                      onClick={() => {
-                        navigator.clipboard.writeText(
-                          citationPreview.bibliography
-                        );
-                        toast({ title: "Copied" });
+                      onClick={async () => {
+                        try {
+                          await copyTextToClipboard(citationPreview.bibliography);
+                          toast({ title: "Copied" });
+                        } catch {
+                          toast({
+                            title: "Copy failed",
+                            description: "Clipboard access is unavailable in this browser context",
+                            variant: "destructive",
+                          });
+                        }
                       }}
                     >
                       <Copy className="h-3 w-3 mr-2" />
@@ -1069,7 +1173,7 @@ export default function ProjectDocumentPage() {
                     style: citationStyle,
                   });
                   const textToCopy = citation.inlineCitation || citation.footnote;
-                  await navigator.clipboard.writeText(textToCopy);
+                  await copyTextToClipboard(textToCopy);
                   toast({
                     title: "Copied",
                     description: `${citationStyle === "chicago" ? "Footnote" : "In-text citation"} copied to clipboard`,

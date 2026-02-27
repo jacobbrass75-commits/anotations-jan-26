@@ -10,18 +10,20 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Card } from "@/components/ui/card";
-import { FileText, Loader2, CheckCircle, XCircle, AlertCircle, Plus, Upload, X, Library } from "lucide-react";
+import { FileText, CheckCircle, XCircle, AlertCircle, Plus, Upload, X, Library } from "lucide-react";
 import { useBatchAddDocuments } from "@/hooks/useProjects";
 import { useUploadDocument } from "@/hooks/useDocument";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import type { Document, Folder, BatchAddDocumentsResponse, BatchAddDocumentResult } from "@shared/schema";
 
+type DocumentLibraryItem = Pick<Document, "id" | "filename">;
+
 interface BatchUploadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
-  availableDocuments: Document[];
+  availableDocuments: DocumentLibraryItem[];
   folders: Folder[];
   currentFolderId: string | null;
 }
@@ -32,6 +34,42 @@ interface UploadedFile {
   status: "pending" | "uploading" | "success" | "error";
   error?: string;
   documentId?: string;
+}
+
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".tif",
+  ".tiff",
+  ".heic",
+  ".heif",
+]);
+
+function getFileExtension(filename: string): string {
+  const extStart = filename.lastIndexOf(".");
+  if (extStart < 0) return "";
+  return filename.slice(extStart).toLowerCase();
+}
+
+function isPdfFile(file: File): boolean {
+  return file.type === "application/pdf" || getFileExtension(file.name) === ".pdf";
+}
+
+function isImageFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  return file.type.startsWith("image/") || IMAGE_EXTENSIONS.has(extension);
+}
+
+function isSupportedUploadFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  const isPdf = isPdfFile(file);
+  const isTxt = file.type === "text/plain" || extension === ".txt";
+  const isImage = isImageFile(file);
+  return isPdf || isTxt || isImage;
 }
 
 export function BatchUploadModal({
@@ -57,6 +95,12 @@ export function BatchUploadModal({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [batchOcrMode, setBatchOcrMode] = useState<string>("standard");
+  const [batchOcrModel, setBatchOcrModel] = useState<string>("gpt-4o");
+
+  const hasPdfFiles = filesToUpload.some((file) => isPdfFile(file));
+  const hasImageFiles = filesToUpload.some((file) => isImageFile(file));
+  const shouldShowOcrModelSelector =
+    hasImageFiles || (hasPdfFiles && (batchOcrMode === "vision" || batchOcrMode === "vision_batch"));
 
   useEffect(() => {
     if (open) {
@@ -75,6 +119,7 @@ export function BatchUploadModal({
       setIsUploading(false);
       setUploadProgress(0);
       setBatchOcrMode("standard");
+      setBatchOcrModel("gpt-4o");
     }
   }, [open]);
 
@@ -121,8 +166,7 @@ export function BatchUploadModal({
   };
 
   const isValidFile = (file: File) => {
-    const validTypes = ["application/pdf", "text/plain"];
-    return validTypes.includes(file.type) || file.name.endsWith(".txt") || file.name.endsWith(".pdf");
+    return isSupportedUploadFile(file);
   };
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -179,7 +223,11 @@ export function BatchUploadModal({
       setUploadProgress(Math.round((i / filesToUpload.length) * 100));
 
       try {
-        const doc = await uploadMutation.mutateAsync({ file, ocrMode: batchOcrMode });
+        const doc = await uploadMutation.mutateAsync({
+          file,
+          ocrMode: batchOcrMode,
+          ocrModel: batchOcrModel,
+        });
         uploadedDocIds.push(doc.id);
         setUploadedFiles(prev => prev.map((f, idx) => 
           idx === i ? { ...f, status: "success", documentId: doc.id } : f
@@ -207,6 +255,7 @@ export function BatchUploadModal({
         });
         
         queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/documents/meta"] });
         queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "documents"] });
         
         setResponse(result);
@@ -236,11 +285,11 @@ export function BatchUploadModal({
   const getStatusIcon = (status: BatchAddDocumentResult["status"]) => {
     switch (status) {
       case "added":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-eva-green" />;
       case "already_exists":
         return <AlertCircle className="h-4 w-4 text-yellow-500" />;
       case "failed":
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="h-4 w-4 text-eva-red" />;
     }
   };
 
@@ -258,11 +307,11 @@ export function BatchUploadModal({
   const getUploadStatusIcon = (status: UploadedFile["status"]) => {
     switch (status) {
       case "success":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-eva-green" />;
       case "error":
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="h-4 w-4 text-eva-red" />;
       case "uploading":
-        return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+        return <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />;
       default:
         return <FileText className="h-4 w-4 text-muted-foreground" />;
     }
@@ -277,7 +326,7 @@ export function BatchUploadModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5" />
-            Add Documents to Project
+            <span className="eva-section-title text-sm">BATCH DOCUMENT INSERTION</span>
           </DialogTitle>
           <DialogDescription>
             Select from your library or upload new files
@@ -287,11 +336,11 @@ export function BatchUploadModal({
         {!isComplete ? (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "library" | "upload")}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="library" data-testid="tab-library">
+              <TabsTrigger value="library" className="uppercase tracking-wider" data-testid="tab-library">
                 <Library className="h-4 w-4 mr-2" />
                 From Library
               </TabsTrigger>
-              <TabsTrigger value="upload" data-testid="tab-upload">
+              <TabsTrigger value="upload" className="uppercase tracking-wider" data-testid="tab-upload">
                 <Upload className="h-4 w-4 mr-2" />
                 Upload New
               </TabsTrigger>
@@ -324,7 +373,7 @@ export function BatchUploadModal({
                         {availableDocuments.map((doc) => (
                           <label
                             key={doc.id}
-                            className="flex items-center gap-3 p-2 hover-elevate rounded-md cursor-pointer"
+                            className="flex items-center gap-3 p-2 hover-elevate rounded-md cursor-pointer font-mono text-sm"
                             data-testid={`row-doc-${doc.id}`}
                           >
                             <Checkbox
@@ -373,12 +422,12 @@ export function BatchUploadModal({
                   <Progress value={uploadProgress} />
                   <ScrollArea className="h-48 border rounded-md p-2">
                     <div className="space-y-2">
-                      {uploadedFiles.map((file) => (
-                        <div
-                          key={file.id}
-                          className="flex items-center gap-3 p-2 rounded-md"
-                          data-testid={`upload-status-${file.id}`}
-                        >
+                          {uploadedFiles.map((file) => (
+                            <div
+                              key={file.id}
+                              className="flex items-center gap-3 p-2 rounded-md font-mono text-sm"
+                              data-testid={`upload-status-${file.id}`}
+                            >
                           {getUploadStatusIcon(file.status)}
                           <span className="text-sm flex-1 truncate">{file.filename}</span>
                           {file.status === "success" && (
@@ -395,8 +444,8 @@ export function BatchUploadModal({
               ) : (
                 <>
                   <Card
-                    className={`p-6 border-2 border-dashed transition-colors ${
-                      dragActive ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"
+                    className={`p-6 border-2 border-dashed eva-clip-panel transition-colors ${
+                      dragActive ? "border-eva-orange bg-eva-orange/5" : "border-eva-orange/30 hover:border-eva-orange/60"
                     }`}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
@@ -407,22 +456,24 @@ export function BatchUploadModal({
                       <input
                         type="file"
                         className="hidden"
-                        accept=".pdf,.txt,application/pdf,text/plain"
+                        accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,application/pdf,text/plain,image/*"
                         multiple
                         onChange={handleFileSelect}
                         data-testid="input-file-upload-batch"
                       />
                       <div className="flex flex-col items-center gap-3">
                         <div className="p-3 bg-muted rounded-full">
-                          <Upload className="h-6 w-6 text-muted-foreground" />
+                          <Upload className="h-6 w-6 text-eva-orange" />
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-medium">Drop files here or click to browse</p>
-                          <p className="text-xs text-muted-foreground mt-1">PDF and TXT files, max 50MB each</p>
+                          <p className="text-xs text-muted-foreground mt-1">PDF, TXT, and image files, max 50MB each</p>
                         </div>
                         <div className="flex gap-2">
                           <Badge variant="secondary">PDF</Badge>
                           <Badge variant="secondary">TXT</Badge>
+                          <Badge variant="secondary">HEIC</Badge>
+                          <Badge variant="secondary">Images</Badge>
                         </div>
                       </div>
                     </label>
@@ -436,7 +487,7 @@ export function BatchUploadModal({
                           {filesToUpload.map((file, index) => (
                             <div
                               key={`${file.name}-${index}`}
-                              className="flex items-center gap-3 p-2 rounded-md bg-muted/50"
+                              className="flex items-center gap-3 p-2 rounded-md bg-muted/50 font-mono text-sm"
                               data-testid={`file-pending-${index}`}
                             >
                               <FileText className="h-4 w-4 text-muted-foreground" />
@@ -460,7 +511,7 @@ export function BatchUploadModal({
                     </div>
                   )}
 
-                  {filesToUpload.some(f => f.type === "application/pdf" || f.name.endsWith(".pdf")) && (
+                  {hasPdfFiles && (
                     <div className="space-y-2">
                       <Label>Text Extraction Mode (for PDFs)</Label>
                       <Select value={batchOcrMode} onValueChange={setBatchOcrMode}>
@@ -471,12 +522,31 @@ export function BatchUploadModal({
                           <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
                           <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
                           <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
+                          <SelectItem value="vision_batch">Vision OCR Batch (long scanned PDFs, faster)</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
                         {batchOcrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
                         {batchOcrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
                         {batchOcrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+                        {batchOcrMode === "vision_batch" && "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
+                      </p>
+                    </div>
+                  )}
+                  {shouldShowOcrModelSelector && (
+                    <div className="space-y-2">
+                      <Label>AI OCR Model</Label>
+                      <Select value={batchOcrModel} onValueChange={setBatchOcrModel}>
+                        <SelectTrigger data-testid="select-batch-ocr-model">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="gpt-4o">GPT-4o (best OCR quality)</SelectItem>
+                          <SelectItem value="gpt-4o-mini">GPT-4o mini (faster, lower cost)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Used for HEIC/image uploads and Vision OCR PDF modes.
                       </p>
                     </div>
                   )}
@@ -549,10 +619,10 @@ export function BatchUploadModal({
               data-testid="button-add-from-library"
             >
               {isAdding ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Adding...
-                </>
+                <span className="flex items-center gap-2">
+                  <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
+                  ADDING...
+                </span>
               ) : (
                 <>
                   <Plus className="h-4 w-4 mr-2" />
