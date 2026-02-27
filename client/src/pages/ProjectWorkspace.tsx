@@ -16,15 +16,23 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Upload, Quote } from "lucide-react";
+import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Upload, Quote, PenTool } from "lucide-react";
 import { BatchAnalysisModal } from "@/components/BatchAnalysisModal";
 import { BatchUploadModal } from "@/components/BatchUploadModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import WritingPane from "@/components/WritingPane";
 import { useToast } from "@/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Folder as FolderType, GlobalSearchResult, Document } from "@shared/schema";
 
 type DocumentLibraryItem = Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">;
+type WritingAnnotationItem = {
+  id: string;
+  highlightedText: string;
+  note: string | null;
+  category: string;
+  documentFilename?: string;
+};
 
 function FolderTree({ 
   folders, 
@@ -308,6 +316,7 @@ export default function ProjectWorkspace() {
   const generateCitation = useGenerateCitation();
   
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<"documents" | "write">("documents");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -335,10 +344,56 @@ export default function ProjectWorkspace() {
     return projectDocuments.filter(pd => pd.folderId === selectedFolderId);
   }, [projectDocuments, selectedFolderId]);
 
+  const projectDocumentIds = useMemo(
+    () => projectDocuments.map((pd) => pd.id),
+    [projectDocuments]
+  );
+
+  const projectDocumentFilenameMap = useMemo(
+    () => new Map(projectDocuments.map((pd) => [pd.id, pd.document.filename])),
+    [projectDocuments]
+  );
+
   const availableDocuments = useMemo(() => {
     const addedDocIds = new Set(projectDocuments.map(pd => pd.documentId));
     return allDocuments.filter(doc => !addedDocIds.has(doc.id));
   }, [allDocuments, projectDocuments]);
+
+  const {
+    data: writingAnnotations = [],
+    isLoading: isWritingAnnotationsLoading,
+    error: writingAnnotationsError,
+  } = useQuery<WritingAnnotationItem[]>({
+    queryKey: ["/api/projects", projectId, "writing-annotations", projectDocumentIds],
+    enabled: workspaceTab === "write" && projectDocumentIds.length > 0,
+    queryFn: async () => {
+      const annotationSets = await Promise.all(
+        projectDocumentIds.map(async (projectDocumentId) => {
+          const res = await fetch(`/api/project-documents/${projectDocumentId}/annotations`);
+          if (!res.ok) {
+            throw new Error("Failed to fetch project annotations for writing");
+          }
+
+          const annotations = await res.json() as Array<{
+            id: string;
+            highlightedText: string;
+            note: string | null;
+            category: string;
+          }>;
+
+          return annotations.map((annotation) => ({
+            id: annotation.id,
+            highlightedText: annotation.highlightedText,
+            note: annotation.note,
+            category: annotation.category,
+            documentFilename: projectDocumentFilenameMap.get(projectDocumentId),
+          }));
+        })
+      );
+
+      return annotationSets.flat();
+    },
+  });
 
   const hasPdfUploadFiles = uploadFiles.some((file) => isPdfFile(file));
   const hasImageUploadFiles = uploadFiles.some((file) => isImageFile(file));
@@ -756,135 +811,191 @@ export default function ProjectWorkspace() {
 
       <main className="flex-1 flex flex-col eva-grid-bg">
         <header className="border-b border-border bg-background/95 backdrop-blur-md p-4">
-          <div className="flex items-center gap-4">
-            <div className="flex-1 flex gap-2">
-              <Input
-                placeholder="Search across all documents in this project..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="max-w-xl"
-                data-testid="input-global-search"
-              />
-              <Button onClick={handleSearch} disabled={isSearching} data-testid="button-search">
-                <Search className="h-4 w-4 mr-2" />
-                {isSearching ? "Searching..." : "Search"}
-              </Button>
-            </div>
-            <Button 
-              variant="outline" 
-              className="uppercase tracking-wider text-xs"
-              onClick={() => setIsBatchModalOpen(true)} 
-              disabled={projectDocuments.length === 0}
-              data-testid="button-batch-analyze"
-            >
-              <Sparkles className="h-4 w-4 mr-2" />
-              Batch Analyze
-            </Button>
-            <Button 
-              variant="outline"
-              className="uppercase tracking-wider text-xs"
-              onClick={() => setIsBatchUploadOpen(true)} 
-              disabled={availableDocuments.length === 0}
-              data-testid="button-batch-upload"
-            >
-              <FolderUp className="h-4 w-4 mr-2" />
-              Batch Add
-            </Button>
-            <Button className="uppercase tracking-wider text-xs" onClick={() => setIsAddDocOpen(true)} data-testid="button-add-document">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Document
-            </Button>
-            <ThemeToggle />
+          <div className="flex items-center justify-between gap-4">
+            <Tabs value={workspaceTab} onValueChange={(v) => setWorkspaceTab(v as "documents" | "write")}>
+              <TabsList>
+                <TabsTrigger value="documents" data-testid="tab-workspace-documents">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Documents
+                </TabsTrigger>
+                <TabsTrigger value="write" data-testid="tab-workspace-write">
+                  <PenTool className="h-4 w-4 mr-2" />
+                  Write
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {workspaceTab === "documents" ? (
+              <div className="flex-1 flex justify-end gap-2">
+                <Input
+                  placeholder="Search across all documents in this project..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  className="max-w-xl"
+                  data-testid="input-global-search"
+                />
+                <Button onClick={handleSearch} disabled={isSearching} data-testid="button-search">
+                  <Search className="h-4 w-4 mr-2" />
+                  {isSearching ? "Searching..." : "Search"}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="uppercase tracking-wider text-xs"
+                  onClick={() => setIsBatchModalOpen(true)} 
+                  disabled={projectDocuments.length === 0}
+                  data-testid="button-batch-analyze"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Batch Analyze
+                </Button>
+                <Button 
+                  variant="outline"
+                  className="uppercase tracking-wider text-xs"
+                  onClick={() => setIsBatchUploadOpen(true)} 
+                  disabled={availableDocuments.length === 0}
+                  data-testid="button-batch-upload"
+                >
+                  <FolderUp className="h-4 w-4 mr-2" />
+                  Batch Add
+                </Button>
+                <Button className="uppercase tracking-wider text-xs" onClick={() => setIsAddDocOpen(true)} data-testid="button-add-document">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Document
+                </Button>
+                <ThemeToggle />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="uppercase tracking-wider text-xs"
+                  onClick={() => setIsAddDocOpen(true)}
+                  data-testid="button-add-document-write-tab"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Source
+                </Button>
+                <Link href="/write">
+                  <Button variant="outline" className="uppercase tracking-wider text-xs" data-testid="button-open-full-write">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open Full Page
+                  </Button>
+                </Link>
+                <ThemeToggle />
+              </div>
+            )}
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-6 pb-8 eva-grid-bg">
-          {searchResults.length > 0 ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="eva-section-title text-sm">SEARCH RESULTS ({searchResults.length})</h3>
-                <Button variant="ghost" size="sm" onClick={() => setSearchResults([])}>
-                  Clear Results
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {searchResults.map((result, idx) => (
-                  <SearchResultCard
-                    key={`${result.annotationId || result.documentId}-${idx}`}
-                    result={result}
-                    onGenerateCitation={() => handleGenerateCitation(result)}
-                    onCopyQuote={() => handleCopyQuote(result.highlightedText || result.matchedText)}
-                    onCopyFootnote={() => handleCopyFootnote(result)}
-                    onNavigateToDocument={() => handleNavigateToDocument(result)}
-                    isGeneratingCitation={generatingCitationFor === (result.annotationId || result.documentId)}
-                    isGeneratingFootnote={generatingFootnoteFor === (result.annotationId || result.documentId)}
-                  />
-                ))}
-              </div>
+        {workspaceTab === "write" ? (
+          <div className="flex-1 min-h-0 p-6 pb-8 eva-grid-bg">
+            <div className="mb-3 flex items-center justify-between gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground">
+              <span>Project Writing</span>
+              <span>{writingAnnotations.length} source annotation{writingAnnotations.length === 1 ? "" : "s"} loaded</span>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold font-mono text-sm uppercase tracking-wider">
-                  {selectedFolderId ? folders.find(f => f.id === selectedFolderId)?.name : "All Documents"}
-                  <span className="text-muted-foreground font-normal ml-2">({filteredDocuments.length})</span>
-                </h3>
+
+            {isWritingAnnotationsLoading && (
+              <div className="mb-3 text-sm text-muted-foreground">Loading project source annotations...</div>
+            )}
+            {writingAnnotationsError && (
+              <div className="mb-3 text-sm text-destructive">
+                Could not load project annotations. You can still write, but source selection may be incomplete.
               </div>
-              
-              {filteredDocuments.length === 0 ? (
-                <div className="text-center py-16 space-y-4">
-                  <FileText className="h-12 w-12 mx-auto text-muted-foreground" />
-                  <p className="text-muted-foreground">No documents in this {selectedFolderId ? "folder" : "project"} yet.</p>
-                  <Button onClick={() => setIsAddDocOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Document
+            )}
+
+            <div className="h-full min-h-0">
+              <WritingPane projectId={projectId} availableAnnotations={writingAnnotations} />
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto p-6 pb-8 eva-grid-bg">
+            {searchResults.length > 0 ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="eva-section-title text-sm">SEARCH RESULTS ({searchResults.length})</h3>
+                  <Button variant="ghost" size="sm" onClick={() => setSearchResults([])}>
+                    Clear Results
                   </Button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredDocuments.map((pd) => (
-                    <Card key={pd.id} className="group hover-elevate" data-testid={`doc-card-${pd.id}`}>
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <CardTitle className="text-base line-clamp-1 font-mono text-sm">{pd.document.filename}</CardTitle>
-                          <div className="flex gap-1">
-                            <Link href={`/projects/${projectId}/documents/${pd.id}`}>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-view-doc-${pd.id}`}>
-                                <ExternalLink className="h-3 w-3" />
-                              </Button>
-                            </Link>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-7 w-7 opacity-0 group-hover:opacity-100"
-                              onClick={() => handleRemoveDocument(pd.id)}
-                              data-testid={`button-remove-doc-${pd.id}`}
-                            >
-                              <Trash2 className="h-3 w-3 text-destructive" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="text-sm text-muted-foreground">
-                        {pd.document.summary ? (
-                          <p className="line-clamp-3">{pd.document.summary}</p>
-                        ) : (
-                          <p className="italic">No summary available</p>
-                        )}
-                        {pd.roleInProject && (
-                          <div className="mt-2 pt-2 border-t">
-                            <span className="text-xs">Role: {pd.roleInProject}</span>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                <div className="space-y-3">
+                  {searchResults.map((result, idx) => (
+                    <SearchResultCard
+                      key={`${result.annotationId || result.documentId}-${idx}`}
+                      result={result}
+                      onGenerateCitation={() => handleGenerateCitation(result)}
+                      onCopyQuote={() => handleCopyQuote(result.highlightedText || result.matchedText)}
+                      onCopyFootnote={() => handleCopyFootnote(result)}
+                      onNavigateToDocument={() => handleNavigateToDocument(result)}
+                      isGeneratingCitation={generatingCitationFor === (result.annotationId || result.documentId)}
+                      isGeneratingFootnote={generatingFootnoteFor === (result.annotationId || result.documentId)}
+                    />
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold font-mono text-sm uppercase tracking-wider">
+                    {selectedFolderId ? folders.find(f => f.id === selectedFolderId)?.name : "All Documents"}
+                    <span className="text-muted-foreground font-normal ml-2">({filteredDocuments.length})</span>
+                  </h3>
+                </div>
+                
+                {filteredDocuments.length === 0 ? (
+                  <div className="text-center py-16 space-y-4">
+                    <FileText className="h-12 w-12 mx-auto text-muted-foreground" />
+                    <p className="text-muted-foreground">No documents in this {selectedFolderId ? "folder" : "project"} yet.</p>
+                    <Button onClick={() => setIsAddDocOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Document
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredDocuments.map((pd) => (
+                      <Card key={pd.id} className="group hover-elevate" data-testid={`doc-card-${pd.id}`}>
+                        <CardHeader className="pb-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <CardTitle className="text-base line-clamp-1 font-mono text-sm">{pd.document.filename}</CardTitle>
+                            <div className="flex gap-1">
+                              <Link href={`/projects/${projectId}/documents/${pd.id}`}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-view-doc-${pd.id}`}>
+                                  <ExternalLink className="h-3 w-3" />
+                                </Button>
+                              </Link>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 opacity-0 group-hover:opacity-100"
+                                onClick={() => handleRemoveDocument(pd.id)}
+                                data-testid={`button-remove-doc-${pd.id}`}
+                              >
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="text-sm text-muted-foreground">
+                          {pd.document.summary ? (
+                            <p className="line-clamp-3">{pd.document.summary}</p>
+                          ) : (
+                            <p className="italic">No summary available</p>
+                          )}
+                          {pd.roleInProject && (
+                            <div className="mt-2 pt-2 border-t">
+                              <span className="text-xs">Role: {pd.roleInProject}</span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       <Dialog open={isAddFolderOpen} onOpenChange={setIsAddFolderOpen}>
