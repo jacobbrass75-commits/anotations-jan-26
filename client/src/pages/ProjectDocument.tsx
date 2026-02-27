@@ -59,6 +59,7 @@ import type {
   Document,
   AnnotationCategory,
   CitationData,
+  CitationStyle,
   SearchResult,
   Annotation,
 } from "@shared/schema";
@@ -89,6 +90,7 @@ export default function ProjectDocumentPage() {
     end: number;
   } | null>(null);
   const [isCitationOpen, setIsCitationOpen] = useState(false);
+  const [citationStyle, setCitationStyle] = useState<CitationStyle>("chicago");
   const [citationForm, setCitationForm] = useState<CitationData>({
     sourceType: "book",
     authors: [{ firstName: "", lastName: "" }],
@@ -97,6 +99,8 @@ export default function ProjectDocumentPage() {
   const [citationPreview, setCitationPreview] = useState<{
     footnote: string;
     bibliography: string;
+    inlineCitation?: string;
+    style?: CitationStyle;
   } | null>(null);
   const [isAutoFilling, setIsAutoFilling] = useState(false);
 
@@ -177,6 +181,11 @@ export default function ProjectDocumentPage() {
       setCitationForm(projectDoc.citationData);
     }
   }, [projectDoc?.citationData]);
+
+  // Clear citation preview when style changes so user re-generates
+  useEffect(() => {
+    setCitationPreview(null);
+  }, [citationStyle]);
 
   // Mark as analyzed if there are annotations
   useEffect(() => {
@@ -428,7 +437,7 @@ export default function ProjectDocumentPage() {
         const res = await fetch(`/api/project-annotations/${annotationId}/footnote`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ style: citationStyle }),
         });
 
         if (!res.ok) {
@@ -436,20 +445,23 @@ export default function ProjectDocumentPage() {
         }
 
         const data = await res.json();
-        await navigator.clipboard.writeText(data.footnoteWithQuote);
+        const styleLabel = citationStyle === "mla" ? "MLA" : citationStyle === "apa" ? "APA" : "Chicago";
+        // For MLA/APA copy in-text citation; for Chicago copy footnoteWithQuote
+        const textToCopy = citationStyle === "chicago" ? data.footnoteWithQuote : data.inlineCitation;
+        await navigator.clipboard.writeText(textToCopy);
         toast({
-          title: "Footnote Copied",
-          description: "Chicago-style footnote with quote copied to clipboard",
+          title: "Citation Copied",
+          description: `${styleLabel}-style citation copied to clipboard`,
         });
       } catch (error) {
         toast({
           title: "Error",
-          description: "Failed to generate footnote",
+          description: "Failed to generate citation",
           variant: "destructive",
         });
       }
     },
-    [toast]
+    [toast, citationStyle]
   );
 
   // Citation handlers
@@ -463,6 +475,7 @@ export default function ProjectDocumentPage() {
 
       const preview = await generateCitation.mutateAsync({
         citationData: citationForm,
+        style: citationStyle,
       });
       setCitationPreview(preview);
       toast({ title: "Success", description: "Citation saved" });
@@ -751,9 +764,22 @@ export default function ProjectDocumentPage() {
               </Button>
             </DialogTitle>
             <DialogDescription>
-              Enter bibliographic information for Chicago-style citations
+              Enter bibliographic information for citations
             </DialogDescription>
           </DialogHeader>
+          <div className="flex items-center gap-2 py-2">
+            <Label className="text-sm whitespace-nowrap">Citation Style</Label>
+            <Select value={citationStyle} onValueChange={(v) => setCitationStyle(v as CitationStyle)}>
+              <SelectTrigger className="w-[200px]" data-testid="select-citation-style">
+                <SelectValue placeholder="Citation Style" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="chicago">Chicago</SelectItem>
+                <SelectItem value="mla">MLA (9th Ed.)</SelectItem>
+                <SelectItem value="apa">APA (7th Ed.)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Tabs defaultValue="metadata">
             <TabsList className="w-full">
               <TabsTrigger value="metadata" className="flex-1">
@@ -981,17 +1007,17 @@ export default function ProjectDocumentPage() {
                 <>
                   <div>
                     <Label className="text-xs text-muted-foreground">
-                      Footnote
+                      {citationStyle === "chicago" ? "Footnote" : "In-Text Citation"}
                     </Label>
                     <div className="p-3 bg-muted rounded-md text-sm font-mono">
-                      {citationPreview.footnote}
+                      {citationPreview.inlineCitation || citationPreview.footnote}
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
                       className="mt-2"
                       onClick={() => {
-                        navigator.clipboard.writeText(citationPreview.footnote);
+                        navigator.clipboard.writeText(citationPreview.inlineCitation || citationPreview.footnote);
                         toast({ title: "Copied" });
                       }}
                     >
@@ -1002,7 +1028,7 @@ export default function ProjectDocumentPage() {
                   <Separator />
                   <div>
                     <Label className="text-xs text-muted-foreground">
-                      Bibliography
+                      {citationStyle === "mla" ? "Works Cited" : citationStyle === "apa" ? "Reference" : "Bibliography"}
                     </Label>
                     <div className="p-3 bg-muted rounded-md text-sm font-mono">
                       {citationPreview.bibliography}
@@ -1040,11 +1066,13 @@ export default function ProjectDocumentPage() {
                 try {
                   const citation = await generateCitation.mutateAsync({
                     citationData: citationForm,
+                    style: citationStyle,
                   });
-                  await navigator.clipboard.writeText(citation.footnote);
+                  const textToCopy = citation.inlineCitation || citation.footnote;
+                  await navigator.clipboard.writeText(textToCopy);
                   toast({
                     title: "Copied",
-                    description: "Footnote copied to clipboard",
+                    description: `${citationStyle === "chicago" ? "Footnote" : "In-text citation"} copied to clipboard`,
                   });
                 } catch {
                   toast({
@@ -1058,7 +1086,7 @@ export default function ProjectDocumentPage() {
               data-testid="button-copy-citation"
             >
               <Copy className="h-3 w-3 mr-2" />
-              Copy Footnote
+              {citationStyle === "chicago" ? "Copy Footnote" : "Copy In-Text"}
             </Button>
             <Button
               onClick={handleSaveCitation}

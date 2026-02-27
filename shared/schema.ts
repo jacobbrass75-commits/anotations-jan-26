@@ -220,6 +220,10 @@ export type User = typeof users.$inferSelect;
 
 // === PROJECT STORAGE LAYER ===
 
+// Citation style types
+export const citationStyles = ["chicago", "mla", "apa"] as const;
+export type CitationStyle = typeof citationStyles[number];
+
 // Citation data type for Chicago-style citations
 export interface CitationData {
   sourceType: 'book' | 'journal' | 'website' | 'newspaper' | 'chapter' | 'thesis' | 'other';
