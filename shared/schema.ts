@@ -526,3 +526,46 @@ export const batchAddDocumentsResponseSchema = z.object({
 });
 export type BatchAddDocumentsResponse = z.infer<typeof batchAddDocumentsResponseSchema>;
 
+// === CHAT TABLES ===
+
+export const conversations = sqliteTable("conversations", {
+  id: text("id").primaryKey().$defaultFn(genId),
+  userId: text("user_id"), // nullable until auth is merged
+  title: text("title").notNull().default("New Chat"),
+  model: text("model").notNull().default("claude-haiku-4-5"), // claude-haiku-4-5 or claude-sonnet-4-6
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+});
+
+export const messages = sqliteTable("messages", {
+  id: text("id").primaryKey().$defaultFn(genId),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // "user" | "assistant" | "system"
+  content: text("content").notNull(),
+  tokensUsed: integer("tokens_used").default(0),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+});
+
+export const conversationsRelations = relations(conversations, ({ many }) => ({
+  messages: many(messages),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [messages.conversationId],
+    references: [conversations.id],
+  }),
+}));
+
+export const insertConversationSchema = createInsertSchema(conversations).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true, createdAt: true,
+});
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Message = typeof messages.$inferSelect;
+

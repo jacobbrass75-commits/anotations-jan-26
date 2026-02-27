@@ -7,6 +7,7 @@ import Home from "@/pages/Home";
 import Projects from "@/pages/Projects";
 import ProjectWorkspace from "@/pages/ProjectWorkspace";
 import ProjectDocument from "@/pages/ProjectDocument";
+import Chat from "@/pages/Chat";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -16,6 +17,8 @@ function Router() {
       <Route path="/projects" component={Projects} />
       <Route path="/projects/:id" component={ProjectWorkspace} />
       <Route path="/projects/:projectId/documents/:docId" component={ProjectDocument} />
+      <Route path="/chat" component={Chat} />
+      <Route path="/chat/:conversationId" component={Chat} />
       <Route component={NotFound} />
     </Switch>
   );
