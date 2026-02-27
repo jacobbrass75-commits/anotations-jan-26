@@ -23,6 +23,7 @@ import {
   PIPELINE_V2_CONFIG,
 } from "./pipelineV2";
 import { registerProjectRoutes } from "./projectRoutes";
+import { registerExtensionRoutes } from "./extensionRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
 import { saveTempPdf, processWithPaddleOcr, processWithVisionOcr } from "./ocrProcessor";
 
@@ -501,6 +502,9 @@ export async function registerRoutes(
 
   // Register project routes
   registerProjectRoutes(app);
+
+  // Register extension routes (Chrome extension API)
+  registerExtensionRoutes(app);
 
   // Register A/B test routes
   // registerABTestRoutes(app); // TODO: Not implemented yet

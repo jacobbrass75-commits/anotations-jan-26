@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ScholarMark Options</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      color: #2D2A26;
+      background: #FAFAF8;
+      padding: 24px;
+      max-width: 480px;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #D4556B;
+      margin-bottom: 16px;
+    }
+    .setting {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #E8E4E0;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #F5F3F0;
+      color: #2D2A26;
+      outline: none;
+    }
+    input[type="text"]:focus {
+      border-color: #D4556B;
+    }
+    .hint {
+      font-size: 12px;
+      color: #8A8580;
+      margin-top: 4px;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      background: #D4556B;
+      color: white;
+      margin-top: 8px;
+    }
+    .saved {
+      color: #22c55e;
+      font-size: 12px;
+      margin-top: 8px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>ScholarMark Settings</h1>
+
+  <div class="setting">
+    <label for="api-url">API Server URL</label>
+    <input type="text" id="api-url" placeholder="http://localhost:5001">
+    <p class="hint">The URL of your ScholarMark server. Default: http://localhost:5001</p>
+  </div>
+
+  <button id="save-btn">Save Settings</button>
+  <p class="saved" id="saved-msg">Settings saved.</p>
+
+  <script src="options.js"></script>
+</body>
+</html>
