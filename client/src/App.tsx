@@ -11,6 +11,7 @@ import ProjectDocument from "@/pages/ProjectDocument";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Chat from "@/pages/Chat";
+import WritingPage from "@/pages/WritingPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/chat" component={Chat} />
       <Route path="/chat/:conversationId" component={Chat} />
+      <Route path="/write" component={WritingPage} />
       <Route component={NotFound} />
     </Switch>
   );

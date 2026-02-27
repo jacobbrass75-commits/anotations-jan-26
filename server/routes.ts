@@ -24,6 +24,7 @@ import {
 } from "./pipelineV2";
 import { registerProjectRoutes } from "./projectRoutes";
 import { registerChatRoutes } from "./chatRoutes";
+import { registerWritingRoutes } from "./writingRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
 import { saveTempPdf, processWithPaddleOcr, processWithVisionOcr } from "./ocrProcessor";
 import { optionalAuth } from "./auth";
@@ -506,6 +507,9 @@ export async function registerRoutes(
 
   // Register chat routes
   registerChatRoutes(app);
+
+  // Register writing pipeline routes
+  registerWritingRoutes(app);
 
   // Register A/B test routes
   // registerABTestRoutes(app); // TODO: Not implemented yet
