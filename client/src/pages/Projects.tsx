@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, FolderOpen, FileText, Trash2, ArrowLeft, Search } from "lucide-react";
+import { Plus, FolderOpen, FileText, Trash2, ArrowLeft, Search, PenTool } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Projects() {
@@ -89,8 +89,14 @@ export default function Projects() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/write">
+              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-open-write">
+                <PenTool className="h-4 w-4 mr-2" />
+                Write
+              </Button>
+            </Link>
             <Link href="/web-clips">
-              <Button variant="outline" className="uppercase tracking-wider" data-testid="button-open-web-clips">
+              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-open-web-clips">
                 Web Clips
               </Button>
             </Link>

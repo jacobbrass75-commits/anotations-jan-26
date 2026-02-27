@@ -1,7 +1,6 @@
 import { spawn } from "child_process";
 import { writeFile, readFile, rm, mkdtemp } from "fs/promises";
 import { join, dirname, extname } from "path";
-import { fileURLToPath } from "url";
 import { tmpdir } from "os";
 import OpenAI from "openai";
 import { PDFDocument } from "pdf-lib";
@@ -11,8 +10,7 @@ import { chunkTextV2 } from "./pipelineV2";
 import { generateDocumentSummary } from "./openai";
 import { saveDocumentSource } from "./sourceFiles";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const PYTHON_SCRIPTS_DIR = join(process.cwd(), "server", "python");
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -597,7 +595,7 @@ export async function processWithPaddleOcr(
   tempPdfPath: string
 ): Promise<void> {
   try {
-    const scriptPath = join(__dirname, "python", "pdf_pipeline.py");
+    const scriptPath = join(PYTHON_SCRIPTS_DIR, "pdf_pipeline.py");
     const stdout = await runPython(scriptPath, [
       "--mode=ocr",
       "--model=ppocr",
@@ -1030,7 +1028,7 @@ export async function processWithVisionOcr(
   try {
     imageDir = await mkdtemp(join(tmpdir(), "vision-imgs-"));
 
-    const scriptPath = join(__dirname, "python", "pdf_to_images.py");
+    const scriptPath = join(PYTHON_SCRIPTS_DIR, "pdf_to_images.py");
     const stdout = await runPython(scriptPath, [tempPdfPath, imageDir, "--dpi", "200"]);
     const result = JSON.parse(stdout) as { images: string[]; total_pages: number };
 
