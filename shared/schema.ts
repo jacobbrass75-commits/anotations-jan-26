@@ -204,17 +204,46 @@ export const pipelineAnnotationSchema = z.object({
 });
 export type PipelineAnnotation = z.infer<typeof pipelineAnnotationSchema>;
 
-// Legacy user types for compatibility (keeping original structure)
+// Users table
 export const users = sqliteTable("users", {
   id: text("id").primaryKey().$defaultFn(genId),
+  email: text("email").notNull().unique(),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password").notNull(), // bcrypt hash
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  tier: text("tier").notNull().default("free"), // "free" | "pro" | "max"
+  tokensUsed: integer("tokens_used").notNull().default(0),
+  tokenLimit: integer("token_limit").notNull().default(50000), // 50K for free
+  storageUsed: integer("storage_used").notNull().default(0), // bytes
+  storageLimit: integer("storage_limit").notNull().default(52428800), // 50MB for free
+  emailVerified: integer("email_verified", { mode: "boolean" }).default(false),
+  billingCycleStart: integer("billing_cycle_start", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
+  email: true,
   username: true,
   password: true,
+  firstName: true,
+  lastName: true,
 });
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+export const registerSchema = z.object({
+  email: z.string().email(),
+  username: z.string().min(3).max(30),
+  password: z.string().min(8),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 

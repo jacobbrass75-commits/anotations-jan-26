@@ -25,6 +25,7 @@ import {
 import { registerProjectRoutes } from "./projectRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
 import { saveTempPdf, processWithPaddleOcr, processWithVisionOcr } from "./ocrProcessor";
+import { optionalAuth } from "./auth";
 
 // Detect garbled text from failed PDF extraction
 // Checks for high ratio of non-word characters or unusual patterns
@@ -77,7 +78,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   // Upload document
-  app.post("/api/upload", upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload", optionalAuth, upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
@@ -179,7 +180,7 @@ export async function registerRoutes(
   });
 
   // Get document processing status (for polling)
-  app.get("/api/documents/:id/status", async (req: Request, res: Response) => {
+  app.get("/api/documents/:id/status", optionalAuth, async (req: Request, res: Response) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) {
@@ -199,7 +200,7 @@ export async function registerRoutes(
   });
 
   // Get all documents
-  app.get("/api/documents", async (req: Request, res: Response) => {
+  app.get("/api/documents", optionalAuth, async (req: Request, res: Response) => {
     try {
       const docs = await storage.getAllDocuments();
       res.json(docs);
@@ -210,7 +211,7 @@ export async function registerRoutes(
   });
 
   // Get single document
-  app.get("/api/documents/:id", async (req: Request, res: Response) => {
+  app.get("/api/documents/:id", optionalAuth, async (req: Request, res: Response) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) {
@@ -224,7 +225,7 @@ export async function registerRoutes(
   });
 
   // Set intent and trigger AI analysis
-  app.post("/api/documents/:id/set-intent", async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/set-intent", optionalAuth, async (req: Request, res: Response) => {
     try {
       const { intent, thoroughness = 'standard' } = req.body;
       if (!intent || typeof intent !== "string") {
@@ -346,7 +347,7 @@ export async function registerRoutes(
   });
 
   // Get annotations for document
-  app.get("/api/documents/:id/annotations", async (req: Request, res: Response) => {
+  app.get("/api/documents/:id/annotations", optionalAuth, async (req: Request, res: Response) => {
     try {
       const annotations = await storage.getAnnotationsForDocument(req.params.id);
       res.json(annotations);
@@ -357,7 +358,7 @@ export async function registerRoutes(
   });
 
   // Add manual annotation
-  app.post("/api/documents/:id/annotate", async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/annotate", optionalAuth, async (req: Request, res: Response) => {
     try {
       const { startPosition, endPosition, highlightedText, category, note, isAiGenerated } = req.body;
 
@@ -394,7 +395,7 @@ export async function registerRoutes(
   });
 
   // Update annotation
-  app.put("/api/annotations/:id", async (req: Request, res: Response) => {
+  app.put("/api/annotations/:id", optionalAuth, async (req: Request, res: Response) => {
     try {
       const { note, category } = req.body;
 
@@ -420,7 +421,7 @@ export async function registerRoutes(
   });
 
   // Delete annotation
-  app.delete("/api/annotations/:id", async (req: Request, res: Response) => {
+  app.delete("/api/annotations/:id", optionalAuth, async (req: Request, res: Response) => {
     try {
       await storage.deleteAnnotation(req.params.id);
       res.json({ success: true });
@@ -431,7 +432,7 @@ export async function registerRoutes(
   });
 
   // Search document
-  app.post("/api/documents/:id/search", async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/search", optionalAuth, async (req: Request, res: Response) => {
     try {
       const { query } = req.body;
 
@@ -481,7 +482,7 @@ export async function registerRoutes(
   });
 
   // Get document summary
-  app.get("/api/documents/:id/summary", async (req: Request, res: Response) => {
+  app.get("/api/documents/:id/summary", optionalAuth, async (req: Request, res: Response) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) {
