@@ -25,6 +25,7 @@ import {
 import { registerProjectRoutes } from "./projectRoutes";
 import { registerChatRoutes } from "./chatRoutes";
 import { registerWritingRoutes } from "./writingRoutes";
+import { registerExtensionRoutes } from "./extensionRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
 import { saveTempPdf, processWithPaddleOcr, processWithVisionOcr } from "./ocrProcessor";
 import { optionalAuth } from "./auth";
@@ -510,6 +511,9 @@ export async function registerRoutes(
 
   // Register writing pipeline routes
   registerWritingRoutes(app);
+
+  // Register extension routes (Chrome extension API)
+  registerExtensionRoutes(app);
 
   // Register A/B test routes
   // registerABTestRoutes(app); // TODO: Not implemented yet
