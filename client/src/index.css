@@ -2,63 +2,94 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE */
+/* LIGHT MODE — "Darling" */
+/* Inspired by Darling in the Franxx. Warm, clean, confident. */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
-  --background: 0 0% 100%;
-  --foreground: 220 13% 13%;
-  --border: 220 13% 91%;
-  --card: 0 0% 98%;
-  --card-foreground: 220 13% 13%;
-  --card-border: 220 13% 94%;
-  --sidebar: 220 13% 96%;
-  --sidebar-foreground: 220 13% 13%;
-  --sidebar-border: 220 13% 92%;
-  --sidebar-primary: 217 91% 60%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 220 14% 91%;
-  --sidebar-accent-foreground: 220 13% 13%;
-  --sidebar-ring: 217 91% 60%;
-  --popover: 0 0% 96%;
-  --popover-foreground: 220 13% 13%;
-  --popover-border: 220 13% 90%;
-  --primary: 217 91% 60%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 220 14% 91%;
-  --secondary-foreground: 220 13% 13%;
-  --muted: 220 14% 93%;
-  --muted-foreground: 220 13% 35%;
-  --accent: 220 14% 92%;
-  --accent-foreground: 220 13% 13%;
-  --destructive: 0 84% 60%;
+
+  /* Base */
+  --background: 40 14% 98%;              /* #FAFAF8 warm white */
+  --foreground: 28 5% 16%;               /* #2D2A26 warm charcoal */
+
+  /* Cards & Surfaces */
+  --card: 30 13% 96%;                    /* #F5F3F0 soft cream */
+  --card-foreground: 28 5% 16%;
+  --card-border: 25 8% 90%;              /* #E8E4E0 blush gray */
+
+  /* Sidebar */
+  --sidebar: 30 13% 95%;
+  --sidebar-foreground: 28 5% 16%;
+  --sidebar-border: 25 8% 90%;
+  --sidebar-primary: 350 50% 59%;        /* #D4556B muted rose */
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 30 10% 92%;
+  --sidebar-accent-foreground: 28 5% 16%;
+  --sidebar-ring: 350 50% 59%;
+
+  /* Popover */
+  --popover: 30 13% 96%;
+  --popover-foreground: 28 5% 16%;
+  --popover-border: 25 8% 90%;
+
+  /* Primary — Muted Rose (Zero Two red, pulled back 40%) */
+  --primary: 350 50% 59%;                /* #D4556B */
+  --primary-foreground: 0 0% 100%;
+
+  /* Secondary — Calm Blue (Franxx blue, desaturated) */
+  --secondary: 212 28% 50%;              /* #5B7FA5 */
+  --secondary-foreground: 0 0% 100%;
+
+  /* Muted */
+  --muted: 25 8% 92%;
+  --muted-foreground: 25 4% 52%;         /* #8A8580 warm gray */
+
+  /* Accent */
+  --accent: 25 8% 93%;
+  --accent-foreground: 28 5% 16%;
+
+  /* Borders & Input */
+  --border: 25 8% 90%;                   /* #E8E4E0 barely-there blush gray */
+  --input: 25 8% 78%;
+  --ring: 350 50% 59%;
+
+  /* Success / Active — Soft Teal */
+  --success: 168 27% 49%;                /* #5A9E8F */
+
+  /* Destructive — Warm Rose */
+  --destructive: 354 55% 53%;            /* #C94454 */
   --destructive-foreground: 0 0% 98%;
-  --input: 220 13% 75%;
-  --ring: 217 91% 60%;
-  --chart-1: 217 91% 45%;
-  --chart-2: 142 76% 36%;
-  --chart-3: 271 91% 65%;
-  --chart-4: 43 96% 56%;
-  --chart-5: 27 87% 67%;
-  --font-sans: 'Inter', sans-serif;
+
+  /* Charts */
+  --chart-1: 350 50% 50%;                /* Rose */
+  --chart-2: 168 27% 49%;                /* Teal */
+  --chart-3: 212 28% 50%;                /* Blue */
+  --chart-4: 40 70% 55%;                 /* Amber */
+  --chart-5: 25 50% 60%;                 /* Warm */
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-serif: 'Merriweather', Georgia, serif;
   --font-mono: 'JetBrains Mono', monospace;
-  --radius: .5rem;
-  --shadow-2xs: 0px 2px 0px 0px hsl(220 13% 13% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(220 13% 13% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(220 13% 13% / 0.00), 0px 1px 2px -1px hsl(220 13% 13% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(220 13% 13% / 0.00), 0px 1px 2px -1px hsl(220 13% 13% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(220 13% 13% / 0.00), 0px 2px 4px -1px hsl(220 13% 13% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(220 13% 13% / 0.00), 0px 4px 6px -1px hsl(220 13% 13% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(220 13% 13% / 0.00), 0px 8px 10px -1px hsl(220 13% 13% / 0.00);
-  --shadow-2xl: 0px 2px 0px 0px hsl(220 13% 13% / 0.00);
-  --tracking-normal: 0em;
+
+  /* Spacing & Radius */
+  --radius: 0.5rem;
   --spacing: 0.25rem;
 
-/* Fallback for older browsers */
+  --shadow-2xs: 0px 2px 0px 0px hsl(28 5% 16% / 0.00);
+  --shadow-xs: 0px 2px 0px 0px hsl(28 5% 16% / 0.00);
+  --shadow-sm: 0px 2px 0px 0px hsl(28 5% 16% / 0.00), 0px 1px 2px -1px hsl(28 5% 16% / 0.00);
+  --shadow: 0px 2px 0px 0px hsl(28 5% 16% / 0.00), 0px 1px 2px -1px hsl(28 5% 16% / 0.00);
+  --shadow-md: 0px 2px 0px 0px hsl(28 5% 16% / 0.00), 0px 2px 4px -1px hsl(28 5% 16% / 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(28 5% 16% / 0.00), 0px 4px 6px -1px hsl(28 5% 16% / 0.00);
+  --shadow-xl: 0px 2px 0px 0px hsl(28 5% 16% / 0.00), 0px 8px 10px -1px hsl(28 5% 16% / 0.00);
+  --shadow-2xl: 0px 2px 0px 0px hsl(28 5% 16% / 0.00);
+  --tracking-normal: 0em;
+
+  /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
@@ -87,56 +118,81 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+/* DARK MODE — "Eva" */
+/* Inspired by Evangelion NERV. Refined for legibility. Orange is accent only. */
 .dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
   --opaque-button-border-intensity: 9;
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
-  --background: 220 13% 9%;
-  --foreground: 210 40% 98%;
-  --border: 220 13% 18%;
-  --card: 220 13% 11%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 220 13% 15%;
-  --sidebar: 220 13% 13%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 220 13% 17%;
-  --sidebar-primary: 217 91% 60%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 220 14% 16%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 217 91% 60%;
-  --popover: 220 13% 15%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 220 13% 19%;
-  --primary: 217 91% 60%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 220 14% 18%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 220 14% 17%;
-  --muted-foreground: 220 13% 65%;
-  --accent: 220 14% 16%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62% 50%;
-  --destructive-foreground: 210 40% 98%;
-  --input: 220 13% 35%;
-  --ring: 217 91% 60%;
-  --chart-1: 217 91% 65%;
-  --chart-2: 142 76% 56%;
-  --chart-3: 271 91% 75%;
-  --chart-4: 43 96% 66%;
-  --chart-5: 27 87% 72%;
-  --shadow-2xs: 0px 2px 0px 0px hsl(220 13% 9% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(220 13% 9% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(220 13% 9% / 0.00), 0px 1px 2px -1px hsl(220 13% 9% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(220 13% 9% / 0.00), 0px 1px 2px -1px hsl(220 13% 9% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(220 13% 9% / 0.00), 0px 2px 4px -1px hsl(220 13% 9% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(220 13% 9% / 0.00), 0px 4px 6px -1px hsl(220 13% 9% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(220 13% 9% / 0.00), 0px 8px 10px -1px hsl(220 13% 9% / 0.00);
-  --shadow-2xl: 0px 2px 0px 0px hsl(220 13% 9% / 0.00);
 
-/* Fallback for older browsers */
+  /* Base — Deep purple-black */
+  --background: 260 30% 8%;              /* Deep NERV purple-black */
+  --foreground: 30 5% 92%;               /* #EBEAE8 much more legible than before */
+
+  /* Cards — Slightly lighter for contrast */
+  --card: 260 30% 12%;
+  --card-foreground: 30 5% 92%;
+  --card-border: 260 20% 18%;
+
+  /* Sidebar */
+  --sidebar: 260 30% 10%;
+  --sidebar-foreground: 30 5% 92%;
+  --sidebar-border: 260 20% 16%;
+  --sidebar-primary: 24 90% 55%;         /* Eva orange — accent only */
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 260 25% 15%;
+  --sidebar-accent-foreground: 30 5% 92%;
+  --sidebar-ring: 24 90% 55%;
+
+  /* Popover */
+  --popover: 260 30% 11%;
+  --popover-foreground: 30 5% 92%;
+  --popover-border: 260 20% 18%;
+
+  /* Primary — Eva Orange (accent only — buttons, links, highlights) */
+  --primary: 24 90% 55%;
+  --primary-foreground: 0 0% 100%;
+
+  /* Secondary */
+  --secondary: 260 25% 18%;
+  --secondary-foreground: 30 5% 92%;
+
+  /* Muted — Actually readable now (65% lightness, was 55%) */
+  --muted: 260 15% 16%;
+  --muted-foreground: 260 10% 65%;
+
+  /* Accent */
+  --accent: 260 25% 15%;
+  --accent-foreground: 30 5% 92%;
+
+  /* Borders & Input */
+  --border: 260 20% 18%;
+  --input: 260 15% 25%;
+  --ring: 24 90% 55%;
+
+  /* Destructive */
+  --destructive: 0 70% 55%;
+  --destructive-foreground: 0 0% 98%;
+
+  /* Charts */
+  --chart-1: 24 90% 55%;                 /* Orange */
+  --chart-2: 120 50% 45%;                /* Green */
+  --chart-3: 200 70% 55%;                /* Blue */
+  --chart-4: 340 60% 55%;                /* Pink */
+  --chart-5: 55 80% 55%;                 /* Yellow */
+
+  --shadow-2xs: 0px 2px 0px 0px hsl(260 30% 8% / 0.00);
+  --shadow-xs: 0px 2px 0px 0px hsl(260 30% 8% / 0.00);
+  --shadow-sm: 0px 2px 0px 0px hsl(260 30% 8% / 0.00), 0px 1px 2px -1px hsl(260 30% 8% / 0.00);
+  --shadow: 0px 2px 0px 0px hsl(260 30% 8% / 0.00), 0px 1px 2px -1px hsl(260 30% 8% / 0.00);
+  --shadow-md: 0px 2px 0px 0px hsl(260 30% 8% / 0.00), 0px 2px 4px -1px hsl(260 30% 8% / 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(260 30% 8% / 0.00), 0px 4px 6px -1px hsl(260 30% 8% / 0.00);
+  --shadow-xl: 0px 2px 0px 0px hsl(260 30% 8% / 0.00), 0px 8px 10px -1px hsl(260 30% 8% / 0.00);
+  --shadow-2xl: 0px 2px 0px 0px hsl(260 30% 8% / 0.00);
+
+  /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
@@ -172,7 +228,16 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    font-size: 15px;
+    line-height: 1.6;
   }
+}
+
+/* Dark mode: Rajdhani for headings only, system font for body */
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+  font-family: 'Rajdhani', var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 /**
