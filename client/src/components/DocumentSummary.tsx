@@ -74,7 +74,7 @@ export function DocumentSummary({ document, isLoading }: DocumentSummaryProps) {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {document.keyConcepts.map((concept, i) => (
-                <Badge key={i} variant="secondary" className="bg-eva-purple/30 text-eva-cyan border border-eva-cyan/20 font-mono text-xs">
+                <Badge key={i} variant="secondary" className="bg-secondary/30 text-chart-3 border border-chart-3/20 font-mono text-xs">
                   {concept}
                 </Badge>
               ))}

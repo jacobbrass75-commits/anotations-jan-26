@@ -77,7 +77,7 @@ export default function Projects() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md sticky top-0 z-10">
+      <header className="border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link href="/">
@@ -171,7 +171,7 @@ export default function Projects() {
       <main className="max-w-6xl mx-auto p-6 pb-8 eva-grid-bg">
         {projects && projects.length === 0 ? (
           <div className="text-center py-16 space-y-4">
-            <FolderOpen className="h-16 w-16 mx-auto text-eva-orange" />
+            <FolderOpen className="h-16 w-16 mx-auto text-primary" />
             <h2 className="eva-section-title text-base">NO ACTIVE PROJECTS</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
               Create a research project to organize your documents, annotations, and enable global search across your entire collection.
@@ -185,7 +185,7 @@ export default function Projects() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects?.map((project) => (
               <Link key={project.id} href={`/projects/${project.id}`}>
-                <Card className="h-full hover-elevate cursor-pointer group eva-clip-panel eva-corner-decor hover:shadow-[0_0_20px_rgba(255,106,0,0.15)] transition-all duration-200" data-testid={`card-project-${project.id}`}>
+                <Card className="h-full hover-elevate cursor-pointer group eva-clip-panel eva-corner-decor hover:shadow-lg transition-all duration-200" data-testid={`card-project-${project.id}`}>
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="text-lg line-clamp-1 font-sans uppercase tracking-wider">{project.name}</CardTitle>
@@ -196,7 +196,7 @@ export default function Projects() {
                         onClick={(e) => handleDelete(project.id, e)}
                         data-testid={`button-delete-project-${project.id}`}
                       >
-                        <Trash2 className="h-4 w-4 text-eva-red hover:text-eva-red/80" />
+                        <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
                       </Button>
                     </div>
                     {project.description && (

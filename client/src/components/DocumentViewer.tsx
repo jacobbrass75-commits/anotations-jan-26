@@ -105,7 +105,7 @@ export function DocumentViewer({
           <div className="mx-auto mb-4 eva-hex-spinner" />
           <div className="mb-2 flex items-center justify-center gap-2">
             <div className="eva-status-warning" />
-            <h3 className="eva-section-title text-eva-orange">PROCESSING DOCUMENT...</h3>
+            <h3 className="eva-section-title text-primary">PROCESSING DOCUMENT...</h3>
           </div>
           <p className="text-sm text-muted-foreground">
             Extracting text from your source file. This may take a moment...
@@ -119,7 +119,7 @@ export function DocumentViewer({
     return (
       <Card className="h-full flex flex-col items-center justify-center eva-warning-stripes">
         <div className="text-center p-8 max-w-sm">
-          <AlertCircle className="mx-auto h-12 w-12 text-eva-red mb-4" />
+          <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2">Processing Failed</h3>
           <p className="text-sm text-muted-foreground">
             {document.processingError || "Could not extract text from this file."}
@@ -173,7 +173,7 @@ export function DocumentViewer({
           <ScrollArea className="h-full eva-grid-bg">
             <div
               ref={scrollRef}
-              className="p-6 max-w-4xl mx-auto border-l-2 border-eva-orange/20 eva-materialize"
+              className="p-6 max-w-4xl mx-auto border-l-2 border-border eva-materialize"
             >
               <HighlightedText
                 text={document.fullText}

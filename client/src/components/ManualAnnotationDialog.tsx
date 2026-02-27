@@ -66,7 +66,7 @@ export function ManualAnnotationDialog({
 
         <div className="space-y-4 py-4">
           {selectedText && (
-            <div className="p-3 bg-eva-dark/50 rounded-lg border border-eva-orange/20 border-l-2 border-l-eva-orange">
+            <div className="p-3 bg-muted/50 rounded-lg border border-border border-l-2 border-l-primary">
               <Label className="text-xs text-muted-foreground mb-1 block">Selected Text</Label>
               <p className="text-sm font-serif line-clamp-4">"{selectedText.text}"</p>
             </div>

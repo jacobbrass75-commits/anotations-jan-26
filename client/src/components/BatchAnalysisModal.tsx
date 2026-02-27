@@ -138,9 +138,9 @@ export function BatchAnalysisModal({
   const getStatusIcon = (status: BatchDocumentResult["status"]) => {
     switch (status) {
       case "completed":
-        return <CheckCircle className="h-4 w-4 text-eva-green" />;
+        return <CheckCircle className="h-4 w-4 text-chart-2" />;
       case "failed":
-        return <XCircle className="h-4 w-4 text-eva-red" />;
+        return <XCircle className="h-4 w-4 text-destructive" />;
       case "processing":
         return <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />;
       default:

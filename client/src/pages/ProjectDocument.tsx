@@ -703,7 +703,7 @@ export default function ProjectDocumentPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md sticky top-0 z-40">
+      <header className="border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link href={`/projects/${projectId}`}>
@@ -831,7 +831,7 @@ export default function ProjectDocumentPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="text-eva-cyan uppercase tracking-wider text-xs"
+                className="text-chart-3 uppercase tracking-wider text-xs"
                 onClick={handleAutoFill}
                 disabled={isAutoFilling}
                 data-testid="button-autofill-citation"

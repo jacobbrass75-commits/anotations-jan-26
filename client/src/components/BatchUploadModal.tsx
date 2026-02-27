@@ -285,11 +285,11 @@ export function BatchUploadModal({
   const getStatusIcon = (status: BatchAddDocumentResult["status"]) => {
     switch (status) {
       case "added":
-        return <CheckCircle className="h-4 w-4 text-eva-green" />;
+        return <CheckCircle className="h-4 w-4 text-chart-2" />;
       case "already_exists":
         return <AlertCircle className="h-4 w-4 text-yellow-500" />;
       case "failed":
-        return <XCircle className="h-4 w-4 text-eva-red" />;
+        return <XCircle className="h-4 w-4 text-destructive" />;
     }
   };
 
@@ -307,9 +307,9 @@ export function BatchUploadModal({
   const getUploadStatusIcon = (status: UploadedFile["status"]) => {
     switch (status) {
       case "success":
-        return <CheckCircle className="h-4 w-4 text-eva-green" />;
+        return <CheckCircle className="h-4 w-4 text-chart-2" />;
       case "error":
-        return <XCircle className="h-4 w-4 text-eva-red" />;
+        return <XCircle className="h-4 w-4 text-destructive" />;
       case "uploading":
         return <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />;
       default:
@@ -445,7 +445,7 @@ export function BatchUploadModal({
                 <>
                   <Card
                     className={`p-6 border-2 border-dashed eva-clip-panel transition-colors ${
-                      dragActive ? "border-eva-orange bg-eva-orange/5" : "border-eva-orange/30 hover:border-eva-orange/60"
+                      dragActive ? "border-primary bg-primary/5" : "border-primary/30 hover:border-primary/60"
                     }`}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
@@ -463,7 +463,7 @@ export function BatchUploadModal({
                       />
                       <div className="flex flex-col items-center gap-3">
                         <div className="p-3 bg-muted rounded-full">
-                          <Upload className="h-6 w-6 text-eva-orange" />
+                          <Upload className="h-6 w-6 text-primary" />
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-medium">Drop files here or click to browse</p>

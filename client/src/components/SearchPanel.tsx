@@ -15,8 +15,8 @@ interface SearchPanelProps {
 }
 
 const relevanceColors = {
-  high: "bg-eva-green/15 text-eva-green border border-eva-green/30",
-  medium: "bg-eva-orange/15 text-eva-orange border border-eva-orange/30",
+  high: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  medium: "bg-primary/15 text-primary border border-primary/30",
   low: "bg-muted text-muted-foreground border-muted",
 };
 
@@ -78,7 +78,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                   placeholder="ENTER SEARCH QUERY..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="pl-9 font-mono bg-eva-dark/50 text-eva-green eva-focus-glow border-eva-orange/30"
+                  className="pl-9 font-mono bg-muted/50 text-foreground eva-focus-glow border-border"
                   disabled={!documentId || isSearching}
                   data-testid="input-search"
                 />
@@ -90,7 +90,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                 )}
               </div>
               <Button type="submit" disabled={!documentId || !query.trim() || isSearching} data-testid="button-search">
-                <Sparkles className="h-4 w-4 mr-2 text-eva-orange eva-glitch" />
+                <Sparkles className="h-4 w-4 mr-2 text-primary eva-glitch" />
                 Search
               </Button>
             </form>
@@ -107,7 +107,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                   <button
                     key={suggestion}
                     type="button"
-                    className="px-2 py-1 font-mono text-xs uppercase tracking-wider bg-secondary rounded-md hover:bg-eva-orange/10 hover:text-eva-orange transition-colors"
+                    className="px-2 py-1 font-mono text-xs uppercase tracking-wider bg-secondary rounded-md hover:bg-primary/10 hover:text-primary transition-colors"
                     onClick={() => setQuery(suggestion)}
                     disabled={!documentId}
                   >
@@ -134,7 +134,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                         >
                           {result.relevance} relevance
                         </Badge>
-                        <button className="text-eva-cyan hover:text-eva-cyan/80 flex items-center gap-1 uppercase text-xs tracking-wider">
+                        <button className="text-chart-3 hover:text-chart-3/80 flex items-center gap-1 uppercase text-xs tracking-wider">
                           <MapPin className="h-3 w-3" />
                           Jump to
                         </button>

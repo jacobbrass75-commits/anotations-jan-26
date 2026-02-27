@@ -66,7 +66,7 @@ function FolderTree({
       <div key={folder.id}>
         <div
           className={`flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer group ${
-            isSelected ? "text-eva-orange bg-eva-orange/10 border-l-2 border-eva-orange" : "hover-elevate"
+            isSelected ? "text-primary bg-primary/10 border-l-2 border-primary" : "hover-elevate"
           }`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
           onClick={() => onSelectFolder(folder.id)}
@@ -109,7 +109,7 @@ function FolderTree({
     <div className="space-y-0.5">
       <div
         className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer ${
-          selectedFolderId === null ? "text-eva-orange bg-eva-orange/10 border-l-2 border-eva-orange" : "hover-elevate"
+          selectedFolderId === null ? "text-primary bg-primary/10 border-l-2 border-primary" : "hover-elevate"
         }`}
         onClick={() => onSelectFolder(null)}
         data-testid="folder-root"
@@ -148,8 +148,8 @@ function SearchResultCard({
     document_context: "bg-gray-500/20 text-gray-700 dark:text-gray-300",
   };
   const relevanceClasses: Record<string, string> = {
-    high: "bg-eva-green/15 text-eva-green border border-eva-green/30",
-    medium: "bg-eva-orange/15 text-eva-orange border border-eva-orange/30",
+    high: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+    medium: "bg-primary/15 text-primary border border-primary/30",
     low: "bg-muted text-muted-foreground border border-muted",
   };
 
@@ -755,7 +755,7 @@ export default function ProjectWorkspace() {
       </aside>
 
       <main className="flex-1 flex flex-col eva-grid-bg">
-        <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md p-4">
+        <header className="border-b border-border bg-background/95 backdrop-blur-md p-4">
           <div className="flex items-center gap-4">
             <div className="flex-1 flex gap-2">
               <Input

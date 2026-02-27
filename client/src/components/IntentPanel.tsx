@@ -130,8 +130,8 @@ export function IntentPanel({
           </div>
 
           {hasAnalyzed && (
-            <div className="flex items-center gap-2 p-3 bg-eva-green/10 rounded-lg border border-eva-green/30">
-              <CheckCircle2 className="h-4 w-4 text-eva-green" />
+            <div className="flex items-center gap-2 p-3 bg-chart-2/10 rounded-lg border border-chart-2/30">
+              <CheckCircle2 className="h-4 w-4 text-chart-2" />
               <span className="text-sm text-foreground">Analysis complete</span>
               <Badge variant="secondary" className="ml-auto">
                 {annotationCount} highlights

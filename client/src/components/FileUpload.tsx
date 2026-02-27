@@ -211,7 +211,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
   return (
     <Card
       className={`p-8 border-2 border-dashed eva-clip-panel transition-colors duration-200 ${
-        dragActive ? "border-eva-orange bg-eva-orange/5" : "border-eva-orange/30 hover:border-eva-orange/60"
+        dragActive ? "border-primary bg-primary/5" : "border-primary/30 hover:border-primary/60"
       }`}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
@@ -228,7 +228,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
         />
         <div className="flex flex-col items-center gap-4">
           <div className="p-4 bg-muted rounded-full">
-            <Upload className="h-8 w-8 text-eva-orange" />
+            <Upload className="h-8 w-8 text-primary" />
           </div>
           <div className="text-center">
             <p className="eva-section-title text-sm font-medium text-foreground">DOCUMENT INSERTION</p>

@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 
 const BOOT_LINES = [
-  { text: "NERV DOCUMENT ANALYSIS SYSTEM", delay: 0, className: "text-eva-orange text-lg" },
-  { text: "SCHOLARMARK EVA EDITION v2.0", delay: 200, className: "text-eva-orange" },
+  { text: "NERV DOCUMENT ANALYSIS SYSTEM", delay: 0, className: "text-primary text-lg" },
+  { text: "SCHOLARMARK EVA EDITION v2.0", delay: 200, className: "text-primary" },
   { text: "", delay: 300, className: "" },
   { text: "INITIALIZING MAGI SUBSYSTEMS...", delay: 400, className: "text-muted-foreground" },
-  { text: "[OK] Pattern Recognition Engine", delay: 600, className: "text-eva-green" },
-  { text: "[OK] Semantic Analysis Module", delay: 800, className: "text-eva-green" },
-  { text: "[OK] Annotation Pipeline v2", delay: 1000, className: "text-eva-green" },
-  { text: "[OK] Document Processing Core", delay: 1200, className: "text-eva-green" },
-  { text: "[OK] Citation Generator", delay: 1400, className: "text-eva-green" },
+  { text: "[OK] Pattern Recognition Engine", delay: 600, className: "text-chart-2" },
+  { text: "[OK] Semantic Analysis Module", delay: 800, className: "text-chart-2" },
+  { text: "[OK] Annotation Pipeline v2", delay: 1000, className: "text-chart-2" },
+  { text: "[OK] Document Processing Core", delay: 1200, className: "text-chart-2" },
+  { text: "[OK] Citation Generator", delay: 1400, className: "text-chart-2" },
   { text: "", delay: 1500, className: "" },
-  { text: "ALL SYSTEMS NOMINAL", delay: 1600, className: "text-eva-orange font-bold" },
-  { text: "READY FOR OPERATION", delay: 1800, className: "text-eva-green font-bold" },
+  { text: "ALL SYSTEMS NOMINAL", delay: 1600, className: "text-primary font-bold" },
+  { text: "READY FOR OPERATION", delay: 1800, className: "text-chart-2 font-bold" },
 ];
 
 export function BootSequence({ onComplete }: { onComplete: () => void }) {
@@ -31,7 +31,7 @@ export function BootSequence({ onComplete }: { onComplete: () => void }) {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] bg-eva-dark flex items-center justify-center transition-opacity duration-500 ${
+      className={`fixed inset-0 z-[100] bg-background flex items-center justify-center transition-opacity duration-500 ${
         fading ? "opacity-0" : "opacity-100"
       }`}
     >

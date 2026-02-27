@@ -9,8 +9,8 @@ export default function NotFound() {
       <Card className="w-full max-w-md mx-4 eva-clip-panel eva-corner-decor">
         <CardContent className="pt-6">
           <div className="flex mb-4 gap-2">
-            <AlertCircle className="h-8 w-8 text-eva-red" />
-            <h1 className="text-xl font-mono text-eva-red">ERROR 404 // PATTERN NOT FOUND</h1>
+            <AlertCircle className="h-8 w-8 text-destructive" />
+            <h1 className="text-xl font-mono text-destructive">ERROR 404 // PATTERN NOT FOUND</h1>
           </div>
 
           <p className="mt-4 text-sm text-muted-foreground">

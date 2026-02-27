@@ -158,11 +158,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md sticky top-0 z-40">
+      <header className="border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <BookOpen className="h-6 w-6 text-eva-orange" />
-            <h1 className="font-sans uppercase tracking-[0.2em] font-bold text-eva-orange">SCHOLARMARK</h1>
+            <BookOpen className="h-6 w-6 text-primary" />
+            <h1 className="font-sans uppercase tracking-[0.2em] font-bold text-primary">SCHOLARMARK</h1>
             <div className="eva-status-active" />
           </div>
           <div className="flex items-center gap-2">
@@ -184,14 +184,14 @@ export default function Home() {
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-6 pb-8 space-y-6 eva-grid-bg">
-        <Card className="eva-clip-panel eva-corner-decor border-eva-orange/30 bg-card/80">
+        <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80">
           <CardContent className="pt-8 pb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             <div className="space-y-3">
               <div className="eva-section-title">NERV Interface</div>
-              <h2 className="text-3xl md:text-4xl font-sans uppercase tracking-[0.12em] text-eva-orange leading-tight">
+              <h2 className="text-3xl md:text-4xl font-sans uppercase tracking-[0.12em] text-primary leading-tight">
                 NERV RESEARCH COMMAND CENTER
               </h2>
-              <div className="flex items-center gap-3 text-sm font-mono text-eva-green">
+              <div className="flex items-center gap-3 text-sm font-mono text-chart-2">
                 <div className="flex items-center gap-1.5">
                   <div className="eva-status-active" />
                   <div className="eva-status-active" />
@@ -204,7 +204,7 @@ export default function Home() {
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
                 <Button
-                  className="h-14 px-8 text-sm font-mono uppercase tracking-[0.12em] bg-eva-orange text-black hover:bg-eva-orange/90"
+                  className="h-14 px-8 text-sm font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground hover:bg-primary/90"
                   data-testid="button-initialize-project"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -274,61 +274,61 @@ export default function Home() {
         </Card>
 
         <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm eva-section-title flex items-center gap-2">
-                <FolderOpen className="h-4 w-4 text-eva-orange" />
+                <FolderOpen className="h-4 w-4 text-primary" />
                 Projects
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-mono text-3xl text-eva-green">{projectsCount}</div>
+              <div className="font-mono text-3xl text-chart-2">{projectsCount}</div>
             </CardContent>
           </Card>
 
-          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm eva-section-title flex items-center gap-2">
-                <FileText className="h-4 w-4 text-eva-orange" />
+                <FileText className="h-4 w-4 text-primary" />
                 Documents
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-mono text-3xl text-eva-cyan">{documentsCount}</div>
+              <div className="font-mono text-3xl text-chart-3">{documentsCount}</div>
             </CardContent>
           </Card>
 
-          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm eva-section-title flex items-center gap-2">
-                <Search className="h-4 w-4 text-eva-orange" />
+                <Search className="h-4 w-4 text-primary" />
                 Annotations
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-mono text-3xl text-eva-green">{annotationsCount}</div>
+              <div className="font-mono text-3xl text-chart-2">{annotationsCount}</div>
             </CardContent>
           </Card>
 
-          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm eva-section-title flex items-center gap-2">
-                <Upload className="h-4 w-4 text-eva-orange" />
+                <Upload className="h-4 w-4 text-primary" />
                 Storage Used
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-mono text-3xl text-eva-orange">{totalStorageLabel}</div>
+              <div className="font-mono text-3xl text-primary">{totalStorageLabel}</div>
             </CardContent>
           </Card>
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <Card className="xl:col-span-2 eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+          <Card className="xl:col-span-2 eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="eva-section-title">Recent Projects</CardTitle>
               <Link href="/projects">
-                <Button variant="ghost" className="text-xs uppercase tracking-[0.12em] font-mono text-eva-orange" data-testid="button-view-all-projects">
+                <Button variant="ghost" className="text-xs uppercase tracking-[0.12em] font-mono text-primary" data-testid="button-view-all-projects">
                   VIEW ALL PROJECTS
                 </Button>
               </Link>
@@ -342,7 +342,7 @@ export default function Home() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {recentProjects.map((project) => (
                     <Link key={project.id} href={`/projects/${project.id}`}>
-                      <Card className="cursor-pointer hover-elevate eva-corner-decor bg-background/40 border-eva-orange/20">
+                      <Card className="cursor-pointer hover-elevate eva-corner-decor bg-background/40 border-border">
                         <CardContent className="pt-4 pb-4 space-y-2">
                           <div className="font-sans uppercase tracking-[0.1em] text-sm line-clamp-2">{project.name}</div>
                           {project.description ? (
@@ -350,7 +350,7 @@ export default function Home() {
                           ) : (
                             <p className="text-xs text-muted-foreground">No description</p>
                           )}
-                          <div className="text-[11px] font-mono text-eva-cyan">
+                          <div className="text-[11px] font-mono text-chart-3">
                             {new Date(project.createdAt).toLocaleDateString()}
                           </div>
                         </CardContent>
@@ -362,7 +362,7 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader>
               <CardTitle className="eva-section-title">System Status</CardTitle>
             </CardHeader>
@@ -374,15 +374,15 @@ export default function Home() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider">Uptime</div>
-                      <div className="text-eva-green">{formatUptime(liveUptimeSeconds)}</div>
+                      <div className="text-chart-2">{formatUptime(liveUptimeSeconds)}</div>
                     </div>
                     <div>
                       <div className="text-muted-foreground text-xs uppercase tracking-wider">Node</div>
-                      <div className="text-eva-cyan">{dashboard.system.nodeVersion}</div>
+                      <div className="text-chart-3">{dashboard.system.nodeVersion}</div>
                     </div>
                     <div className="col-span-2">
                       <div className="text-muted-foreground text-xs uppercase tracking-wider">Platform</div>
-                      <div className="text-eva-orange">{dashboard.system.platform}</div>
+                      <div className="text-primary">{dashboard.system.platform}</div>
                     </div>
                   </div>
 
@@ -393,11 +393,11 @@ export default function Home() {
                     </div>
                     <div className="h-2 rounded bg-muted overflow-hidden">
                       <div
-                        className="h-full bg-eva-cyan transition-all"
+                        className="h-full bg-chart-3 transition-all"
                         style={{ width: `${heapPercent}%` }}
                       />
                     </div>
-                    <div className="text-xs text-eva-cyan">
+                    <div className="text-xs text-chart-3">
                       {formatBytes(dashboard.system.heapUsedBytes)} / {formatBytes(dashboard.system.heapTotalBytes)}
                     </div>
                   </div>
@@ -406,15 +406,15 @@ export default function Home() {
                     <div className="text-muted-foreground uppercase tracking-wider">Document Status</div>
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-2"><span className="eva-status-active" />Ready</span>
-                      <span className="text-eva-green">{dashboard.documentsByStatus.ready}</span>
+                      <span className="text-chart-2">{dashboard.documentsByStatus.ready}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-2"><span className="eva-status-warning" />Processing</span>
-                      <span className="text-eva-orange">{dashboard.documentsByStatus.processing}</span>
+                      <span className="text-primary">{dashboard.documentsByStatus.processing}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-2"><span className="eva-status-error" />Error</span>
-                      <span className="text-eva-red">{dashboard.documentsByStatus.error}</span>
+                      <span className="text-destructive">{dashboard.documentsByStatus.error}</span>
                     </div>
                   </div>
                 </>
@@ -423,27 +423,27 @@ export default function Home() {
           </Card>
         </section>
 
-        <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-eva-orange/20">
+        <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
           <CardHeader>
             <CardTitle className="eva-section-title">Storage Allocation</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 font-mono text-xs">
-            <div className="h-5 rounded overflow-hidden border border-eva-orange/30 flex">
+            <div className="h-5 rounded overflow-hidden border border-border flex">
               <div
-                className="h-full bg-eva-cyan/80"
+                className="h-full bg-chart-3/80"
                 style={{ width: `${storageDbPercent}%` }}
                 title="Database"
               />
               <div
-                className="h-full bg-eva-orange/80"
+                className="h-full bg-primary/80"
                 style={{ width: `${storageSourcePercent}%` }}
                 title="Source Files"
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="text-eva-cyan">DB: {formatBytes(dashboard?.storage.databaseBytes ?? 0)}</div>
-              <div className="text-eva-orange">Source Files: {formatBytes(dashboard?.storage.sourceFilesBytes ?? 0)}</div>
-              <div className="text-eva-green">Total: {formatBytes(dashboard?.storage.totalBytes ?? 0)}</div>
+              <div className="text-chart-3">DB: {formatBytes(dashboard?.storage.databaseBytes ?? 0)}</div>
+              <div className="text-primary">Source Files: {formatBytes(dashboard?.storage.sourceFilesBytes ?? 0)}</div>
+              <div className="text-chart-2">Total: {formatBytes(dashboard?.storage.totalBytes ?? 0)}</div>
             </div>
           </CardContent>
         </Card>

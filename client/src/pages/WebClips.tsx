@@ -113,7 +113,7 @@ export default function WebClips() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-eva-orange/20 bg-eva-dark/90 backdrop-blur-md sticky top-0 z-10">
+      <header className="border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link href="/projects">
@@ -185,7 +185,7 @@ export default function WebClips() {
           </div>
         ) : isError ? (
           <Card className="eva-clip-panel">
-            <CardContent className="pt-6 text-sm text-eva-red">
+            <CardContent className="pt-6 text-sm text-destructive">
               Failed to load web clips.
             </CardContent>
           </Card>
@@ -216,7 +216,7 @@ export default function WebClips() {
                       href={clip.sourceUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-eva-orange hover:underline shrink-0"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
                     >
                       Source
                       <ExternalLink className="h-3.5 w-3.5" />
@@ -224,7 +224,7 @@ export default function WebClips() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <blockquote className="border-l-2 border-eva-blue pl-3 text-sm italic leading-relaxed whitespace-pre-wrap">
+                  <blockquote className="border-l-2 border-secondary pl-3 text-sm italic leading-relaxed whitespace-pre-wrap">
                     {clip.highlightedText}
                   </blockquote>
 
