@@ -612,8 +612,13 @@ export type BatchAddDocumentsResponse = z.infer<typeof batchAddDocumentsResponse
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey().$defaultFn(genId),
   userId: text("user_id"), // nullable until auth is merged
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   title: text("title").notNull().default("New Chat"),
   model: text("model").notNull().default("claude-haiku-4-5"), // claude-haiku-4-5 or claude-sonnet-4-6
+  selectedSourceIds: text("selected_source_ids", { mode: "json" }).$type<string[]>(),
+  citationStyle: text("citation_style").default("chicago"),
+  tone: text("tone").default("academic"),
+  noEnDashes: integer("no_en_dashes", { mode: "boolean" }).default(false),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
 });
@@ -627,7 +632,11 @@ export const messages = sqliteTable("messages", {
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
 });
 
-export const conversationsRelations = relations(conversations, ({ many }) => ({
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [conversations.projectId],
+    references: [projects.id],
+  }),
   messages: many(messages),
 }));
 

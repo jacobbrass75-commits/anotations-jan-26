@@ -7,7 +7,7 @@ import {
   type InsertMessage,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, and, isNull } from "drizzle-orm";
 
 export const chatStorage = {
   async createConversation(data: InsertConversation): Promise<Conversation> {
@@ -20,17 +20,51 @@ export const chatStorage = {
     return conv || null;
   },
 
-  async getConversationsForUser(userId?: string): Promise<Conversation[]> {
+  async getConversationsForUser(userId?: string, projectId?: string): Promise<Conversation[]> {
+    if (userId && projectId) {
+      return db.select().from(conversations)
+        .where(and(eq(conversations.userId, userId), eq(conversations.projectId, projectId)))
+        .orderBy(desc(conversations.updatedAt));
+    }
     if (userId) {
       return db.select().from(conversations).where(eq(conversations.userId, userId)).orderBy(desc(conversations.updatedAt));
     }
     return db.select().from(conversations).orderBy(desc(conversations.updatedAt));
   },
 
-  async updateConversation(id: string, data: Partial<Pick<Conversation, "title" | "model">>): Promise<Conversation> {
+  async getConversationsForProject(projectId: string, userId?: string): Promise<Conversation[]> {
+    if (userId) {
+      return db.select().from(conversations)
+        .where(and(eq(conversations.projectId, projectId), eq(conversations.userId, userId)))
+        .orderBy(desc(conversations.updatedAt));
+    }
+    return db.select().from(conversations)
+      .where(eq(conversations.projectId, projectId))
+      .orderBy(desc(conversations.updatedAt));
+  },
+
+  async getStandaloneConversations(userId: string): Promise<Conversation[]> {
+    return db.select().from(conversations)
+      .where(and(eq(conversations.userId, userId), isNull(conversations.projectId)))
+      .orderBy(desc(conversations.updatedAt));
+  },
+
+  async updateConversation(
+    id: string,
+    data: Partial<Pick<Conversation, "title" | "model" | "selectedSourceIds" | "citationStyle" | "tone" | "noEnDashes">>
+  ): Promise<Conversation> {
     const [updated] = await db
       .update(conversations)
       .set({ ...data, updatedAt: new Date() })
+      .where(eq(conversations.id, id))
+      .returning();
+    return updated;
+  },
+
+  async updateSelectedSources(id: string, selectedSourceIds: string[]): Promise<Conversation> {
+    const [updated] = await db
+      .update(conversations)
+      .set({ selectedSourceIds, updatedAt: new Date() })
       .where(eq(conversations.id, id))
       .returning();
     return updated;

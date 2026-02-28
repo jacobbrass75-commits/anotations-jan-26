@@ -13,7 +13,7 @@ import type { CitationData } from "@shared/schema";
 const MAX_SOURCE_EXCERPT_CHARS = 700;
 const MAX_SOURCE_FULLTEXT_CHARS = 7000;
 
-function clipText(text: string | null | undefined, maxChars: number): string {
+export function clipText(text: string | null | undefined, maxChars: number): string {
   if (!text) return "";
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return "";
@@ -21,7 +21,7 @@ function clipText(text: string | null | undefined, maxChars: number): string {
   return `${normalized.slice(0, maxChars).trimEnd()}...`;
 }
 
-function buildAuthorLabel(citationData: CitationData | null): string {
+export function buildAuthorLabel(citationData: CitationData | null): string {
   if (!citationData?.authors?.length) return "Unknown Author";
   return citationData.authors
     .map((author) => `${author.firstName} ${author.lastName}`.trim())
@@ -39,7 +39,7 @@ function toSafeFilename(topic: string): string {
   return `${base || "generated-paper"}-${datePart}.md`;
 }
 
-async function savePaperToProject(
+export async function savePaperToProject(
   projectId: string,
   topic: string,
   fullText: string

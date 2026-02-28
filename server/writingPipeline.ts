@@ -83,7 +83,7 @@ function getClient(): Anthropic {
   return new Anthropic({ apiKey });
 }
 
-function formatSourceForPrompt(source: WritingSource): string {
+export function formatSourceForPrompt(source: WritingSource): string {
   const parts: string[] = [];
   parts.push(`[SOURCE ${source.id}]`);
   parts.push(`Type: ${source.kind}`);
