@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { getAuthHeaders } from "@/lib/auth";
 
 // --- Types ---
 
@@ -102,7 +103,7 @@ export function useWritingPipeline() {
     try {
       const response = await fetch("/api/write", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(request),
         credentials: "include",
         signal: abortController.signal,

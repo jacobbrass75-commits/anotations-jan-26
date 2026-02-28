@@ -1,27 +1,7 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request, Response } from "express";
+import { requireAuth } from "./auth";
 import { projectStorage } from "./projectStorage";
 import type { AnnotationCategory } from "@shared/schema";
-
-// Minimal JWT auth middleware for extension endpoints.
-// In development, accepts any Bearer token. In production, this should
-// verify the JWT signature against a shared secret.
-function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-
-  const token = authHeader.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ message: "Invalid token" });
-  }
-
-  // TODO: Verify JWT signature in production.
-  // For now, attach a minimal user object for development.
-  // In production, decode the JWT payload to get user info.
-  (req as any).user = { id: "extension-user", token };
-  next();
-}
 
 export function registerExtensionRoutes(app: Express): void {
   // POST /api/extension/save — Save a highlight from the Chrome extension

@@ -26,9 +26,13 @@ import {
 } from "@shared/schema";
 import { PIPELINE_CONFIG, cosineSimilarity, getEmbedding } from "./openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "missing" });
+  }
+  return _openai;
+}
 
 // V2 Configuration - improved settings
 export const PIPELINE_V2_CONFIG = {
@@ -242,7 +246,7 @@ Return JSON: {"candidates": [...]}
 If nothing genuinely relevant, return: {"candidates": []}`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_V2_CONFIG.MODEL,
       messages: [
         {
@@ -405,7 +409,7 @@ Return JSON:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_V2_CONFIG.MODEL,
       messages: [
         {
@@ -578,7 +582,7 @@ Return JSON:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_V2_CONFIG.MODEL,
       messages: [
         { role: "system", content: "You polish research annotations for clarity and usefulness. Output valid JSON only." },
@@ -644,7 +648,7 @@ export async function getDocumentContextV2(
     const { cleanText } = filterTextNoise(fullText);
     const truncatedText = cleanText.slice(0, 5000); // Slightly more context
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_V2_CONFIG.MODEL,
       messages: [
         { role: "system", content: "You summarize academic documents for research context. Output valid JSON only." },

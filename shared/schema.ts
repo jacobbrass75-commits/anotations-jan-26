@@ -21,6 +21,7 @@ export type AnnotationCategory = typeof annotationCategories[number];
 // Documents table
 export const documents = sqliteTable("documents", {
   id: text("id").primaryKey().$defaultFn(genId),
+  userId: text("user_id"),
   filename: text("filename").notNull(),
   fullText: text("full_text").notNull(),
   uploadDate: integer("upload_date", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
@@ -311,6 +312,7 @@ export const citationDataSchema = z.object({
 // Projects table
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey().$defaultFn(genId),
+  userId: text("user_id"),
   name: text("name").notNull(),
   description: text("description"),
   thesis: text("thesis"),
@@ -383,6 +385,7 @@ export const projectAnnotations = sqliteTable("project_annotations", {
 // Web clips table (saved browser highlights with source metadata + citations)
 export const webClips = sqliteTable("web_clips", {
   id: text("id").primaryKey().$defaultFn(genId),
+  userId: text("user_id"),
   highlightedText: text("highlighted_text").notNull(),
   note: text("note"),
   category: text("category").notNull().default("key_quote"),

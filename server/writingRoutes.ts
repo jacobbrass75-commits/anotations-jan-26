@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { requireAuth } from "./auth";
 import { projectStorage } from "./projectStorage";
 import { storage } from "./storage";
 import {
@@ -75,7 +76,7 @@ async function savePaperToProject(
 
 export function registerWritingRoutes(app: Express): void {
   // POST /api/write - Start writing pipeline, stream results via SSE
-  app.post("/api/write", async (req: Request, res: Response) => {
+  app.post("/api/write", requireAuth, async (req: Request, res: Response) => {
     try {
       const body = req.body as Partial<WritingRequest> & {
         sourceDocumentIds?: unknown;
@@ -279,7 +280,7 @@ export function registerWritingRoutes(app: Express): void {
   });
 
   // GET /api/write/history - Placeholder for future writing session history
-  app.get("/api/write/history", async (_req: Request, res: Response) => {
+  app.get("/api/write/history", requireAuth, async (_req: Request, res: Response) => {
     // Future: return list of previous writing sessions
     res.json([]);
   });

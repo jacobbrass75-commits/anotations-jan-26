@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getAuthHeaders } from "@/lib/auth";
 import type { WebClip } from "@shared/schema";
 
 export interface WebClipFilters {
@@ -31,7 +32,10 @@ export function useWebClips(filters: WebClipFilters = {}) {
   return useQuery<WebClip[]>({
     queryKey: ["/api/web-clips", filters],
     queryFn: async () => {
-      const res = await fetch(`/api/web-clips${buildQueryString(filters)}`);
+      const res = await fetch(`/api/web-clips${buildQueryString(filters)}`, {
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch web clips");
       return res.json();
     },
@@ -42,7 +46,10 @@ export function useWebClip(id: string | null) {
   return useQuery<WebClip>({
     queryKey: ["/api/web-clips", id],
     queryFn: async () => {
-      const res = await fetch(`/api/web-clips/${id}`);
+      const res = await fetch(`/api/web-clips/${id}`, {
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch web clip");
       return res.json();
     },

@@ -1,10 +1,16 @@
 import OpenAI from "openai";
 import { getEmbedding } from "./openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "missing",
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+  }
+  return _openai;
+}
 
 const CONTEXT_MODEL = "gpt-4.1-nano";
 
@@ -35,7 +41,7 @@ Role in Project: ${roleInProject}
 
 Generate a search-optimized context paragraph:`;
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: CONTEXT_MODEL,
       messages: [
         { role: "system", content: "You generate concise, search-optimized document contexts for academic research." },
@@ -69,7 +75,7 @@ ${documentContexts.slice(0, 5).map((c, i) => `[Doc ${i + 1}]: ${c.slice(0, 200)}
 
 Generate a search-optimized project summary:`;
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: CONTEXT_MODEL,
       messages: [
         { role: "system", content: "You generate concise project summaries for academic research retrieval." },
@@ -103,7 +109,7 @@ ${documentContexts.slice(0, 3).map((c, i) => `[Doc ${i + 1}]: ${c.slice(0, 150)}
 
 Generate a search-optimized folder summary:`;
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: CONTEXT_MODEL,
       messages: [
         { role: "system", content: "You generate concise folder summaries for research organization." },

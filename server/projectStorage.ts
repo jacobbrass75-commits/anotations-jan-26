@@ -25,7 +25,7 @@ export interface IProjectStorage {
   // Projects
   createProject(data: InsertProject): Promise<Project>;
   getProject(id: string): Promise<Project | undefined>;
-  getAllProjects(): Promise<Project[]>;
+  getAllProjects(userId?: string): Promise<Project[]>;
   updateProject(id: string, data: Partial<InsertProject & { contextSummary?: string; contextEmbedding?: number[] }>): Promise<Project | undefined>;
   deleteProject(id: string): Promise<void>;
 
@@ -81,7 +81,10 @@ export const projectStorage: IProjectStorage = {
     return project;
   },
 
-  async getAllProjects(): Promise<Project[]> {
+  async getAllProjects(userId?: string): Promise<Project[]> {
+    if (userId) {
+      return db.select().from(projects).where(eq(projects.userId, userId)).orderBy(desc(projects.createdAt));
+    }
     return db.select().from(projects).orderBy(desc(projects.createdAt));
   },
 

@@ -12,9 +12,13 @@ import { saveDocumentSource } from "./sourceFiles";
 
 const PYTHON_SCRIPTS_DIR = join(process.cwd(), "server", "python");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "missing" });
+  }
+  return _openai;
+}
 
 export const SUPPORTED_VISION_OCR_MODELS = ["gpt-4o", "gpt-4o-mini"] as const;
 export type VisionOcrModel = (typeof SUPPORTED_VISION_OCR_MODELS)[number];
@@ -331,7 +335,7 @@ async function extractVisionTextForPage(
   const imageUrl = await readImageAsDataUrl(imagePath);
 
   const response = await runVisionRequestWithRetry(`page ${pageNumber}/${totalPages}`, () =>
-    openai.chat.completions.create({
+    getOpenAI().chat.completions.create({
       model,
       messages: [
         {
@@ -385,7 +389,7 @@ async function extractVisionTextForBatch(
   ];
 
   const response = await runVisionRequestWithRetry(`batch ${startPage}-${endPage}/${totalPages}`, () =>
-    openai.chat.completions.create({
+    getOpenAI().chat.completions.create({
       model,
       messages: [{ role: "user", content }],
       response_format: { type: "json_object" },

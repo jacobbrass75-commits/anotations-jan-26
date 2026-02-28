@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { getAuthHeaders } from "@/lib/auth";
 import type { Project, Folder, ProjectDocument, ProjectAnnotation, InsertProject, InsertFolder, InsertProjectDocument, InsertProjectAnnotation, CitationData, SearchResult, PromptTemplate } from "@shared/schema";
 
 export function useProjects() {
@@ -55,7 +56,10 @@ export function useFolders(projectId: string) {
   return useQuery<Folder[]>({
     queryKey: ["/api/projects", projectId, "folders"],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/folders`);
+      const res = await fetch(`/api/projects/${projectId}/folders`, {
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch folders");
       return res.json();
     },
@@ -91,7 +95,10 @@ export function useProjectDocuments(projectId: string) {
   return useQuery<(ProjectDocument & { document: { id: string; filename: string; summary: string | null } })[]>({
     queryKey: ["/api/projects", projectId, "documents"],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/documents`);
+      const res = await fetch(`/api/projects/${projectId}/documents`, {
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch project documents");
       return res.json();
     },
@@ -139,7 +146,10 @@ export function useProjectAnnotations(projectDocumentId: string) {
   return useQuery<ProjectAnnotation[]>({
     queryKey: ["/api/project-documents", projectDocumentId, "annotations"],
     queryFn: async () => {
-      const res = await fetch(`/api/project-documents/${projectDocumentId}/annotations`);
+      const res = await fetch(`/api/project-documents/${projectDocumentId}/annotations`, {
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch annotations");
       return res.json();
     },
@@ -303,7 +313,10 @@ export function usePromptTemplates(projectId: string) {
   return useQuery<PromptTemplate[]>({
     queryKey: ["/api/projects", projectId, "prompt-templates"],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/prompt-templates`);
+      const res = await fetch(`/api/projects/${projectId}/prompt-templates`, {
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch prompt templates");
       return res.json();
     },

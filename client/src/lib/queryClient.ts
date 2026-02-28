@@ -15,6 +15,15 @@ function getAuthHeaders(): Record<string, string> {
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 401) {
+      // Clear stored token and redirect to login
+      try {
+        localStorage.removeItem("scholarmark_token");
+      } catch {}
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }

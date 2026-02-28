@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { requireAuth } from "./auth";
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -213,7 +214,7 @@ async function getWebClip(id: string): Promise<WebClip | undefined> {
 }
 
 export function registerWebClipRoutes(app: Express): void {
-  app.post("/api/web-clips", async (req: Request, res: Response) => {
+  app.post("/api/web-clips", requireAuth, async (req: Request, res: Response) => {
     try {
       const parsed = createWebClipRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -235,6 +236,7 @@ export function registerWebClipRoutes(app: Express): void {
         .insert(webClips)
         .values({
           ...payload,
+          userId: req.user!.userId,
           citationData,
           footnote,
           bibliography,
@@ -248,7 +250,7 @@ export function registerWebClipRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/web-clips", async (req: Request, res: Response) => {
+  app.get("/api/web-clips", requireAuth, async (req: Request, res: Response) => {
     try {
       const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
       const sourceUrlRaw = typeof req.query.sourceUrl === "string" ? req.query.sourceUrl : undefined;
@@ -259,6 +261,7 @@ export function registerWebClipRoutes(app: Express): void {
       const sort = typeof req.query.sort === "string" ? req.query.sort : "newest";
 
       const whereClauses: SQL[] = [];
+      whereClauses.push(eq(webClips.userId, req.user!.userId));
       if (projectId) whereClauses.push(eq(webClips.projectId, projectId));
       if (sourceUrlRaw) {
         whereClauses.push(eq(webClips.sourceUrl, normalizeUrl(sourceUrlRaw)));
@@ -304,7 +307,7 @@ export function registerWebClipRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/web-clips/by-url", async (req: Request, res: Response) => {
+  app.get("/api/web-clips/by-url", requireAuth, async (req: Request, res: Response) => {
     try {
       const sourceUrlRaw = typeof req.query.sourceUrl === "string"
         ? req.query.sourceUrl
@@ -320,7 +323,7 @@ export function registerWebClipRoutes(app: Express): void {
       const rows = await db
         .select()
         .from(webClips)
-        .where(eq(webClips.sourceUrl, normalizedSourceUrl))
+        .where(and(eq(webClips.userId, req.user!.userId), eq(webClips.sourceUrl, normalizedSourceUrl)))
         .orderBy(desc(webClips.createdAt));
 
       return res.json(rows);
@@ -330,7 +333,7 @@ export function registerWebClipRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/web-clips/:id", async (req: Request, res: Response) => {
+  app.get("/api/web-clips/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const clip = await getWebClip(req.params.id);
       if (!clip) {
@@ -344,7 +347,7 @@ export function registerWebClipRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/web-clips/:id", async (req: Request, res: Response) => {
+  app.put("/api/web-clips/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const parsed = updateWebClipRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -395,7 +398,7 @@ export function registerWebClipRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/web-clips/:id", async (req: Request, res: Response) => {
+  app.delete("/api/web-clips/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const clip = await getWebClip(req.params.id);
       if (!clip) {
@@ -410,7 +413,7 @@ export function registerWebClipRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/web-clips/:id/promote", async (req: Request, res: Response) => {
+  app.post("/api/web-clips/:id/promote", requireAuth, async (req: Request, res: Response) => {
     try {
       const clip = await getWebClip(req.params.id);
       if (!clip) {

@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { chatStorage } from "./chatStorage";
+import { requireAuth } from "./auth";
 
 const SYSTEM_PROMPT =
   "You are ScholarMark AI, a helpful academic writing assistant. You help students with research, writing, citations, and understanding academic sources. Be concise, accurate, and helpful.";
@@ -11,9 +12,9 @@ function getAnthropicClient(): Anthropic {
 
 export function registerChatRoutes(app: Express) {
   // List all conversations (newest first)
-  app.get("/api/chat/conversations", async (_req: Request, res: Response) => {
+  app.get("/api/chat/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
-      const convos = await chatStorage.getConversationsForUser();
+      const convos = await chatStorage.getConversationsForUser(req.user!.userId);
       res.json(convos);
     } catch (error) {
       console.error("Error listing conversations:", error);
@@ -22,13 +23,13 @@ export function registerChatRoutes(app: Express) {
   });
 
   // Create new conversation
-  app.post("/api/chat/conversations", async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
       const { title, model } = req.body || {};
       const conv = await chatStorage.createConversation({
         title: title || "New Chat",
         model: model || "claude-haiku-4-5",
-        userId: null, // nullable until auth is merged
+        userId: req.user!.userId,
       });
       res.json(conv);
     } catch (error) {
@@ -38,11 +39,14 @@ export function registerChatRoutes(app: Express) {
   });
 
   // Get conversation with messages
-  app.get("/api/chat/conversations/:id", async (req: Request, res: Response) => {
+  app.get("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const conv = await chatStorage.getConversation(req.params.id);
       if (!conv) {
         return res.status(404).json({ message: "Conversation not found" });
+      }
+      if (conv.userId && conv.userId !== req.user!.userId) {
+        return res.status(403).json({ message: "Access denied" });
       }
       const msgs = await chatStorage.getMessagesForConversation(conv.id);
       res.json({ ...conv, messages: msgs });
@@ -53,8 +57,15 @@ export function registerChatRoutes(app: Express) {
   });
 
   // Delete conversation
-  app.delete("/api/chat/conversations/:id", async (req: Request, res: Response) => {
+  app.delete("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const conv = await chatStorage.getConversation(req.params.id);
+      if (!conv) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      if (conv.userId && conv.userId !== req.user!.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
       await chatStorage.deleteConversation(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -64,7 +75,7 @@ export function registerChatRoutes(app: Express) {
   });
 
   // Update conversation (title, model)
-  app.put("/api/chat/conversations/:id", async (req: Request, res: Response) => {
+  app.put("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const { title, model } = req.body;
       const updates: Record<string, string> = {};
@@ -80,7 +91,7 @@ export function registerChatRoutes(app: Express) {
   });
 
   // Send message + get streaming response
-  app.post("/api/chat/conversations/:id/messages", async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
     try {
       const { content } = req.body;
       if (!content || typeof content !== "string") {

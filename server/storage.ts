@@ -16,9 +16,9 @@ import { eq } from "drizzle-orm";
 export interface IStorage {
   // Documents
   getDocument(id: string): Promise<Document | undefined>;
-  getAllDocuments(): Promise<Document[]>;
-  getAllDocumentMeta(): Promise<Array<Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">>>;
-  createDocument(doc: InsertDocument): Promise<Document>;
+  getAllDocuments(userId?: string): Promise<Document[]>;
+  getAllDocumentMeta(userId?: string): Promise<Array<Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">>>;
+  createDocument(doc: InsertDocument & { userId?: string }): Promise<Document>;
   updateDocument(id: string, updates: Partial<Document>): Promise<Document | undefined>;
   deleteDocument(id: string): Promise<void>;
 
@@ -43,11 +43,14 @@ export class DatabaseStorage implements IStorage {
     return doc || undefined;
   }
 
-  async getAllDocuments(): Promise<Document[]> {
+  async getAllDocuments(userId?: string): Promise<Document[]> {
+    if (userId) {
+      return db.select().from(documents).where(eq(documents.userId, userId));
+    }
     return db.select().from(documents);
   }
 
-  async getAllDocumentMeta(): Promise<
+  async getAllDocumentMeta(userId?: string): Promise<
     Array<
       Pick<
         Document,
@@ -55,7 +58,7 @@ export class DatabaseStorage implements IStorage {
       >
     >
   > {
-    return db
+    const query = db
       .select({
         id: documents.id,
         filename: documents.filename,
@@ -66,6 +69,10 @@ export class DatabaseStorage implements IStorage {
         processingError: documents.processingError,
       })
       .from(documents);
+    if (userId) {
+      return query.where(eq(documents.userId, userId));
+    }
+    return query;
   }
 
   async createDocument(doc: InsertDocument): Promise<Document> {

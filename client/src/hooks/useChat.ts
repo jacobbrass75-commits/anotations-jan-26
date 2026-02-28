@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { getAuthHeaders } from "@/lib/auth";
 import type { Conversation, Message } from "@shared/schema";
 
 // Conversation with messages included
@@ -19,6 +20,7 @@ export function useConversation(id: string | null) {
     queryKey: ["/api/chat/conversations", id],
     queryFn: async () => {
       const res = await fetch(`/api/chat/conversations/${id}`, {
+        headers: { ...getAuthHeaders() },
         credentials: "include",
       });
       if (!res.ok) {
@@ -82,7 +84,7 @@ export function useSendMessage(conversationId: string | null) {
           `/api/chat/conversations/${conversationId}/messages`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
             body: JSON.stringify({ content }),
             credentials: "include",
           }

@@ -21,7 +21,9 @@ export const chatStorage = {
   },
 
   async getConversationsForUser(userId?: string): Promise<Conversation[]> {
-    // Until auth is merged, return all conversations ordered by updatedAt desc
+    if (userId) {
+      return db.select().from(conversations).where(eq(conversations.userId, userId)).orderBy(desc(conversations.updatedAt));
+    }
     return db.select().from(conversations).orderBy(desc(conversations.updatedAt));
   },
 

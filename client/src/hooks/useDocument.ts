@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { getAuthHeaders } from "@/lib/auth";
 import type { Document, Annotation, SearchResult, AnnotationCategory, InsertAnnotation } from "@shared/schema";
 
 export function useDocuments() {
@@ -82,7 +83,9 @@ export function useUploadDocument() {
 
       const response = await fetch("/api/upload", {
         method: "POST",
+        headers: { ...getAuthHeaders() },
         body: formData,
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -123,7 +126,9 @@ export function useUploadDocumentGroup() {
 
       const response = await fetch("/api/upload-group", {
         method: "POST",
+        headers: { ...getAuthHeaders() },
         body: formData,
+        credentials: "include",
       });
 
       if (!response.ok) {

@@ -50,7 +50,7 @@ import {
 } from "./sourceFiles";
 import { annotations, documents, projectAnnotations, projects } from "@shared/schema";
 import { sql } from "drizzle-orm";
-import { optionalAuth } from "./auth";
+import { requireAuth } from "./auth";
 
 const IMAGE_EXTENSIONS = new Set([
   ".png",
@@ -236,7 +236,7 @@ export async function registerRoutes(
   });
 
   // Upload document
-  app.post("/api/upload", optionalAuth, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
@@ -298,7 +298,8 @@ export async function registerRoutes(
         const doc = await storage.createDocument({
           filename: file.originalname,
           fullText,
-        });
+          userId: req.user!.userId,
+        } as any);
         await saveDocumentSource(doc.id, file.originalname, file.buffer);
 
         // Chunk the text using V2 chunking (with noise filtering and larger chunks)
@@ -335,7 +336,8 @@ export async function registerRoutes(
         const doc = await storage.createDocument({
           filename: file.originalname,
           fullText: "",
-        });
+          userId: req.user!.userId,
+        } as any);
         await saveDocumentSource(doc.id, file.originalname, file.buffer);
         await storage.updateDocument(doc.id, { status: "processing" });
         await enqueuePdfOcrJob({
@@ -354,7 +356,8 @@ export async function registerRoutes(
         const doc = await storage.createDocument({
           filename: file.originalname,
           fullText: "",
-        });
+          userId: req.user!.userId,
+        } as any);
         await saveDocumentSource(doc.id, file.originalname, file.buffer);
         await storage.updateDocument(doc.id, { status: "processing" });
         const imageOcrMode = ocrMode === "vision_batch" ? "vision_batch" : "vision";
@@ -377,7 +380,7 @@ export async function registerRoutes(
   });
 
   // Upload multiple images as a single combined document (preserves upload order).
-  app.post("/api/upload-group", upload.array("files", 100), async (req: Request, res: Response) => {
+  app.post("/api/upload-group", requireAuth, upload.array("files", 100), async (req: Request, res: Response) => {
     try {
       const files = (req.files as Express.Multer.File[] | undefined) || [];
       if (!files.length) {
@@ -429,7 +432,8 @@ export async function registerRoutes(
       const doc = await storage.createDocument({
         filename: combinedFilename,
         fullText: "",
-      });
+        userId: req.user!.userId,
+      } as any);
       await storage.updateDocument(doc.id, { status: "processing" });
       const combinedZipBuffer = await createZipFromImageUploads(
         files.map((file) => ({ buffer: file.buffer, originalFilename: file.originalname }))
@@ -453,11 +457,14 @@ export async function registerRoutes(
   });
 
   // Get document processing status (for polling)
-  app.get("/api/documents/:id/status", optionalAuth, async (req: Request, res: Response) => {
+  app.get("/api/documents/:id/status", requireAuth, async (req: Request, res: Response) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) {
         return res.status(404).json({ message: "Document not found" });
+      }
+      if ((doc as any).userId && (doc as any).userId !== req.user!.userId) {
+        return res.status(403).json({ message: "Access denied" });
       }
       res.json({
         id: doc.id,
@@ -473,9 +480,9 @@ export async function registerRoutes(
   });
 
   // Get all documents
-  app.get("/api/documents", optionalAuth, async (req: Request, res: Response) => {
+  app.get("/api/documents", requireAuth, async (req: Request, res: Response) => {
     try {
-      const docs = await storage.getAllDocuments();
+      const docs = await storage.getAllDocuments(req.user!.userId);
       res.json(docs);
     } catch (error) {
       console.error("Error fetching documents:", error);
@@ -484,9 +491,9 @@ export async function registerRoutes(
   });
 
   // Get lightweight document metadata list (avoids returning fullText for every document)
-  app.get("/api/documents/meta", async (req: Request, res: Response) => {
+  app.get("/api/documents/meta", requireAuth, async (req: Request, res: Response) => {
     try {
-      const docs = await storage.getAllDocumentMeta();
+      const docs = await storage.getAllDocumentMeta(req.user!.userId);
       res.json(docs);
     } catch (error) {
       console.error("Error fetching document metadata:", error);
@@ -495,11 +502,14 @@ export async function registerRoutes(
   });
 
   // Get single document
-  app.get("/api/documents/:id", optionalAuth, async (req: Request, res: Response) => {
+  app.get("/api/documents/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) {
         return res.status(404).json({ message: "Document not found" });
+      }
+      if ((doc as any).userId && (doc as any).userId !== req.user!.userId) {
+        return res.status(403).json({ message: "Access denied" });
       }
       res.json(doc);
     } catch (error) {
@@ -509,7 +519,7 @@ export async function registerRoutes(
   });
 
   // Get original source metadata for a document
-  app.get("/api/documents/:id/source-meta", async (req: Request, res: Response) => {
+  app.get("/api/documents/:id/source-meta", requireAuth, async (req: Request, res: Response) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) {
@@ -531,7 +541,7 @@ export async function registerRoutes(
   });
 
   // Stream original uploaded source file for side-by-side reference
-  app.get("/api/documents/:id/source", async (req: Request, res: Response) => {
+  app.get("/api/documents/:id/source", requireAuth, async (req: Request, res: Response) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) {
@@ -562,7 +572,7 @@ export async function registerRoutes(
   });
 
   // Set intent and trigger AI analysis
-  app.post("/api/documents/:id/set-intent", optionalAuth, async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/set-intent", requireAuth, async (req: Request, res: Response) => {
     try {
       const { intent, thoroughness = 'standard' } = req.body;
       if (!intent || typeof intent !== "string") {
@@ -684,7 +694,7 @@ export async function registerRoutes(
   });
 
   // Get annotations for document
-  app.get("/api/documents/:id/annotations", optionalAuth, async (req: Request, res: Response) => {
+  app.get("/api/documents/:id/annotations", requireAuth, async (req: Request, res: Response) => {
     try {
       const annotations = await storage.getAnnotationsForDocument(req.params.id);
       res.json(annotations);
@@ -695,7 +705,7 @@ export async function registerRoutes(
   });
 
   // Add manual annotation
-  app.post("/api/documents/:id/annotate", optionalAuth, async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/annotate", requireAuth, async (req: Request, res: Response) => {
     try {
       const { startPosition, endPosition, highlightedText, category, note, isAiGenerated } = req.body;
 
@@ -732,7 +742,7 @@ export async function registerRoutes(
   });
 
   // Update annotation
-  app.put("/api/annotations/:id", optionalAuth, async (req: Request, res: Response) => {
+  app.put("/api/annotations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const { note, category } = req.body;
 
@@ -758,7 +768,7 @@ export async function registerRoutes(
   });
 
   // Delete annotation
-  app.delete("/api/annotations/:id", optionalAuth, async (req: Request, res: Response) => {
+  app.delete("/api/annotations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       await storage.deleteAnnotation(req.params.id);
       res.json({ success: true });
@@ -769,7 +779,7 @@ export async function registerRoutes(
   });
 
   // Search document
-  app.post("/api/documents/:id/search", optionalAuth, async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/search", requireAuth, async (req: Request, res: Response) => {
     try {
       const { query } = req.body;
 
@@ -819,7 +829,7 @@ export async function registerRoutes(
   });
 
   // Get document summary
-  app.get("/api/documents/:id/summary", optionalAuth, async (req: Request, res: Response) => {
+  app.get("/api/documents/:id/summary", requireAuth, async (req: Request, res: Response) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) {

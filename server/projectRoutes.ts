@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { requireAuth } from "./auth";
 import { projectStorage } from "./projectStorage";
 import { globalSearch, searchProjectDocument } from "./projectSearch";
 import { generateChicagoFootnote, generateChicagoBibliography, generateFootnoteWithQuote, generateInlineCitation, generateFootnote, generateInTextCitation, generateBibliographyEntry } from "./citationGenerator";
@@ -205,13 +206,27 @@ async function analyzeProjectDocument(
   };
 }
 
+/** Verify the project belongs to the requesting user. Returns the project or sends 403/404. */
+async function verifyProjectOwnership(req: Request, res: Response, projectId: string) {
+  const project = await projectStorage.getProject(projectId);
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return null;
+  }
+  if ((project as any).userId && (project as any).userId !== req.user!.userId) {
+    res.status(403).json({ error: "Access denied" });
+    return null;
+  }
+  return project;
+}
+
 export function registerProjectRoutes(app: Express): void {
   // === PROJECTS ===
-  
-  app.post("/api/projects", async (req: Request, res: Response) => {
+
+  app.post("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {
       const validated = insertProjectSchema.parse(req.body);
-      const project = await projectStorage.createProject(validated);
+      const project = await projectStorage.createProject({ ...validated, userId: req.user!.userId } as any);
       
       // Context generation is optional - don't block project creation
       if (validated.thesis && validated.scope) {
@@ -231,9 +246,9 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/projects", async (req: Request, res: Response) => {
+  app.get("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {
-      const projects = await projectStorage.getAllProjects();
+      const projects = await projectStorage.getAllProjects(req.user!.userId);
       res.json(projects);
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -241,12 +256,10 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/projects/:id", async (req: Request, res: Response) => {
+  app.get("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const project = await projectStorage.getProject(req.params.id);
-      if (!project) {
-        return res.status(404).json({ error: "Project not found" });
-      }
+      const project = await verifyProjectOwnership(req, res, req.params.id);
+      if (!project) return;
       res.json(project);
     } catch (error) {
       console.error("Error fetching project:", error);
@@ -254,8 +267,10 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/projects/:id", async (req: Request, res: Response) => {
+  app.put("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const project = await verifyProjectOwnership(req, res, req.params.id);
+      if (!project) return;
       const updated = await projectStorage.updateProject(req.params.id, req.body);
       if (!updated) {
         return res.status(404).json({ error: "Project not found" });
@@ -287,8 +302,10 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/projects/:id", async (req: Request, res: Response) => {
+  app.delete("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const project = await verifyProjectOwnership(req, res, req.params.id);
+      if (!project) return;
       await projectStorage.deleteProject(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -299,7 +316,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === PROMPT TEMPLATES ===
 
-  app.post("/api/projects/:projectId/prompt-templates", async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/prompt-templates", requireAuth, async (req: Request, res: Response) => {
     try {
       const { name, prompts } = req.body;
       if (!name || typeof name !== "string") {
@@ -321,7 +338,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/projects/:projectId/prompt-templates", async (req: Request, res: Response) => {
+  app.get("/api/projects/:projectId/prompt-templates", requireAuth, async (req: Request, res: Response) => {
     try {
       const templates = await projectStorage.getPromptTemplatesByProject(req.params.projectId);
       res.json(templates);
@@ -331,7 +348,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/prompt-templates/:id", async (req: Request, res: Response) => {
+  app.put("/api/prompt-templates/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const { name, prompts } = req.body;
       const updated = await projectStorage.updatePromptTemplate(req.params.id, {
@@ -348,7 +365,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/prompt-templates/:id", async (req: Request, res: Response) => {
+  app.delete("/api/prompt-templates/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       await projectStorage.deletePromptTemplate(req.params.id);
       res.status(204).send();
@@ -360,7 +377,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === FOLDERS ===
 
-  app.post("/api/projects/:projectId/folders", async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/folders", requireAuth, async (req: Request, res: Response) => {
     try {
       const validated = insertFolderSchema.parse({
         ...req.body,
@@ -374,7 +391,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/projects/:projectId/folders", async (req: Request, res: Response) => {
+  app.get("/api/projects/:projectId/folders", requireAuth, async (req: Request, res: Response) => {
     try {
       const folders = await projectStorage.getFoldersByProject(req.params.projectId);
       res.json(folders);
@@ -384,7 +401,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/folders/:id", async (req: Request, res: Response) => {
+  app.put("/api/folders/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const updated = await projectStorage.updateFolder(req.params.id, req.body);
       if (!updated) {
@@ -397,7 +414,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/folders/:id", async (req: Request, res: Response) => {
+  app.delete("/api/folders/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       await projectStorage.deleteFolder(req.params.id);
       res.status(204).send();
@@ -407,7 +424,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/folders/:id/move", async (req: Request, res: Response) => {
+  app.put("/api/folders/:id/move", requireAuth, async (req: Request, res: Response) => {
     try {
       const { parentFolderId } = req.body;
       const updated = await projectStorage.moveFolder(req.params.id, parentFolderId || null);
@@ -423,7 +440,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === PROJECT DOCUMENTS ===
 
-  app.post("/api/projects/:projectId/documents", async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/documents", requireAuth, async (req: Request, res: Response) => {
     try {
       const validated = insertProjectDocumentSchema.parse({
         ...req.body,
@@ -472,7 +489,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/projects/:projectId/documents", async (req: Request, res: Response) => {
+  app.get("/api/projects/:projectId/documents", requireAuth, async (req: Request, res: Response) => {
     try {
       const documents = await projectStorage.getProjectDocumentsByProject(req.params.projectId);
       res.json(documents);
@@ -482,7 +499,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/projects/:projectId/documents/batch", async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/documents/batch", requireAuth, async (req: Request, res: Response) => {
     try {
       const validated = batchAddDocumentsRequestSchema.parse(req.body);
       const { documentIds, folderId } = validated;
@@ -577,7 +594,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/project-documents/:id", async (req: Request, res: Response) => {
+  app.get("/api/project-documents/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const projectDoc = await projectStorage.getProjectDocument(req.params.id);
       if (!projectDoc) {
@@ -590,7 +607,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/project-documents/:id", async (req: Request, res: Response) => {
+  app.put("/api/project-documents/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const updated = await projectStorage.updateProjectDocument(req.params.id, req.body);
       if (!updated) {
@@ -603,7 +620,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/project-documents/:id", async (req: Request, res: Response) => {
+  app.delete("/api/project-documents/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       await projectStorage.removeDocumentFromProject(req.params.id);
       res.status(204).send();
@@ -613,7 +630,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/project-documents/:id/move", async (req: Request, res: Response) => {
+  app.put("/api/project-documents/:id/move", requireAuth, async (req: Request, res: Response) => {
     try {
       const { folderId } = req.body;
       const updated = await projectStorage.updateProjectDocument(req.params.id, {
@@ -629,7 +646,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/project-documents/:id/citation", async (req: Request, res: Response) => {
+  app.put("/api/project-documents/:id/citation", requireAuth, async (req: Request, res: Response) => {
     try {
       const citationData = citationDataSchema.parse(req.body);
       const updated = await projectStorage.updateProjectDocument(req.params.id, {
@@ -647,7 +664,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === PROJECT ANNOTATIONS ===
 
-  app.post("/api/project-documents/:id/annotations", async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/annotations", requireAuth, async (req: Request, res: Response) => {
     try {
       const validated = insertProjectAnnotationSchema.parse({
         ...req.body,
@@ -677,7 +694,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/project-documents/:id/annotations", async (req: Request, res: Response) => {
+  app.get("/api/project-documents/:id/annotations", requireAuth, async (req: Request, res: Response) => {
     try {
       const annotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
       res.json(annotations);
@@ -687,7 +704,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/project-annotations/:id", async (req: Request, res: Response) => {
+  app.put("/api/project-annotations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const updated = await projectStorage.updateProjectAnnotation(req.params.id, req.body);
       if (!updated) {
@@ -700,7 +717,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/project-annotations/:id", async (req: Request, res: Response) => {
+  app.delete("/api/project-annotations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       await projectStorage.deleteProjectAnnotation(req.params.id);
       res.status(204).send();
@@ -712,7 +729,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === AI ANALYSIS ===
 
-  app.post("/api/project-documents/:id/analyze", async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/analyze", requireAuth, async (req: Request, res: Response) => {
     try {
       const { intent, thoroughness } = req.body;
       if (!intent || typeof intent !== "string") {
@@ -742,7 +759,7 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Multi-prompt parallel analysis
-  app.post("/api/project-documents/:id/analyze-multi", async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/analyze-multi", requireAuth, async (req: Request, res: Response) => {
     try {
       const { prompts, thoroughness } = req.body;
 
@@ -932,7 +949,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/projects/:projectId/batch-analyze", async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/batch-analyze", requireAuth, async (req: Request, res: Response) => {
     try {
       const validated = batchAnalysisRequestSchema.parse(req.body);
       const { projectDocumentIds, intent, thoroughness, constraints } = validated;
@@ -1004,7 +1021,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === SEARCH ===
 
-  app.post("/api/projects/:projectId/search", async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/search", requireAuth, async (req: Request, res: Response) => {
     try {
       const { query, filters, limit } = req.body;
 
@@ -1021,7 +1038,7 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Search within a single project document
-  app.post("/api/project-documents/:id/search", async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/search", requireAuth, async (req: Request, res: Response) => {
     try {
       const { query } = req.body;
 
@@ -1039,7 +1056,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === CITATIONS ===
 
-  app.post("/api/citations/generate", async (req: Request, res: Response) => {
+  app.post("/api/citations/generate", requireAuth, async (req: Request, res: Response) => {
     try {
       const { citationData, style = "chicago", pageNumber, isSubsequent } = req.body;
       const validated = citationDataSchema.parse(citationData);
@@ -1056,7 +1073,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/citations/ai", async (req: Request, res: Response) => {
+  app.post("/api/citations/ai", requireAuth, async (req: Request, res: Response) => {
     try {
       const { documentId, highlightedText, style = "chicago" } = req.body;
       const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
@@ -1091,7 +1108,7 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Generate footnote with embedded quote for an annotation
-  app.post("/api/citations/footnote-with-quote", async (req: Request, res: Response) => {
+  app.post("/api/citations/footnote-with-quote", requireAuth, async (req: Request, res: Response) => {
     try {
       const { citationData, quote, pageNumber, style = "chicago" } = req.body;
       const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
@@ -1134,7 +1151,7 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Generate footnote for a specific annotation by ID
-  app.post("/api/project-annotations/:id/footnote", async (req: Request, res: Response) => {
+  app.post("/api/project-annotations/:id/footnote", requireAuth, async (req: Request, res: Response) => {
     try {
       const annotation = await projectStorage.getProjectAnnotation(req.params.id);
       if (!annotation) {
@@ -1212,7 +1229,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === STATE PERSISTENCE ===
 
-  app.put("/api/project-documents/:id/view-state", async (req: Request, res: Response) => {
+  app.put("/api/project-documents/:id/view-state", requireAuth, async (req: Request, res: Response) => {
     try {
       const { scrollPosition } = req.body;
       const updated = await projectStorage.updateProjectDocument(req.params.id, {

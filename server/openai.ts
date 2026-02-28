@@ -19,9 +19,13 @@ import {
   documentContextSchema,
 } from "@shared/schema";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "missing" });
+  }
+  return _openai;
+}
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const ANALYSIS_MODEL = "gpt-4o-mini";
@@ -62,7 +66,7 @@ export function getMaxChunksForLevel(level: ThoroughnessLevel): number {
 }
 
 export async function getEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+  const response = await getOpenAI().embeddings.create({
     model: EMBEDDING_MODEL,
     input: text,
   });
@@ -89,7 +93,7 @@ export async function analyzeChunkForIntent(
   intent: string
 ): Promise<AnalysisResult> {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: ANALYSIS_MODEL,
       messages: [
         {
@@ -143,7 +147,7 @@ export async function generateDocumentSummary(
   try {
     const truncatedText = fullText.slice(0, 8000); // Limit for context window
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: ANALYSIS_MODEL,
       messages: [
         {
@@ -201,7 +205,7 @@ export async function searchDocument(
       .map((c, i) => `[Chunk ${i + 1}, Position ${c.startPosition}-${c.endPosition}]\n${c.text}`)
       .join("\n\n---\n\n");
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: ANALYSIS_MODEL,
       messages: [
         {
@@ -404,7 +408,7 @@ Return JSON: {"candidates": [...]}
 If nothing relevant, return: {"candidates": []}`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_CONFIG.MODEL,
       messages: [
         { role: "system", content: "You are a precise research assistant. Output valid JSON only." },
@@ -482,7 +486,7 @@ Return JSON:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_CONFIG.MODEL,
       messages: [
         { role: "system", content: "You are a strict research quality reviewer. Output valid JSON only." },
@@ -623,7 +627,7 @@ Return JSON:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_CONFIG.MODEL,
       messages: [
         { role: "system", content: "You polish research annotations. Output valid JSON only." },
@@ -692,7 +696,7 @@ export async function getDocumentContext(
   try {
     const truncatedText = fullText.slice(0, 4000);
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_CONFIG.MODEL,
       messages: [
         { role: "system", content: "You summarize documents for research context. Output valid JSON only." },
@@ -843,7 +847,7 @@ export async function extractCitationMetadata(
     : "";
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: ANALYSIS_MODEL,
       messages: [
         {
