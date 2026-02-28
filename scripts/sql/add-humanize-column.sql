@@ -1,0 +1,1 @@
+ALTER TABLE conversations ADD COLUMN humanize INTEGER DEFAULT 1;

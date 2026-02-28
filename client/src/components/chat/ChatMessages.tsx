@@ -2,14 +2,25 @@ import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BookOpen, Lightbulb, FileText, PenLine } from "lucide-react";
+import { markdownComponents, remarkPlugins } from "@/lib/markdownConfig";
+import { DocumentStatusCard } from "@/components/chat/DocumentStatusCard";
 import type { Message } from "@shared/schema";
 
 interface ChatMessagesProps {
   messages: Message[];
   streamingText: string;
   isStreaming: boolean;
+  streamingChatText?: string;
+  streamingDocumentTitle?: string;
+  streamingDocumentText?: string;
+  isDocumentStreaming?: boolean;
+  onDocumentSelect?: (document: { title: string; content: string }) => void;
   onSuggestedPrompt?: (prompt: string) => void;
 }
+
+type ParsedSegment =
+  | { type: "chat"; content: string }
+  | { type: "document"; title: string; content: string };
 
 const SUGGESTED_PROMPTS = [
   {
@@ -34,86 +45,96 @@ const SUGGESTED_PROMPTS = [
   },
 ];
 
-function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === "user";
+function parseMessageContent(content: string): ParsedSegment[] {
+  const regex = /<document\s+title="([^"]*)">([\s\S]*?)<\/document>/gi;
+  const segments: ParsedSegment[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
 
+  while ((match = regex.exec(content)) !== null) {
+    const chatChunk = content.slice(lastIndex, match.index);
+    if (chatChunk.trim().length > 0) {
+      segments.push({ type: "chat", content: chatChunk.trim() });
+    }
+
+    segments.push({
+      type: "document",
+      title: (match[1] || "Draft").trim() || "Draft",
+      content: (match[2] || "").trim(),
+    });
+
+    lastIndex = regex.lastIndex;
+  }
+
+  const remainder = content.slice(lastIndex);
+  if (remainder.trim().length > 0) {
+    segments.push({ type: "chat", content: remainder.trim() });
+  }
+
+  return segments;
+}
+
+function UserBubble({ content }: { content: string }) {
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
-      <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-card border shadow-sm"
-        }`}
-      >
-        {isUser ? (
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-        ) : (
-          <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-            <ReactMarkdown
-              components={{
-                code({ className, children, ...props }) {
-                  const match = /language-(\w+)/.exec(className || "");
-                  const isBlock = match || (typeof children === "string" && children.includes("\n"));
-                  if (isBlock) {
-                    return (
-                      <pre className="bg-muted rounded-md p-3 overflow-x-auto text-xs">
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      </pre>
-                    );
-                  }
-                  return (
-                    <code className="bg-muted px-1 py-0.5 rounded text-xs" {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
-          </div>
-        )}
+    <div className="flex justify-end mb-4">
+      <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-primary text-primary-foreground">
+        <p className="text-sm whitespace-pre-wrap">{content}</p>
       </div>
     </div>
   );
 }
 
-function StreamingBubble({ text }: { text: string }) {
+function AssistantMarkdownBubble({ content, isStreaming = false }: { content: string; isStreaming?: boolean }) {
   return (
     <div className="flex justify-start mb-4">
       <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-card border shadow-sm">
         <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-          <ReactMarkdown
-            components={{
-              code({ className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || "");
-                const isBlock = match || (typeof children === "string" && children.includes("\n"));
-                if (isBlock) {
-                  return (
-                    <pre className="bg-muted rounded-md p-3 overflow-x-auto text-xs">
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
-                    </pre>
-                  );
-                }
-                return (
-                  <code className="bg-muted px-1 py-0.5 rounded text-xs" {...props}>
-                    {children}
-                  </code>
-                );
-              },
-            }}
-          >
-            {text}
+          <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+            {content}
           </ReactMarkdown>
-          <span className="inline-block w-2 h-4 bg-foreground/60 animate-pulse ml-0.5 align-text-bottom" />
+          {isStreaming && <span className="inline-block w-2 h-4 bg-foreground/60 animate-pulse ml-0.5 align-text-bottom" />}
         </div>
       </div>
     </div>
+  );
+}
+
+function AssistantMessage({
+  message,
+  onDocumentSelect,
+}: {
+  message: Message;
+  onDocumentSelect?: (document: { title: string; content: string }) => void;
+}) {
+  const segments = parseMessageContent(message.content);
+  if (segments.length === 0) {
+    return <AssistantMarkdownBubble content={message.content} />;
+  }
+
+  return (
+    <>
+      {segments.map((segment, index) => {
+        if (segment.type === "chat") {
+          return <AssistantMarkdownBubble key={`${message.id}-chat-${index}`} content={segment.content} />;
+        }
+
+        return (
+          <div key={`${message.id}-doc-${index}`} className="flex justify-start mb-4">
+            <div className="max-w-[80%] w-full">
+              <DocumentStatusCard
+                title={segment.title}
+                content={segment.content}
+                onView={
+                  onDocumentSelect
+                    ? () => onDocumentSelect({ title: segment.title, content: segment.content })
+                    : undefined
+                }
+              />
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -121,15 +142,20 @@ export function ChatMessages({
   messages,
   streamingText,
   isStreaming,
+  streamingChatText,
+  streamingDocumentTitle,
+  streamingDocumentText,
+  isDocumentStreaming = false,
+  onDocumentSelect,
   onSuggestedPrompt,
 }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const activeStreamingChat = streamingChatText ?? streamingText;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText]);
+  }, [messages, activeStreamingChat, streamingDocumentText, isDocumentStreaming]);
 
-  // Empty state
   if (messages.length === 0 && !isStreaming) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8">
@@ -160,11 +186,40 @@ export function ChatMessages({
   return (
     <ScrollArea className="flex-1">
       <div className="max-w-3xl mx-auto p-4">
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
-        {isStreaming && streamingText && <StreamingBubble text={streamingText} />}
-        {isStreaming && !streamingText && (
+        {messages.map((msg) =>
+          msg.role === "user" ? (
+            <UserBubble key={msg.id} content={msg.content} />
+          ) : (
+            <AssistantMessage key={msg.id} message={msg} onDocumentSelect={onDocumentSelect} />
+          )
+        )}
+
+        {isStreaming && activeStreamingChat && (
+          <AssistantMarkdownBubble content={activeStreamingChat} isStreaming />
+        )}
+
+        {isDocumentStreaming && (
+          <div className="flex justify-start mb-4">
+            <div className="max-w-[80%] w-full">
+              <DocumentStatusCard
+                title={streamingDocumentTitle || "Draft"}
+                content={streamingDocumentText || ""}
+                isStreaming
+                onView={
+                  onDocumentSelect && streamingDocumentText
+                    ? () =>
+                        onDocumentSelect({
+                          title: streamingDocumentTitle || "Draft",
+                          content: streamingDocumentText,
+                        })
+                    : undefined
+                }
+              />
+            </div>
+          </div>
+        )}
+
+        {isStreaming && !activeStreamingChat && !isDocumentStreaming && (
           <div className="flex justify-start mb-4">
             <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-card border shadow-sm">
               <div className="flex gap-1.5">
@@ -175,6 +230,7 @@ export function ChatMessages({
             </div>
           </div>
         )}
+
         <div ref={bottomRef} />
       </div>
     </ScrollArea>

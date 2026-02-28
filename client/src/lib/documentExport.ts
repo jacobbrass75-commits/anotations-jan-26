@@ -1,5 +1,39 @@
-import JSZip from "jszip";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import remarkGfm from "remark-gfm";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { markdownToDocx } from "./markdownToDocx";
+
+type MdNode = {
+  type: string;
+  depth?: number;
+  value?: string;
+  children?: MdNode[];
+  ordered?: boolean;
+  identifier?: string;
+  alt?: string;
+};
+
+interface TextStyle {
+  bold?: boolean;
+  italics?: boolean;
+  superscript?: boolean;
+}
+
+interface TextSegment {
+  text: string;
+  style: TextStyle;
+}
+
+interface FootnoteContext {
+  footnoteIdsByIdentifier: Map<string, number>;
+  footnoteOrder: string[];
+  footnoteDefinitions: Map<string, MdNode>;
+}
+
+function parseMarkdownAst(markdownContent: string): MdNode {
+  return unified().use(remarkParse).use(remarkGfm).parse(markdownContent) as unknown as MdNode;
+}
 
 export function stripMarkdown(markdown: string): string {
   return markdown
@@ -23,14 +57,6 @@ export function toSafeFilename(value: string): string {
   );
 }
 
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -42,100 +68,257 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export async function buildDocxBlob(title: string, content: string): Promise<Blob> {
-  const lines = `${title}\n\n${content}`
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const paragraphs = lines
-    .map((line) => `<w:p><w:r><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`)
-    .join("");
-
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    ${paragraphs}
-    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
-  </w:body>
-</w:document>`;
-
-  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`;
-
-  const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`;
-
-  const zip = new JSZip();
-  zip.file("[Content_Types].xml", contentTypesXml);
-  zip.folder("_rels")?.file(".rels", relsXml);
-  zip.folder("word")?.file("document.xml", documentXml);
-  return zip.generateAsync({
-    type: "blob",
-    mimeType:
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  });
+function flattenText(node?: MdNode): string {
+  if (!node) return "";
+  if (node.type === "text" || node.type === "inlineCode") {
+    return node.value || "";
+  }
+  return (node.children || []).map((child) => flattenText(child)).join("");
 }
 
-function wrapText(text: string, maxWidth: number, font: any, size: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = "";
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (font.widthOfTextAtSize(next, size) > maxWidth && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
+function ensureFootnoteId(context: FootnoteContext, identifier: string): number {
+  const key = identifier.toLowerCase();
+  const existing = context.footnoteIdsByIdentifier.get(key);
+  if (existing) return existing;
+  const id = context.footnoteIdsByIdentifier.size + 1;
+  context.footnoteIdsByIdentifier.set(key, id);
+  context.footnoteOrder.push(key);
+  return id;
+}
+
+function inlineToSegments(node: MdNode, context: FootnoteContext, style: TextStyle = {}): TextSegment[] {
+  switch (node.type) {
+    case "text":
+    case "inlineCode":
+      return [{ text: node.value || "", style }];
+    case "strong":
+      return (node.children || []).flatMap((child) =>
+        inlineToSegments(child, context, { ...style, bold: true })
+      );
+    case "emphasis":
+      return (node.children || []).flatMap((child) =>
+        inlineToSegments(child, context, { ...style, italics: true })
+      );
+    case "delete":
+      return (node.children || []).flatMap((child) => inlineToSegments(child, context, style));
+    case "footnoteReference": {
+      const identifier = node.identifier || "";
+      if (!identifier) return [];
+      const id = ensureFootnoteId(context, identifier);
+      return [{ text: `[${id}]`, style: { ...style, superscript: true } }];
+    }
+    case "link":
+      return (node.children || []).flatMap((child) => inlineToSegments(child, context, style));
+    default:
+      return (node.children || []).flatMap((child) => inlineToSegments(child, context, style));
+  }
+}
+
+function tokenizeSegments(segments: TextSegment[]): TextSegment[] {
+  const tokens: TextSegment[] = [];
+  for (const segment of segments) {
+    const parts = segment.text.split(/(\s+)/);
+    for (const part of parts) {
+      if (!part) continue;
+      tokens.push({ text: part, style: segment.style });
     }
   }
-  if (current) lines.push(current);
-  return lines;
+  return tokens;
 }
 
-export async function buildPdfBlob(title: string, content: string): Promise<Blob> {
+function getFontKey(style: TextStyle): "regular" | "bold" | "italic" | "boldItalic" {
+  if (style.bold && style.italics) return "boldItalic";
+  if (style.bold) return "bold";
+  if (style.italics) return "italic";
+  return "regular";
+}
+
+export async function buildDocxBlob(title: string, markdownContent: string): Promise<Blob> {
+  return markdownToDocx(markdownContent, { title });
+}
+
+export async function buildPdfBlob(title: string, markdownContent: string): Promise<Blob> {
+  const root = parseMarkdownAst(markdownContent);
+  const topLevelChildren = root.children || [];
+
+  const footnoteDefinitions = new Map<string, MdNode>();
+  const bodyNodes: MdNode[] = [];
+  for (const child of topLevelChildren) {
+    if (child.type === "footnoteDefinition" && child.identifier) {
+      footnoteDefinitions.set(child.identifier.toLowerCase(), child);
+    } else {
+      bodyNodes.push(child);
+    }
+  }
+
+  const footnoteContext: FootnoteContext = {
+    footnoteIdsByIdentifier: new Map(),
+    footnoteOrder: [],
+    footnoteDefinitions,
+  };
+
   const pdf = await PDFDocument.create();
-  const bodyFont = await pdf.embedFont(StandardFonts.TimesRoman);
-  const headingFont = await pdf.embedFont(StandardFonts.TimesRomanBold);
+  const fonts = {
+    regular: await pdf.embedFont(StandardFonts.TimesRoman),
+    bold: await pdf.embedFont(StandardFonts.TimesRomanBold),
+    italic: await pdf.embedFont(StandardFonts.TimesRomanItalic),
+    boldItalic: await pdf.embedFont(StandardFonts.TimesBoldItalic),
+  };
 
   const pageWidth = 612;
   const pageHeight = 792;
-  const margin = 48;
-  const maxWidth = pageWidth - margin * 2;
-  const bodySize = 11;
-  const titleSize = 15;
-  const lineHeight = 15;
+  const margin = 72;
+  const contentWidth = pageWidth - margin * 2;
+  const lineHeight = 24; // 12pt double-spaced
 
   let page = pdf.addPage([pageWidth, pageHeight]);
+  const pages = [page];
   let y = pageHeight - margin;
 
-  const draw = (line: string, size: number, font: any) => {
-    if (y <= margin) {
+  const ensureLineSpace = () => {
+    if (y <= margin + 28) {
       page = pdf.addPage([pageWidth, pageHeight]);
+      pages.push(page);
       y = pageHeight - margin;
     }
-    page.drawText(line, { x: margin, y, size, font, color: rgb(0.08, 0.08, 0.08) });
+  };
+
+  const drawLine = (tokens: TextSegment[], size: number) => {
+    ensureLineSpace();
+    let x = margin;
+    for (const token of tokens) {
+      const fontKey = getFontKey(token.style);
+      const font = fonts[fontKey];
+      const tokenSize = token.style.superscript ? Math.max(8, size - 3) : size;
+      const tokenY = token.style.superscript ? y + 4 : y;
+      page.drawText(token.text, {
+        x,
+        y: tokenY,
+        size: tokenSize,
+        font,
+        color: rgb(0.08, 0.08, 0.08),
+      });
+      x += font.widthOfTextAtSize(token.text, tokenSize);
+    }
     y -= lineHeight;
   };
 
-  for (const line of wrapText(title, maxWidth, headingFont, titleSize)) {
-    draw(line, titleSize, headingFont);
-  }
-  y -= lineHeight;
+  const wrapAndDrawSegments = (segments: TextSegment[], size: number) => {
+    const tokens = tokenizeSegments(segments);
+    let current: TextSegment[] = [];
+    let currentWidth = 0;
 
-  for (const paragraph of content.split(/\n+/).map((p) => p.trim()).filter(Boolean)) {
-    for (const line of wrapText(paragraph, maxWidth, bodyFont, bodySize)) {
-      draw(line, bodySize, bodyFont);
+    for (const token of tokens) {
+      const font = fonts[getFontKey(token.style)];
+      const tokenSize = token.style.superscript ? Math.max(8, size - 3) : size;
+      const tokenWidth = font.widthOfTextAtSize(token.text, tokenSize);
+      if (current.length > 0 && currentWidth + tokenWidth > contentWidth) {
+        drawLine(current, size);
+        current = [];
+        currentWidth = 0;
+      }
+      current.push(token);
+      currentWidth += tokenWidth;
     }
+
+    if (current.length > 0) {
+      drawLine(current, size);
+    }
+  };
+
+  const renderParagraphNode = (node: MdNode, size: number, prefix?: string) => {
+    const segments = (node.children || []).flatMap((child) => inlineToSegments(child, footnoteContext));
+    const prefixed = prefix ? [{ text: prefix, style: {} as TextStyle }, ...segments] : segments;
+    wrapAndDrawSegments(prefixed, size);
     y -= 6;
+  };
+
+  const renderBlock = (node: MdNode, listPrefix?: string) => {
+    switch (node.type) {
+      case "heading": {
+        const size = node.depth === 1 ? 14 : node.depth === 2 ? 13 : 12;
+        const headingSegments = (node.children || []).flatMap((child) =>
+          inlineToSegments(child, footnoteContext, { bold: true })
+        );
+        wrapAndDrawSegments(headingSegments, size);
+        y -= 8;
+        return;
+      }
+      case "paragraph":
+        renderParagraphNode(node, 12, listPrefix);
+        return;
+      case "blockquote": {
+        const text = flattenText(node).trim();
+        if (text) {
+          renderParagraphNode({ type: "paragraph", children: [{ type: "text", value: text }] }, 12, "> ");
+        }
+        return;
+      }
+      case "list": {
+        (node.children || []).forEach((item, index) => {
+          const prefix = node.ordered ? `${index + 1}. ` : "• ";
+          const paragraphChild = (item.children || []).find((child) => child.type === "paragraph");
+          if (paragraphChild) {
+            renderParagraphNode(paragraphChild, 12, prefix);
+          } else {
+            const text = flattenText(item);
+            renderParagraphNode({ type: "paragraph", children: [{ type: "text", value: text }] }, 12, prefix);
+          }
+        });
+        return;
+      }
+      case "code": {
+        const codeText = node.value || "";
+        const codeSegments = [{ text: codeText, style: { italics: true } }];
+        wrapAndDrawSegments(codeSegments, 11);
+        y -= 6;
+        return;
+      }
+      case "thematicBreak":
+        y -= 10;
+        return;
+      default:
+        (node.children || []).forEach((child) => renderBlock(child, listPrefix));
+    }
+  };
+
+  // Title
+  wrapAndDrawSegments([{ text: title, style: { bold: true } }], 15);
+  y -= 8;
+
+  for (const node of bodyNodes) {
+    renderBlock(node);
   }
+
+  if (footnoteContext.footnoteOrder.length > 0) {
+    y -= 10;
+    wrapAndDrawSegments([{ text: "Endnotes", style: { bold: true } }], 13);
+    y -= 4;
+
+    for (const identifier of footnoteContext.footnoteOrder) {
+      const id = footnoteContext.footnoteIdsByIdentifier.get(identifier)!;
+      const definition = footnoteContext.footnoteDefinitions.get(identifier);
+      const definitionText = definition
+        ? (definition.children || []).map((child) => flattenText(child)).join(" ").trim()
+        : "";
+      const line = definitionText ? `[${id}] ${definitionText}` : `[${id}]`;
+      wrapAndDrawSegments([{ text: line, style: {} }], 10);
+      y -= 2;
+    }
+  }
+
+  // Page numbers (bottom-right)
+  pages.forEach((p, index) => {
+    const label = `${index + 1}`;
+    const width = fonts.regular.widthOfTextAtSize(label, 10);
+    p.drawText(label, {
+      x: pageWidth - margin - width,
+      y: 24,
+      size: 10,
+      font: fonts.regular,
+      color: rgb(0.25, 0.25, 0.25),
+    });
+  });
 
   return new Blob([await pdf.save()], { type: "application/pdf" });
 }

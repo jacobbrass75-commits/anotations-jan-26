@@ -618,6 +618,7 @@ export const conversations = sqliteTable("conversations", {
   selectedSourceIds: text("selected_source_ids", { mode: "json" }).$type<string[]>(),
   citationStyle: text("citation_style").default("chicago"),
   tone: text("tone").default("academic"),
+  humanize: integer("humanize", { mode: "boolean" }).default(true),
   noEnDashes: integer("no_en_dashes", { mode: "boolean" }).default(false),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),

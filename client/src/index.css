@@ -351,3 +351,16 @@
     inset: -1px;
   }
 }
+
+.prose .footnotes {
+  border-top: 1px solid hsl(var(--border));
+  margin-top: 2rem;
+  padding-top: 1rem;
+  font-size: 0.85em;
+}
+
+.prose sup a[data-footnote-ref] {
+  color: hsl(var(--primary));
+  font-weight: 600;
+  text-decoration: none;
+}

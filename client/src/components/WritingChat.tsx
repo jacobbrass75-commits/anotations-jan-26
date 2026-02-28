@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { queryClient } from "@/lib/queryClient";
 import { useProjects, useProjectDocuments } from "@/hooks/useProjects";
 import { useWebClips } from "@/hooks/useWebClips";
+import { markdownComponents, remarkPlugins } from "@/lib/markdownConfig";
 import {
   useProjectConversations,
   useStandaloneConversations,
@@ -27,6 +28,7 @@ import {
 import { ChatMessages } from "@/components/chat/ChatMessages";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
+import { DocumentPanel } from "@/components/chat/DocumentPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -136,7 +138,15 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const updateSources = useUpdateSources();
 
   const messages = conversationData?.messages || [];
-  const { send, streamingText, isStreaming } = useWritingSendMessage(activeConversationId);
+  const {
+    send,
+    streamingText,
+    streamingChatText,
+    documentTitle,
+    streamingDocumentText,
+    isDocumentStreaming,
+    isStreaming,
+  } = useWritingSendMessage(activeConversationId);
 
   // Source management
   const { data: projectSources = [], isLoading: projectSourcesLoading } = useProjectDocuments(
@@ -171,18 +181,52 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   // Writing settings
   const [citationStyle, setCitationStyle] = useState(conversationData?.citationStyle || "chicago");
   const [tone, setTone] = useState(conversationData?.tone || "academic");
+  const [humanize, setHumanize] = useState(conversationData?.humanize ?? true);
   const [noEnDashes, setNoEnDashes] = useState(conversationData?.noEnDashes || false);
+
+  // Document history / panel
+  const [documents, setDocuments] = useState<Array<{ title: string; content: string }>>([]);
+  const [selectedDocIndex, setSelectedDocIndex] = useState<number | null>(null);
+  const lastCompletedDocumentKeyRef = useRef("");
 
   // Sync settings from conversation
   useEffect(() => {
     if (conversationData) {
       if (conversationData.citationStyle) setCitationStyle(conversationData.citationStyle);
       if (conversationData.tone) setTone(conversationData.tone);
+      if (conversationData.humanize !== undefined && conversationData.humanize !== null) {
+        setHumanize(conversationData.humanize);
+      }
       if (conversationData.noEnDashes !== undefined && conversationData.noEnDashes !== null) {
         setNoEnDashes(conversationData.noEnDashes);
       }
     }
   }, [conversationData]);
+
+  useEffect(() => {
+    // Reset document panel state when switching conversations.
+    setDocuments([]);
+    setSelectedDocIndex(null);
+    lastCompletedDocumentKeyRef.current = "";
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    if (isDocumentStreaming || !streamingDocumentText.trim()) {
+      return;
+    }
+
+    const key = `${documentTitle}\n${streamingDocumentText}`;
+    if (key === lastCompletedDocumentKeyRef.current) {
+      return;
+    }
+
+    lastCompletedDocumentKeyRef.current = key;
+    setDocuments((prev) => {
+      const next = [...prev, { title: documentTitle || "Draft", content: streamingDocumentText }];
+      setSelectedDocIndex(next.length - 1);
+      return next;
+    });
+  }, [documentTitle, isDocumentStreaming, streamingDocumentText]);
 
   // Compile & Verify
   const { compile, cancelCompile, clearCompiled, compiledContent, isCompiling, savedPaper } = useCompilePaper(activeConversationId);
@@ -193,6 +237,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [isPreparingPdf, setIsPreparingPdf] = useState(false);
   const [isPreparingDocx, setIsPreparingDocx] = useState(false);
+  const [showControlsWhenDocument, setShowControlsWhenDocument] = useState(true);
 
   // Quick Generate dialog
   const [quickGenerateOpen, setQuickGenerateOpen] = useState(false);
@@ -221,12 +266,16 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         projectId: conversationProjectId,
         selectedSourceIds: localSelectedSourceIds,
       });
+      await updateConversation.mutateAsync({
+        id: conv.id,
+        data: { citationStyle, tone, humanize, noEnDashes },
+      });
       setActiveConversationId(conv.id);
       clearCompiled();
     } catch {
       toast({ title: "Error", description: "Failed to create conversation", variant: "destructive" });
     }
-  }, [conversationProjectId, localSelectedSourceIds, createConversation, clearCompiled, toast]);
+  }, [conversationProjectId, localSelectedSourceIds, citationStyle, tone, humanize, noEnDashes, createConversation, updateConversation, clearCompiled, toast]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversationId(id);
@@ -266,7 +315,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         // Save settings
         await updateConversation.mutateAsync({
           id: conv.id,
-          data: { citationStyle, tone, noEnDashes },
+          data: { citationStyle, tone, humanize, noEnDashes },
         });
 
         // Send first message directly
@@ -294,7 +343,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
 
     await send(content);
-  }, [activeConversationId, conversationProjectId, localSelectedSourceIds, citationStyle, tone, noEnDashes, send, createConversation, updateConversation, toast]);
+  }, [activeConversationId, conversationProjectId, localSelectedSourceIds, citationStyle, tone, humanize, noEnDashes, send, createConversation, updateConversation, toast]);
 
   const toggleSource = useCallback((id: string) => {
     setLocalSelectedSourceIds((prev) => {
@@ -319,6 +368,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const handleSettingChange = useCallback((key: string, value: any) => {
     if (key === "citationStyle") setCitationStyle(value);
     if (key === "tone") setTone(value);
+    if (key === "humanize") setHumanize(value);
     if (key === "noEnDashes") setNoEnDashes(value);
 
     if (activeConversationId) {
@@ -348,7 +398,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (!compiledContent) return;
     setIsPreparingDocx(true);
     try {
-      const blob = await buildDocxBlob(conversationData?.title || "Paper", stripMarkdown(compiledContent));
+      const blob = await buildDocxBlob(conversationData?.title || "Paper", compiledContent);
       downloadBlob(blob, `${toSafeFilename(conversationData?.title || "Paper")}.docx`);
     } catch (e) {
       toast({ title: "Export failed", description: e instanceof Error ? e.message : "DOCX export failed", variant: "destructive" });
@@ -361,7 +411,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (!compiledContent) return;
     setIsPreparingPdf(true);
     try {
-      const blob = await buildPdfBlob(conversationData?.title || "Paper", stripMarkdown(compiledContent));
+      const blob = await buildPdfBlob(conversationData?.title || "Paper", compiledContent);
       downloadBlob(blob, `${toSafeFilename(conversationData?.title || "Paper")}.pdf`);
     } catch (e) {
       toast({ title: "Export failed", description: e instanceof Error ? e.message : "PDF export failed", variant: "destructive" });
@@ -380,7 +430,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
     setIsPreparingPdf(true);
     try {
-      const blob = await buildPdfBlob(conversationData?.title || "Paper", stripMarkdown(compiledContent));
+      const blob = await buildPdfBlob(conversationData?.title || "Paper", compiledContent);
       if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(URL.createObjectURL(blob));
       setShowPdfPreview(true);
@@ -415,6 +465,86 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const handleSuggestedPrompt = useCallback((prompt: string) => {
     handleSend(prompt);
   }, [handleSend]);
+
+  const handleSelectDocument = useCallback((document: { title: string; content: string }) => {
+    setDocuments((prev) => {
+      const existingIndex = prev.findIndex(
+        (item) => item.title === document.title && item.content === document.content
+      );
+      if (existingIndex >= 0) {
+        setSelectedDocIndex(existingIndex);
+        return prev;
+      }
+
+      const next = [...prev, document];
+      setSelectedDocIndex(next.length - 1);
+      return next;
+    });
+  }, []);
+
+  const activeDocument = useMemo(() => {
+    if (isDocumentStreaming) {
+      return {
+        title: documentTitle || "Draft",
+        content: streamingDocumentText || "",
+        isStreaming: true,
+      };
+    }
+
+    if (selectedDocIndex === null || !documents[selectedDocIndex]) {
+      return null;
+    }
+
+    return {
+      title: documents[selectedDocIndex].title,
+      content: documents[selectedDocIndex].content,
+      isStreaming: false,
+    };
+  }, [documentTitle, documents, isDocumentStreaming, selectedDocIndex, streamingDocumentText]);
+
+  const handleCopyActiveDocument = useCallback(async () => {
+    if (!activeDocument?.content) return;
+    try {
+      await navigator.clipboard.writeText(activeDocument.content);
+      toast({ title: "Copied to clipboard" });
+    } catch {
+      toast({ title: "Failed to copy", variant: "destructive" });
+    }
+  }, [activeDocument, toast]);
+
+  const handleDownloadActiveDocumentDocx = useCallback(async () => {
+    if (!activeDocument?.content) return;
+    setIsPreparingDocx(true);
+    try {
+      const blob = await buildDocxBlob(activeDocument.title || "Document", activeDocument.content);
+      downloadBlob(blob, `${toSafeFilename(activeDocument.title || "Document")}.docx`);
+    } catch (e) {
+      toast({
+        title: "Export failed",
+        description: e instanceof Error ? e.message : "DOCX export failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPreparingDocx(false);
+    }
+  }, [activeDocument, toast]);
+
+  const handleDownloadActiveDocumentPdf = useCallback(async () => {
+    if (!activeDocument?.content) return;
+    setIsPreparingPdf(true);
+    try {
+      const blob = await buildPdfBlob(activeDocument.title || "Document", activeDocument.content);
+      downloadBlob(blob, `${toSafeFilename(activeDocument.title || "Document")}.pdf`);
+    } catch (e) {
+      toast({
+        title: "Export failed",
+        description: e instanceof Error ? e.message : "PDF export failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPreparingPdf(false);
+    }
+  }, [activeDocument, toast]);
 
   return (
     <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-[250px_1fr_380px] border border-border rounded-xl overflow-hidden bg-[#F5F0E8] dark:bg-background">
@@ -475,7 +605,12 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         <ChatMessages
           messages={messages}
           streamingText={streamingText}
+          streamingChatText={streamingChatText}
+          streamingDocumentTitle={documentTitle}
+          streamingDocumentText={streamingDocumentText}
+          isDocumentStreaming={isDocumentStreaming}
           isStreaming={isStreaming}
+          onDocumentSelect={handleSelectDocument}
           onSuggestedPrompt={handleSuggestedPrompt}
         />
 
@@ -485,7 +620,36 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
 
       {/* Right Panel */}
       <aside className="min-h-0 bg-[#F1ECE2] dark:bg-muted/10">
-        <div className="h-full min-h-0 overflow-auto p-4 space-y-4">
+        <div className="h-full min-h-0 flex flex-col p-4 gap-4">
+          {activeDocument && (
+            <div className="min-h-0 flex-[1_1_55%]">
+              <DocumentPanel
+                title={activeDocument.title}
+                content={activeDocument.content}
+                isStreaming={activeDocument.isStreaming}
+                isPreparingDocx={isPreparingDocx}
+                isPreparingPdf={isPreparingPdf}
+                onCopy={handleCopyActiveDocument}
+                onDownloadDocx={handleDownloadActiveDocumentDocx}
+                onDownloadPdf={handleDownloadActiveDocumentPdf}
+                onClose={() => setSelectedDocIndex(null)}
+              />
+            </div>
+          )}
+
+          {activeDocument && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-xs"
+              onClick={() => setShowControlsWhenDocument((v) => !v)}
+            >
+              {showControlsWhenDocument ? "Hide Controls" : "Show Controls"}
+            </Button>
+          )}
+
+          {(!activeDocument || showControlsWhenDocument) && (
+            <div className={`${activeDocument ? "min-h-0 flex-[1_1_45%]" : "h-full"} overflow-auto space-y-4`}>
           {/* Settings Card */}
           <Card className="border-border bg-background/80">
             <CardHeader className="pb-2">
@@ -510,6 +674,10 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                   </SelectContent>
                 </Select>
               </div>
+              <label className="flex items-center gap-2 text-xs">
+                <Checkbox checked={humanize} onCheckedChange={(v) => handleSettingChange("humanize", Boolean(v))} />
+                Humanize prose
+              </label>
               <label className="flex items-center gap-2 text-xs">
                 <Checkbox checked={noEnDashes} onCheckedChange={(v) => handleSettingChange("noEnDashes", Boolean(v))} />
                 No en-dashes
@@ -695,7 +863,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               <CardContent>
                 <ScrollArea className="h-64">
                   <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <ReactMarkdown>{compiledContent}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+                      {compiledContent}
+                    </ReactMarkdown>
                     {isCompiling && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />}
                   </div>
                 </ScrollArea>
@@ -729,7 +899,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               <CardContent>
                 <ScrollArea className="h-48">
                   <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <ReactMarkdown>{verifyReport}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+                      {verifyReport}
+                    </ReactMarkdown>
                     {isVerifying && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />}
                   </div>
                 </ScrollArea>
@@ -756,11 +928,15 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               <CardContent>
                 <ScrollArea className="h-48">
                   <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <ReactMarkdown>{quickGenerate.fullText}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+                      {quickGenerate.fullText}
+                    </ReactMarkdown>
                   </div>
                 </ScrollArea>
               </CardContent>
             </Card>
+          )}
+            </div>
           )}
         </div>
       </aside>

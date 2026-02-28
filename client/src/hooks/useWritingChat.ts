@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
-import { useProjectDocuments } from "@/hooks/useProjects";
 import type { Conversation, Message } from "@shared/schema";
 
 export interface ConversationWithMessages extends Conversation {
@@ -121,6 +120,10 @@ export function useUpdateSources() {
 
 export function useWritingSendMessage(conversationId: string | null) {
   const [streamingText, setStreamingText] = useState("");
+  const [streamingChatText, setStreamingChatText] = useState("");
+  const [documentTitle, setDocumentTitle] = useState("");
+  const [streamingDocumentText, setStreamingDocumentText] = useState("");
+  const [isDocumentStreaming, setIsDocumentStreaming] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
 
   const send = useCallback(
@@ -129,6 +132,10 @@ export function useWritingSendMessage(conversationId: string | null) {
 
       setIsStreaming(true);
       setStreamingText("");
+      setStreamingChatText("");
+      setDocumentTitle("");
+      setStreamingDocumentText("");
+      setIsDocumentStreaming(false);
 
       try {
         const response = await fetch(
@@ -147,7 +154,8 @@ export function useWritingSendMessage(conversationId: string | null) {
 
         const reader = response.body!.getReader();
         const decoder = new TextDecoder();
-        let accumulated = "";
+        let accumulatedChat = "";
+        let accumulatedDocument = "";
 
         while (true) {
           const { done, value } = await reader.read();
@@ -159,9 +167,20 @@ export function useWritingSendMessage(conversationId: string | null) {
             if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.slice(6));
-                if (data.type === "text") {
-                  accumulated += data.text;
-                  setStreamingText(accumulated);
+                if (data.type === "text" || data.type === "chat_text") {
+                  accumulatedChat += String(data.text || "");
+                  setStreamingText(accumulatedChat);
+                  setStreamingChatText(accumulatedChat);
+                } else if (data.type === "document_start") {
+                  accumulatedDocument = "";
+                  setDocumentTitle(String(data.title || "Draft"));
+                  setStreamingDocumentText("");
+                  setIsDocumentStreaming(true);
+                } else if (data.type === "document_text") {
+                  accumulatedDocument += String(data.text || "");
+                  setStreamingDocumentText(accumulatedDocument);
+                } else if (data.type === "document_end") {
+                  setIsDocumentStreaming(false);
                 } else if (data.type === "done") {
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations", conversationId],
@@ -183,12 +202,22 @@ export function useWritingSendMessage(conversationId: string | null) {
       } finally {
         setIsStreaming(false);
         setStreamingText("");
+        setStreamingChatText("");
+        setIsDocumentStreaming(false);
       }
     },
     [conversationId]
   );
 
-  return { send, streamingText, isStreaming };
+  return {
+    send,
+    streamingText,
+    streamingChatText,
+    documentTitle,
+    streamingDocumentText,
+    isDocumentStreaming,
+    isStreaming,
+  };
 }
 
 // --- Compile paper ---

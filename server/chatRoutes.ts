@@ -30,6 +30,13 @@ const BASE_SYSTEM_PROMPT =
   "You are ScholarMark AI, a helpful academic writing assistant. You help students with research, writing, citations, and understanding academic sources. Be concise, accurate, and helpful.";
 
 type WritingProjectContext = Pick<Project, "name" | "thesis" | "scope" | "contextSummary">;
+type WritingStreamEventType =
+  | "chat_text"
+  | "document_start"
+  | "document_text"
+  | "document_end"
+  | "done"
+  | "error";
 
 function getAnthropicClient(): Anthropic {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -65,6 +72,125 @@ function buildSourceBlock(sources: WritingSource[]): string {
   return sources
     .map((source, i) => `--- Source ${i + 1} ---\n${formatSourceForPrompt(source)}`)
     .join("\n\n");
+}
+
+function normalizeTitle(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : "Draft";
+}
+
+function matchOpenDocumentTag(tagText: string): string | null {
+  const match = tagText.match(/^<document\s+title="([^"]*)"\s*>$/i);
+  if (!match) return null;
+  return normalizeTitle(match[1] || "");
+}
+
+function isCloseDocumentTag(tagText: string): boolean {
+  return /^<\/document\s*>$/i.test(tagText);
+}
+
+function createDocumentStreamParser(
+  emit: (event: { type: WritingStreamEventType; [key: string]: unknown }) => void
+) {
+  let inDocument = false;
+  let tagMode = false;
+  let tagBuffer = "";
+  let chatBuffer = "";
+  let documentBuffer = "";
+  let activeDocumentTitle = "";
+
+  const flushChat = () => {
+    if (!chatBuffer) return;
+    emit({ type: "chat_text", text: chatBuffer });
+    chatBuffer = "";
+  };
+
+  const flushDocument = () => {
+    if (!documentBuffer) return;
+    emit({ type: "document_text", text: documentBuffer });
+    documentBuffer = "";
+  };
+
+  const appendVisible = (text: string) => {
+    if (!text) return;
+    if (inDocument) {
+      documentBuffer += text;
+      return;
+    }
+    chatBuffer += text;
+  };
+
+  const processCompletedTag = (tagText: string) => {
+    const openTitle = matchOpenDocumentTag(tagText);
+    if (!inDocument && openTitle) {
+      flushChat();
+      activeDocumentTitle = openTitle;
+      emit({ type: "document_start", title: activeDocumentTitle });
+      inDocument = true;
+      return;
+    }
+
+    if (inDocument && isCloseDocumentTag(tagText)) {
+      flushDocument();
+      emit({ type: "document_end", title: activeDocumentTitle || "Draft" });
+      activeDocumentTitle = "";
+      inDocument = false;
+      return;
+    }
+
+    appendVisible(tagText);
+  };
+
+  const pushText = (chunk: string) => {
+    for (const ch of chunk) {
+      if (!tagMode) {
+        if (ch === "<") {
+          tagMode = true;
+          tagBuffer = "<";
+        } else {
+          appendVisible(ch);
+        }
+        continue;
+      }
+
+      tagBuffer += ch;
+      if (ch === ">") {
+        processCompletedTag(tagBuffer);
+        tagBuffer = "";
+        tagMode = false;
+        continue;
+      }
+
+      // If this no longer looks like a document tag, flush immediately as plain text.
+      if (
+        tagBuffer.length > 60 ||
+        (!"<document".startsWith(tagBuffer.toLowerCase()) && !"</document".startsWith(tagBuffer.toLowerCase()))
+      ) {
+        appendVisible(tagBuffer);
+        tagBuffer = "";
+        tagMode = false;
+      }
+    }
+  };
+
+  const finish = () => {
+    if (tagMode && tagBuffer) {
+      appendVisible(tagBuffer);
+      tagBuffer = "";
+      tagMode = false;
+    }
+
+    flushChat();
+    flushDocument();
+
+    if (inDocument) {
+      emit({ type: "document_end", title: activeDocumentTitle || "Draft" });
+      inDocument = false;
+      activeDocumentTitle = "";
+    }
+  };
+
+  return { pushText, finish };
 }
 
 async function loadProjectSources(
@@ -214,15 +340,22 @@ function buildWritingSystemPrompt(
   project: WritingProjectContext | null,
   citationStyle?: string,
   tone?: string,
+  humanize?: boolean,
   noEnDashes?: boolean
 ): string {
-  if (sources.length === 0 && !project) {
-    return BASE_SYSTEM_PROMPT;
-  }
-
   const styleLabel = (citationStyle || "chicago").toUpperCase();
-  const noEnDashesLine = noEnDashes
-    ? "\n8. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
+  const noEnDashesRule = noEnDashes
+    ? "\n9. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
+    : "";
+  const includeHumanStyle = humanize ?? true;
+  const writingStyleBlock = includeHumanStyle
+    ? `
+WRITING STYLE:
+- Vary sentence length. Mix short punchy sentences with longer analytical ones.
+- Use active voice by default. Passive only when actor is unknown.
+- Avoid cliche phrases: "It is important to note", "Furthermore", "In conclusion".
+- Start paragraphs with substance, not meta-commentary.
+- Write as a knowledgeable human expert, not as an AI summarizing.`
     : "";
 
   return `You are ScholarMark AI, an expert academic writing partner. You are collaborating with a student on a research paper.
@@ -234,16 +367,26 @@ You have access to ${sources.length} source document(s).
 SOURCE MATERIALS:
 ${buildSourceBlock(sources)}
 
-When the student asks you to write, draft, expand, or refine content:
-1. Write in ${prettyToneLabel(tone)} register with ${styleLabel} citations.
-2. Ground every claim in the provided sources and cite specific page numbers or section references when available.
-3. When quoting a source, use exact source text.
-4. Distinguish direct quotations from paraphrases.
-5. Explicitly flag claims that go beyond what the provided sources support.
-6. Maintain the student's argumentative thread across the full conversation and build on what has already been drafted.
-7. When asked to write a section, produce complete, publication-ready prose (not an outline).${noEnDashesLine}
+BEHAVIOR RULES:
+1. When asked to write, draft, expand, or revise: PRODUCE THE CONTENT IMMEDIATELY. Do not ask clarifying questions unless the request is genuinely ambiguous.
+2. Write in ${prettyToneLabel(tone)} register with ${styleLabel} citations.
+3. Ground claims in the provided sources. Cite page numbers when available.
+4. Use exact source text for direct quotations.
+5. Flag claims that go beyond source support.
+6. Build on prior conversation and maintain the student's argument thread.
+7. Produce complete, publication-ready prose, not outlines.
+8. Use footnotes for citations: [^1], [^2], etc. with footnote definitions at the end.${noEnDashesRule}
 
-Do not fabricate quotations, publication details, page numbers, or bibliography metadata. If source detail is uncertain, state uncertainty clearly and cite conservatively.`;
+Do not fabricate quotations, publication details, page numbers, or bibliography metadata. If source detail is uncertain, state uncertainty clearly and cite conservatively.${writingStyleBlock}
+
+OUTPUT FORMAT:
+When producing substantial written content (a full paragraph or more of paper content), wrap it in document tags:
+
+<document title="Section Title">
+Your written content here in markdown...
+</document>
+
+Brief conversational responses (questions, acknowledgments, short clarifications) should NOT use document tags.`;
 }
 
 export function registerChatRoutes(app: Express) {
@@ -266,13 +409,14 @@ export function registerChatRoutes(app: Express) {
   // Create new conversation
   app.post("/api/chat/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { title, model, projectId, selectedSourceIds } = req.body || {};
+      const { title, model, projectId, selectedSourceIds, humanize } = req.body || {};
       const conv = await chatStorage.createConversation({
         title: title || "New Chat",
         model: model || "claude-opus-4-6",
         userId: req.user!.userId,
         projectId: projectId || null,
         selectedSourceIds: selectedSourceIds || null,
+        humanize: humanize ?? true,
       });
       res.json(conv);
     } catch (error) {
@@ -320,12 +464,13 @@ export function registerChatRoutes(app: Express) {
   // Update conversation (title, model, settings)
   app.put("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { title, model, citationStyle, tone, noEnDashes } = req.body;
+      const { title, model, citationStyle, tone, humanize, noEnDashes } = req.body;
       const updates: Record<string, any> = {};
       if (title !== undefined) updates.title = title;
       if (model !== undefined) updates.model = model;
       if (citationStyle !== undefined) updates.citationStyle = citationStyle;
       if (tone !== undefined) updates.tone = tone;
+      if (humanize !== undefined) updates.humanize = humanize;
       if (noEnDashes !== undefined) updates.noEnDashes = noEnDashes;
 
       const conv = await chatStorage.updateConversation(req.params.id, updates);
@@ -385,12 +530,14 @@ export function registerChatRoutes(app: Express) {
       // Build system prompt with project context + sources (project docs or selected web clips)
       let systemPrompt = BASE_SYSTEM_PROMPT;
       const { project, sources } = await loadConversationContext(conv, req.user!.userId);
-      if (project || sources.length > 0 || conv.projectId) {
+      const isWritingConversation = Boolean(conv.projectId || conv.selectedSourceIds !== null);
+      if (isWritingConversation) {
         systemPrompt = buildWritingSystemPrompt(
           sources,
           project,
           conv.citationStyle || undefined,
           conv.tone || undefined,
+          conv.humanize ?? true,
           conv.noEnDashes || false
         );
       }
@@ -411,14 +558,25 @@ export function registerChatRoutes(app: Express) {
       });
 
       let fullText = "";
+      let closed = false;
+      const parser = createDocumentStreamParser((event) => {
+        if (closed || res.writableEnded) return;
+        if (event.type === "chat_text") {
+          const text = String(event.text ?? "");
+          // Backward compatibility for legacy chat clients still listening for `text`.
+          res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
+        }
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      });
 
       stream.on("text", (text) => {
         fullText += text;
-        res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
+        parser.pushText(text);
       });
 
       stream.on("message", async (message) => {
         try {
+          parser.finish();
           const usage = message.usage;
 
           // Save complete assistant message to DB
@@ -440,25 +598,32 @@ export function registerChatRoutes(app: Express) {
             await chatStorage.updateConversation(conv.id, { title: autoTitle });
           }
 
-          res.write(`data: ${JSON.stringify({ type: "done", usage })}\n\n`);
-          res.end();
+          if (!closed && !res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ type: "done", usage })}\n\n`);
+            res.end();
+          }
         } catch (err) {
           console.error("Error saving assistant message:", err);
-          res.write(`data: ${JSON.stringify({ type: "error", error: "Failed to save response" })}\n\n`);
-          res.end();
+          if (!closed && !res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ type: "error", error: "Failed to save response" })}\n\n`);
+            res.end();
+          }
         }
       });
 
       stream.on("error", (error) => {
         console.error("Anthropic stream error:", error);
-        res.write(
-          `data: ${JSON.stringify({ type: "error", error: error instanceof Error ? error.message : "Stream failed" })}\n\n`
-        );
-        res.end();
+        if (!closed && !res.writableEnded) {
+          res.write(
+            `data: ${JSON.stringify({ type: "error", error: error instanceof Error ? error.message : "Stream failed" })}\n\n`
+          );
+          res.end();
+        }
       });
 
       // Handle client disconnect
       req.on("close", () => {
+        closed = true;
         stream.abort();
       });
     } catch (error) {
@@ -508,8 +673,8 @@ export function registerChatRoutes(app: Express) {
         : "";
 
       const noEnDashesRule = avoidDashes
-        ? "\n9. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead.\n10. Output clean markdown using ## section headings."
-        : "\n9. Output clean markdown using ## section headings.";
+        ? "\n11. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
+        : "";
 
       const compilePrompt = `You are assembling a final academic paper from a writing conversation.
 The student and AI have been collaboratively drafting sections.
@@ -525,8 +690,12 @@ RULES:
 4. If the same topic or section was revised multiple times, use the LATEST version.
 5. Remove conversational chatter and keep only polished paper content.
 6. Add only what is required to unify the paper: transitions, a unified introduction (if missing), and a conclusion that synthesizes the argument.
-7. Compile a bibliography from all cited sources using ${style.toUpperCase()} format.
-8. Do not fabricate source details not grounded in the provided sources.${noEnDashesRule}
+7. Use footnotes for citations ([^1], [^2], etc.) throughout the paper.
+8. Include footnote definitions immediately before the bibliography.
+9. Compile a bibliography from all cited sources using ${style.toUpperCase()} format.
+10. Write naturally: vary sentence length, prefer active voice, and avoid filler phrases.
+11. Do not fabricate source details not grounded in the provided sources.${noEnDashesRule}
+12. Output clean markdown using ## section headings.
 
 CONVERSATION TRANSCRIPT:
 ${transcript}${sourcesBlock}`;
@@ -630,9 +799,10 @@ Verification requirements:
 2. Check whether paraphrases accurately reflect the source content.
 3. Verify page numbers or section references where they are provided.
 4. Flag any citation that does not correspond to the provided sources.
-5. Check citation and bibliography formatting consistency in ${style.toUpperCase()}.
-6. Identify unsupported or over-claimed assertions.
-7. Review logical flow, argument coherence, tone consistency, and major grammar issues.
+5. Check footnote numbering consistency and formatting correctness.
+6. Check citation and bibliography formatting consistency in ${style.toUpperCase()}.
+7. Identify unsupported or over-claimed assertions.
+8. Review logical flow, argument coherence, tone consistency, and major grammar issues.
 
 Output format:
 - Executive summary (2-4 sentences)

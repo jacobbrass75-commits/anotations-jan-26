@@ -109,7 +109,7 @@ export function useSendMessage(conversationId: string | null) {
             if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.slice(6));
-                if (data.type === "text") {
+                if (data.type === "text" || data.type === "chat_text") {
                   accumulated += data.text;
                   setStreamingText(accumulated);
                 } else if (data.type === "done") {
