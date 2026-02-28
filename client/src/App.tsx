@@ -31,6 +31,7 @@ function Router() {
       <Route path="/chat" component={Chat} />
       <Route path="/chat/:conversationId" component={Chat} />
       <Route path="/write" component={WritingPage} />
+      <Route path="/writing" component={WritingPage} />
       <Route component={NotFound} />
     </Switch>
   );

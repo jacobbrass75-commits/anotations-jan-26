@@ -4,6 +4,11 @@ import { ArrowLeft, FolderOpen, MessageSquare, PenTool } from "lucide-react";
 import WritingPane from "@/components/WritingPane";
 
 export default function WritingPage() {
+  const initialProjectId =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("projectId") || undefined
+      : undefined;
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-40">
@@ -36,7 +41,7 @@ export default function WritingPage() {
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-6 pb-8 w-full eva-grid-bg">
-        <WritingPane />
+        <WritingPane initialProjectId={initialProjectId} />
       </main>
     </div>
   );

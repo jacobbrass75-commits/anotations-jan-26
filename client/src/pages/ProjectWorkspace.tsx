@@ -26,13 +26,6 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Folder as FolderType, GlobalSearchResult, Document } from "@shared/schema";
 
 type DocumentLibraryItem = Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">;
-type WritingAnnotationItem = {
-  id: string;
-  highlightedText: string;
-  note: string | null;
-  category: string;
-  documentFilename?: string;
-};
 
 function FolderTree({ 
   folders, 
@@ -344,56 +337,10 @@ export default function ProjectWorkspace() {
     return projectDocuments.filter(pd => pd.folderId === selectedFolderId);
   }, [projectDocuments, selectedFolderId]);
 
-  const projectDocumentIds = useMemo(
-    () => projectDocuments.map((pd) => pd.id),
-    [projectDocuments]
-  );
-
-  const projectDocumentFilenameMap = useMemo(
-    () => new Map(projectDocuments.map((pd) => [pd.id, pd.document.filename])),
-    [projectDocuments]
-  );
-
   const availableDocuments = useMemo(() => {
     const addedDocIds = new Set(projectDocuments.map(pd => pd.documentId));
     return allDocuments.filter(doc => !addedDocIds.has(doc.id));
   }, [allDocuments, projectDocuments]);
-
-  const {
-    data: writingAnnotations = [],
-    isLoading: isWritingAnnotationsLoading,
-    error: writingAnnotationsError,
-  } = useQuery<WritingAnnotationItem[]>({
-    queryKey: ["/api/projects", projectId, "writing-annotations", projectDocumentIds],
-    enabled: workspaceTab === "write" && projectDocumentIds.length > 0,
-    queryFn: async () => {
-      const annotationSets = await Promise.all(
-        projectDocumentIds.map(async (projectDocumentId) => {
-          const res = await fetch(`/api/project-documents/${projectDocumentId}/annotations`);
-          if (!res.ok) {
-            throw new Error("Failed to fetch project annotations for writing");
-          }
-
-          const annotations = await res.json() as Array<{
-            id: string;
-            highlightedText: string;
-            note: string | null;
-            category: string;
-          }>;
-
-          return annotations.map((annotation) => ({
-            id: annotation.id,
-            highlightedText: annotation.highlightedText,
-            note: annotation.note,
-            category: annotation.category,
-            documentFilename: projectDocumentFilenameMap.get(projectDocumentId),
-          }));
-        })
-      );
-
-      return annotationSets.flat();
-    },
-  });
 
   const hasPdfUploadFiles = uploadFiles.some((file) => isPdfFile(file));
   const hasImageUploadFiles = uploadFiles.some((file) => isImageFile(file));
@@ -876,7 +823,7 @@ export default function ProjectWorkspace() {
                   <Plus className="h-4 w-4 mr-2" />
                   Add Source
                 </Button>
-                <Link href="/write">
+                <Link href={`/write?projectId=${projectId}`}>
                   <Button variant="outline" className="uppercase tracking-wider text-xs" data-testid="button-open-full-write">
                     <ExternalLink className="h-4 w-4 mr-2" />
                     Open Full Page
@@ -892,20 +839,11 @@ export default function ProjectWorkspace() {
           <div className="flex-1 min-h-0 p-6 pb-8 eva-grid-bg">
             <div className="mb-3 flex items-center justify-between gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground">
               <span>Project Writing</span>
-              <span>{writingAnnotations.length} source annotation{writingAnnotations.length === 1 ? "" : "s"} loaded</span>
+              <span>{projectDocuments.length} source document{projectDocuments.length === 1 ? "" : "s"} available</span>
             </div>
 
-            {isWritingAnnotationsLoading && (
-              <div className="mb-3 text-sm text-muted-foreground">Loading project source annotations...</div>
-            )}
-            {writingAnnotationsError && (
-              <div className="mb-3 text-sm text-destructive">
-                Could not load project annotations. You can still write, but source selection may be incomplete.
-              </div>
-            )}
-
             <div className="h-full min-h-0">
-              <WritingPane projectId={projectId} availableAnnotations={writingAnnotations} />
+              <WritingPane initialProjectId={projectId} lockProject />
             </div>
           </div>
         ) : (

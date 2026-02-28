@@ -5,6 +5,7 @@ import { useState, useCallback, useRef } from "react";
 export interface WritingRequest {
   topic: string;
   annotationIds: string[];
+  sourceDocumentIds?: string[];
   projectId?: string;
   citationStyle: "mla" | "apa" | "chicago";
   tone: "academic" | "casual" | "ap_style";
@@ -16,7 +17,7 @@ export interface WritingRequest {
 export interface WritingPlanSection {
   title: string;
   description: string;
-  annotationIds: string[];
+  sourceIds: string[];
   targetWords: number;
 }
 
@@ -32,8 +33,15 @@ export interface WritingSection {
   content: string;
 }
 
+export interface SavedPaper {
+  documentId: string;
+  projectDocumentId: string;
+  filename: string;
+  savedAt: number;
+}
+
 interface SSEEvent {
-  type: "status" | "plan" | "section" | "complete" | "error";
+  type: "status" | "plan" | "section" | "complete" | "error" | "saved";
   phase?: string;
   message?: string;
   plan?: WritingPlan;
@@ -43,6 +51,7 @@ interface SSEEvent {
   fullText?: string;
   usage?: { inputTokens: number; outputTokens: number };
   error?: string;
+  savedPaper?: SavedPaper;
 }
 
 export function useWritingPipeline() {
@@ -53,6 +62,7 @@ export function useWritingPipeline() {
   const [fullText, setFullText] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedPaper, setSavedPaper] = useState<SavedPaper | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const reset = useCallback(() => {
@@ -63,6 +73,7 @@ export function useWritingPipeline() {
     setFullText("");
     setIsGenerating(false);
     setError(null);
+    setSavedPaper(null);
   }, []);
 
   const cancel = useCallback(() => {
@@ -83,6 +94,7 @@ export function useWritingPipeline() {
     setFullText("");
     setIsGenerating(true);
     setError(null);
+    setSavedPaper(null);
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -163,6 +175,14 @@ export function useWritingPipeline() {
                 setError(event.error || "Unknown error");
                 setIsGenerating(false);
                 break;
+              case "saved":
+                if (event.savedPaper) {
+                  setSavedPaper(event.savedPaper);
+                }
+                if (event.message) {
+                  setStatus(event.message);
+                }
+                break;
             }
           } catch {
             // Skip malformed JSON lines
@@ -195,5 +215,6 @@ export function useWritingPipeline() {
     fullText,
     isGenerating,
     error,
+    savedPaper,
   };
 }

@@ -6,6 +6,7 @@ import type { CitationData } from "@shared/schema";
 export interface WritingRequest {
   topic: string;
   annotationIds: string[];
+  sourceDocumentIds?: string[];
   projectId?: string;
   citationStyle: "mla" | "apa" | "chicago";
   tone: "academic" | "casual" | "ap_style";
@@ -17,7 +18,7 @@ export interface WritingRequest {
 export interface WritingPlanSection {
   title: string;
   description: string;
-  annotationIds: string[];
+  sourceIds: string[];
   targetWords: number;
 }
 
@@ -27,17 +28,21 @@ export interface WritingPlan {
   bibliography: string[];
 }
 
-export interface AnnotationSource {
+export interface WritingSource {
   id: string;
-  highlightedText: string;
-  note: string | null;
+  kind: "project_document" | "annotation";
+  title: string;
+  author: string;
+  excerpt: string;
+  fullText: string;
   category: string;
+  note: string | null;
   citationData: CitationData | null;
   documentFilename: string;
 }
 
 export interface WritingSSEEvent {
-  type: "status" | "plan" | "section" | "complete" | "error";
+  type: "status" | "plan" | "section" | "complete" | "error" | "saved";
   phase?: string;
   message?: string;
   plan?: WritingPlan;
@@ -47,6 +52,12 @@ export interface WritingSSEEvent {
   fullText?: string;
   usage?: { inputTokens: number; outputTokens: number };
   error?: string;
+  savedPaper?: {
+    documentId: string;
+    projectDocumentId: string;
+    filename: string;
+    savedAt: number;
+  };
 }
 
 // --- Constants ---
@@ -72,17 +83,23 @@ function getClient(): Anthropic {
   return new Anthropic({ apiKey });
 }
 
-function formatAnnotationForPrompt(ann: AnnotationSource): string {
+function formatSourceForPrompt(source: WritingSource): string {
   const parts: string[] = [];
-  parts.push(`[Source ID: ${ann.id}]`);
-  if (ann.citationData) {
-    const cd = ann.citationData;
+  parts.push(`[SOURCE ${source.id}]`);
+  parts.push(`Type: ${source.kind}`);
+  parts.push(`Document: ${source.documentFilename}`);
+  parts.push(`Title: ${source.title}`);
+  parts.push(`Author(s): ${source.author}`);
+  parts.push(`Category: ${source.category}`);
+  if (source.note) parts.push(`Note: ${source.note}`);
+  if (source.citationData) {
+    const cd = source.citationData;
     const authorStr =
       cd.authors && cd.authors.length > 0
         ? cd.authors.map((a) => `${a.firstName} ${a.lastName}`).join(", ")
         : "Unknown Author";
-    parts.push(`Author(s): ${authorStr}`);
-    parts.push(`Title: ${cd.title}${cd.subtitle ? ": " + cd.subtitle : ""}`);
+    parts.push(`Citation Author(s): ${authorStr}`);
+    parts.push(`Citation Title: ${cd.title}${cd.subtitle ? ": " + cd.subtitle : ""}`);
     if (cd.publicationDate) parts.push(`Date: ${cd.publicationDate}`);
     if (cd.publisher) parts.push(`Publisher: ${cd.publisher}`);
     if (cd.containerTitle) parts.push(`In: ${cd.containerTitle}`);
@@ -92,12 +109,9 @@ function formatAnnotationForPrompt(ann: AnnotationSource): string {
       );
     }
     if (cd.url) parts.push(`URL: ${cd.url}`);
-  } else {
-    parts.push(`Source: ${ann.documentFilename}`);
   }
-  parts.push(`Category: ${ann.category}`);
-  if (ann.note) parts.push(`Note: ${ann.note}`);
-  parts.push(`Quoted text: "${ann.highlightedText}"`);
+  parts.push(`Excerpt: "${source.excerpt}"`);
+  parts.push(`Content Snippet:\n${source.fullText}`);
   return parts.join("\n");
 }
 
@@ -106,16 +120,16 @@ function formatAnnotationForPrompt(ann: AnnotationSource): string {
 async function runPlanner(
   client: Anthropic,
   request: WritingRequest,
-  annotations: AnnotationSource[],
+  sources: WritingSource[],
   model: string
 ): Promise<WritingPlan> {
   const totalWords = TARGET_WORDS[request.targetLength] || 2500;
 
-  const annotationBlock = annotations
-    .map((ann, i) => `--- Annotation ${i + 1} ---\n${formatAnnotationForPrompt(ann)}`)
+  const sourceBlock = sources
+    .map((source, i) => `--- Source ${i + 1} ---\n${formatSourceForPrompt(source)}`)
     .join("\n\n");
 
-  const systemPrompt = `You are an academic writing planner. Given a topic, tone, and a set of source annotations,
+  const systemPrompt = `You are an academic writing planner. Given a topic, tone, and source materials,
 create a detailed outline for a paper.
 
 Output ONLY a JSON object (no markdown fences, no extra text) with:
@@ -123,7 +137,7 @@ Output ONLY a JSON object (no markdown fences, no extra text) with:
 - sections: Array of sections, each with:
   - title: Section heading
   - description: What this section should cover
-  - annotationIds: Array of source annotation IDs to use in this section
+  - sourceIds: Array of source IDs to use in this section
   - targetWords: Target word count for this section
 - bibliography: Array of formatted ${request.citationStyle.toUpperCase()} bibliography entries based on available citation data
 
@@ -134,15 +148,16 @@ Target lengths:
 - medium: ~2500 words (5 pages)
 - long: ~4000 words (8 pages)
 
-Always include an Introduction and Conclusion section. Distribute annotations logically across sections.`;
+Always include an Introduction and Conclusion section. Distribute sources logically across sections.
+Do not invent fake source metadata. If source metadata is missing, use conservative placeholders in bibliography entries.`;
 
   const userPrompt = `Topic: ${request.topic}
 Tone: ${request.tone}
 Target length: ${request.targetLength} (~${totalWords} words)
 Citation style: ${request.citationStyle}
 
-Source annotations (${annotations.length} total):
-${annotationBlock || "(No annotations provided - write based on topic alone)"}`;
+Source materials (${sources.length} total):
+${sourceBlock || "(No sources provided - write based on topic alone)"}`;
 
   const response = await client.messages.create({
     model,
@@ -157,12 +172,48 @@ ${annotationBlock || "(No annotations provided - write based on topic alone)"}`;
   // Parse JSON from response (strip markdown fences if present)
   const jsonStr = text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
   try {
-    const plan: WritingPlan = JSON.parse(jsonStr);
-    // Validate structure
-    if (!plan.thesis || !Array.isArray(plan.sections)) {
+    type RawPlanSection = {
+      title: string;
+      description: string;
+      targetWords: number;
+      sourceIds?: string[];
+      annotationIds?: string[];
+    };
+    const parsed = JSON.parse(jsonStr) as {
+      thesis: string;
+      bibliography?: string[];
+      sections?: RawPlanSection[];
+    };
+
+    if (!parsed.thesis || !Array.isArray(parsed.sections)) {
       throw new Error("Invalid plan structure");
     }
-    return plan;
+
+    const sectionCount = Math.max(1, parsed.sections.length);
+    const fallbackWords = Math.max(250, Math.round(totalWords / sectionCount));
+
+    const sections: WritingPlanSection[] = parsed.sections.map((section) => {
+      const sourceIds = Array.isArray(section.sourceIds)
+        ? section.sourceIds
+        : Array.isArray(section.annotationIds)
+          ? section.annotationIds
+          : [];
+      return {
+        title: section.title,
+        description: section.description,
+        sourceIds,
+        targetWords:
+          Number.isFinite(section.targetWords) && section.targetWords > 0
+            ? section.targetWords
+            : fallbackWords,
+      };
+    });
+
+    return {
+      thesis: parsed.thesis,
+      sections,
+      bibliography: Array.isArray(parsed.bibliography) ? parsed.bibliography : [],
+    };
   } catch (e) {
     throw new Error(
       `Failed to parse writing plan from AI response: ${e instanceof Error ? e.message : String(e)}`
@@ -177,18 +228,18 @@ async function writeSection(
   plan: WritingPlan,
   sectionIndex: number,
   request: WritingRequest,
-  annotations: AnnotationSource[],
+  sources: WritingSource[],
   model: string
 ): Promise<string> {
   const section = plan.sections[sectionIndex];
 
-  // Get relevant annotations for this section
-  const relevantAnnotations = section.annotationIds.length > 0
-    ? annotations.filter((a) => section.annotationIds.includes(a.id))
-    : annotations; // fallback: give all annotations if none mapped
+  // Get relevant sources for this section
+  const relevantSources = section.sourceIds.length > 0
+    ? sources.filter((source) => section.sourceIds.includes(source.id))
+    : sources;
 
-  const annotationBlock = relevantAnnotations
-    .map((ann) => formatAnnotationForPrompt(ann))
+  const sourceBlock = relevantSources
+    .map((source) => formatSourceForPrompt(source))
     .join("\n\n---\n\n");
 
   const planSummary = plan.sections
@@ -214,14 +265,16 @@ Target length: ${section.targetWords} words
 Tone: ${request.tone}
 Citation style: ${request.citationStyle}
 
-Source material (annotations from the student's research):
-${annotationBlock || "(No specific sources for this section)"}
+Source material (from the student's selected project sources):
+${sourceBlock || "(No specific sources for this section)"}
 
 Requirements:
 - Write ONLY this section, not the whole paper
 - Include in-text citations in ${request.citationStyle.toUpperCase()} format where appropriate
-- Use the provided source annotations as evidence
+- Use ONLY the provided sources as primary evidence
 - Match the specified tone${noEnDashesLine}
+- Do not fabricate quotations, page numbers, publication details, or bibliography entries
+- If uncertain, cite conservatively and state uncertainty plainly
 
 Output the section text in markdown format. Start with the section heading as ## ${section.title}`;
 
@@ -276,6 +329,7 @@ Your job is to:
 4. Write a conclusion that ties the argument together
 5. Append a complete bibliography/works cited section in ${request.citationStyle.toUpperCase()} format
 6. Do NOT rewrite the sections - only add transitions, intro, conclusion, and bibliography${noEnDashesLine}
+7. Do not fabricate source details that are not supported by the source material
 
 The thesis of the paper is: ${plan.thesis}
 
@@ -303,7 +357,7 @@ Output the complete paper in markdown format.`;
 
 export async function runWritingPipeline(
   request: WritingRequest,
-  annotations: AnnotationSource[],
+  sources: WritingSource[],
   onEvent: (event: WritingSSEEvent) => void
 ): Promise<void> {
   const client = getClient();
@@ -320,7 +374,7 @@ export async function runWritingPipeline(
       message: "Creating outline...",
     });
 
-    const plan = await runPlanner(client, request, annotations, model);
+    const plan = await runPlanner(client, request, sources, model);
 
     onEvent({ type: "plan", plan });
 
@@ -340,7 +394,7 @@ export async function runWritingPipeline(
         plan,
         i,
         request,
-        annotations,
+        sources,
         model
       );
       sectionTexts.push(sectionContent);
