@@ -20,7 +20,7 @@ import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDow
 import { BatchAnalysisModal } from "@/components/BatchAnalysisModal";
 import { BatchUploadModal } from "@/components/BatchUploadModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import WritingPane from "@/components/WritingPane";
+import WritingChat from "@/components/WritingChat";
 import { useToast } from "@/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Folder as FolderType, GlobalSearchResult, Document } from "@shared/schema";
@@ -836,15 +836,8 @@ export default function ProjectWorkspace() {
         </header>
 
         {workspaceTab === "write" ? (
-          <div className="flex-1 min-h-0 p-6 pb-8 eva-grid-bg">
-            <div className="mb-3 flex items-center justify-between gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground">
-              <span>Project Writing</span>
-              <span>{projectDocuments.length} source document{projectDocuments.length === 1 ? "" : "s"} available</span>
-            </div>
-
-            <div className="h-full min-h-0">
-              <WritingPane initialProjectId={projectId} lockProject />
-            </div>
+          <div className="flex-1 min-h-0 eva-grid-bg">
+            <WritingChat initialProjectId={projectId} lockProject />
           </div>
         ) : (
           <div className="flex-1 overflow-auto p-6 pb-8 eva-grid-bg">

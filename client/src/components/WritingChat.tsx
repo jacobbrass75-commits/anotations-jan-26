@@ -71,6 +71,7 @@ import {
 
 interface WritingChatProps {
   initialProjectId?: string;
+  lockProject?: boolean;
 }
 
 const WRITING_PROMPTS = [
@@ -96,7 +97,7 @@ const WRITING_PROMPTS = [
   },
 ];
 
-export default function WritingChat({ initialProjectId }: WritingChatProps) {
+export default function WritingChat({ initialProjectId, lockProject }: WritingChatProps) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
@@ -413,16 +414,20 @@ export default function WritingChat({ initialProjectId }: WritingChatProps) {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm">
               <PenTool className="h-4 w-4 text-primary" />
-              <Select value={selectedProjectId} onValueChange={(v) => { setSelectedProjectId(v); setActiveConversationId(null); clearCompiled(); }}>
-                <SelectTrigger className="w-auto border-0 shadow-none p-0 h-auto font-semibold">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {lockProject ? (
+                <span className="font-semibold">{selectedProject?.name || "Project"}</span>
+              ) : (
+                <Select value={selectedProjectId} onValueChange={(v) => { setSelectedProjectId(v); setActiveConversationId(null); clearCompiled(); }}>
+                  <SelectTrigger className="w-auto border-0 shadow-none p-0 h-auto font-semibold">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             {compiledContent && (
               <div className="flex items-center gap-2">
