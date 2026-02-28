@@ -330,6 +330,10 @@ export default function WritingPane({
     if (!selectedPaperId) return generatedPapers[0];
     return generatedPapers.find((paper) => paper.id === selectedPaperId) || generatedPapers[0];
   }, [generatedPapers, selectedPaperId]);
+  const orderedPapers = useMemo(
+    () => [...generatedPapers].sort((a, b) => a.createdAt - b.createdAt),
+    [generatedPapers]
+  );
 
   const activeContent = isGenerating ? streamingContent : selectedPaper?.content || streamingContent;
   const activeTopic = isGenerating ? currentPrompt : selectedPaper?.topic || currentPrompt || "Generated Paper";
@@ -483,257 +487,24 @@ export default function WritingPane({
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col md:flex-row border border-border rounded-lg overflow-hidden bg-background">
-      <aside className="w-full md:w-2/5 lg:w-[38%] border-b md:border-b-0 md:border-r border-border bg-[#FDFAF4] dark:bg-muted/20 min-h-0">
-        <div className="h-full min-h-0 overflow-y-auto p-4 space-y-4">
-          <Card className="border-border bg-card/85">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <PenTool className="h-4 w-4 text-primary" />
-                Writing Controls
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Project</Label>
-                {lockProject ? (
-                  <div className="rounded-md border px-3 py-2 text-sm font-mono uppercase tracking-wider">
-                    {selectedProject?.name || "Current Project"}
-                  </div>
-                ) : (
-                  <Select
-                    value={selectedProjectId}
-                    onValueChange={setSelectedProjectId}
-                    disabled={projectsLoading || isGenerating}
-                  >
-                    <SelectTrigger data-testid="select-writing-project">
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                <p className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider">
-                  Active source bank: {selectedProject?.name || "None selected"}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <button type="button" className="w-full flex items-center justify-between" onClick={() => setSourcesExpanded((v) => !v)}>
-                  <Label className="cursor-pointer">
-                    Sources ({selectedSourceDocumentIds.length}/{projectSources.length})
-                  </Label>
-                  {sourcesExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
-                {sourcesExpanded && (
-                  <>
-                    <div className="flex justify-end">
-                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={toggleAllSources} disabled={projectSources.length === 0 || isGenerating}>
-                        {selectedSourceDocumentIds.length === projectSources.length ? "Deselect all" : "Select all"}
-                      </Button>
-                    </div>
-                    <ScrollArea className="h-40 border rounded-md p-2">
-                      {projectSourcesLoading ? (
-                        <p className="text-xs text-muted-foreground">Loading project sources...</p>
-                      ) : projectSources.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No source documents in this project.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {projectSources.map((source) => (
-                            <label key={source.id} className="flex gap-2 rounded-md p-1.5 hover:bg-muted/40 cursor-pointer">
-                              <Checkbox checked={selectedSourceDocumentIds.includes(source.id)} onCheckedChange={() => toggleSource(source.id)} disabled={isGenerating} className="mt-0.5" />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-medium truncate">{source.document.filename}</span>
-                                  <Badge variant="outline" className="text-[10px]">{getDocTypeLabel(source.document.filename)}</Badge>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                                  {source.document.summary || "No summary available for this source."}
-                                </p>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="writing-topic">Topic / Prompt</Label>
-                <Textarea
-                  id="writing-topic"
-                  value={topic}
-                  onChange={(event) => setTopic(event.target.value)}
-                  placeholder="Describe what you want written, your thesis, and argument strategy."
-                  className="min-h-[96px] resize-none"
-                  disabled={isGenerating}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Tone</Label>
-                  <Select value={tone} onValueChange={(v) => setTone(v as typeof tone)} disabled={isGenerating}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="academic">Academic</SelectItem>
-                      <SelectItem value="casual">Casual</SelectItem>
-                      <SelectItem value="ap_style">AP Style</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Length</Label>
-                  <Select value={targetLength} onValueChange={(v) => setTargetLength(v as typeof targetLength)} disabled={isGenerating}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="short">Short (~3 pages)</SelectItem>
-                      <SelectItem value="medium">Medium (~5 pages)</SelectItem>
-                      <SelectItem value="long">Long (~8 pages)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Citation Style</Label>
-                <Select value={citationStyle} onValueChange={(v) => setCitationStyle(v as typeof citationStyle)} disabled={isGenerating}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="chicago">Chicago</SelectItem>
-                    <SelectItem value="mla">MLA</SelectItem>
-                    <SelectItem value="apa">APA</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <label className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider">
-                  <Checkbox checked={noEnDashes} onCheckedChange={(v) => setNoEnDashes(Boolean(v))} disabled={isGenerating} />
-                  No en-dashes
-                </label>
-                <label className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider">
-                  <Checkbox checked={deepWrite} onCheckedChange={(v) => setDeepWrite(Boolean(v))} disabled={isGenerating} />
-                  Deep Write
-                </label>
-              </div>
-
-              {(isGenerating || phase) && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs">
-                    {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : error ? <AlertCircle className="h-3.5 w-3.5 text-destructive" /> : <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
-                    <span className="text-muted-foreground">{status}</span>
-                  </div>
-                  {isGenerating && <Progress value={progressPercent} className="h-1.5" />}
-                </div>
-              )}
-
-              {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</div>}
-
-              <div className="flex items-center gap-2">
-                {!isGenerating ? (
-                  <Button onClick={handleGenerate} className="flex-1" data-testid="button-generate-paper">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Generate Paper
-                  </Button>
-                ) : (
-                  <Button variant="destructive" onClick={cancel} className="flex-1">
-                    <StopCircle className="h-4 w-4 mr-2" />
-                    Stop
-                  </Button>
-                )}
-                <Button variant="outline" onClick={handleReset}>
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Reset
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border bg-card/85">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-mono uppercase tracking-wider">Writing Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-56 pr-2">
-                <div className="space-y-3">
-                  {generatedPapers.map((paper) => (
-                    <div key={paper.id} className="space-y-1.5">
-                      <div className="ml-auto max-w-[90%] rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs">{paper.topic}</div>
-                      <div className="max-w-[92%] rounded-lg border border-border bg-background px-3 py-2 text-xs space-y-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium">Done</span>
-                          <span className="text-[10px] text-muted-foreground">{new Date(paper.createdAt).toLocaleTimeString()}</span>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">
-                          {paper.savedPaper ? `Saved as ${paper.savedPaper.filename}` : "Generated in this session"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-
-                  {currentPrompt && (isGenerating || !!error) && (
-                    <div className="space-y-1.5">
-                      <div className="ml-auto max-w-[90%] rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs">{currentPrompt}</div>
-                      <div className="max-w-[92%] rounded-lg border border-border bg-background px-3 py-2 text-xs">{isGenerating ? status || "Generating..." : error || "Generation failed"}</div>
-                    </div>
-                  )}
-
-                  {!generatedPapers.length && !currentPrompt && (
-                    <p className="text-xs text-muted-foreground">Prompt and generation status history appears here.</p>
-                  )}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </div>
-      </aside>
-
-      <section className="flex-1 min-h-0 flex flex-col bg-[#F7F2EA] dark:bg-background">
-        <div className="border-b border-border px-4 py-3 bg-background/80 backdrop-blur-md">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {generatedPapers.length > 1 && !isGenerating && (
-                <Select value={selectedPaper?.id || ""} onValueChange={setSelectedPaperId}>
-                  <SelectTrigger className="w-[220px]"><SelectValue placeholder="Select draft" /></SelectTrigger>
-                  <SelectContent>
-                    {generatedPapers.map((paper) => (
-                      <SelectItem key={paper.id} value={paper.id}>{paper.topic.slice(0, 45)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+    <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_380px] border border-border rounded-xl overflow-hidden bg-[#F5F0E8] dark:bg-background">
+      <section className="min-h-0 flex flex-col bg-[#FAF7F1] dark:bg-background">
+        <div className="border-b border-border px-5 py-3 bg-background/80 backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">project</span>
+              <span className="font-semibold">{selectedProject?.name || "Select project"}</span>
+            </div>
+            <div className="flex items-center gap-2">
               <Badge variant="outline" className="font-mono text-[10px] uppercase">{wordCount} words</Badge>
               <Badge variant="outline" className="font-mono text-[10px] uppercase">{pageEstimate} page{pageEstimate === 1 ? "" : "s"}</Badge>
-              {activeSavedPaper && <Badge variant="secondary" className="font-mono text-[10px] uppercase">Saved to project</Badge>}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleCopy} disabled={!activeContent}><Copy className="h-4 w-4 mr-2" />Copy</Button>
-              <Button variant="outline" size="sm" onClick={handleDownloadDocx} disabled={!activeContent || isPreparingDocx}>
-                {isPreparingDocx ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                DOCX
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={!activeContent || isPreparingPdf}>
-                {isPreparingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                PDF
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleTogglePdfPreview} disabled={!activeContent || isPreparingPdf}>
-                {showPdfPreview ? <><EyeOff className="h-4 w-4 mr-2" />Hide Preview</> : <><Eye className="h-4 w-4 mr-2" />Preview PDF</>}
-              </Button>
+              {activeSavedPaper && <Badge variant="secondary" className="font-mono text-[10px] uppercase">Saved</Badge>}
             </div>
           </div>
         </div>
 
-        <div ref={rightPanelRef} className="flex-1 min-h-0 overflow-auto p-4 md:p-6">
-          {!activeContent && !isGenerating && !error && (
+        <div ref={rightPanelRef} className="flex-1 min-h-0 overflow-auto px-5 py-4 space-y-4">
+          {!orderedPapers.length && !currentPrompt && !activeContent && !isGenerating && (
             <div className="h-full min-h-[260px] flex items-center justify-center">
               <div className="text-center space-y-2 max-w-md">
                 <PenTool className="h-12 w-12 mx-auto text-primary/60" />
@@ -744,31 +515,247 @@ export default function WritingPane({
             </div>
           )}
 
-          {isGenerating && !activeContent && (
-            <div className="space-y-4 animate-pulse">
-              <div className="h-6 w-2/5 bg-muted rounded" />
-              <div className="h-4 w-full bg-muted rounded" />
-              <div className="h-4 w-[92%] bg-muted rounded" />
-              <div className="h-4 w-[88%] bg-muted rounded" />
+          {orderedPapers.map((paper) => (
+            <div key={paper.id} className="space-y-2">
+              <div className="ml-auto max-w-[88%] rounded-2xl bg-[#E8D6C2] dark:bg-muted px-4 py-2 text-sm">
+                {paper.topic}
+              </div>
+              <div className="max-w-[92%] rounded-2xl border border-border bg-background px-4 py-3">
+                <div className="prose prose-sm max-w-none dark:prose-invert">
+                  <ReactMarkdown>{paper.content}</ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {currentPrompt && isGenerating && (
+            <div className="space-y-2">
+              <div className="ml-auto max-w-[88%] rounded-2xl bg-[#E8D6C2] dark:bg-muted px-4 py-2 text-sm">
+                {currentPrompt}
+              </div>
+              <div className="max-w-[92%] rounded-2xl border border-border bg-background px-4 py-3">
+                <div className="flex items-center gap-2 text-xs mb-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  <span className="text-muted-foreground">{status || "Generating..."}</span>
+                </div>
+                {activeContent ? (
+                  <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <ReactMarkdown>{activeContent}</ReactMarkdown>
+                    <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />
+                  </div>
+                ) : (
+                  <div className="space-y-2 animate-pulse">
+                    <div className="h-4 w-full bg-muted rounded" />
+                    <div className="h-4 w-[92%] bg-muted rounded" />
+                    <div className="h-4 w-[84%] bg-muted rounded" />
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {activeContent && (
-            <>
-              {showPdfPreview && pdfPreviewUrl ? (
-                <div className="h-full min-h-[560px] border border-border rounded-md overflow-hidden bg-white">
-                  <iframe src={pdfPreviewUrl} title="Generated PDF Preview" className="w-full h-full min-h-[560px]" />
-                </div>
-              ) : (
-                <div className="prose prose-sm max-w-none dark:prose-invert">
-                  <ReactMarkdown>{activeContent}</ReactMarkdown>
-                  {isGenerating && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />}
-                </div>
-              )}
-            </>
+          {!!error && (
+            <div className="max-w-[92%] rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
           )}
         </div>
+
+        <div className="border-t border-border bg-background/95 px-4 py-3 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider">Project</Label>
+              {lockProject ? (
+                <div className="rounded-md border px-3 py-2 text-sm">{selectedProject?.name || "Current Project"}</div>
+              ) : (
+                <Select value={selectedProjectId} onValueChange={setSelectedProjectId} disabled={projectsLoading || isGenerating}>
+                  <SelectTrigger data-testid="select-writing-project"><SelectValue placeholder="Select project" /></SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider">Topic / Prompt</Label>
+              <Textarea
+                id="writing-topic"
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+                placeholder="Enter your writing instruction..."
+                className="min-h-[68px] resize-none"
+                disabled={isGenerating}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <Select value={tone} onValueChange={(v) => setTone(v as typeof tone)} disabled={isGenerating}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="academic">Academic</SelectItem>
+                <SelectItem value="casual">Casual</SelectItem>
+                <SelectItem value="ap_style">AP Style</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={targetLength} onValueChange={(v) => setTargetLength(v as typeof targetLength)} disabled={isGenerating}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="short">Short</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="long">Long</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={citationStyle} onValueChange={(v) => setCitationStyle(v as typeof citationStyle)} disabled={isGenerating}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="chicago">Chicago</SelectItem>
+                <SelectItem value="mla">MLA</SelectItem>
+                <SelectItem value="apa">APA</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-3 px-2">
+              <label className="flex items-center gap-2 text-xs">
+                <Checkbox checked={noEnDashes} onCheckedChange={(v) => setNoEnDashes(Boolean(v))} disabled={isGenerating} />
+                No dashes
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <Checkbox checked={deepWrite} onCheckedChange={(v) => setDeepWrite(Boolean(v))} disabled={isGenerating} />
+                Deep
+              </label>
+            </div>
+          </div>
+
+          {(isGenerating || phase) && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs">
+                {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : error ? <AlertCircle className="h-3.5 w-3.5 text-destructive" /> : <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
+                <span className="text-muted-foreground">{status}</span>
+              </div>
+              {isGenerating && <Progress value={progressPercent} className="h-1.5" />}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            {!isGenerating ? (
+              <Button onClick={handleGenerate} className="flex-1" data-testid="button-generate-paper">
+                <FileText className="h-4 w-4 mr-2" />
+                Generate Paper
+              </Button>
+            ) : (
+              <Button variant="destructive" onClick={cancel} className="flex-1">
+                <StopCircle className="h-4 w-4 mr-2" />
+                Stop
+              </Button>
+            )}
+            <Button variant="outline" onClick={handleReset}><RotateCcw className="h-4 w-4 mr-2" />Reset</Button>
+          </div>
+        </div>
       </section>
+
+      <aside className="min-h-0 border-t lg:border-t-0 lg:border-l border-border bg-[#F1ECE2] dark:bg-muted/10">
+        <div className="h-full min-h-0 overflow-auto p-4 space-y-4">
+          <Card className="border-border bg-background/80">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Artifacts</CardTitle>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!activeContent}><Copy className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="sm" onClick={handleDownloadDocx} disabled={!activeContent || isPreparingDocx}>
+                    {isPreparingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleDownloadPdf} disabled={!activeContent || isPreparingPdf}>
+                    {isPreparingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleTogglePdfPreview} disabled={!activeContent || isPreparingPdf}>
+                    {showPdfPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {generatedPapers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No artifacts yet.</p>
+              ) : (
+                generatedPapers.map((paper) => (
+                  <button
+                    key={paper.id}
+                    type="button"
+                    onClick={() => setSelectedPaperId(paper.id)}
+                    className={`w-full text-left rounded-lg border p-3 transition ${selectedPaper?.id === paper.id ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted/40"}`}
+                  >
+                    <div className="text-sm font-medium truncate">{paper.topic}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {paper.savedPaper ? paper.savedPaper.filename : `${new Date(paper.createdAt).toLocaleTimeString()}`}
+                    </div>
+                  </button>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          {showPdfPreview && pdfPreviewUrl && (
+            <Card className="border-border bg-white">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">PDF Preview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[320px] overflow-hidden rounded border">
+                  <iframe src={pdfPreviewUrl} title="Generated PDF Preview" className="w-full h-full" />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="border-border bg-background/80">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Project Content</CardTitle>
+                <button type="button" className="text-xs text-muted-foreground" onClick={() => setSourcesExpanded((v) => !v)}>
+                  {sourcesExpanded ? "Hide" : "Show"}
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {sourcesExpanded && (
+                <>
+                  <div className="flex justify-end mb-2">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={toggleAllSources} disabled={projectSources.length === 0 || isGenerating}>
+                      {selectedSourceDocumentIds.length === projectSources.length ? "Deselect all" : "Select all"}
+                    </Button>
+                  </div>
+                  <ScrollArea className="h-64">
+                    {projectSourcesLoading ? (
+                      <p className="text-xs text-muted-foreground">Loading project sources...</p>
+                    ) : projectSources.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No source documents in this project.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {projectSources.map((source) => (
+                          <label key={source.id} className="flex gap-2 rounded-md p-2 hover:bg-muted/40 cursor-pointer">
+                            <Checkbox checked={selectedSourceDocumentIds.includes(source.id)} onCheckedChange={() => toggleSource(source.id)} disabled={isGenerating} className="mt-0.5" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium truncate">{source.document.filename}</span>
+                                <Badge variant="outline" className="text-[10px]">{getDocTypeLabel(source.document.filename)}</Badge>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                                {source.document.summary || "No summary available for this source."}
+                              </p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </aside>
     </div>
   );
 }
