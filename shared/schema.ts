@@ -614,7 +614,7 @@ export const conversations = sqliteTable("conversations", {
   userId: text("user_id"), // nullable until auth is merged
   projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   title: text("title").notNull().default("New Chat"),
-  model: text("model").notNull().default("claude-haiku-4-5"), // claude-haiku-4-5 or claude-sonnet-4-6
+  model: text("model").notNull().default("claude-opus-4-6"),
   selectedSourceIds: text("selected_source_ids", { mode: "json" }).$type<string[]>(),
   citationStyle: text("citation_style").default("chicago"),
   tone: text("tone").default("academic"),

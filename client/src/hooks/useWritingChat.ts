@@ -11,7 +11,7 @@ export interface ConversationWithMessages extends Conversation {
 
 // --- Conversation queries (project-scoped) ---
 
-export function useProjectConversations(projectId: string) {
+export function useProjectConversations(projectId?: string | null) {
   return useQuery<Conversation[]>({
     queryKey: ["/api/chat/conversations", { projectId }],
     queryFn: async () => {
@@ -22,7 +22,22 @@ export function useProjectConversations(projectId: string) {
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
-    enabled: !!projectId,
+    enabled: Boolean(projectId),
+  });
+}
+
+export function useStandaloneConversations(enabled = true) {
+  return useQuery<Conversation[]>({
+    queryKey: ["/api/chat/conversations", { standalone: true }],
+    queryFn: async () => {
+      const res = await fetch("/api/chat/conversations?standalone=true", {
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+    enabled,
   });
 }
 
@@ -43,15 +58,23 @@ export function useWritingConversation(id: string | null) {
 
 export function useCreateWritingConversation() {
   return useMutation({
-    mutationFn: async (data: { projectId: string; selectedSourceIds?: string[] }) => {
+    mutationFn: async (data: { projectId?: string | null; selectedSourceIds?: string[] }) => {
       const res = await apiRequest("POST", "/api/chat/conversations", {
-        projectId: data.projectId,
+        projectId: data.projectId ?? null,
         selectedSourceIds: data.selectedSourceIds || [],
       });
       return res.json() as Promise<Conversation>;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations", { projectId: variables.projectId }] });
+      if (variables.projectId) {
+        queryClient.invalidateQueries({
+          queryKey: ["/api/chat/conversations", { projectId: variables.projectId }],
+        });
+      } else {
+        queryClient.invalidateQueries({
+          queryKey: ["/api/chat/conversations", { standalone: true }],
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations"] });
     },
   });

@@ -28,7 +28,7 @@ function buildQueryString(filters: WebClipFilters = {}): string {
   return query ? `?${query}` : "";
 }
 
-export function useWebClips(filters: WebClipFilters = {}) {
+export function useWebClips(filters: WebClipFilters = {}, enabled = true) {
   return useQuery<WebClip[]>({
     queryKey: ["/api/web-clips", filters],
     queryFn: async () => {
@@ -39,6 +39,7 @@ export function useWebClips(filters: WebClipFilters = {}) {
       if (!res.ok) throw new Error("Failed to fetch web clips");
       return res.json();
     },
+    enabled,
   });
 }
 

@@ -30,7 +30,7 @@ export interface WritingPlan {
 
 export interface WritingSource {
   id: string;
-  kind: "project_document" | "annotation";
+  kind: "project_document" | "annotation" | "web_clip";
   title: string;
   author: string;
   excerpt: string;

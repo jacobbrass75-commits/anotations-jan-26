@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
 import ReactMarkdown from "react-markdown";
 import { queryClient } from "@/lib/queryClient";
 import { useProjects, useProjectDocuments } from "@/hooks/useProjects";
+import { useWebClips } from "@/hooks/useWebClips";
 import {
   useProjectConversations,
+  useStandaloneConversations,
   useWritingConversation,
   useCreateWritingConversation,
   useDeleteWritingConversation,
@@ -74,6 +75,8 @@ interface WritingChatProps {
   lockProject?: boolean;
 }
 
+const NO_PROJECT_VALUE = "__no_project__";
+
 const WRITING_PROMPTS = [
   {
     icon: PenLine,
@@ -99,27 +102,33 @@ const WRITING_PROMPTS = [
 
 export default function WritingChat({ initialProjectId, lockProject }: WritingChatProps) {
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
 
   // Project selection
   const { data: projects = [] } = useProjects();
-  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId || "");
+  const [selectedProjectId, setSelectedProjectId] = useState(
+    initialProjectId || (lockProject ? "" : NO_PROJECT_VALUE)
+  );
+  const hasSelectedProject = Boolean(selectedProjectId && selectedProjectId !== NO_PROJECT_VALUE);
 
-  // Auto-select first project if none provided
+  // If project is locked and no initial project is available yet, select the first loaded project.
   useEffect(() => {
-    if (!selectedProjectId && projects.length > 0) {
+    if (lockProject && !selectedProjectId && projects.length > 0) {
       setSelectedProjectId(initialProjectId || projects[0].id);
     }
-  }, [initialProjectId, projects, selectedProjectId]);
+  }, [initialProjectId, lockProject, projects, selectedProjectId]);
 
   const selectedProject = useMemo(
-    () => projects.find((p) => p.id === selectedProjectId),
-    [projects, selectedProjectId]
+    () => (hasSelectedProject ? projects.find((p) => p.id === selectedProjectId) : undefined),
+    [hasSelectedProject, projects, selectedProjectId]
   );
 
   // Conversation management
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const { data: conversations = [] } = useProjectConversations(selectedProjectId);
+  const { data: projectConversations = [] } = useProjectConversations(
+    hasSelectedProject ? selectedProjectId : undefined
+  );
+  const { data: standaloneConversations = [] } = useStandaloneConversations(!hasSelectedProject);
+  const conversations = hasSelectedProject ? projectConversations : standaloneConversations;
   const { data: conversationData } = useWritingConversation(activeConversationId);
   const createConversation = useCreateWritingConversation();
   const deleteConversation = useDeleteWritingConversation();
@@ -130,7 +139,14 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const { send, streamingText, isStreaming } = useWritingSendMessage(activeConversationId);
 
   // Source management
-  const { data: projectSources = [], isLoading: sourcesLoading } = useProjectDocuments(selectedProjectId);
+  const { data: projectSources = [], isLoading: projectSourcesLoading } = useProjectDocuments(
+    hasSelectedProject ? selectedProjectId : ""
+  );
+  const { data: standaloneWebClips = [], isLoading: webClipsLoading } = useWebClips({}, !hasSelectedProject);
+  const sourcesLoading = hasSelectedProject ? projectSourcesLoading : webClipsLoading;
+  const sourceIds = hasSelectedProject
+    ? projectSources.map((source) => source.id)
+    : standaloneWebClips.map((clip) => clip.id);
   const [localSelectedSourceIds, setLocalSelectedSourceIds] = useState<string[]>([]);
   const [sourcesExpanded, setSourcesExpanded] = useState(true);
   const autoSelectedRef = useRef<Set<string>>(new Set());
@@ -139,12 +155,18 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   useEffect(() => {
     if (conversationData?.selectedSourceIds) {
       setLocalSelectedSourceIds(conversationData.selectedSourceIds);
-    } else if (selectedProjectId && projectSources.length > 0 && !autoSelectedRef.current.has(selectedProjectId)) {
+    } else if (
+      hasSelectedProject &&
+      projectSources.length > 0 &&
+      !autoSelectedRef.current.has(selectedProjectId)
+    ) {
       autoSelectedRef.current.add(selectedProjectId);
       const allIds = projectSources.map((s) => s.id);
       setLocalSelectedSourceIds(allIds);
+    } else if (!hasSelectedProject) {
+      setLocalSelectedSourceIds([]);
     }
-  }, [conversationData, projectSources, selectedProjectId]);
+  }, [conversationData, hasSelectedProject, projectSources, selectedProjectId]);
 
   // Writing settings
   const [citationStyle, setCitationStyle] = useState(conversationData?.citationStyle || "chicago");
@@ -183,6 +205,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const plainText = useMemo(() => (compiledContent ? stripMarkdown(compiledContent) : ""), [compiledContent]);
   const wordCount = useMemo(() => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0), [plainText]);
   const pageEstimate = useMemo(() => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0), [wordCount]);
+  const conversationProjectId = hasSelectedProject ? selectedProjectId : null;
 
   useEffect(() => {
     return () => {
@@ -193,10 +216,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   // --- Handlers ---
 
   const handleNewChat = useCallback(async () => {
-    if (!selectedProjectId) return;
     try {
       const conv = await createConversation.mutateAsync({
-        projectId: selectedProjectId,
+        projectId: conversationProjectId,
         selectedSourceIds: localSelectedSourceIds,
       });
       setActiveConversationId(conv.id);
@@ -204,7 +226,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     } catch {
       toast({ title: "Error", description: "Failed to create conversation", variant: "destructive" });
     }
-  }, [selectedProjectId, localSelectedSourceIds, createConversation, clearCompiled, toast]);
+  }, [conversationProjectId, localSelectedSourceIds, createConversation, clearCompiled, toast]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversationId(id);
@@ -234,10 +256,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const handleSend = useCallback(async (content: string) => {
     if (!activeConversationId) {
       // Create a new conversation first
-      if (!selectedProjectId) return;
       try {
         const conv = await createConversation.mutateAsync({
-          projectId: selectedProjectId,
+          projectId: conversationProjectId,
           selectedSourceIds: localSelectedSourceIds,
         });
         setActiveConversationId(conv.id);
@@ -273,7 +294,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
 
     await send(content);
-  }, [activeConversationId, selectedProjectId, localSelectedSourceIds, citationStyle, tone, noEnDashes, send, createConversation, updateConversation, toast]);
+  }, [activeConversationId, conversationProjectId, localSelectedSourceIds, citationStyle, tone, noEnDashes, send, createConversation, updateConversation, toast]);
 
   const toggleSource = useCallback((id: string) => {
     setLocalSelectedSourceIds((prev) => {
@@ -287,13 +308,13 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [activeConversationId, updateSources]);
 
   const toggleAllSources = useCallback(() => {
-    const allIds = projectSources.map((s) => s.id);
+    const allIds = sourceIds;
     const next = localSelectedSourceIds.length === allIds.length ? [] : allIds;
     setLocalSelectedSourceIds(next);
     if (activeConversationId) {
       updateSources.mutate({ conversationId: activeConversationId, selectedSourceIds: next });
     }
-  }, [projectSources, localSelectedSourceIds, activeConversationId, updateSources]);
+  }, [sourceIds, localSelectedSourceIds, activeConversationId, updateSources]);
 
   const handleSettingChange = useCallback((key: string, value: any) => {
     if (key === "citationStyle") setCitationStyle(value);
@@ -371,7 +392,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [compiledContent, showPdfPreview, pdfPreviewUrl, conversationData, toast]);
 
   const handleQuickGenerate = useCallback(() => {
-    if (!selectedProjectId || !quickTopic.trim() || localSelectedSourceIds.length === 0) {
+    if (!hasSelectedProject || !quickTopic.trim() || localSelectedSourceIds.length === 0) {
       toast({ title: "Fill in all fields", variant: "destructive" });
       return;
     }
@@ -388,7 +409,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     };
     quickGenerate.generate(request);
     setQuickGenerateOpen(false);
-  }, [selectedProjectId, quickTopic, localSelectedSourceIds, citationStyle, tone, quickTargetLength, noEnDashes, quickDeepWrite, quickGenerate, toast]);
+  }, [hasSelectedProject, selectedProjectId, quickTopic, localSelectedSourceIds, citationStyle, tone, quickTargetLength, noEnDashes, quickDeepWrite, quickGenerate, toast]);
 
   // Custom suggested prompts for writing context
   const handleSuggestedPrompt = useCallback((prompt: string) => {
@@ -415,13 +436,24 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
             <div className="flex items-center gap-2 text-sm">
               <PenTool className="h-4 w-4 text-primary" />
               {lockProject ? (
-                <span className="font-semibold">{selectedProject?.name || "Project"}</span>
+                <span className="font-semibold">
+                  {hasSelectedProject ? selectedProject?.name || "Project" : "General Writing"}
+                </span>
               ) : (
-                <Select value={selectedProjectId} onValueChange={(v) => { setSelectedProjectId(v); setActiveConversationId(null); clearCompiled(); }}>
+                <Select
+                  value={selectedProjectId}
+                  onValueChange={(v) => {
+                    setSelectedProjectId(v);
+                    setActiveConversationId(null);
+                    setLocalSelectedSourceIds([]);
+                    clearCompiled();
+                  }}
+                >
                   <SelectTrigger className="w-auto border-0 shadow-none p-0 h-auto font-semibold">
                     <SelectValue placeholder="Select project" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={NO_PROJECT_VALUE}>No Project (General Writing)</SelectItem>
                     {projects.map((p) => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
@@ -489,7 +521,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
           <Card className="border-border bg-background/80">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Sources</CardTitle>
+                <CardTitle className="text-base">
+                  {hasSelectedProject ? "Project Sources" : "Web Clips"}
+                </CardTitle>
                 <button type="button" className="text-xs text-muted-foreground" onClick={() => setSourcesExpanded((v) => !v)}>
                   {sourcesExpanded ? "Hide" : "Show"}
                 </button>
@@ -499,31 +533,50 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               {sourcesExpanded && (
                 <>
                   <div className="flex justify-end mb-2">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={toggleAllSources} disabled={projectSources.length === 0}>
-                      {localSelectedSourceIds.length === projectSources.length ? "Deselect all" : "Select all"}
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={toggleAllSources} disabled={sourceIds.length === 0}>
+                      {localSelectedSourceIds.length === sourceIds.length ? "Deselect all" : "Select all"}
                     </Button>
                   </div>
                   <ScrollArea className="h-48">
                     {sourcesLoading ? (
                       <p className="text-xs text-muted-foreground">Loading...</p>
-                    ) : projectSources.length === 0 ? (
+                    ) : hasSelectedProject && projectSources.length === 0 ? (
                       <p className="text-xs text-muted-foreground">No source documents in this project.</p>
+                    ) : !hasSelectedProject && standaloneWebClips.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No web clips yet. You can still write in standalone mode without sources.
+                      </p>
                     ) : (
                       <div className="space-y-2">
-                        {projectSources.map((source) => (
-                          <label key={source.id} className="flex gap-2 rounded-md p-2 hover:bg-muted/40 cursor-pointer">
-                            <Checkbox checked={localSelectedSourceIds.includes(source.id)} onCheckedChange={() => toggleSource(source.id)} className="mt-0.5" />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium truncate">{source.document.filename}</span>
-                                <Badge variant="outline" className="text-[10px]">{getDocTypeLabel(source.document.filename)}</Badge>
+                        {hasSelectedProject
+                          ? projectSources.map((source) => (
+                            <label key={source.id} className="flex gap-2 rounded-md p-2 hover:bg-muted/40 cursor-pointer">
+                              <Checkbox checked={localSelectedSourceIds.includes(source.id)} onCheckedChange={() => toggleSource(source.id)} className="mt-0.5" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium truncate">{source.document.filename}</span>
+                                  <Badge variant="outline" className="text-[10px]">{getDocTypeLabel(source.document.filename)}</Badge>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                                  {source.document.summary || "No summary available."}
+                                </p>
                               </div>
-                              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                                {source.document.summary || "No summary available."}
-                              </p>
-                            </div>
-                          </label>
-                        ))}
+                            </label>
+                          ))
+                          : standaloneWebClips.map((clip) => (
+                            <label key={clip.id} className="flex gap-2 rounded-md p-2 hover:bg-muted/40 cursor-pointer">
+                              <Checkbox checked={localSelectedSourceIds.includes(clip.id)} onCheckedChange={() => toggleSource(clip.id)} className="mt-0.5" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium truncate">{clip.pageTitle}</span>
+                                  <Badge variant="outline" className="text-[10px]">WEB</Badge>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                                  {clip.note || clip.highlightedText || clip.sourceUrl}
+                                </p>
+                              </div>
+                            </label>
+                          ))}
                       </div>
                     )}
                   </ScrollArea>
@@ -560,7 +613,12 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               {/* Quick Generate */}
               <Dialog open={quickGenerateOpen} onOpenChange={setQuickGenerateOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full text-xs">
+                  <Button
+                    variant="outline"
+                    className="w-full text-xs"
+                    disabled={!hasSelectedProject}
+                    title={!hasSelectedProject ? "Select a project to use Quick Generate" : undefined}
+                  >
                     <Zap className="h-4 w-4 mr-2" />
                     Quick Generate (Full Paper)
                   </Button>

@@ -1,21 +1,70 @@
 import type { Express, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { and, eq, inArray } from "drizzle-orm";
 import { chatStorage } from "./chatStorage";
+import { db } from "./db";
 import { projectStorage } from "./projectStorage";
 import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { formatSourceForPrompt, type WritingSource } from "./writingPipeline";
 import { clipText, buildAuthorLabel, savePaperToProject } from "./writingRoutes";
-import type { CitationData } from "@shared/schema";
+import {
+  webClips,
+  type CitationData,
+  type Conversation,
+  type Project,
+} from "@shared/schema";
 
-const MAX_SOURCE_EXCERPT_CHARS = 700;
-const MAX_SOURCE_FULLTEXT_CHARS = 7000;
+const MAX_SOURCE_EXCERPT_CHARS = 2000;
+const MAX_SOURCE_FULLTEXT_CHARS = 30000;
+const MAX_SOURCE_TOTAL_FULLTEXT_CHARS = 150000;
+
+const CHAT_MODEL = "claude-opus-4-6";
+const COMPILE_MODEL = "claude-opus-4-6";
+const VERIFY_MODEL = "claude-opus-4-6";
+const CHAT_MAX_TOKENS = 8192;
+const COMPILE_MAX_TOKENS = 8192;
+const VERIFY_MAX_TOKENS = 8192;
 
 const BASE_SYSTEM_PROMPT =
   "You are ScholarMark AI, a helpful academic writing assistant. You help students with research, writing, citations, and understanding academic sources. Be concise, accurate, and helpful.";
 
+type WritingProjectContext = Pick<Project, "name" | "thesis" | "scope" | "contextSummary">;
+
 function getAnthropicClient(): Anthropic {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
+
+function normalizedPromptValue(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : "Not provided.";
+}
+
+function prettyToneLabel(tone?: string): string {
+  if (!tone) return "academic";
+  if (tone === "ap_style") return "AP style";
+  return tone;
+}
+
+function buildProjectContextBlock(project: WritingProjectContext | null): string {
+  if (!project) {
+    return "PROJECT CONTEXT:\nProject: Standalone writing mode\nThesis: Not provided.\nScope: Not provided.\nSummary: Not provided.";
+  }
+
+  return `PROJECT CONTEXT:
+Project: ${normalizedPromptValue(project.name)}
+Thesis: ${normalizedPromptValue(project.thesis)}
+Scope: ${normalizedPromptValue(project.scope)}
+Summary: ${normalizedPromptValue(project.contextSummary)}`;
+}
+
+function buildSourceBlock(sources: WritingSource[]): string {
+  if (sources.length === 0) {
+    return "No explicit source materials are attached to this conversation.";
+  }
+  return sources
+    .map((source, i) => `--- Source ${i + 1} ---\n${formatSourceForPrompt(source)}`)
+    .join("\n\n");
 }
 
 async function loadProjectSources(
@@ -27,6 +76,13 @@ async function loadProjectSources(
   const filteredDocs = selectedSourceIds && selectedSourceIds.length > 0
     ? projectDocs.filter((pd) => selectedSourceIds.includes(pd.id))
     : projectDocs;
+
+  const perSourceFullTextLimit = filteredDocs.length > 0
+    ? Math.min(
+      MAX_SOURCE_FULLTEXT_CHARS,
+      Math.max(2000, Math.floor(MAX_SOURCE_TOTAL_FULLTEXT_CHARS / filteredDocs.length))
+    )
+    : MAX_SOURCE_FULLTEXT_CHARS;
 
   const sources: WritingSource[] = [];
 
@@ -46,7 +102,7 @@ async function loadProjectSources(
       author: buildAuthorLabel(citationData),
       excerpt: summaryExcerpt || "No summary available.",
       fullText:
-        clipText(fullDoc.fullText, MAX_SOURCE_FULLTEXT_CHARS) ||
+        clipText(fullDoc.fullText, perSourceFullTextLimit) ||
         summaryExcerpt ||
         "No source text available.",
       category: "project_source",
@@ -59,49 +115,147 @@ async function loadProjectSources(
   return sources;
 }
 
+async function loadStandaloneWebClipSources(
+  userId: string,
+  selectedSourceIds?: string[] | null
+): Promise<WritingSource[]> {
+  if (!selectedSourceIds || selectedSourceIds.length === 0) {
+    return [];
+  }
+
+  const clipIds = [...new Set(selectedSourceIds.map((id) => id?.trim()).filter(Boolean))] as string[];
+  if (clipIds.length === 0) {
+    return [];
+  }
+
+  const clips = await db
+    .select()
+    .from(webClips)
+    .where(and(eq(webClips.userId, userId), inArray(webClips.id, clipIds)));
+
+  const perSourceFullTextLimit = clips.length > 0
+    ? Math.min(
+      MAX_SOURCE_FULLTEXT_CHARS,
+      Math.max(2000, Math.floor(MAX_SOURCE_TOTAL_FULLTEXT_CHARS / clips.length))
+    )
+    : MAX_SOURCE_FULLTEXT_CHARS;
+
+  const byId = new Map(clips.map((clip) => [clip.id, clip]));
+  const orderedClips = clipIds
+    .map((id) => byId.get(id))
+    .filter((clip): clip is typeof clips[number] => Boolean(clip));
+
+  return orderedClips.map((clip) => {
+    const citationData = (clip.citationData as CitationData | null) || null;
+    const excerpt = clipText(
+      clip.note || clip.highlightedText || clip.surroundingContext,
+      MAX_SOURCE_EXCERPT_CHARS
+    ) || "No summary available.";
+    const mergedText = [
+      `Page: ${clip.pageTitle}`,
+      `URL: ${clip.sourceUrl}`,
+      clip.authorName ? `Author: ${clip.authorName}` : "",
+      clip.publishDate ? `Published: ${clip.publishDate}` : "",
+      "",
+      "Highlighted text:",
+      clip.highlightedText,
+      clip.surroundingContext ? `\nSurrounding context:\n${clip.surroundingContext}` : "",
+      clip.note ? `\nUser note:\n${clip.note}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      id: clip.id,
+      kind: "web_clip",
+      title: citationData?.title || clip.pageTitle,
+      author: buildAuthorLabel(citationData) || clip.authorName || "Unknown Author",
+      excerpt,
+      fullText: clipText(mergedText, perSourceFullTextLimit) || excerpt,
+      category: "web_clip",
+      note: clip.note || null,
+      citationData,
+      documentFilename: `${clip.pageTitle || "Web Clip"}.txt`,
+    } satisfies WritingSource;
+  });
+}
+
+async function loadConversationContext(
+  conv: Pick<Conversation, "projectId" | "selectedSourceIds">,
+  userId: string
+): Promise<{ project: WritingProjectContext | null; sources: WritingSource[] }> {
+  if (conv.projectId) {
+    const [project, sources] = await Promise.all([
+      projectStorage.getProject(conv.projectId),
+      loadProjectSources(conv.projectId, conv.selectedSourceIds),
+    ]);
+
+    return {
+      project: project
+        ? {
+          name: project.name,
+          thesis: project.thesis,
+          scope: project.scope,
+          contextSummary: project.contextSummary,
+        }
+        : null,
+      sources,
+    };
+  }
+
+  return {
+    project: null,
+    sources: await loadStandaloneWebClipSources(userId, conv.selectedSourceIds),
+  };
+}
+
 function buildWritingSystemPrompt(
   sources: WritingSource[],
+  project: WritingProjectContext | null,
   citationStyle?: string,
-  tone?: string
+  tone?: string,
+  noEnDashes?: boolean
 ): string {
-  if (sources.length === 0) {
+  if (sources.length === 0 && !project) {
     return BASE_SYSTEM_PROMPT;
   }
 
-  const sourceBlock = sources
-    .map((source, i) => `--- Source ${i + 1} ---\n${formatSourceForPrompt(source)}`)
-    .join("\n\n");
-
-  const styleNote = citationStyle
-    ? `Use ${citationStyle.toUpperCase()} format for in-text citations when referencing sources.`
-    : "Use appropriate citation format when referencing sources.";
-
-  const toneNote = tone
-    ? `Match the following tone: ${tone}.`
+  const styleLabel = (citationStyle || "chicago").toUpperCase();
+  const noEnDashesLine = noEnDashes
+    ? "\n8. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
     : "";
 
-  return `You are ScholarMark AI, an academic writing assistant. You are helping a student write a paper using their project sources.
+  return `You are ScholarMark AI, an expert academic writing partner. You are collaborating with a student on a research paper.
 
-You have access to the following source materials. When the student asks you to write content, use these sources and include proper in-text citations.
+${buildProjectContextBlock(project)}
 
-${sourceBlock}
+You have access to ${sources.length} source document(s).
 
-Instructions:
-- ${styleNote}
-- ${toneNote}
-- When writing paper sections, use markdown formatting.
-- Be conversational in your responses but produce polished academic prose when asked to write paper content.
-- Do not fabricate quotations, page numbers, publication details, or source information.
-- If uncertain about a source detail, cite conservatively and state uncertainty plainly.
-- You can discuss, explain, and help refine content iteratively.`;
+SOURCE MATERIALS:
+${buildSourceBlock(sources)}
+
+When the student asks you to write, draft, expand, or refine content:
+1. Write in ${prettyToneLabel(tone)} register with ${styleLabel} citations.
+2. Ground every claim in the provided sources and cite specific page numbers or section references when available.
+3. When quoting a source, use exact source text.
+4. Distinguish direct quotations from paraphrases.
+5. Explicitly flag claims that go beyond what the provided sources support.
+6. Maintain the student's argumentative thread across the full conversation and build on what has already been drafted.
+7. When asked to write a section, produce complete, publication-ready prose (not an outline).${noEnDashesLine}
+
+Do not fabricate quotations, publication details, page numbers, or bibliography metadata. If source detail is uncertain, state uncertainty clearly and cite conservatively.`;
 }
 
 export function registerChatRoutes(app: Express) {
   // List all conversations (newest first)
   app.get("/api/chat/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
-      const projectId = req.query.projectId as string | undefined;
-      const convos = await chatStorage.getConversationsForUser(req.user!.userId, projectId);
+      const rawProjectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
+      const projectId = rawProjectId && rawProjectId !== "null" ? rawProjectId : undefined;
+      const standaloneOnly = req.query.standalone === "true";
+      const convos = standaloneOnly
+        ? await chatStorage.getStandaloneConversations(req.user!.userId)
+        : await chatStorage.getConversationsForUser(req.user!.userId, projectId);
       res.json(convos);
     } catch (error) {
       console.error("Error listing conversations:", error);
@@ -115,7 +269,7 @@ export function registerChatRoutes(app: Express) {
       const { title, model, projectId, selectedSourceIds } = req.body || {};
       const conv = await chatStorage.createConversation({
         title: title || "New Chat",
-        model: model || "claude-haiku-4-5",
+        model: model || "claude-opus-4-6",
         userId: req.user!.userId,
         projectId: projectId || null,
         selectedSourceIds: selectedSourceIds || null,
@@ -228,14 +382,16 @@ export function registerChatRoutes(app: Express) {
           content: m.content,
         }));
 
-      // Build system prompt -- inject sources if this is a project conversation
+      // Build system prompt with project context + sources (project docs or selected web clips)
       let systemPrompt = BASE_SYSTEM_PROMPT;
-      if (conv.projectId) {
-        const sources = await loadProjectSources(conv.projectId, conv.selectedSourceIds);
+      const { project, sources } = await loadConversationContext(conv, req.user!.userId);
+      if (project || sources.length > 0 || conv.projectId) {
         systemPrompt = buildWritingSystemPrompt(
           sources,
+          project,
           conv.citationStyle || undefined,
-          conv.tone || undefined
+          conv.tone || undefined,
+          conv.noEnDashes || false
         );
       }
 
@@ -248,8 +404,8 @@ export function registerChatRoutes(app: Express) {
       const anthropic = getAnthropicClient();
 
       const stream = anthropic.messages.stream({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 4096,
+        model: CHAT_MODEL,
+        max_tokens: CHAT_MAX_TOKENS,
         system: systemPrompt,
         messages: anthropicMessages,
       });
@@ -345,38 +501,34 @@ export function registerChatRoutes(app: Express) {
         .map((m) => `[${m.role.toUpperCase()}]: ${m.content}`)
         .join("\n\n---\n\n");
 
-      // Load sources for bibliography
-      let sourcesBlock = "";
-      if (conv.projectId) {
-        const sources = await loadProjectSources(conv.projectId, conv.selectedSourceIds);
-        if (sources.length > 0) {
-          sourcesBlock = `\n\nAvailable source materials for citations and bibliography:\n${sources
-            .map((s, i) => `--- Source ${i + 1} ---\n${formatSourceForPrompt(s)}`)
-            .join("\n\n")}`;
-        }
-      }
-
-      const noEnDashesLine = avoidDashes
-        ? "\n- NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
+      const { project, sources } = await loadConversationContext(conv, req.user!.userId);
+      const projectContextBlock = buildProjectContextBlock(project);
+      const sourcesBlock = sources.length > 0
+        ? `\n\nSOURCE MATERIALS:\n${buildSourceBlock(sources)}`
         : "";
 
-      const compilePrompt = `You are an academic editor. Read the following conversation between a student and an AI writing assistant. The conversation contains paper content that the student has been developing iteratively.
+      const noEnDashesRule = avoidDashes
+        ? "\n9. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead.\n10. Output clean markdown using ## section headings."
+        : "\n9. Output clean markdown using ## section headings.";
 
-Your job is to extract ALL paper content from the conversation and assemble it into a single, complete, polished academic paper.
+      const compilePrompt = `You are assembling a final academic paper from a writing conversation.
+The student and AI have been collaboratively drafting sections.
 
-Requirements:
-1. Extract all paper sections, paragraphs, and arguments from the assistant's responses
-2. Add smooth transitions between sections
-3. Write a compelling introduction if one isn't already present
-4. Write a conclusion that ties the argument together
-5. Ensure consistent voice and tone (${writingTone}) throughout
-6. Include proper in-text citations in ${style.toUpperCase()} format
-7. Append a complete bibliography/works cited section in ${style.toUpperCase()} format${noEnDashesLine}
-8. Do NOT include conversational back-and-forth -- only the polished paper content
-9. Do not fabricate source details not supported by the source material
-10. Output the complete paper in markdown format
+${projectContextBlock}
+Target citation style: ${style.toUpperCase()}
+Target tone: ${prettyToneLabel(writingTone)}
 
-CONVERSATION:
+RULES:
+1. Include every piece of substantive writing the assistant produced.
+2. Preserve the student's thesis and argument structure.
+3. Do NOT summarize or shorten sections. Include draft content in full unless superseded by a later revision.
+4. If the same topic or section was revised multiple times, use the LATEST version.
+5. Remove conversational chatter and keep only polished paper content.
+6. Add only what is required to unify the paper: transitions, a unified introduction (if missing), and a conclusion that synthesizes the argument.
+7. Compile a bibliography from all cited sources using ${style.toUpperCase()} format.
+8. Do not fabricate source details not grounded in the provided sources.${noEnDashesRule}
+
+CONVERSATION TRANSCRIPT:
 ${transcript}${sourcesBlock}`;
 
       // Set up SSE
@@ -394,8 +546,8 @@ ${transcript}${sourcesBlock}`;
       });
 
       const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-5-20241022",
-        max_tokens: 8192,
+        model: COMPILE_MODEL,
+        max_tokens: COMPILE_MAX_TOKENS,
         messages: [{ role: "user", content: compilePrompt }],
       });
 
@@ -462,33 +614,31 @@ ${transcript}${sourcesBlock}`;
       }
 
       const style = conv.citationStyle || "chicago";
+      const { project, sources } = await loadConversationContext(conv, req.user!.userId);
+      const projectContextBlock = buildProjectContextBlock(project);
+      const sourcesBlock = sources.length > 0
+        ? `\n\nSOURCE MATERIALS FOR VERIFICATION:\n${buildSourceBlock(sources)}`
+        : "\n\nSOURCE MATERIALS FOR VERIFICATION:\nNo attached source materials were provided.";
 
-      // Load sources for verification
-      let sourcesBlock = "";
-      if (conv.projectId) {
-        const sources = await loadProjectSources(conv.projectId, conv.selectedSourceIds);
-        if (sources.length > 0) {
-          sourcesBlock = `\n\nOriginal source materials used:\n${sources
-            .map((s, i) => `--- Source ${i + 1} ---\nTitle: ${s.title}\nAuthor: ${s.author}\nExcerpt: "${s.excerpt}"`)
-            .join("\n\n")}`;
-        }
-      }
+      const verifyPrompt = `You are an academic paper reviewer performing strict source and citation verification.
 
-      const verifyPrompt = `You are an academic paper reviewer. Review the following paper for quality and accuracy.
+${projectContextBlock}
+Citation style to enforce: ${style.toUpperCase()}
 
-Check for:
-1. **Citation accuracy**: Are in-text citations properly formatted in ${style.toUpperCase()} style? Are bibliography entries complete and correctly formatted?
-2. **Source fidelity**: Does the paper accurately represent the source materials? Are any claims unsupported?
-3. **Logical coherence**: Does the argument flow logically? Are transitions smooth?
-4. **Grammar and style**: Is the writing clear, consistent in tone, and free of errors?
-5. **Completeness**: Does the paper have an introduction, body sections, conclusion, and bibliography?
+Verification requirements:
+1. Cross-reference every direct quote against the provided source text.
+2. Check whether paraphrases accurately reflect the source content.
+3. Verify page numbers or section references where they are provided.
+4. Flag any citation that does not correspond to the provided sources.
+5. Check citation and bibliography formatting consistency in ${style.toUpperCase()}.
+6. Identify unsupported or over-claimed assertions.
+7. Review logical flow, argument coherence, tone consistency, and major grammar issues.
 
-For each issue found, provide:
-- The specific location or passage
-- What the issue is
-- A suggested fix
-
-If the paper is well-written, note its strengths.
+Output format:
+- Executive summary (2-4 sentences)
+- Findings (numbered, highest severity first)
+- Each finding must include: location/passage, issue, and concrete fix
+- Strengths (optional)
 
 PAPER TO REVIEW:
 ${compiledContent}${sourcesBlock}`;
@@ -507,8 +657,8 @@ ${compiledContent}${sourcesBlock}`;
       });
 
       const stream = anthropic.messages.stream({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 4096,
+        model: VERIFY_MODEL,
+        max_tokens: VERIFY_MAX_TOKENS,
         messages: [{ role: "user", content: verifyPrompt }],
       });
 
