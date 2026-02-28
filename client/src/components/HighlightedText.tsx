@@ -80,31 +80,58 @@ export function HighlightedText({
       return [{ start: 0, end: text.length, text, annotation: null }];
     }
 
-    const sortedAnnotations = [...annotations].sort((a, b) => a.startPosition - b.startPosition);
+    const sortedAnnotations = [...annotations]
+      .filter((annotation) => {
+        const start = annotation.startPosition;
+        const end = annotation.endPosition;
+        const valid =
+          Number.isFinite(start) &&
+          Number.isFinite(end) &&
+          start >= 0 &&
+          end > start &&
+          end <= text.length;
+
+        if (!valid && import.meta.env.DEV) {
+          console.warn("[HighlightedText] Skipping invalid annotation range", {
+            annotationId: annotation.id,
+            startPosition: start,
+            endPosition: end,
+            textLength: text.length,
+          });
+        }
+        return valid;
+      })
+      .sort((a, b) => a.startPosition - b.startPosition);
+
     const result: TextSegment[] = [];
     let currentPos = 0;
 
     for (const annotation of sortedAnnotations) {
+      // If annotations overlap, clip the next highlight to avoid dropping it entirely.
+      const start = Math.max(annotation.startPosition, currentPos);
+      const end = annotation.endPosition;
+      if (end <= start) {
+        continue;
+      }
+
       // Add non-highlighted text before this annotation
-      if (annotation.startPosition > currentPos) {
+      if (start > currentPos) {
         result.push({
           start: currentPos,
-          end: annotation.startPosition,
-          text: text.slice(currentPos, annotation.startPosition),
+          end: start,
+          text: text.slice(currentPos, start),
           annotation: null,
         });
       }
 
       // Add highlighted segment
-      if (annotation.startPosition >= currentPos) {
-        result.push({
-          start: annotation.startPosition,
-          end: annotation.endPosition,
-          text: text.slice(annotation.startPosition, annotation.endPosition),
-          annotation,
-        });
-        currentPos = annotation.endPosition;
-      }
+      result.push({
+        start,
+        end,
+        text: text.slice(start, end),
+        annotation,
+      });
+      currentPos = end;
     }
 
     // Add remaining text after last annotation
@@ -132,9 +159,17 @@ export function HighlightedText({
     const range = selection.getRangeAt(0);
     const container = containerRef.current;
     if (!container) return;
+    if (!container.contains(range.commonAncestorContainer)) return;
 
-    // Find the start and end positions in the original text
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+    // Find the start and end positions in the original text, excluding popover text.
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        if (popoverRef.current?.contains(node)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
     let currentOffset = 0;
     let startOffset = -1;
     let endOffset = -1;
@@ -157,11 +192,11 @@ export function HighlightedText({
     if (startOffset >= 0 && endOffset > startOffset) {
       onTextSelect({
         text: selectedText,
-        start: startOffset,
-        end: endOffset,
+        start: Math.min(startOffset, text.length),
+        end: Math.min(endOffset, text.length),
       });
     }
-  }, [onTextSelect]);
+  }, [onTextSelect, text.length]);
 
   const handleHighlightClick = useCallback((e: React.MouseEvent, annotation: AnnotationWithPrompt) => {
     e.stopPropagation();

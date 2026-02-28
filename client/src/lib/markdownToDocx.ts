@@ -51,7 +51,7 @@ function flattenText(node: MdNode | undefined): string {
   return node.children.map((child) => flattenText(child)).join("");
 }
 
-function getHeadingLevel(depth: number): HeadingLevel {
+function getHeadingLevel(depth: number) {
   if (depth <= 1) return HeadingLevel.HEADING_1;
   if (depth === 2) return HeadingLevel.HEADING_2;
   return HeadingLevel.HEADING_3;
@@ -171,9 +171,13 @@ function blocksFromNode(node: MdNode, context: FootnoteRefContext): Paragraph[] 
   }
 }
 
-function buildFootnotes(context: FootnoteRefContext): Array<{ id: number; children: Paragraph[] }> {
-  return context.footnoteOrder.map((identifier) => {
-    const id = context.footnoteIdsByIdentifier.get(identifier)!;
+function buildFootnotes(context: FootnoteRefContext): Record<string, { children: Paragraph[] }> {
+  const footnotes: Record<string, { children: Paragraph[] }> = {};
+
+  for (const identifier of context.footnoteOrder) {
+    const id = context.footnoteIdsByIdentifier.get(identifier);
+    if (!id) continue;
+
     const definition = context.footnoteDefinitionByIdentifier.get(identifier);
     const definitionText = flattenText(definition).trim();
     const children = [
@@ -183,11 +187,12 @@ function buildFootnotes(context: FootnoteRefContext): Array<{ id: number; childr
       }),
     ];
 
-    return {
-      id,
+    footnotes[String(id)] = {
       children: children.length > 0 ? children : [new Paragraph(" ")],
     };
-  });
+  }
+
+  return footnotes;
 }
 
 export async function markdownToDocx(markdownContent: string, options: MarkdownToDocxOptions = {}): Promise<Blob> {
@@ -256,9 +261,7 @@ export async function markdownToDocx(markdownContent: string, options: MarkdownT
         },
       ],
     },
-    footnotes: {
-      children: footnotes,
-    },
+    footnotes,
     sections: [
       {
         properties: {

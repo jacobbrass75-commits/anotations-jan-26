@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useProjects, useProjectDocuments } from "@/hooks/useProjects";
 import { useWebClips } from "@/hooks/useWebClips";
 import { markdownComponents, remarkPlugins } from "@/lib/markdownConfig";
@@ -16,6 +16,7 @@ import {
   useCompilePaper,
   useVerifyPaper,
 } from "@/hooks/useWritingChat";
+import { useHumanizeText } from "@/hooks/useHumanizer";
 import { useWritingPipeline, type WritingRequest } from "@/hooks/useWriting";
 import {
   stripMarkdown,
@@ -231,6 +232,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   // Compile & Verify
   const { compile, cancelCompile, clearCompiled, compiledContent, isCompiling, savedPaper } = useCompilePaper(activeConversationId);
   const { verify, verifyReport, isVerifying } = useVerifyPaper(activeConversationId);
+  const humanizeText = useHumanizeText();
+  const [humanizedCompiledContent, setHumanizedCompiledContent] = useState<string | null>(null);
 
   // PDF preview
   const [showPdfPreview, setShowPdfPreview] = useState(false);
@@ -247,10 +250,18 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const quickGenerate = useWritingPipeline();
 
   // Computed
-  const plainText = useMemo(() => (compiledContent ? stripMarkdown(compiledContent) : ""), [compiledContent]);
+  const effectiveCompiledContent = humanizedCompiledContent ?? compiledContent;
+  const plainText = useMemo(
+    () => (effectiveCompiledContent ? stripMarkdown(effectiveCompiledContent) : ""),
+    [effectiveCompiledContent]
+  );
   const wordCount = useMemo(() => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0), [plainText]);
   const pageEstimate = useMemo(() => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0), [wordCount]);
   const conversationProjectId = hasSelectedProject ? selectedProjectId : null;
+
+  useEffect(() => {
+    setHumanizedCompiledContent(null);
+  }, [compiledContent]);
 
   useEffect(() => {
     return () => {
@@ -320,13 +331,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
 
         // Send first message directly
         setTimeout(async () => {
-          const response = await fetch(`/api/chat/conversations/${conv.id}/messages`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content }),
-            credentials: "include",
-          });
-          if (response.ok && response.body) {
+          const response = await apiRequest("POST", `/api/chat/conversations/${conv.id}/messages`, { content });
+          if (response.body) {
             const reader = response.body.getReader();
             while (true) {
               const { done } = await reader.read();
@@ -381,47 +387,47 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [compile, citationStyle, tone, noEnDashes]);
 
   const handleVerify = useCallback(() => {
-    if (compiledContent) verify(compiledContent);
-  }, [verify, compiledContent]);
+    if (effectiveCompiledContent) verify(effectiveCompiledContent);
+  }, [verify, effectiveCompiledContent]);
 
   const handleCopy = useCallback(async () => {
-    if (!compiledContent) return;
+    if (!effectiveCompiledContent) return;
     try {
-      await navigator.clipboard.writeText(compiledContent);
+      await navigator.clipboard.writeText(effectiveCompiledContent);
       toast({ title: "Copied to clipboard" });
     } catch {
       toast({ title: "Failed to copy", variant: "destructive" });
     }
-  }, [compiledContent, toast]);
+  }, [effectiveCompiledContent, toast]);
 
   const handleDownloadDocx = useCallback(async () => {
-    if (!compiledContent) return;
+    if (!effectiveCompiledContent) return;
     setIsPreparingDocx(true);
     try {
-      const blob = await buildDocxBlob(conversationData?.title || "Paper", compiledContent);
+      const blob = await buildDocxBlob(conversationData?.title || "Paper", effectiveCompiledContent);
       downloadBlob(blob, `${toSafeFilename(conversationData?.title || "Paper")}.docx`);
     } catch (e) {
       toast({ title: "Export failed", description: e instanceof Error ? e.message : "DOCX export failed", variant: "destructive" });
     } finally {
       setIsPreparingDocx(false);
     }
-  }, [compiledContent, conversationData, toast]);
+  }, [effectiveCompiledContent, conversationData, toast]);
 
   const handleDownloadPdf = useCallback(async () => {
-    if (!compiledContent) return;
+    if (!effectiveCompiledContent) return;
     setIsPreparingPdf(true);
     try {
-      const blob = await buildPdfBlob(conversationData?.title || "Paper", compiledContent);
+      const blob = await buildPdfBlob(conversationData?.title || "Paper", effectiveCompiledContent);
       downloadBlob(blob, `${toSafeFilename(conversationData?.title || "Paper")}.pdf`);
     } catch (e) {
       toast({ title: "Export failed", description: e instanceof Error ? e.message : "PDF export failed", variant: "destructive" });
     } finally {
       setIsPreparingPdf(false);
     }
-  }, [compiledContent, conversationData, toast]);
+  }, [effectiveCompiledContent, conversationData, toast]);
 
   const handleTogglePdfPreview = useCallback(async () => {
-    if (!compiledContent) return;
+    if (!effectiveCompiledContent) return;
     if (showPdfPreview) {
       setShowPdfPreview(false);
       if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
@@ -430,7 +436,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
     setIsPreparingPdf(true);
     try {
-      const blob = await buildPdfBlob(conversationData?.title || "Paper", compiledContent);
+      const blob = await buildPdfBlob(conversationData?.title || "Paper", effectiveCompiledContent);
       if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(URL.createObjectURL(blob));
       setShowPdfPreview(true);
@@ -439,7 +445,30 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     } finally {
       setIsPreparingPdf(false);
     }
-  }, [compiledContent, showPdfPreview, pdfPreviewUrl, conversationData, toast]);
+  }, [effectiveCompiledContent, showPdfPreview, pdfPreviewUrl, conversationData, toast]);
+
+  const handleHumanize = useCallback(async () => {
+    if (!effectiveCompiledContent) return;
+    try {
+      const result = await humanizeText.mutateAsync({ text: effectiveCompiledContent });
+      setHumanizedCompiledContent(result.humanizedText);
+      toast({
+        title: "Humanized",
+        description: `Rewritten with ${result.provider} (${result.model})`,
+      });
+    } catch (error) {
+      toast({
+        title: "Humanize failed",
+        description: error instanceof Error ? error.message : "Failed to humanize text",
+        variant: "destructive",
+      });
+    }
+  }, [effectiveCompiledContent, humanizeText, toast]);
+
+  const handleRevertHumanized = useCallback(() => {
+    setHumanizedCompiledContent(null);
+    toast({ title: "Reverted", description: "Showing original compiled paper" });
+  }, [toast]);
 
   const handleQuickGenerate = useCallback(() => {
     if (!hasSelectedProject || !quickTopic.trim() || localSelectedSourceIds.length === 0) {
@@ -591,10 +620,13 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                 </Select>
               )}
             </div>
-            {compiledContent && (
+            {effectiveCompiledContent && (
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="font-mono text-[10px] uppercase">{wordCount} words</Badge>
                 <Badge variant="outline" className="font-mono text-[10px] uppercase">{pageEstimate} pg</Badge>
+                {humanizedCompiledContent && (
+                  <Badge variant="secondary" className="font-mono text-[10px] uppercase">Humanized</Badge>
+                )}
                 {savedPaper && <Badge variant="secondary" className="font-mono text-[10px] uppercase">Saved</Badge>}
               </div>
             )}
@@ -773,10 +805,30 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               )}
 
               {/* Verify */}
-              <Button variant="outline" onClick={handleVerify} className="w-full" disabled={!compiledContent || isVerifying}>
+              <Button variant="outline" onClick={handleVerify} className="w-full" disabled={!effectiveCompiledContent || isVerifying}>
                 {isVerifying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
                 {isVerifying ? "Verifying..." : "Verify Paper"}
               </Button>
+
+              <Button
+                variant="outline"
+                onClick={handleHumanize}
+                className="w-full"
+                disabled={!effectiveCompiledContent || humanizeText.isPending}
+              >
+                {humanizeText.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                {humanizedCompiledContent ? "Re-humanize Paper" : "Humanize Compiled Paper"}
+              </Button>
+
+              {humanizedCompiledContent && (
+                <Button variant="ghost" onClick={handleRevertHumanized} className="w-full">
+                  Revert to Original
+                </Button>
+              )}
 
               {/* Quick Generate */}
               <Dialog open={quickGenerateOpen} onOpenChange={setQuickGenerateOpen}>
@@ -836,7 +888,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
           </Card>
 
           {/* Compiled Paper Card */}
-          {(compiledContent || isCompiling) && (
+          {(effectiveCompiledContent || isCompiling) && (
             <Card className="border-border bg-background/80">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -844,7 +896,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                     {isCompiling ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />}
                     Compiled Paper
                   </CardTitle>
-                  {compiledContent && (
+                  {effectiveCompiledContent && (
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="sm" onClick={handleCopy}><Copy className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="sm" onClick={handleDownloadDocx} disabled={isPreparingDocx}>
@@ -864,7 +916,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                 <ScrollArea className="h-64">
                   <div className="prose prose-sm max-w-none dark:prose-invert">
                     <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
-                      {compiledContent}
+                      {effectiveCompiledContent}
                     </ReactMarkdown>
                     {isCompiling && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />}
                   </div>

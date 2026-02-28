@@ -154,6 +154,8 @@ export function useProjectAnnotations(projectDocumentId: string) {
       return res.json();
     },
     enabled: !!projectDocumentId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 

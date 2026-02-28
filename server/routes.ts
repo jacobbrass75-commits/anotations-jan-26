@@ -28,6 +28,7 @@ import {
 import { registerProjectRoutes } from "./projectRoutes";
 import { registerChatRoutes } from "./chatRoutes";
 import { registerWritingRoutes } from "./writingRoutes";
+import { registerHumanizerRoutes } from "./humanizerRoutes";
 import { registerExtensionRoutes } from "./extensionRoutes";
 import { registerWebClipRoutes } from "./webClipRoutes";
 import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
@@ -856,6 +857,9 @@ export async function registerRoutes(
 
   // Register writing pipeline routes
   registerWritingRoutes(app);
+
+  // Register humanizer routes
+  registerHumanizerRoutes(app);
 
   // Register extension routes (Chrome extension API)
   registerExtensionRoutes(app);

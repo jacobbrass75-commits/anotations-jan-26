@@ -249,7 +249,9 @@ async function loadStandaloneWebClipSources(
     return [];
   }
 
-  const clipIds = [...new Set(selectedSourceIds.map((id) => id?.trim()).filter(Boolean))] as string[];
+  const clipIds = Array.from(
+    new Set(selectedSourceIds.map((id) => id?.trim()).filter(Boolean))
+  ) as string[];
   if (clipIds.length === 0) {
     return [];
   }

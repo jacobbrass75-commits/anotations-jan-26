@@ -40,7 +40,7 @@ export function DocumentStatusCard({
       </div>
       {onView && (
         <div className="mt-2">
-          <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={onView}>
+          <Button variant="ghost" size="sm" className="h-auto p-0 text-xs underline underline-offset-2" onClick={onView}>
             View in panel
           </Button>
         </div>

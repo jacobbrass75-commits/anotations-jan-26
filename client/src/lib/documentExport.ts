@@ -162,7 +162,7 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
     regular: await pdf.embedFont(StandardFonts.TimesRoman),
     bold: await pdf.embedFont(StandardFonts.TimesRomanBold),
     italic: await pdf.embedFont(StandardFonts.TimesRomanItalic),
-    boldItalic: await pdf.embedFont(StandardFonts.TimesBoldItalic),
+    boldItalic: await pdf.embedFont(StandardFonts.TimesRomanBoldItalic),
   };
 
   const pageWidth = 612;

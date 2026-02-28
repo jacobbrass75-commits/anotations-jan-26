@@ -147,7 +147,8 @@ async function analyzeProjectDocument(
   console.log(`Analyzing ${topChunks.length} of ${chunks.length} chunks (${thoroughness} mode)`);
 
   const existingAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
-  const existingAnnotationPositions = existingAnnotations
+  const existingUserAnnotations = existingAnnotations.filter((annotation) => !annotation.isAiGenerated);
+  const existingAnnotationPositions = existingUserAnnotations
     .map(a => ({
       startPosition: a.startPosition,
       endPosition: a.endPosition,
@@ -155,13 +156,23 @@ async function analyzeProjectDocument(
     }));
 
   // Use V2 pipeline for improved annotation quality
-  let pipelineAnnotations = await processChunksWithPipelineV2(
-    topChunks,
-    fullIntent,
-    doc.id,
-    doc.fullText,
-    existingAnnotationPositions
-  );
+  let pipelineAnnotations: Awaited<ReturnType<typeof processChunksWithPipelineV2>> = [];
+  try {
+    pipelineAnnotations = await processChunksWithPipelineV2(
+      topChunks,
+      fullIntent,
+      doc.id,
+      doc.fullText,
+      existingAnnotationPositions
+    );
+  } catch (pipelineError) {
+    console.error("[ProjectAnalyze] Pipeline failed", {
+      projectDocumentId: projectDocId,
+      documentId: doc.id,
+      error: pipelineError instanceof Error ? pipelineError.message : String(pipelineError),
+    });
+    throw new Error("AI pipeline failed while processing document chunks");
+  }
 
   if (constraints?.categories && constraints.categories.length > 0) {
     pipelineAnnotations = pipelineAnnotations.filter(
@@ -177,6 +188,12 @@ async function analyzeProjectDocument(
 
   if (constraints?.maxAnnotationsPerDoc) {
     pipelineAnnotations = pipelineAnnotations.slice(0, constraints.maxAnnotationsPerDoc);
+  }
+
+  // Replace prior AI annotations for single-prompt runs while preserving manual/user annotations.
+  const priorAiAnnotations = existingAnnotations.filter((annotation) => annotation.isAiGenerated);
+  if (pipelineAnnotations.length > 0 && priorAiAnnotations.length > 0) {
+    await Promise.all(priorAiAnnotations.map((annotation) => projectStorage.deleteProjectAnnotation(annotation.id)));
   }
 
   for (const ann of pipelineAnnotations) {
@@ -218,6 +235,22 @@ async function verifyProjectOwnership(req: Request, res: Response, projectId: st
     return null;
   }
   return project;
+}
+
+/** Verify a project_document exists and belongs to the requesting user. */
+async function verifyProjectDocumentOwnership(req: Request, res: Response, projectDocumentId: string) {
+  const projectDoc = await projectStorage.getProjectDocument(projectDocumentId);
+  if (!projectDoc) {
+    res.status(404).json({ error: "Project document not found" });
+    return null;
+  }
+
+  const project = await verifyProjectOwnership(req, res, projectDoc.projectId);
+  if (!project) {
+    return null;
+  }
+
+  return projectDoc;
 }
 
 export function registerProjectRoutes(app: Express): void {
@@ -596,10 +629,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.get("/api/project-documents/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const projectDoc = await projectStorage.getProjectDocument(req.params.id);
-      if (!projectDoc) {
-        return res.status(404).json({ error: "Project document not found" });
-      }
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
       res.json(projectDoc);
     } catch (error) {
       console.error("Error fetching project document:", error);
@@ -609,6 +640,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.put("/api/project-documents/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
       const updated = await projectStorage.updateProjectDocument(req.params.id, req.body);
       if (!updated) {
         return res.status(404).json({ error: "Project document not found" });
@@ -622,6 +655,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.delete("/api/project-documents/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
       await projectStorage.removeDocumentFromProject(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -632,6 +667,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.put("/api/project-documents/:id/move", requireAuth, async (req: Request, res: Response) => {
     try {
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
       const { folderId } = req.body;
       const updated = await projectStorage.updateProjectDocument(req.params.id, {
         folderId: folderId || null,
@@ -648,6 +685,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.put("/api/project-documents/:id/citation", requireAuth, async (req: Request, res: Response) => {
     try {
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
       const citationData = citationDataSchema.parse(req.body);
       const updated = await projectStorage.updateProjectDocument(req.params.id, {
         citationData,
@@ -666,6 +705,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.post("/api/project-documents/:id/annotations", requireAuth, async (req: Request, res: Response) => {
     try {
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
       const validated = insertProjectAnnotationSchema.parse({
         ...req.body,
         projectDocumentId: req.params.id,
@@ -696,6 +737,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.get("/api/project-documents/:id/annotations", requireAuth, async (req: Request, res: Response) => {
     try {
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
       const annotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
       res.json(annotations);
     } catch (error) {
@@ -706,6 +749,14 @@ export function registerProjectRoutes(app: Express): void {
 
   app.put("/api/project-annotations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const annotation = await projectStorage.getProjectAnnotation(req.params.id);
+      if (!annotation) {
+        return res.status(404).json({ error: "Annotation not found" });
+      }
+
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, annotation.projectDocumentId);
+      if (!projectDoc) return;
+
       const updated = await projectStorage.updateProjectAnnotation(req.params.id, req.body);
       if (!updated) {
         return res.status(404).json({ error: "Annotation not found" });
@@ -719,6 +770,14 @@ export function registerProjectRoutes(app: Express): void {
 
   app.delete("/api/project-annotations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const annotation = await projectStorage.getProjectAnnotation(req.params.id);
+      if (!annotation) {
+        return res.status(404).json({ error: "Annotation not found" });
+      }
+
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, annotation.projectDocumentId);
+      if (!projectDoc) return;
+
       await projectStorage.deleteProjectAnnotation(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -736,12 +795,33 @@ export function registerProjectRoutes(app: Express): void {
         return res.status(400).json({ error: "Research intent is required" });
       }
 
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
+
       const validThoroughness = ['quick', 'standard', 'thorough', 'exhaustive'].includes(thoroughness) 
         ? thoroughness as ThoroughnessLevel 
         : 'standard';
 
+      const startTime = Date.now();
+      console.log("[ProjectAnalyze] Starting single-prompt analysis", {
+        projectDocumentId: req.params.id,
+        projectId: projectDoc.projectId,
+        documentId: projectDoc.documentId,
+        userId: req.user?.userId,
+        thoroughness: validThoroughness,
+      });
+
       const result = await analyzeProjectDocument(req.params.id, intent, { thoroughness: validThoroughness });
       const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
+
+      console.log("[ProjectAnalyze] Completed single-prompt analysis", {
+        projectDocumentId: req.params.id,
+        chunksAnalyzed: result.chunksAnalyzed,
+        totalChunks: result.totalChunks,
+        annotationsCreated: result.annotationsCreated,
+        totalAnnotationsOnDocument: finalAnnotations.length,
+        durationMs: Date.now() - startTime,
+      });
       
       res.json({
         annotations: finalAnnotations,
@@ -779,10 +859,8 @@ export function registerProjectRoutes(app: Express): void {
         : 'standard';
 
       const projectDocId = req.params.id;
-      const projectDoc = await projectStorage.getProjectDocument(projectDocId);
-      if (!projectDoc) {
-        return res.status(404).json({ error: "Project document not found" });
-      }
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, projectDocId);
+      if (!projectDoc) return;
 
       const doc = await storage.getDocument(projectDoc.documentId);
       if (!doc) {
@@ -883,7 +961,19 @@ export function registerProjectRoutes(app: Express): void {
       // Generate analysis run ID
       const analysisRunId = randomUUID();
 
+      const startTime = Date.now();
       console.log(`Multi-prompt analysis: ${prompts.length} prompts on ${topChunks.length} chunks`);
+      console.log("[ProjectAnalyze] Starting multi-prompt analysis", {
+        analysisRunId,
+        projectDocumentId: projectDocId,
+        projectId: projectDoc.projectId,
+        documentId: projectDoc.documentId,
+        promptCount: prompts.length,
+        chunksAnalyzed: topChunks.length,
+        totalChunks: chunks.length,
+        userId: req.user?.userId,
+        thoroughness: validThoroughness,
+      });
 
       // Run all prompts in parallel
       const resultsMap = await processChunksWithMultiplePrompts(
@@ -931,6 +1021,14 @@ export function registerProjectRoutes(app: Express): void {
       }
 
       const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
+      console.log("[ProjectAnalyze] Completed multi-prompt analysis", {
+        analysisRunId,
+        projectDocumentId: projectDocId,
+        promptCount: prompts.length,
+        totalAnnotationsCreated: totalAnnotations,
+        totalAnnotationsOnDocument: finalAnnotations.length,
+        durationMs: Date.now() - startTime,
+      });
 
       res.json({
         analysisRunId,
@@ -1046,6 +1144,9 @@ export function registerProjectRoutes(app: Express): void {
         return res.status(400).json({ error: "Query is required" });
       }
 
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
+
       const results = await searchProjectDocument(req.params.id, query);
       res.json(results);
     } catch (error) {
@@ -1158,10 +1259,8 @@ export function registerProjectRoutes(app: Express): void {
         return res.status(404).json({ error: "Annotation not found" });
       }
 
-      const projectDoc = await projectStorage.getProjectDocument(annotation.projectDocumentId);
-      if (!projectDoc) {
-        return res.status(404).json({ error: "Project document not found" });
-      }
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, annotation.projectDocumentId);
+      if (!projectDoc) return;
 
       const { pageNumber, style = "chicago" } = req.body;
       const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
@@ -1231,6 +1330,9 @@ export function registerProjectRoutes(app: Express): void {
 
   app.put("/api/project-documents/:id/view-state", requireAuth, async (req: Request, res: Response) => {
     try {
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
+
       const { scrollPosition } = req.body;
       const updated = await projectStorage.updateProjectDocument(req.params.id, {
         lastViewedAt: new Date(),

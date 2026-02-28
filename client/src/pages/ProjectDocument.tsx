@@ -114,14 +114,13 @@ export default function ProjectDocumentPage() {
   const { data: projectDoc, isLoading: docLoading } = useQuery<ProjectDocument>({
     queryKey: ["/api/project-documents", projectDocId],
     queryFn: async () => {
-      const res = await fetch(`/api/project-documents/${projectDocId}`);
-      if (!res.ok) throw new Error("Failed to fetch project document");
+      const res = await apiRequest("GET", `/api/project-documents/${projectDocId}`);
       return res.json();
     },
     enabled: !!projectDocId,
   });
 
-  const { data: document } = useQuery<Document>({
+  const { data: document, isLoading: documentLoading } = useQuery<Document>({
     queryKey: ["/api/documents", projectDoc?.documentId],
     enabled: !!projectDoc?.documentId,
   });
@@ -129,6 +128,25 @@ export default function ProjectDocumentPage() {
 
   const { data: projectAnnotations = [], isLoading: annotationsLoading } =
     useProjectAnnotations(projectDocId);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.debug("[ProjectDocument] Data chain", {
+      projectId,
+      projectDocId,
+      projectDocumentLoaded: !!projectDoc,
+      resolvedDocumentId: projectDoc?.documentId ?? null,
+      documentLoaded: !!document,
+      annotationsCount: projectAnnotations.length,
+    });
+  }, [
+    projectId,
+    projectDocId,
+    projectDoc?.id,
+    projectDoc?.documentId,
+    document?.id,
+    projectAnnotations.length,
+  ]);
 
   const deepLinkQuery = useMemo(() => {
     const queryFromLocation = location.includes("?") ? location.slice(location.indexOf("?")) : "";
@@ -490,16 +508,9 @@ export default function ProjectDocumentPage() {
   const handleCopyFootnote = useCallback(
     async (annotationId: string) => {
       try {
-        const res = await fetch(`/api/project-annotations/${annotationId}/footnote`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ style: citationStyle }),
+        const res = await apiRequest("POST", `/api/project-annotations/${annotationId}/footnote`, {
+          style: citationStyle,
         });
-
-        if (!res.ok) {
-          throw new Error("Failed to generate footnote");
-        }
-
         const data = await res.json();
         const styleLabel = citationStyle === "mla" ? "MLA" : citationStyle === "apa" ? "APA" : "Chicago";
         // For MLA/APA copy in-text citation; for Chicago copy footnoteWithQuote
@@ -599,17 +610,10 @@ export default function ProjectDocumentPage() {
 
     setIsAutoFilling(true);
     try {
-      const res = await fetch("/api/citations/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ documentId: projectDoc.documentId }),
+      const res = await apiRequest("POST", "/api/citations/ai", {
+        documentId: projectDoc.documentId,
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to extract citation metadata");
-      }
 
       if (data.citationData) {
         const cd = data.citationData;
@@ -677,7 +681,7 @@ export default function ProjectDocumentPage() {
     }
   };
 
-  if (docLoading) {
+  if (docLoading || documentLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">
