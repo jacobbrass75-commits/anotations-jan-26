@@ -1,6 +1,6 @@
 # ScholarMark Architecture Reference
 
-> Generated 2026-02-27. Covers the full codebase of `anotations-jan-26`.
+> Updated 2026-02-27. Covers the full codebase of `anotations-jan-26` after Opus upgrade.
 
 ---
 
@@ -378,13 +378,13 @@ A simple conversational chatbot with no project context.
 
 | Aspect | Detail |
 |--------|--------|
-| Model | `claude-haiku-4-5-20251001` |
-| Max tokens | 4096 |
-| System prompt | Generic ScholarMark AI assistant |
+| Model | `claude-opus-4-6` |
+| Max tokens | 8192 |
+| System prompt | Generic ScholarMark AI assistant (or source-aware if web clips selected) |
 | Streaming | SSE with `{type: "text"/"done"/"error"}` events |
 | Auto-title | Generated from first user message |
 
-No source injection, no citation tracking. Just a helpful assistant.
+The standalone chat page (`/chat`) uses the base system prompt. The writing page (`/writing`) in "No Project" mode can attach web clips as sources.
 
 ---
 
@@ -394,7 +394,7 @@ No source injection, no citation tracking. Just a helpful assistant.
 
 **Route:** `/writing` (standalone) or Project Workspace -> Write tab
 
-This is the primary writing workflow -- an iterative chat where the AI has access to project sources and can write paper sections on request.
+This is the primary writing workflow -- an iterative chat where the AI has access to project sources and can write paper sections on request. All writing features use **Opus 4.6**.
 
 ### Layout (3-column)
 
@@ -411,19 +411,36 @@ This is the primary writing workflow -- an iterative chat where the AI has acces
 +---------------+------------------+------------------+
 ```
 
+### Two Modes
+
+**Project Mode** (with a project selected):
+- Sources come from project documents (`project_documents` table)
+- Project thesis, scope, and context summary injected into system prompt
+- Conversations scoped to the project (`projectId` set)
+- Compiled papers auto-saved to the project
+
+**Standalone Mode** ("No Project (General Writing)"):
+- Sources come from web clips (`web_clips` table)
+- No project context injection -- uses base system prompt unless web clips selected
+- Conversations have `projectId = null`
+- Fetched via `GET /api/chat/conversations?standalone=true`
+- Frontend uses `useStandaloneConversations()` hook
+
 ### Chat Message Flow
 
 1. User sends message
 2. Server loads conversation history
-3. Server loads project sources (filtered by `selectedSourceIds`)
-4. Sources formatted and injected into system prompt
-5. Claude responds with source-aware content
+3. Server calls `loadConversationContext(conv, userId)`:
+   - If `conv.projectId` exists: loads project metadata + project documents
+   - If no project: loads selected web clips as sources via `loadStandaloneWebClipSources()`
+4. `buildWritingSystemPrompt()` creates source-aware prompt with project context
+5. Opus 4.6 responds with source-aware content
 
 | Aspect | Detail |
 |--------|--------|
-| Model | `claude-haiku-4-5-20251001` |
-| Max tokens | 4096 |
-| System prompt | Source-aware (see [Section 12](#12-source-injection--formatting)) |
+| Model | `claude-opus-4-6` (constant `CHAT_MODEL`) |
+| Max tokens | 8192 (constant `CHAT_MAX_TOKENS`) |
+| System prompt | Source-aware with project context (see [Section 12](#12-source-injection--formatting)) |
 | Streaming | SSE |
 
 ### Compile Flow
@@ -432,39 +449,47 @@ User clicks "Compile Paper" -> server reads full conversation -> assembles into 
 
 | Aspect | Detail |
 |--------|--------|
-| Model | `claude-sonnet-4-5-20241022` |
-| Max tokens | 8192 |
+| Model | `claude-opus-4-6` (constant `COMPILE_MODEL`) |
+| Max tokens | 8192 (constant `COMPILE_MAX_TOKENS`) |
 | Endpoint | `POST /api/chat/conversations/:id/compile` |
 
 **Compile prompt instructs Claude to:**
-1. Extract ALL paper content from the conversation
-2. Add smooth transitions between sections
-3. Write introduction if missing
-4. Write conclusion
-5. Ensure consistent voice/tone
-6. Include in-text citations in chosen style
-7. Append complete bibliography
-8. Strip conversational back-and-forth
-9. Output markdown
+1. Include every piece of substantive writing the assistant produced
+2. Preserve thesis and argument structure
+3. Do NOT summarize or shorten -- include content in full
+4. If same section was revised multiple times, use the LATEST version
+5. Remove conversational chatter
+6. Add only transitions, introduction (if missing), and conclusion
+7. Compile bibliography from all cited sources
+8. Do not fabricate source details
+9. Output clean markdown with ## section headings
 
-**After compilation:** Paper auto-saved to project as a document.
+**Project context and source materials** are appended to the compile prompt for bibliography generation.
+
+**After compilation:** Paper auto-saved to project as a document (if project mode).
 
 ### Verify Flow
 
-User clicks "Verify" -> server sends compiled paper for review.
+User clicks "Verify" -> server sends compiled paper + full source materials for review.
 
 | Aspect | Detail |
 |--------|--------|
-| Model | `claude-haiku-4-5-20251001` |
-| Max tokens | 4096 |
+| Model | `claude-opus-4-6` (constant `VERIFY_MODEL`) |
+| Max tokens | 8192 (constant `VERIFY_MAX_TOKENS`) |
 | Endpoint | `POST /api/chat/conversations/:id/verify` |
 
-**Verify prompt checks for:**
-1. Citation accuracy (format, bibliography completeness)
-2. Source fidelity (accurate representation of sources)
-3. Logical coherence (argument flow, transitions)
-4. Grammar and style consistency
-5. Completeness (intro, body, conclusion, bibliography)
+**Verify prompt performs strict source verification:**
+1. Cross-reference every direct quote against the provided source text
+2. Check whether paraphrases accurately reflect source content
+3. Verify page numbers / section references
+4. Flag any citation that doesn't correspond to provided sources
+5. Check citation and bibliography formatting consistency
+6. Identify unsupported or over-claimed assertions
+7. Review logical flow, argument coherence, tone consistency, grammar
+
+**Output format:** Executive summary, numbered findings (highest severity first) with location/issue/fix, optional strengths section.
+
+**Full source materials** are now injected into verify (not just title/author/excerpt), enabling real quote verification.
 
 ### Settings (stored per conversation)
 
@@ -476,10 +501,21 @@ User clicks "Verify" -> server sends compiled paper for review.
 
 ### Source Selection
 
-- All project documents auto-selected on first conversation creation
+- **Project mode:** All project documents auto-selected on first conversation creation
+- **Standalone mode:** Web clips shown as selectable sources
 - User can deselect/reselect individual sources via checkboxes
 - Selection saved to conversation's `selectedSourceIds` field
 - Only selected sources are injected into AI context
+
+### Source Context Limits
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `MAX_SOURCE_EXCERPT_CHARS` | 2,000 | Max chars for source excerpt/summary |
+| `MAX_SOURCE_FULLTEXT_CHARS` | 30,000 | Max chars per individual source |
+| `MAX_SOURCE_TOTAL_FULLTEXT_CHARS` | 150,000 | Total budget across all sources |
+
+When multiple sources are loaded, the per-source fulltext limit is dynamically computed as `min(30000, max(2000, 150000 / sourceCount))` to distribute the budget evenly.
 
 ### Props
 
@@ -562,24 +598,33 @@ When `deepWrite: true`:
 ### How sources get into the AI's context
 
 ```
-User selects project + sources
+User selects project + sources (or web clips in standalone mode)
   |
-loadProjectSources(projectId, selectedSourceIds)     [chatRoutes.ts:21-60]
-  | Fetches project_documents + full document text
-  | Filters to selectedSourceIds
+loadConversationContext(conv, userId)                  [chatRoutes.ts:183-210]
   |
-formatSourceForPrompt(source)                        [writingPipeline.ts:86-116]
+  +-- If conv.projectId exists:
+  |     loadProjectSources(projectId, selectedSourceIds) [chatRoutes.ts:70-116]
+  |       | Fetches project_documents + full document text
+  |       | Filters to selectedSourceIds
+  |       | Distributes fulltext budget (150K total / N sources)
+  |     projectStorage.getProject(projectId)
+  |       | Fetches project thesis, scope, contextSummary
+  |
+  +-- If no projectId:
+        loadStandaloneWebClipSources(userId, selectedSourceIds) [chatRoutes.ts:118-181]
+          | Fetches web clips by ID from web_clips table
+          | Formats as WritingSource with kind: "web_clip"
+  |
+formatSourceForPrompt(source)                          [writingPipeline.ts:86-116]
   | Formats each source as structured text block
   |
-buildWritingSystemPrompt(sources, citationStyle, tone) [chatRoutes.ts:62-97]
-  | Embeds all formatted sources into system prompt
+buildWritingSystemPrompt(sources, project, citationStyle, tone, noEnDashes) [chatRoutes.ts:212-247]
+  | Embeds project context + all formatted sources into system prompt
   |
 anthropic.messages.stream({ system: prompt, ... })
 ```
 
-### Source format template
-
-Each source is formatted as:
+### Source format template (project documents)
 
 ```
 [SOURCE projectdoc-{id}]
@@ -595,37 +640,73 @@ Publisher: {publisher}
 In: {containerTitle}
 Pages: {pageStart}-{pageEnd}
 URL: {url}
-Excerpt: "{summary or first 700 chars}"
+Excerpt: "{summary or first 2000 chars}"
 Content Snippet:
-{first 7000 chars of fullText}
+{up to 30000 chars of fullText, budget-distributed}
+```
+
+### Source format template (web clips, standalone mode)
+
+```
+[SOURCE webclip-{id}]
+Type: web_clip
+Page: {pageTitle}
+URL: {sourceUrl}
+Author: {authorName}
+Published: {publishDate}
+
+Highlighted text:
+{highlightedText}
+
+Surrounding context:
+{surroundingContext}
+
+User note:
+{note}
 ```
 
 ### Size limits
-- Excerpt: max 700 characters
-- Content snippet: max 7000 characters
+- Excerpt: max 2,000 characters (was 700)
+- Per-source fulltext: max 30,000 characters (was 7,000)
+- Total fulltext budget: 150,000 characters across all sources
+- Per-source limit dynamically computed: `min(30000, max(2000, 150000 / N))`
 
-### System prompt (with sources)
+### System prompt (with sources and project context)
 
 ```
-You are ScholarMark AI, an academic writing assistant. You are helping a student
-write a paper using their project sources.
+You are ScholarMark AI, an expert academic writing partner. You are collaborating
+with a student on a research paper.
 
-You have access to the following source materials. When the student asks you to
-write content, use these sources and include proper in-text citations.
+PROJECT CONTEXT:
+Project: {project.name}
+Thesis: {project.thesis}
+Scope: {project.scope}
+Summary: {project.contextSummary}
 
+You have access to {N} source document(s).
+
+SOURCE MATERIALS:
 {all formatted sources}
 
-Instructions:
-- Use {STYLE} format for in-text citations when referencing sources.
-- Match the following tone: {tone}.
-- When writing paper sections, use markdown formatting.
-- Be conversational in your responses but produce polished academic prose when asked.
-- Do not fabricate quotations, page numbers, publication details, or source information.
-- If uncertain about a source detail, cite conservatively and state uncertainty plainly.
-- You can discuss, explain, and help refine content iteratively.
+When the student asks you to write, draft, expand, or refine content:
+1. Write in {tone} register with {STYLE} citations.
+2. Ground every claim in the provided sources and cite specific page numbers
+   or section references when available.
+3. When quoting a source, use exact source text.
+4. Distinguish direct quotations from paraphrases.
+5. Explicitly flag claims that go beyond what the provided sources support.
+6. Maintain the student's argumentative thread across the full conversation
+   and build on what has already been drafted.
+7. When asked to write a section, produce complete, publication-ready prose
+   (not an outline).
+[8. NEVER use em-dashes or en-dashes. -- only if noEnDashes is true]
+
+Do not fabricate quotations, publication details, page numbers, or bibliography
+metadata. If source detail is uncertain, state uncertainty clearly and cite
+conservatively.
 ```
 
-### System prompt (no sources)
+### System prompt (no sources, no project)
 
 ```
 You are ScholarMark AI, a helpful academic writing assistant. You help students
@@ -857,16 +938,16 @@ All export happens **client-side** -- no server round-trip needed.
 
 | Feature | Model | Max Tokens | Notes |
 |---------|-------|-----------|-------|
-| Chat (standalone) | `claude-haiku-4-5-20251001` | 4096 | No sources |
-| Chat (project) | `claude-haiku-4-5-20251001` | 4096 | Sources in system prompt |
-| Compile paper | `claude-sonnet-4-5-20241022` | 8192 | Reads full conversation |
-| Verify paper | `claude-haiku-4-5-20251001` | 4096 | Reviews compiled paper |
-| Planning (default) | `claude-haiku-4-5-20251001` | 4096 | Generates outline |
-| Planning (deep) | `claude-sonnet-4-5-20241022` | 4096 | With extended thinking |
-| Section writing (default) | `claude-haiku-4-5-20251001` | 2x target words | Per section |
-| Section writing (deep) | `claude-sonnet-4-5-20241022` | 8192+ | Extended thinking (4096 budget) |
-| Stitching (default) | `claude-haiku-4-5-20251001` | 8192 | Assembles final paper |
-| Stitching (deep) | `claude-sonnet-4-5-20241022` | 8192 | Better assembly |
+| Chat (standalone) | `claude-opus-4-6` | 8192 | Web clips as sources |
+| Chat (project) | `claude-opus-4-6` | 8192 | Project docs in system prompt + project context |
+| Compile paper | `claude-opus-4-6` | 8192 | Reads full conversation + sources + project context |
+| Verify paper | `claude-opus-4-6` | 8192 | Full source materials + compiled paper |
+| Planning (default) | `claude-haiku-4-5-20251001` | 4096 | Generates outline (one-shot pipeline) |
+| Planning (deep) | `claude-sonnet-4-5-20241022` | 4096 | With extended thinking (one-shot pipeline) |
+| Section writing (default) | `claude-haiku-4-5-20251001` | 2x target words | Per section (one-shot pipeline) |
+| Section writing (deep) | `claude-sonnet-4-5-20241022` | 8192+ | Extended thinking (one-shot pipeline) |
+| Stitching (default) | `claude-haiku-4-5-20251001` | 8192 | Assembles final paper (one-shot pipeline) |
+| Stitching (deep) | `claude-sonnet-4-5-20241022` | 8192 | Better assembly (one-shot pipeline) |
 | Auto-title | `claude-haiku-4-5-20251001` | 30 | Short title from first message |
 
 ---
@@ -874,7 +955,7 @@ All export happens **client-side** -- no server round-trip needed.
 ## Key Architectural Patterns
 
 1. **SSE Streaming** -- All AI responses streamed via Server-Sent Events with JSON payloads
-2. **Source Clipping** -- Excerpts max 700 chars, full text max 7000 chars per source
+2. **Source Clipping** -- Excerpts max 2000 chars, full text max 30000 chars per source (150K total budget distributed dynamically)
 3. **Two annotation layers** -- Document-global + project-scoped
 4. **Per-conversation settings** -- Citation style, tone, source selection persist per chat
 5. **Client-side export** -- PDF/DOCX generated in browser, no server needed
