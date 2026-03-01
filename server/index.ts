@@ -124,12 +124,24 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) {
+      return next(err);
+    }
+
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    if (err instanceof URIError || message.includes("Failed to decode param")) {
+      log(`Malformed URI sequence in request URL: ${req.originalUrl}`);
+      return res.status(400).json({ message: "Malformed URI sequence" });
+    }
+
+    if (status >= 500) {
+      console.error(err);
+    }
+
+    return res.status(status).json({ message });
   });
 
   // importantly only setup vite in development and after
