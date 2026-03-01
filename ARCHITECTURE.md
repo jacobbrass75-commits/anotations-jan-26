@@ -1,6 +1,6 @@
 # ScholarMark Architecture Reference
 
-> Updated 2026-02-27. Covers the full codebase of `anotations-jan-26` after Opus upgrade.
+> Updated 2026-02-27. Covers the full codebase of `anotations-jan-26` after Opus upgrade + humanizer integration.
 
 ---
 
@@ -20,9 +20,10 @@
 12. [Source Injection & Formatting](#12-source-injection--formatting)
 13. [Citation System](#13-citation-system)
 14. [Document Export (PDF / DOCX)](#14-document-export-pdf--docx)
-15. [Web Clips & Chrome Extension](#15-web-clips--chrome-extension)
-16. [Environment Variables](#16-environment-variables)
-17. [All API Endpoints](#17-all-api-endpoints)
+15. [Humanizer System](#15-humanizer-system)
+16. [Web Clips & Chrome Extension](#16-web-clips--chrome-extension)
+17. [Environment Variables](#17-environment-variables)
+18. [All API Endpoints](#18-all-api-endpoints)
 
 ---
 
@@ -40,11 +41,13 @@
 | AI | Anthropic SDK | 0.78 |
 | Auth | JWT + bcrypt | jsonwebtoken 9, bcrypt 6 |
 | PDF gen | pdf-lib | 1.17 |
-| DOCX gen | JSZip | - |
+| DOCX gen | docx (via markdownToDocx) | 9.6 |
+| Markdown parsing | unified + remark-parse + remark-gfm | 11 / 4 |
 | File uploads | Multer | 2.0 (50 MB limit) |
 | Image processing | Sharp | 0.34 |
 | PDF text extraction | pdf-parse | 2.4 |
-| Markdown rendering | react-markdown | - |
+| Markdown rendering | react-markdown | 10.1 |
+| AI (humanizer) | Google Gemini REST API (primary) / Anthropic SDK (fallback) | - |
 
 **Database file:** `data/sourceannotator.db`
 **Default port:** `5001`
@@ -222,6 +225,7 @@ Startup order:
 | selectedSourceIds | JSON | string[] (project doc IDs) |
 | citationStyle | TEXT | Default: "chicago" |
 | tone | TEXT | Default: "academic" |
+| humanize | BOOL | Default: true (auto-humanize on compile) |
 | noEnDashes | BOOL | Default: false |
 | createdAt, updatedAt | INT | |
 
@@ -497,6 +501,7 @@ User clicks "Verify" -> server sends compiled paper + full source materials for 
 |---------|---------|--------|
 | Tone | academic, casual, ap_style | Controls writing register and formality |
 | Citation style | chicago, mla, apa | Determines citation format in-text and bibliography |
+| Humanize prose | true/false (default true) | Enables "Humanize" button; stored as `humanize` on conversation |
 | No en-dashes | true/false | Adds instruction: "NEVER use em-dashes or en-dashes" |
 
 ### Source Selection
@@ -761,9 +766,9 @@ accurate, and helpful.
 
 ## 14. Document Export (PDF / DOCX)
 
-**File:** `client/src/lib/documentExport.ts`
+**Files:** `client/src/lib/documentExport.ts`, `client/src/lib/markdownToDocx.ts`
 
-All export happens **client-side** -- no server round-trip needed.
+All export happens **client-side** -- no server round-trip needed. Both exporters parse the markdown AST for rich formatting.
 
 ### PDF (pdf-lib)
 
@@ -774,12 +779,14 @@ All export happens **client-side** -- no server round-trip needed.
 - Auto page breaks
 - Color: dark gray `rgb(0.08, 0.08, 0.08)`
 
-### DOCX (JSZip)
+### DOCX (docx library via markdownToDocx)
 
-- Minimal Office Open XML structure
+- **File:** `client/src/lib/markdownToDocx.ts`
+- Parses markdown AST via unified/remark-parse/remark-gfm
+- Rich formatting: bold, italic, superscript footnote references, headings, lists, hyperlinks
+- Footnotes rendered as Word footnotes
 - Page: 8.5"x11" with 1" margins
-- Plain text paragraphs (no rich formatting)
-- Files: `[Content_Types].xml`, `_rels/.rels`, `word/document.xml`
+- Font: configurable (default Times New Roman body, heading styles)
 
 ### Utilities
 
@@ -788,13 +795,77 @@ All export happens **client-side** -- no server round-trip needed.
 | `stripMarkdown(md)` | Remove all markdown syntax -> plain text |
 | `toSafeFilename(s)` | Escape illegal filename chars, max 80 chars |
 | `downloadBlob(blob, name)` | Trigger browser download |
-| `buildDocxBlob(title, content)` | Generate DOCX blob |
-| `buildPdfBlob(title, content)` | Generate PDF blob |
+| `buildDocxBlob(title, content)` | Generate DOCX blob (via markdownToDocx) |
+| `buildPdfBlob(title, content)` | Generate PDF blob (via pdf-lib with markdown AST) |
 | `getDocTypeLabel(filename)` | Return "PDF" / "TXT" / "IMAGE" / "DOC" |
+| `copyTextToClipboard(text)` | Copy to clipboard (`lib/clipboard.ts`) with fallback for older browsers |
 
 ---
 
-## 15. Web Clips & Chrome Extension
+## 15. Humanizer System
+
+**Files:** `server/humanizer.ts`, `server/humanizerRoutes.ts`, `client/src/hooks/useHumanizer.ts`, `prompts/humanizer.txt`
+
+Rewrites AI-generated text to sound more human/natural. Ported from the [ai-humanizer](https://github.com/dixon2004/ai-humanizer) project (MIT).
+
+### Architecture
+
+```
+WritingChat "Humanize" button
+  |
+  v
+useHumanizeText() mutation  →  POST /api/humanize (requireAuth)
+                                    |
+                                    v
+                               humanizeText()
+                                    |
+                          ┌─────────┴─────────┐
+                          v                   v
+                   Gemini (primary)    Anthropic (fallback)
+                   gemini-2.5-flash-lite    claude-opus-4-6
+```
+
+### Provider strategy
+1. If `GEMINI_API_KEY` is set, try Google Gemini first (cheaper for this task)
+2. If Gemini fails or key is absent, fall back to Anthropic (requires `ANTHROPIC_API_KEY`)
+3. If neither key is configured, returns 503
+
+### Prompt template
+
+Loaded from `prompts/humanizer.txt` at startup (cached). Falls back to hardcoded template if file is missing. Rules enforce: simple language, active voice, no colons/semicolons/dashes, varied sentence length, occasional grammar quirks, output-only (no explanations).
+
+### API
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/humanize` | Yes | Humanize text |
+
+**Request body:** `{ text: string, model?: string, temperature?: number }`
+**Response:** `{ humanizedText: string, provider: "gemini" | "anthropic", model: string, tokensUsed?: number }`
+
+**Validation:**
+- `text` required, max 50,000 characters
+- `temperature` must be finite number (clamped 0-1, default 0.7)
+- Token usage auto-incremented on user's `tokensUsed` counter
+
+### Frontend integration
+
+- **Toggle:** "Humanize prose" checkbox in conversation settings (stored as `humanize` column on `conversations`)
+- **Button:** "Humanize Compiled Paper" in WritingChat right panel (appears after compile)
+- **Revert:** "Revert to Original" button restores pre-humanized compiled content
+- **State:** `humanizedCompiledContent` tracked in WritingChat; `effectiveCompiledContent` switches between original and humanized for display/export
+
+### Configuration
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GEMINI_API_KEY` | - | Google Gemini API key (primary provider) |
+| `GEMINI_HUMANIZER_MODEL` | `gemini-2.5-flash-lite` | Override Gemini model |
+| `HUMANIZER_ANTHROPIC_MODEL` | `claude-opus-4-6` | Override Anthropic fallback model |
+
+---
+
+## 16. Web Clips & Chrome Extension
 
 **Files:** `server/webClipRoutes.ts`, `server/extensionRoutes.ts`
 
@@ -811,7 +882,7 @@ All export happens **client-side** -- no server round-trip needed.
 
 ---
 
-## 16. Environment Variables
+## 17. Environment Variables
 
 ### Required
 
@@ -829,10 +900,13 @@ All export happens **client-side** -- no server round-trip needed.
 | `ALLOWED_ORIGINS` | "" | CORS whitelist (comma-separated) |
 | `VISION_OCR_MODEL` | "gpt-4o" | OCR model |
 | `MAX_COMBINED_UPLOAD_FILES` | 25 | Max batch upload files |
+| `GEMINI_API_KEY` | - | Google Gemini key (humanizer primary provider) |
+| `GEMINI_HUMANIZER_MODEL` | `gemini-2.5-flash-lite` | Override humanizer Gemini model |
+| `HUMANIZER_ANTHROPIC_MODEL` | `claude-opus-4-6` | Override humanizer Anthropic fallback model |
 
 ---
 
-## 17. All API Endpoints
+## 18. All API Endpoints
 
 ### Auth (`server/authRoutes.ts`)
 
@@ -915,6 +989,12 @@ All export happens **client-side** -- no server round-trip needed.
 |--------|------|-------------|
 | POST | `/api/write` | One-shot paper generation (SSE stream) |
 
+### Humanizer (`server/humanizerRoutes.ts`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/humanize` | Humanize text (Gemini primary, Anthropic fallback) |
+
 ### Web Clips (`server/webClipRoutes.ts`)
 
 | Method | Path | Description |
@@ -949,6 +1029,8 @@ All export happens **client-side** -- no server round-trip needed.
 | Stitching (default) | `claude-haiku-4-5-20251001` | 8192 | Assembles final paper (one-shot pipeline) |
 | Stitching (deep) | `claude-sonnet-4-5-20241022` | 8192 | Better assembly (one-shot pipeline) |
 | Auto-title | `claude-haiku-4-5-20251001` | 30 | Short title from first message |
+| Humanizer (primary) | `gemini-2.5-flash-lite` | - | Via Google Gemini REST API |
+| Humanizer (fallback) | `claude-opus-4-6` | 4096 | Via Anthropic SDK when Gemini unavailable |
 
 ---
 
@@ -957,7 +1039,9 @@ All export happens **client-side** -- no server round-trip needed.
 1. **SSE Streaming** -- All AI responses streamed via Server-Sent Events with JSON payloads
 2. **Source Clipping** -- Excerpts max 2000 chars, full text max 30000 chars per source (150K total budget distributed dynamically)
 3. **Two annotation layers** -- Document-global + project-scoped
-4. **Per-conversation settings** -- Citation style, tone, source selection persist per chat
-5. **Client-side export** -- PDF/DOCX generated in browser, no server needed
-6. **React Query invalidation** -- Mutations automatically refresh related queries
+4. **Per-conversation settings** -- Citation style, tone, humanize, source selection persist per chat
+5. **Client-side export** -- PDF/DOCX generated in browser (pdf-lib for PDF, docx library with markdown AST for DOCX), no server needed
+6. **React Query invalidation** -- Mutations automatically refresh related queries (`staleTime: Infinity` — relies on explicit invalidation)
 7. **V2 AI pipeline** -- Generator -> Hard Verifier -> Soft Verifier for annotation quality
+8. **Multi-provider AI** -- Anthropic (chat/writing/verify), OpenAI (annotation pipeline/OCR), Gemini (humanizer) with fallback chains
+9. **Chat component decomposition** -- WritingChat delegates to `chat/ChatInput`, `chat/ChatMessages`, `chat/ChatSidebar`, `chat/DocumentPanel`, `chat/DocumentStatusCard`
