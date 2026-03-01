@@ -55,6 +55,17 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Reject malformed percent-encoding before Express route matching can throw.
+app.use((req, res, next) => {
+  try {
+    decodeURIComponent(req.url);
+    next();
+  } catch {
+    log(`Malformed URI sequence in request URL: ${req.url}`);
+    res.status(400).json({ message: "Malformed URI sequence" });
+  }
+});
+
 // Initialize Passport
 configurePassport(app);
 
