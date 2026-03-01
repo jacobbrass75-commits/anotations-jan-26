@@ -615,6 +615,7 @@ export const conversations = sqliteTable("conversations", {
   projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   title: text("title").notNull().default("New Chat"),
   model: text("model").notNull().default("claude-opus-4-6"),
+  writingModel: text("writing_model").default("precision"),
   selectedSourceIds: text("selected_source_ids", { mode: "json" }).$type<string[]>(),
   citationStyle: text("citation_style").default("chicago"),
   tone: text("tone").default("academic"),

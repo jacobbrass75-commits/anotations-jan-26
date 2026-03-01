@@ -232,29 +232,6 @@ export function registerWritingRoutes(app: Express): void {
         }
       });
 
-      if (!aborted && request.projectId && completedFullText.trim()) {
-        try {
-          const savedPaper = await savePaperToProject(
-            request.projectId,
-            request.topic,
-            completedFullText
-          );
-          sendEvent({
-            type: "saved",
-            message: `Saved to project as "${savedPaper.filename}"`,
-            savedPaper,
-          });
-        } catch (saveError) {
-          sendEvent({
-            type: "status",
-            phase: "saving",
-            message: `Generated paper but could not save to project: ${
-              saveError instanceof Error ? saveError.message : "Unknown save error"
-            }`,
-          });
-        }
-      }
-
       // End the stream
       if (!aborted) {
         res.write("data: [DONE]\n\n");

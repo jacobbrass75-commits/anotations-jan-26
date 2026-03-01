@@ -57,10 +57,23 @@ export function useWritingConversation(id: string | null) {
 
 export function useCreateWritingConversation() {
   return useMutation({
-    mutationFn: async (data: { projectId?: string | null; selectedSourceIds?: string[] }) => {
+    mutationFn: async (data: {
+      projectId?: string | null;
+      selectedSourceIds?: string[];
+      writingModel?: "precision" | "extended";
+      citationStyle?: string;
+      tone?: string;
+      humanize?: boolean;
+      noEnDashes?: boolean;
+    }) => {
       const res = await apiRequest("POST", "/api/chat/conversations", {
         projectId: data.projectId ?? null,
         selectedSourceIds: data.selectedSourceIds || [],
+        writingModel: data.writingModel ?? "precision",
+        citationStyle: data.citationStyle ?? "chicago",
+        tone: data.tone ?? "academic",
+        humanize: data.humanize ?? true,
+        noEnDashes: data.noEnDashes ?? false,
       });
       return res.json() as Promise<Conversation>;
     },
@@ -125,6 +138,8 @@ export function useWritingSendMessage(conversationId: string | null) {
   const [streamingDocumentText, setStreamingDocumentText] = useState("");
   const [isDocumentStreaming, setIsDocumentStreaming] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [contextLoading, setContextLoading] = useState<{ level: number; documentId?: string } | null>(null);
+  const [contextWarning, setContextWarning] = useState<{ id: number; message: string; available?: number } | null>(null);
 
   const send = useCallback(
     async (content: string) => {
@@ -136,6 +151,8 @@ export function useWritingSendMessage(conversationId: string | null) {
       setDocumentTitle("");
       setStreamingDocumentText("");
       setIsDocumentStreaming(false);
+      setContextLoading(null);
+      setContextWarning(null);
 
       try {
         const response = await fetch(
@@ -181,7 +198,21 @@ export function useWritingSendMessage(conversationId: string | null) {
                   setStreamingDocumentText(accumulatedDocument);
                 } else if (data.type === "document_end") {
                   setIsDocumentStreaming(false);
+                } else if (data.type === "context_loading") {
+                  setContextLoading({
+                    level: Number(data.level) || 2,
+                    documentId: typeof data.documentId === "string" ? data.documentId : undefined,
+                  });
+                } else if (data.type === "context_loaded") {
+                  setContextLoading(null);
+                } else if (data.type === "context_warning") {
+                  setContextWarning({
+                    id: Date.now(),
+                    message: String(data.message || "Context is getting large."),
+                    available: typeof data.available === "number" ? data.available : undefined,
+                  });
                 } else if (data.type === "done") {
+                  setContextLoading(null);
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations", conversationId],
                   });
@@ -204,6 +235,7 @@ export function useWritingSendMessage(conversationId: string | null) {
         setStreamingText("");
         setStreamingChatText("");
         setIsDocumentStreaming(false);
+        setContextLoading(null);
       }
     },
     [conversationId]
@@ -217,6 +249,8 @@ export function useWritingSendMessage(conversationId: string | null) {
     streamingDocumentText,
     isDocumentStreaming,
     isStreaming,
+    contextLoading,
+    contextWarning,
   };
 }
 
@@ -225,7 +259,6 @@ export function useWritingSendMessage(conversationId: string | null) {
 export function useCompilePaper(conversationId: string | null) {
   const [compiledContent, setCompiledContent] = useState("");
   const [isCompiling, setIsCompiling] = useState(false);
-  const [savedPaper, setSavedPaper] = useState<{ documentId: string; filename: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const compile = useCallback(
@@ -234,7 +267,6 @@ export function useCompilePaper(conversationId: string | null) {
 
       setIsCompiling(true);
       setCompiledContent("");
-      setSavedPaper(null);
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -270,10 +302,6 @@ export function useCompilePaper(conversationId: string | null) {
                 if (data.type === "text") {
                   accumulated += data.text;
                   setCompiledContent(accumulated);
-                } else if (data.type === "done") {
-                  if (data.savedPaper) {
-                    setSavedPaper(data.savedPaper);
-                  }
                 } else if (data.type === "error") {
                   console.error("Compile error:", data.error);
                 }
@@ -302,10 +330,9 @@ export function useCompilePaper(conversationId: string | null) {
 
   const clearCompiled = useCallback(() => {
     setCompiledContent("");
-    setSavedPaper(null);
   }, []);
 
-  return { compile, cancelCompile, clearCompiled, compiledContent, isCompiling, savedPaper };
+  return { compile, cancelCompile, clearCompiled, compiledContent, isCompiling };
 }
 
 // --- Verify paper ---

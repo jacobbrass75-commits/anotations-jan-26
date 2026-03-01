@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { CitationData } from "@shared/schema";
+import type { CitationData, ProjectAnnotation } from "@shared/schema";
 
 // --- Interfaces ---
 
@@ -39,6 +39,24 @@ export interface WritingSource {
   note: string | null;
   citationData: CitationData | null;
   documentFilename: string;
+}
+
+export interface TieredSource {
+  id: string;
+  kind: "project_document";
+  title: string;
+  author: string;
+  category: string;
+  citationData: CitationData | null;
+  documentFilename: string;
+  summary: string | null;
+  mainArguments: string[] | null;
+  keyConcepts: string[] | null;
+  roleInProject: string | null;
+  projectContext: string | null;
+  annotations: ProjectAnnotation[];
+  excerpt: string;
+  documentId: string;
 }
 
 export interface WritingSSEEvent {
@@ -112,6 +130,65 @@ export function formatSourceForPrompt(source: WritingSource): string {
   }
   parts.push(`Excerpt: "${source.excerpt}"`);
   parts.push(`Content Snippet:\n${source.fullText}`);
+  return parts.join("\n");
+}
+
+export function formatSourceForPromptTiered(source: TieredSource): string {
+  const parts: string[] = [];
+  parts.push(`[SOURCE ${source.id}]`);
+  parts.push(`Document: ${source.documentFilename}`);
+  parts.push(`Title: ${source.title}`);
+  parts.push(`Author(s): ${source.author}`);
+
+  if (source.citationData) {
+    const cd = source.citationData;
+    const authorStr =
+      cd.authors && cd.authors.length > 0
+        ? cd.authors.map((a) => `${a.firstName} ${a.lastName}`).join(", ")
+        : "Unknown Author";
+    parts.push(`Citation Author(s): ${authorStr}`);
+    parts.push(`Citation Title: ${cd.title}${cd.subtitle ? ": " + cd.subtitle : ""}`);
+    if (cd.publicationDate) parts.push(`Date: ${cd.publicationDate}`);
+    if (cd.publisher) parts.push(`Publisher: ${cd.publisher}`);
+    if (cd.containerTitle) parts.push(`In: ${cd.containerTitle}`);
+    if (cd.pageStart) {
+      parts.push(`Pages: ${cd.pageStart}${cd.pageEnd ? "-" + cd.pageEnd : ""}`);
+    }
+    if (cd.url) parts.push(`URL: ${cd.url}`);
+  }
+
+  if (source.summary) parts.push(`Summary: ${source.summary}`);
+  if (source.mainArguments?.length) {
+    parts.push(`Main Arguments: ${source.mainArguments.join("; ")}`);
+  }
+  if (source.keyConcepts?.length) {
+    parts.push(`Key Concepts: ${source.keyConcepts.join(", ")}`);
+  }
+  if (source.roleInProject) parts.push(`Role in Project: ${source.roleInProject}`);
+  if (source.projectContext) parts.push(`Project Context: ${source.projectContext}`);
+
+  if (source.annotations.length > 0) {
+    parts.push("");
+    parts.push(`ANNOTATED PASSAGES (${source.annotations.length} annotations):`);
+    parts.push("");
+
+    for (const ann of source.annotations) {
+      const confidence = typeof ann.confidenceScore === "number"
+        ? ` | Confidence: ${ann.confidenceScore.toFixed(2)}`
+        : "";
+      const promptInfo = ann.promptText ? ` | Prompt: "${ann.promptText}"` : "";
+
+      parts.push(`[ANNOTATION ${ann.id}] Category: ${ann.category}${confidence}${promptInfo}`);
+      parts.push(`"${ann.highlightedText}"`);
+      if (ann.note) parts.push(`Note: ${ann.note}`);
+      parts.push(`Position: chars ${ann.startPosition}-${ann.endPosition}`);
+      parts.push(`Document: ${source.documentId}`);
+      parts.push("");
+    }
+  } else {
+    parts.push(`Excerpt: "${source.excerpt}"`);
+  }
+
   return parts.join("\n");
 }
 

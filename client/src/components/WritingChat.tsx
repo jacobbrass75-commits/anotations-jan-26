@@ -147,6 +147,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     streamingDocumentText,
     isDocumentStreaming,
     isStreaming,
+    contextLoading,
+    contextWarning,
   } = useWritingSendMessage(activeConversationId);
 
   // Source management
@@ -182,6 +184,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   // Writing settings
   const [citationStyle, setCitationStyle] = useState(conversationData?.citationStyle || "chicago");
   const [tone, setTone] = useState(conversationData?.tone || "academic");
+  const [writingModel, setWritingModel] = useState<"precision" | "extended">(
+    conversationData?.writingModel === "extended" ? "extended" : "precision"
+  );
   const [humanize, setHumanize] = useState(conversationData?.humanize ?? true);
   const [noEnDashes, setNoEnDashes] = useState(conversationData?.noEnDashes || false);
 
@@ -195,6 +200,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (conversationData) {
       if (conversationData.citationStyle) setCitationStyle(conversationData.citationStyle);
       if (conversationData.tone) setTone(conversationData.tone);
+      setWritingModel(conversationData.writingModel === "extended" ? "extended" : "precision");
       if (conversationData.humanize !== undefined && conversationData.humanize !== null) {
         setHumanize(conversationData.humanize);
       }
@@ -203,6 +209,15 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       }
     }
   }, [conversationData]);
+
+  useEffect(() => {
+    if (!contextWarning) return;
+    toast({
+      title: "Context Warning",
+      description: contextWarning.message,
+      variant: "destructive",
+    });
+  }, [contextWarning, toast]);
 
   useEffect(() => {
     // Reset document panel state when switching conversations.
@@ -230,7 +245,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [documentTitle, isDocumentStreaming, streamingDocumentText]);
 
   // Compile & Verify
-  const { compile, cancelCompile, clearCompiled, compiledContent, isCompiling, savedPaper } = useCompilePaper(activeConversationId);
+  const { compile, cancelCompile, clearCompiled, compiledContent, isCompiling } = useCompilePaper(activeConversationId);
   const { verify, verifyReport, isVerifying } = useVerifyPaper(activeConversationId);
   const humanizeText = useHumanizeText();
   const [humanizedCompiledContent, setHumanizedCompiledContent] = useState<string | null>(null);
@@ -276,17 +291,22 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       const conv = await createConversation.mutateAsync({
         projectId: conversationProjectId,
         selectedSourceIds: localSelectedSourceIds,
+        writingModel,
+        citationStyle,
+        tone,
+        humanize,
+        noEnDashes,
       });
       await updateConversation.mutateAsync({
         id: conv.id,
-        data: { citationStyle, tone, humanize, noEnDashes },
+        data: { citationStyle, tone, writingModel, humanize, noEnDashes },
       });
       setActiveConversationId(conv.id);
       clearCompiled();
     } catch {
       toast({ title: "Error", description: "Failed to create conversation", variant: "destructive" });
     }
-  }, [conversationProjectId, localSelectedSourceIds, citationStyle, tone, humanize, noEnDashes, createConversation, updateConversation, clearCompiled, toast]);
+  }, [conversationProjectId, localSelectedSourceIds, citationStyle, tone, writingModel, humanize, noEnDashes, createConversation, updateConversation, clearCompiled, toast]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversationId(id);
@@ -320,13 +340,18 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         const conv = await createConversation.mutateAsync({
           projectId: conversationProjectId,
           selectedSourceIds: localSelectedSourceIds,
+          writingModel,
+          citationStyle,
+          tone,
+          humanize,
+          noEnDashes,
         });
         setActiveConversationId(conv.id);
 
         // Save settings
         await updateConversation.mutateAsync({
           id: conv.id,
-          data: { citationStyle, tone, humanize, noEnDashes },
+          data: { citationStyle, tone, writingModel, humanize, noEnDashes },
         });
 
         // Send first message directly
@@ -349,7 +374,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
 
     await send(content);
-  }, [activeConversationId, conversationProjectId, localSelectedSourceIds, citationStyle, tone, humanize, noEnDashes, send, createConversation, updateConversation, toast]);
+  }, [activeConversationId, conversationProjectId, localSelectedSourceIds, citationStyle, tone, writingModel, humanize, noEnDashes, send, createConversation, updateConversation, toast]);
 
   const toggleSource = useCallback((id: string) => {
     setLocalSelectedSourceIds((prev) => {
@@ -374,6 +399,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const handleSettingChange = useCallback((key: string, value: any) => {
     if (key === "citationStyle") setCitationStyle(value);
     if (key === "tone") setTone(value);
+    if (key === "writingModel") setWritingModel(value);
     if (key === "humanize") setHumanize(value);
     if (key === "noEnDashes") setNoEnDashes(value);
 
@@ -627,7 +653,6 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                 {humanizedCompiledContent && (
                   <Badge variant="secondary" className="font-mono text-[10px] uppercase">Humanized</Badge>
                 )}
-                {savedPaper && <Badge variant="secondary" className="font-mono text-[10px] uppercase">Saved</Badge>}
               </div>
             )}
           </div>
@@ -647,6 +672,11 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         />
 
         {/* Input */}
+        {contextLoading && (
+          <div className="border-t border-border px-5 py-2 text-xs text-muted-foreground bg-background/60">
+            Loading source context (Level {contextLoading.level})...
+          </div>
+        )}
         <ChatInput onSend={handleSend} disabled={isStreaming} />
       </section>
 
@@ -688,6 +718,13 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               <CardTitle className="text-base">Settings</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              <Select value={writingModel} onValueChange={(v) => handleSettingChange("writingModel", v)}>
+                <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="precision">Precision (Opus)</SelectItem>
+                  <SelectItem value="extended">Extended (Sonnet)</SelectItem>
+                </SelectContent>
+              </Select>
               <div className="grid grid-cols-2 gap-2">
                 <Select value={tone} onValueChange={(v) => handleSettingChange("tone", v)}>
                   <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>

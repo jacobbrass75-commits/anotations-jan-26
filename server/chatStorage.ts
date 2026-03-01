@@ -51,7 +51,12 @@ export const chatStorage = {
 
   async updateConversation(
     id: string,
-    data: Partial<Pick<Conversation, "title" | "model" | "selectedSourceIds" | "citationStyle" | "tone" | "humanize" | "noEnDashes">>
+    data: Partial<
+      Pick<
+        Conversation,
+        "title" | "model" | "writingModel" | "selectedSourceIds" | "citationStyle" | "tone" | "humanize" | "noEnDashes"
+      >
+    >
   ): Promise<Conversation> {
     const [updated] = await db
       .update(conversations)
