@@ -195,7 +195,6 @@ export function registerChatRoutes(app: Express) {
       const tools = hasProject ? WRITING_TOOLS : undefined;
       let totalTokens = 0;
       let fullAssistantText = "";
-
       try {
         await runToolUseLoop({
           anthropic,
@@ -216,7 +215,10 @@ export function registerChatRoutes(app: Express) {
           },
         });
       } catch (loopError) {
-        console.error("Tool-use loop error:", loopError);
+        console.error(
+          "Tool-use loop error:",
+          loopError instanceof Error ? loopError.stack : loopError
+        );
         if (!clientDisconnected) {
           emitSSE(res, {
             type: "error",
@@ -308,7 +310,6 @@ async function runToolUseLoop(opts: ToolUseLoopOptions): Promise<void> {
       messages: loopMessages,
       ...(tools && tools.length > 0 ? { tools } : {}),
     };
-
     const stream = anthropic.messages.stream(requestParams);
 
     // Collect this iteration's response
@@ -325,6 +326,9 @@ async function runToolUseLoop(opts: ToolUseLoopOptions): Promise<void> {
       iterationText += text;
       onText(text);
       emitSSE(res, { type: "text", text });
+    });
+    stream.on("error", (err) => {
+      console.error("Stream error:", err);
     });
 
     // Wait for the full message
