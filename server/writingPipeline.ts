@@ -192,6 +192,40 @@ export function formatSourceForPromptTiered(source: TieredSource): string {
   return parts.join("\n");
 }
 
+export function formatSourceStubForPrompt(source: TieredSource): string {
+  const parts: string[] = [];
+  parts.push(`[SOURCE ${source.id}]`);
+  parts.push(`Document ID: ${source.documentId}`);
+  parts.push(`Title: ${source.title}`);
+  parts.push(`Author(s): ${source.author}`);
+  if (source.keyConcepts?.length) {
+    parts.push(`Topics: ${source.keyConcepts.slice(0, 5).join(", ")}`);
+  }
+  if (source.roleInProject) {
+    parts.push(`Role in Project: ${source.roleInProject}`);
+  }
+  parts.push(`Annotations available: ${source.annotations.length}`);
+  return parts.join("\n");
+}
+
+export function formatWebClipStubForPrompt(source: WritingSource): string {
+  const parts: string[] = [];
+  parts.push(`[SOURCE ${source.id}]`);
+  parts.push(`Clip ID: ${source.id}`);
+  parts.push(`Type: ${source.kind}`);
+  parts.push(`Title: ${source.title}`);
+  parts.push(`Author(s): ${source.author}`);
+  if (source.citationData?.url) {
+    parts.push(`URL: ${source.citationData.url}`);
+  }
+  const snippetLimit = 200;
+  const snippet = source.excerpt.length > snippetLimit
+    ? `${source.excerpt.slice(0, snippetLimit)}...`
+    : source.excerpt;
+  parts.push(`Snapshot: "${snippet}"`);
+  return parts.join("\n");
+}
+
 // --- Phase 1: PLANNER ---
 
 async function runPlanner(
