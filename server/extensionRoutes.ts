@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { requireAuth } from "./auth";
+import { requireAuth, requireTier } from "./auth";
 import { projectStorage } from "./projectStorage";
 import type { AnnotationCategory } from "@shared/schema";
 
@@ -8,7 +8,7 @@ export function registerExtensionRoutes(app: Express): void {
   // Requires auth (JWT in Authorization header)
   // Body: { highlightedText, pageUrl, pageTitle, context, projectId?, timestamp? }
   // Creates an annotation in the specified project (or default project)
-  app.post("/api/extension/save", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/extension/save", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const { highlightedText, pageUrl, pageTitle, context, projectId } = req.body;
 

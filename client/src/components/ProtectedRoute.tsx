@@ -1,11 +1,11 @@
-import { useAuth } from "@/lib/auth";
+import { type ReactNode } from "react";
+import { useAuth } from "@clerk/clerk-react";
 import { Redirect } from "wouter";
-import type { ReactNode } from "react";
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
 
-  if (isLoading) {
+  if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -13,8 +13,8 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!user) {
-    return <Redirect to="/login" />;
+  if (!isSignedIn) {
+    return <Redirect to="/sign-in" />;
   }
 
   return <>{children}</>;

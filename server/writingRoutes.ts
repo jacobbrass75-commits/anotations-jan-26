@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { requireAuth } from "./auth";
+import { requireAuth, requireTier } from "./auth";
 import { projectStorage } from "./projectStorage";
 import { storage } from "./storage";
 import {
@@ -76,7 +76,7 @@ export async function savePaperToProject(
 
 export function registerWritingRoutes(app: Express): void {
   // POST /api/write - Start writing pipeline, stream results via SSE
-  app.post("/api/write", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/write", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const body = req.body as Partial<WritingRequest> & {
         sourceDocumentIds?: unknown;

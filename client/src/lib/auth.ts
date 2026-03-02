@@ -1,8 +1,7 @@
-import { createContext, useContext, useCallback, useEffect, useState, type ReactNode } from "react";
-import { createElement } from "react";
-import { queryClient, apiRequest } from "./queryClient";
+import { useUser, useAuth as useClerkAuth, useClerk } from "@clerk/clerk-react";
+import { queryClient } from "./queryClient";
 
-interface AuthUser {
+export interface AuthUser {
   id: string;
   email: string;
   username: string;
@@ -21,152 +20,124 @@ interface AuthUser {
 
 interface AuthContextType {
   user: AuthUser | null;
-  token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (data: { email: string; username: string; password: string; firstName?: string; lastName?: string }) => Promise<void>;
+  isSignedIn: boolean;
+  tier: string;
   logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const TIER_LIMITS: Record<string, { tokenLimit: number; storageLimit: number }> = {
+  free: { tokenLimit: 50_000, storageLimit: 52_428_800 },
+  pro: { tokenLimit: 500_000, storageLimit: 524_288_000 },
+  max: { tokenLimit: 2_000_000, storageLimit: 5_368_709_120 },
+};
 
-const TOKEN_KEY = "scholarmark_token";
-
-function getStoredToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function setStoredToken(token: string | null): void {
-  try {
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
-    } else {
-      localStorage.removeItem(TOKEN_KEY);
-    }
-  } catch {
-    // localStorage not available
-  }
-}
-
-/** Fetch with auth token attached */
-async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = getStoredToken();
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string> || {}),
-  };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-  return fetch(url, { ...options, headers });
-}
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(getStoredToken());
-  const [isLoading, setIsLoading] = useState(true);
-
-  // On mount, try to restore session from stored token
-  useEffect(() => {
-    const storedToken = getStoredToken();
-    if (!storedToken) {
-      setIsLoading(false);
-      return;
-    }
-
-    authFetch("/api/auth/me")
-      .then(async (res) => {
-        if (res.ok) {
-          const userData = await res.json();
-          setUser(userData);
-          setToken(storedToken);
-        } else {
-          // Token is invalid/expired
-          setStoredToken(null);
-          setToken(null);
-        }
-      })
-      .catch(() => {
-        setStoredToken(null);
-        setToken(null);
-      })
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: "Login failed" }));
-      throw new Error(error.message || "Login failed");
-    }
-
-    const data = await res.json();
-    setUser(data.user);
-    setToken(data.token);
-    setStoredToken(data.token);
-    // Invalidate all queries so they refetch with the new auth state
-    queryClient.invalidateQueries();
-  }, []);
-
-  const register = useCallback(async (regData: { email: string; username: string; password: string; firstName?: string; lastName?: string }) => {
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(regData),
-    });
-
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: "Registration failed" }));
-      throw new Error(error.message || "Registration failed");
-    }
-
-    const data = await res.json();
-    setUser(data.user);
-    setToken(data.token);
-    setStoredToken(data.token);
-    queryClient.invalidateQueries();
-  }, []);
-
-  const logout = useCallback(() => {
-    // Fire logout request but don't wait for it
-    const storedToken = getStoredToken();
-    if (storedToken) {
-      fetch("/api/auth/logout", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${storedToken}` },
-      }).catch(() => {});
-    }
-    setUser(null);
-    setToken(null);
-    setStoredToken(null);
-    queryClient.invalidateQueries();
-  }, []);
-
-  return createElement(
-    AuthContext.Provider,
-    { value: { user, token, isLoading, login, register, logout } },
-    children
-  );
-}
-
+/** Drop-in replacement for the old useAuth() hook, now backed by Clerk */
 export function useAuth(): AuthContextType {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+  const { user: clerkUser, isLoaded: isUserLoaded } = useUser();
+  const { isLoaded: isAuthLoaded, isSignedIn } = useClerkAuth();
+  const { signOut } = useClerk();
+
+  const isLoading = !isUserLoaded || !isAuthLoaded;
+
+  const tier = (clerkUser?.publicMetadata?.tier as string) || "free";
+  const limits = TIER_LIMITS[tier] ?? TIER_LIMITS.free;
+
+  const user: AuthUser | null = clerkUser
+    ? {
+        id: clerkUser.id,
+        email: clerkUser.primaryEmailAddress?.emailAddress ?? "",
+        username: clerkUser.username ?? clerkUser.primaryEmailAddress?.emailAddress ?? "",
+        firstName: clerkUser.firstName,
+        lastName: clerkUser.lastName,
+        tier,
+        tokensUsed: 0, // populated from /api/auth/usage
+        tokenLimit: limits.tokenLimit,
+        storageUsed: 0,
+        storageLimit: limits.storageLimit,
+        emailVerified: clerkUser.primaryEmailAddress?.verification?.status === "verified",
+        billingCycleStart: null,
+        createdAt: clerkUser.createdAt?.toISOString() ?? "",
+        updatedAt: clerkUser.updatedAt?.toISOString() ?? "",
+      }
+    : null;
+
+  const logout = () => {
+    signOut();
+    queryClient.invalidateQueries();
+  };
+
+  return {
+    user,
+    isLoading,
+    isSignedIn: !!isSignedIn,
+    tier,
+    logout,
+  };
 }
 
-/** Helper: get the current auth headers for fetch calls */
+// ── Tier feature gating ────────────────────────────────────────────
+
+type Feature =
+  | "chat"
+  | "writing"
+  | "deep_write"
+  | "source_verified"
+  | "export"
+  | "bulk_export"
+  | "chrome_extension"
+  | "bibliography"
+  | "endash_toggle"
+  | "batch_analysis"
+  | "multi_prompt"
+  | "vision_ocr"
+  | "advanced_vision_ocr"
+  | "unlimited_docs"
+  | "unlimited_projects"
+  | "unlimited_citations";
+
+const FEATURE_TIERS: Record<Feature, string> = {
+  chat: "pro",
+  writing: "pro",
+  deep_write: "max",
+  source_verified: "max",
+  export: "pro",
+  bulk_export: "max",
+  chrome_extension: "pro",
+  bibliography: "pro",
+  endash_toggle: "pro",
+  batch_analysis: "max",
+  multi_prompt: "max",
+  vision_ocr: "pro",
+  advanced_vision_ocr: "max",
+  unlimited_docs: "pro",
+  unlimited_projects: "pro",
+  unlimited_citations: "pro",
+};
+
+const TIER_LEVELS: Record<string, number> = { free: 0, pro: 1, max: 2 };
+
+/**
+ * Auth headers are no longer needed — Clerk uses session cookies.
+ * Kept for backward compatibility with hooks that import it.
+ */
 export function getAuthHeaders(): Record<string, string> {
-  const token = getStoredToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return {};
+}
+
+export function useUserTier() {
+  const { tier } = useAuth();
+  const level = TIER_LEVELS[tier] ?? 0;
+
+  function can(feature: Feature): boolean {
+    const required = FEATURE_TIERS[feature];
+    if (!required) return true;
+    return level >= (TIER_LEVELS[required] ?? 0);
+  }
+
+  function requiredTier(feature: Feature): string {
+    return FEATURE_TIERS[feature] ?? "free";
+  }
+
+  return { tier, level, can, requiredTier };
 }
