@@ -913,6 +913,24 @@ function resolveTieredSource(documentOrSourceId: string, sources: PromptSource[]
   return null;
 }
 
+function resolveSourceTitle(documentOrSourceId: string, sources: PromptSource[]): string | null {
+  const target = documentOrSourceId.trim();
+  if (!target) return null;
+
+  const tiered = resolveTieredSource(target, sources);
+  if (tiered?.title) {
+    return tiered.title;
+  }
+
+  for (const source of sources) {
+    if (isTieredSource(source)) continue;
+    if (source.id !== target) continue;
+    return source.title || target;
+  }
+
+  return null;
+}
+
 function extractUrlFromStandaloneSource(source: WritingSource): string {
   if (source.citationData?.url) {
     return source.citationData.url;
@@ -1521,12 +1539,17 @@ export function registerChatRoutes(app: Express) {
               const parsedInput = normalizeToolInput(toolCall.input);
               const level = getToolContextLevel(toolCall.name);
               const documentId = getToolInputString(parsedInput, "document_id");
+              const sourceTitle = documentId
+                ? resolveSourceTitle(documentId, sources) || documentId
+                : undefined;
 
               sendEvent({
                 type: "context_loading",
                 level,
+                toolCallId: toolCall.id,
                 toolName: toolCall.name,
                 documentId,
+                sourceTitle,
               });
 
               const toolOutput = await executeWritingTool(
@@ -1546,10 +1569,14 @@ export function registerChatRoutes(app: Express) {
               sendEvent({
                 type: "context_loaded",
                 level,
+                toolCallId: toolCall.id,
                 toolName: toolCall.name,
                 documentId,
+                sourceTitle,
               });
             }
+
+            sendEvent({ type: "tool_round_complete", round: escalationCount + 1 });
 
             anthropicMessages.push(
               { role: "assistant", content: turn.assistantContentBlocks },

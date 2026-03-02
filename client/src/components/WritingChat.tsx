@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useProjects, useProjectDocuments } from "@/hooks/useProjects";
 import { useWebClips } from "@/hooks/useWebClips";
 import { markdownComponents, remarkPlugins } from "@/lib/markdownConfig";
@@ -30,6 +29,7 @@ import { ChatMessages } from "@/components/chat/ChatMessages";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { DocumentPanel } from "@/components/chat/DocumentPanel";
+import { ToolStepsIndicator } from "@/components/chat/ToolStepsIndicator";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -147,7 +147,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     streamingDocumentText,
     isDocumentStreaming,
     isStreaming,
-    contextLoading,
+    toolSteps,
+    isToolPhaseActive,
     contextWarning,
   } = useWritingSendMessage(activeConversationId);
 
@@ -354,19 +355,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
           data: { citationStyle, tone, writingModel, humanize, noEnDashes },
         });
 
-        // Send first message directly
-        setTimeout(async () => {
-          const response = await apiRequest("POST", `/api/chat/conversations/${conv.id}/messages`, { content });
-          if (response.body) {
-            const reader = response.body.getReader();
-            while (true) {
-              const { done } = await reader.read();
-              if (done) break;
-            }
-          }
-          queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations", conv.id] });
-          queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations"] });
-        }, 100);
+        await send(content, conv.id);
       } catch {
         toast({ title: "Error", description: "Failed to start conversation", variant: "destructive" });
       }
@@ -672,11 +661,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         />
 
         {/* Input */}
-        {contextLoading && (
-          <div className="border-t border-border px-5 py-2 text-xs text-muted-foreground bg-background/60">
-            Loading source context (Level {contextLoading.level})...
-          </div>
-        )}
+        <ToolStepsIndicator steps={toolSteps} isToolPhaseActive={isToolPhaseActive} />
         <ChatInput onSend={handleSend} disabled={isStreaming} />
       </section>
 

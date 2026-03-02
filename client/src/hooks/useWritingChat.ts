@@ -8,6 +8,14 @@ export interface ConversationWithMessages extends Conversation {
   messages: Message[];
 }
 
+export interface ToolStep {
+  id: string;
+  toolName: string;
+  sourceTitle?: string;
+  status: "loading" | "done";
+  startedAt: number;
+}
+
 // --- Conversation queries (project-scoped) ---
 
 export function useProjectConversations(projectId?: string | null) {
@@ -138,12 +146,14 @@ export function useWritingSendMessage(conversationId: string | null) {
   const [streamingDocumentText, setStreamingDocumentText] = useState("");
   const [isDocumentStreaming, setIsDocumentStreaming] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [contextLoading, setContextLoading] = useState<{ level: number; documentId?: string } | null>(null);
+  const [toolSteps, setToolSteps] = useState<ToolStep[]>([]);
+  const [isToolPhaseActive, setIsToolPhaseActive] = useState(false);
   const [contextWarning, setContextWarning] = useState<{ id: number; message: string; available?: number } | null>(null);
 
   const send = useCallback(
-    async (content: string) => {
-      if (!conversationId) return;
+    async (content: string, conversationIdOverride?: string | null) => {
+      const targetConversationId = conversationIdOverride ?? conversationId;
+      if (!targetConversationId) return;
 
       setIsStreaming(true);
       setStreamingText("");
@@ -151,12 +161,13 @@ export function useWritingSendMessage(conversationId: string | null) {
       setDocumentTitle("");
       setStreamingDocumentText("");
       setIsDocumentStreaming(false);
-      setContextLoading(null);
+      setToolSteps([]);
+      setIsToolPhaseActive(false);
       setContextWarning(null);
 
       try {
         const response = await fetch(
-          `/api/chat/conversations/${conversationId}/messages`,
+          `/api/chat/conversations/${targetConversationId}/messages`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json", ...getAuthHeaders() },
@@ -199,12 +210,69 @@ export function useWritingSendMessage(conversationId: string | null) {
                 } else if (data.type === "document_end") {
                   setIsDocumentStreaming(false);
                 } else if (data.type === "context_loading") {
-                  setContextLoading({
-                    level: Number(data.level) || 2,
-                    documentId: typeof data.documentId === "string" ? data.documentId : undefined,
+                  const toolCallId = typeof data.toolCallId === "string" && data.toolCallId.trim()
+                    ? data.toolCallId.trim()
+                    : `${String(data.toolName || "tool")}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                  const toolName = typeof data.toolName === "string" ? data.toolName : "tool";
+                  const sourceTitle = typeof data.sourceTitle === "string" ? data.sourceTitle : undefined;
+                  const startedAt = Date.now();
+
+                  setIsToolPhaseActive(true);
+                  setToolSteps((prev) => {
+                    const existingIndex = prev.findIndex((step) => step.id === toolCallId);
+                    if (existingIndex >= 0) {
+                      const next = [...prev];
+                      next[existingIndex] = {
+                        ...next[existingIndex],
+                        toolName,
+                        sourceTitle: sourceTitle ?? next[existingIndex].sourceTitle,
+                        status: "loading",
+                      };
+                      return next;
+                    }
+
+                    return [
+                      ...prev,
+                      {
+                        id: toolCallId,
+                        toolName,
+                        sourceTitle,
+                        status: "loading",
+                        startedAt,
+                      },
+                    ];
                   });
                 } else if (data.type === "context_loaded") {
-                  setContextLoading(null);
+                  const toolCallId = typeof data.toolCallId === "string" && data.toolCallId.trim()
+                    ? data.toolCallId.trim()
+                    : null;
+                  const toolName = typeof data.toolName === "string" ? data.toolName : null;
+
+                  setToolSteps((prev) => {
+                    let matched = false;
+                    const next: ToolStep[] = prev.map((step) => {
+                      const idMatch = toolCallId ? step.id === toolCallId : false;
+                      const fallbackMatch = !toolCallId && toolName
+                        ? step.status === "loading" && step.toolName === toolName
+                        : false;
+
+                      if (!matched && step.status === "loading" && (idMatch || fallbackMatch)) {
+                        matched = true;
+                        return { ...step, status: "done" as const };
+                      }
+
+                      return step;
+                    });
+
+                    return matched ? next : prev;
+                  });
+                } else if (data.type === "tool_round_complete") {
+                  setToolSteps((prev) =>
+                    prev.map((step): ToolStep =>
+                      step.status === "loading" ? { ...step, status: "done" as const } : step
+                    )
+                  );
+                  setIsToolPhaseActive(false);
                 } else if (data.type === "context_warning") {
                   setContextWarning({
                     id: Date.now(),
@@ -212,15 +280,21 @@ export function useWritingSendMessage(conversationId: string | null) {
                     available: typeof data.available === "number" ? data.available : undefined,
                   });
                 } else if (data.type === "done") {
-                  setContextLoading(null);
+                  setToolSteps((prev) =>
+                    prev.map((step): ToolStep =>
+                      step.status === "loading" ? { ...step, status: "done" as const } : step
+                    )
+                  );
+                  setIsToolPhaseActive(false);
                   queryClient.invalidateQueries({
-                    queryKey: ["/api/chat/conversations", conversationId],
+                    queryKey: ["/api/chat/conversations", targetConversationId],
                   });
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations"],
                   });
                 } else if (data.type === "error") {
                   console.error("Stream error:", data.error);
+                  setIsToolPhaseActive(false);
                 }
               } catch {
                 // Ignore malformed SSE
@@ -235,7 +309,7 @@ export function useWritingSendMessage(conversationId: string | null) {
         setStreamingText("");
         setStreamingChatText("");
         setIsDocumentStreaming(false);
-        setContextLoading(null);
+        setIsToolPhaseActive(false);
       }
     },
     [conversationId]
@@ -249,7 +323,8 @@ export function useWritingSendMessage(conversationId: string | null) {
     streamingDocumentText,
     isDocumentStreaming,
     isStreaming,
-    contextLoading,
+    toolSteps,
+    isToolPhaseActive,
     contextWarning,
   };
 }
