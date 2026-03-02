@@ -35,7 +35,7 @@ export function useConversation(id: string | null) {
 
 export function useCreateConversation() {
   return useMutation({
-    mutationFn: async (data: { title?: string; model?: string } | void) => {
+    mutationFn: async (data: { title?: string; model?: string; projectId?: string } | void) => {
       const res = await apiRequest("POST", "/api/chat/conversations", data || {});
       return res.json() as Promise<Conversation>;
     },

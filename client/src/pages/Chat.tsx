@@ -11,6 +11,7 @@ import {
   useUpdateConversation,
   useSendMessage,
 } from "@/hooks/useChat";
+import { useProjects } from "@/hooks/useProjects";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Chat() {
@@ -21,6 +22,7 @@ export default function Chat() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     params.conversationId || null
   );
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // Sync URL param changes
   useEffect(() => {
@@ -28,6 +30,7 @@ export default function Chat() {
   }, [params.conversationId]);
 
   const { data: conversations = [] } = useConversations();
+  const { data: projects = [] } = useProjects();
   const { data: conversationData } = useConversation(activeConversationId);
   const createConversation = useCreateConversation();
   const deleteConversation = useDeleteConversation();
@@ -38,7 +41,9 @@ export default function Chat() {
 
   const handleNewChat = useCallback(async () => {
     try {
-      const conv = await createConversation.mutateAsync();
+      const conv = await createConversation.mutateAsync(
+        selectedProjectId ? { projectId: selectedProjectId } : undefined
+      );
       setLocation(`/chat/${conv.id}`);
     } catch {
       toast({
@@ -47,7 +52,7 @@ export default function Chat() {
         variant: "destructive",
       });
     }
-  }, [createConversation, setLocation, toast]);
+  }, [createConversation, selectedProjectId, setLocation, toast]);
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -94,7 +99,9 @@ export default function Chat() {
       // If no active conversation, create one first
       if (!activeConversationId) {
         try {
-          const conv = await createConversation.mutateAsync();
+          const conv = await createConversation.mutateAsync(
+            selectedProjectId ? { projectId: selectedProjectId } : undefined
+          );
           setLocation(`/chat/${conv.id}`);
           // Wait a tick for state to update, then send via direct fetch
           // We need to call send on the new conversation
@@ -138,7 +145,7 @@ export default function Chat() {
 
       await send(content);
     },
-    [activeConversationId, send, createConversation, setLocation, toast]
+    [activeConversationId, send, createConversation, selectedProjectId, setLocation, toast]
   );
 
   return (
@@ -150,6 +157,9 @@ export default function Chat() {
         onNew={handleNewChat}
         onDelete={handleDelete}
         onRename={handleRename}
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onProjectChange={setSelectedProjectId}
       />
       <div className="flex-1 flex flex-col min-w-0">
         <ChatMessages
@@ -157,6 +167,8 @@ export default function Chat() {
           streamingText={streamingText}
           isStreaming={isStreaming}
           onSuggestedPrompt={handleSend}
+        conversation={conversationData || null}
+        projects={projects}
         />
         <ChatInput onSend={handleSend} disabled={isStreaming} />
       </div>
