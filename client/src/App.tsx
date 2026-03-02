@@ -17,6 +17,7 @@ import Pricing from "@/pages/Pricing";
 import Chat from "@/pages/Chat";
 import WritingPage from "@/pages/WritingPage";
 import WebClips from "@/pages/WebClips";
+import ExtensionAuth from "@/pages/ExtensionAuth";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/sign-in" component={Login} />
       <Route path="/sign-up" component={Register} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/extension-auth">{() => <ProtectedRoute><ExtensionAuth /></ProtectedRoute>}</Route>
       <Route path="/">{() => <ProtectedRoute><Home /></ProtectedRoute>}</Route>
       <Route path="/projects">{() => <ProtectedRoute><Projects /></ProtectedRoute>}</Route>
       <Route path="/web-clips">{() => <ProtectedRoute><WebClips /></ProtectedRoute>}</Route>

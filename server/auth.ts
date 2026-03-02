@@ -1,6 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
-import { getOrCreateUser } from "./authStorage";
+import { createHash } from "crypto";
+import { getOrCreateUser, getUserById } from "./authStorage";
+import { sqlite } from "./db";
 
 // Extend Express Request to include user property (same shape as before)
 declare global {
@@ -28,6 +30,78 @@ const TIER_STORAGE_LIMITS: Record<string, number> = {
   max: 5_368_709_120,     // 5 GB
 };
 
+interface ApiKeyRow {
+  id: string;
+  user_id: string;
+}
+
+type ApiKeyAuthResult =
+  | { status: "none" }
+  | { status: "invalid" }
+  | { status: "success"; user: Express.User };
+
+const selectApiKeyByHash = sqlite.prepare(
+  `SELECT id, user_id
+   FROM api_keys
+   WHERE key_hash = ?
+     AND revoked_at IS NULL
+   LIMIT 1`
+);
+
+const touchApiKeyLastUsed = sqlite.prepare(
+  `UPDATE api_keys
+   SET last_used_at = ?
+   WHERE id = ?`
+);
+
+function getUnixSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+function hashApiKey(rawKey: string): string {
+  return createHash("sha256").update(rawKey).digest("hex");
+}
+
+function extractBearerToken(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return null;
+
+  const [scheme, token] = authHeader.split(/\s+/);
+  if (!scheme || !token || scheme.toLowerCase() !== "bearer") {
+    return null;
+  }
+  return token;
+}
+
+async function resolveApiKeyUser(req: Request): Promise<ApiKeyAuthResult> {
+  const token = extractBearerToken(req);
+  if (!token || !token.startsWith("sk_sm_")) {
+    return { status: "none" };
+  }
+
+  const keyHash = hashApiKey(token);
+  const keyRow = selectApiKeyByHash.get(keyHash) as ApiKeyRow | undefined;
+  if (!keyRow) {
+    return { status: "invalid" };
+  }
+
+  const dbUser = await getUserById(keyRow.user_id);
+  if (!dbUser) {
+    return { status: "invalid" };
+  }
+
+  touchApiKeyLastUsed.run(getUnixSeconds(), keyRow.id);
+
+  return {
+    status: "success",
+    user: {
+      userId: dbUser.id,
+      email: dbUser.email,
+      tier: dbUser.tier,
+    },
+  };
+}
+
 // ── Install Clerk middleware globally ────────────────────────────────
 export function configureClerk(app: Express): void {
   app.use(clerkMiddleware());
@@ -53,6 +127,17 @@ async function resolveUser(req: Request): Promise<Express.User | null> {
 // ── Middleware: requires a valid Clerk session ───────────────────────
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const apiKeyResult = await resolveApiKeyUser(req);
+    if (apiKeyResult.status === "success") {
+      req.user = apiKeyResult.user;
+      next();
+      return;
+    }
+    if (apiKeyResult.status === "invalid") {
+      res.status(401).json({ message: "Invalid API key" });
+      return;
+    }
+
     const user = await resolveUser(req);
     if (!user) {
       res.status(401).json({ message: "Authentication required" });

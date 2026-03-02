@@ -14,7 +14,11 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   if (!isSignedIn) {
-    return <Redirect to="/sign-in" />;
+    const redirectPath =
+      typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search}`
+        : "/";
+    return <Redirect to={`/sign-in?redirect_url=${encodeURIComponent(redirectPath)}`} />;
   }
 
   return <>{children}</>;
