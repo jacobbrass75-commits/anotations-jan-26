@@ -31,8 +31,10 @@ A full-stack AI-powered research annotation tool for analyzing documents, creati
 | better-sqlite3 | 12.6.2 | SQLite driver |
 | Drizzle ORM | 0.39.3 | Database ORM |
 | OpenAI API | - | AI analysis (gpt-4o-mini, text-embedding-3-small) |
+| Anthropic SDK | 0.78.0 | AI writing pipeline (Claude Haiku/Sonnet) |
 | pdf-parse | 2.4.5 | PDF text extraction |
 | multer | 2.0.2 | File uploads |
+| p-limit | 7.2.0 | Concurrency control (Vision OCR) |
 
 ### Frontend
 | Technology | Version | Purpose |
@@ -45,6 +47,7 @@ A full-stack AI-powered research annotation tool for analyzing documents, creati
 | Radix UI | - | Accessible components |
 | shadcn/ui | - | Component library |
 | lucide-react | 0.453.0 | Icons |
+| react-markdown | 10.1.0 | Markdown rendering (writing output) |
 | Zod | 3.25.76 | Validation |
 
 ---
@@ -68,16 +71,19 @@ SourceAnnotator/
 ├── server/                    # Express backend
 │   ├── index.ts              # Server entry
 │   ├── db.ts                 # Database setup
-│   ├── routes.ts             # Main API routes
+│   ├── routes.ts              # Main API routes
 │   ├── projectRoutes.ts      # Project API routes
+│   ├── writingRoutes.ts      # Writing pipeline SSE endpoint
 │   ├── storage.ts            # Document storage layer
 │   ├── projectStorage.ts     # Project storage layer
 │   ├── openai.ts             # OpenAI integration
 │   ├── pipelineV2.ts         # AI annotation pipeline
+│   ├── writingPipeline.ts    # AI writing engine (Planner→Writer→Stitcher)
 │   ├── chunker.ts            # Text chunking
 │   ├── citationGenerator.ts  # Chicago-style citations
 │   ├── projectSearch.ts      # Search functionality
-│   └── contextGenerator.ts   # Context/embeddings
+│   ├── contextGenerator.ts   # Context/embeddings
+│   └── ocrProcessor.ts       # Background OCR (PaddleOCR + Vision)
 ├── shared/                    # Shared types
 │   └── schema.ts             # Database schema + types
 ├── data/                      # SQLite database
@@ -102,6 +108,7 @@ SourceAnnotator/
 | `Projects.tsx` | `/projects` | Project list and creation |
 | `ProjectWorkspace.tsx` | `/projects/:id` | Project view with documents/folders |
 | `ProjectDocument.tsx` | `/projects/:projectId/documents/:docId` | Annotate document within project |
+| `WritingPage.tsx` | `/write` | AI writing pipeline page |
 
 ### Key Components
 
@@ -117,6 +124,7 @@ SourceAnnotator/
 | `ManualAnnotationDialog.tsx` | Create/edit annotations manually |
 | `BatchAnalysisModal.tsx` | Batch analyze multiple documents |
 | `BatchUploadModal.tsx` | Upload multiple documents at once |
+| `WritingPane.tsx` | AI writing controls + streaming output |
 
 ### Custom Hooks
 
@@ -129,6 +137,7 @@ SourceAnnotator/
 | `useAnalyzeMultiPrompt` | `useProjects.ts` | Multi-prompt analysis |
 | `usePromptTemplates` | `useProjects.ts` | Prompt template CRUD |
 | `useProjectSearch` | `useProjectSearch.ts` | Search within projects |
+| `useWritingPipeline` | `useWriting.ts` | AI writing engine (SSE streaming) |
 
 ### State Management
 
@@ -155,6 +164,7 @@ SourceAnnotator/
 |------|-----------|---------|
 | `routes.ts` | `/api` | Documents, annotations, basic operations |
 | `projectRoutes.ts` | `/api` | Projects, folders, batch analysis, templates |
+| `writingRoutes.ts` | `/api` | Writing pipeline (SSE streaming) |
 
 ### Storage Layers
 
@@ -169,8 +179,10 @@ SourceAnnotator/
 |------|---------|
 | `openai.ts` | OpenAI API client, embeddings, analysis prompts |
 | `pipelineV2.ts` | 3-phase annotation pipeline (Generator→Verifier→Refiner) |
+| `writingPipeline.ts` | 3-phase writing pipeline (Planner→Writer→Stitcher) via Anthropic Claude |
 | `chunker.ts` | Split documents into analyzable chunks |
 | `contextGenerator.ts` | Generate document summaries and embeddings |
+| `ocrProcessor.ts` | Background OCR processing (PaddleOCR + GPT-4o Vision) |
 
 ### Other Modules
 
@@ -391,6 +403,13 @@ const PROMPT_COLORS = [
 | POST | `/api/projects/:id/prompt-templates` | Save prompt template |
 | DELETE | `/api/prompt-templates/:id` | Delete template |
 
+### Writing APIs (`writingRoutes.ts`)
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/write` | Start writing pipeline, stream results via SSE |
+| GET | `/api/write/history` | List previous writing sessions (placeholder) |
+
 ### Citation APIs
 
 | Method | Endpoint | Purpose |
@@ -523,11 +542,116 @@ import { schema } from "@shared/schema";          // shared/...
 
 ---
 
+## AI Writing Pipeline (`writingPipeline.ts`)
+
+A 3-phase streaming pipeline powered by Anthropic Claude that generates academic papers from annotated sources.
+
+### Architecture
+
+```
+User Input (topic + selected annotations)
+    │
+    ▼
+┌─────────────────────────────────┐
+│ PHASE 1: PLANNER                │  Claude Haiku (1 API call)
+│ - Takes topic, sources, tone    │
+│ - Outputs JSON plan:            │
+│   {thesis, sections[],          │
+│    bibliography}                │
+└─────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────┐
+│ PHASE 2: WRITER (per section)   │  Claude Haiku or Sonnet
+│ - Writes each section           │  (N API calls, N = # sections)
+│ - Includes in-text citations    │
+│ - Deep Write: extended thinking │
+│   on Sonnet (budget: 4096 tok)  │
+└─────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────┐
+│ PHASE 3: STITCHER               │  Claude Haiku (1 API call)
+│ - Adds intro/conclusion         │
+│ - Smooth transitions            │
+│ - Full bibliography             │
+└─────────────────────────────────┘
+    │
+    ▼
+Final Paper (markdown via SSE)
+```
+
+### Key Types
+
+```typescript
+interface WritingRequest {
+  topic: string;
+  annotationIds: string[];
+  projectId?: string;
+  citationStyle: "mla" | "apa" | "chicago";
+  tone: "academic" | "casual" | "ap_style";
+  targetLength: "short" | "medium" | "long";  // ~1500/2500/4000 words
+  noEnDashes: boolean;                         // Prompt injection toggle
+  deepWrite: boolean;                          // Extended thinking (Sonnet)
+}
+```
+
+### SSE Event Stream
+
+```json
+{"type":"status","phase":"planning","message":"Creating outline..."}
+{"type":"plan","plan":{thesis, sections[], bibliography[]}}
+{"type":"status","phase":"writing","message":"Writing section 1 of 5..."}
+{"type":"section","index":0,"title":"Introduction","content":"..."}
+{"type":"status","phase":"stitching","message":"Polishing..."}
+{"type":"complete","fullText":"...full paper...","usage":{inputTokens,outputTokens}}
+```
+
+### Models
+
+| Mode | Model | Use Case |
+|------|-------|----------|
+| Default | `claude-haiku-4-5-20251001` | Fast, cost-effective |
+| Deep Write | `claude-sonnet-4-5-20241022` | Extended thinking for higher quality |
+
+---
+
+## OCR Pipeline (`ocrProcessor.ts`)
+
+Three modes for PDF text extraction:
+
+```
+Upload (POST /api/upload with ocrMode)
+      │
+      ├── "standard"  → pdf-parse (JS), sync, 200
+      ├── "advanced"  → PaddleOCR (Python), async, 202
+      └── "vision"    → GPT-4o Vision per page, async, 202
+                            │
+                   Client polls /api/documents/:id/status
+                            │
+                   status: processing → ready | error
+```
+
+---
+
 ## Recent Changes
 
-### Multi-Prompt Parallel Annotation System (Latest)
+### AI Writing Pipeline (February 2026 - Latest)
 
-Added the ability to run multiple analysis prompts in parallel:
+- **`server/writingPipeline.ts`** - 3-phase writing engine (Planner→Writer→Stitcher)
+- **`server/writingRoutes.ts`** - SSE streaming endpoint (`POST /api/write`)
+- **`client/src/components/WritingPane.tsx`** - Writing controls + live markdown output
+- **`client/src/hooks/useWriting.ts`** - React hook for SSE consumption
+- **`client/src/pages/WritingPage.tsx`** - Standalone writing page (`/write`)
+- Added `@anthropic-ai/sdk` and `react-markdown` dependencies
+
+### OCR Pipeline (January 2026)
+
+- Three extraction modes: Standard, Advanced (PaddleOCR), Vision (GPT-4o)
+- Async background processing with status polling
+- Garbled text detection for standard mode
+
+### Multi-Prompt Parallel Annotation System (January 2026)
 
 - **Schema**: Added `promptText`, `promptIndex`, `promptColor`, `analysisRunId` to annotations
 - **Backend**: `processChunksWithMultiplePrompts()` runs prompts via `Promise.all`
@@ -538,4 +662,15 @@ Added the ability to run multiple analysis prompts in parallel:
 
 ---
 
-*Last updated: January 2026*
+## Environment Variables
+
+```env
+OPENAI_API_KEY=sk-...           # Required for annotation pipeline + OCR
+ANTHROPIC_API_KEY=sk-ant-...    # Required for writing pipeline
+DATABASE_URL=./data/sourceannotator.db
+PORT=5001
+```
+
+---
+
+*Last updated: March 2026*

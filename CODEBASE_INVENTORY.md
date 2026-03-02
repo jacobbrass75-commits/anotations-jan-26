@@ -71,6 +71,8 @@ SourceAnnotator is a document annotation tool that uses AI (OpenAI) to automatic
 | `projectRoutes.ts` | Project management routes | Route handlers |
 | `projectStorage.ts` | Project/folder/doc CRUD | `ProjectStorage` class |
 | `ocrProcessor.ts` | Background OCR processing (PaddleOCR + GPT-4o Vision) | `saveTempPdf()`, `processWithPaddleOcr()`, `processWithVisionOcr()` |
+| `writingPipeline.ts` | AI writing engine (Planner→Writer→Stitcher) via Anthropic Claude | `runWritingPipeline()`, `runPlanner()`, `writeSection()`, `stitch()` |
+| `writingRoutes.ts` | Writing pipeline SSE endpoint | `registerWritingRoutes()` |
 
 ### API Routes (`routes.ts`)
 
@@ -105,6 +107,13 @@ SourceAnnotator is a document annotation tool that uses AI (OpenAI) to automatic
 | `/api/projects/:projectId/search` | POST | Global search |
 | `/api/citations/*` | POST | Citation generation |
 
+### Writing Routes (`writingRoutes.ts`)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/write` | POST | Start writing pipeline, stream results via SSE |
+| `/api/write/history` | GET | List previous writing sessions (placeholder) |
+
 ### AI & Processing
 
 | File | Purpose | Key Functions |
@@ -116,6 +125,7 @@ SourceAnnotator is a document annotation tool that uses AI (OpenAI) to automatic
 | `contextGenerator.ts` | Retrieval context generation | `generateRetrievalContext()`, `generateProjectContextSummary()`, `embedText()` |
 | `citationGenerator.ts` | Chicago citation formatting | `generateChicagoFootnote()`, `generateChicagoBibliography()`, `generateInlineCitation()` |
 | `projectSearch.ts` | Project-wide search | `globalSearch()` |
+| `writingPipeline.ts` | AI writing engine (Anthropic Claude) | `runWritingPipeline()`, `runPlanner()`, `writeSection()`, `stitch()` |
 
 ### OCR Pipeline (`ocrProcessor.ts` + `server/python/`)
 
@@ -205,6 +215,7 @@ Store with absolute positions
 | `pages/Projects.tsx` | `/projects` | Project management dashboard |
 | `pages/ProjectWorkspace.tsx` | `/projects/:id` | Project workspace with folders/docs |
 | `pages/ProjectDocument.tsx` | `/projects/:projectId/documents/:docId` | Document viewer with annotations |
+| `pages/WritingPage.tsx` | `/write` | AI writing pipeline page |
 | `pages/not-found.tsx` | `*` | 404 error page |
 
 ### Hooks (Data Management)
@@ -214,6 +225,7 @@ Store with absolute positions
 | `hooks/useDocument.ts` | Document CRUD, upload, annotations, search |
 | `hooks/useProjects.ts` | Projects, folders, project documents, batch operations |
 | `hooks/useProjectSearch.ts` | Global search, citation generation |
+| `hooks/useWriting.ts` | AI writing pipeline (SSE streaming, cancel, reset) |
 | `hooks/use-toast.ts` | Toast notifications |
 | `hooks/use-mobile.tsx` | Mobile device detection |
 
@@ -250,6 +262,7 @@ Store with absolute positions
 | `BatchAnalysisModal.tsx` | Batch analysis configuration |
 | `BatchUploadModal.tsx` | Batch document upload with OCR mode selector |
 | `HighlightedText.tsx` | Text rendering with highlights |
+| `WritingPane.tsx` | AI writing controls + streaming markdown output |
 | `ThemeToggle.tsx` | Dark/light mode toggle |
 | `ui/*` | 50+ Shadcn UI components |
 
@@ -297,6 +310,15 @@ Store with absolute positions
 - Batch document upload and analysis
 - Global search across all project content
 
+### AI Writing Pipeline
+- 3-phase pipeline: Planner → Writer (per section) → Stitcher
+- Powered by Anthropic Claude (Haiku default, Sonnet for Deep Write)
+- SSE streaming for real-time output in browser
+- Source annotation integration with citation data
+- Configurable tone (academic/casual/AP), length (short/medium/long), citation style
+- Deep Write mode with extended thinking (Sonnet only)
+- No en-dashes toggle (prompt injection)
+
 ### Citation Management
 - Chicago Manual of Style formatting
 - Auto-extraction from document text
@@ -320,6 +342,7 @@ Store with absolute positions
 - Drizzle ORM (database)
 - SQLite (data storage)
 - OpenAI API (AI analysis + Vision OCR)
+- Anthropic SDK (AI writing pipeline)
 - pdf-parse (digital PDF text extraction)
 - Multer (file uploads, 50MB limit)
 - P-Limit (concurrency control for Vision OCR)
@@ -357,4 +380,4 @@ Store with absolute positions
 
 ---
 
-*Last updated: January 27, 2026 — Added OCR pipeline (Standard/Advanced/Vision modes)*
+*Last updated: March 1, 2026 — Added AI writing pipeline (Planner→Writer→Stitcher)*

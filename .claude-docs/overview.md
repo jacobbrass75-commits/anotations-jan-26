@@ -2,7 +2,7 @@
 
 ## What Is SourceAnnotator?
 
-A full-stack, AI-powered document annotation and research management tool. Researchers upload documents (PDF/TXT), analyze them with OpenAI's GPT models, organize annotations across research projects, and generate Chicago-style citations.
+A full-stack, AI-powered document annotation and academic writing tool. Researchers upload documents (PDF/TXT), analyze them with OpenAI's GPT models, organize annotations across research projects, generate Chicago-style citations, and write full academic papers via a 3-phase AI writing pipeline (Planner→Writer→Stitcher) powered by Anthropic Claude.
 
 ## Tech Stack
 
@@ -12,7 +12,8 @@ A full-stack, AI-powered document annotation and research management tool. Resea
 | Frontend | React + Vite | 18.3.1 / 7.3.0 |
 | Backend | Express.js | 4.21.2 |
 | Database | SQLite via Drizzle ORM | better-sqlite3 12.6.2 / drizzle-orm 0.39.3 |
-| AI | OpenAI API | openai 6.16.0 |
+| AI (Annotations) | OpenAI API | openai 6.16.0 |
+| AI (Writing) | Anthropic SDK | @anthropic-ai/sdk 0.78.0 |
 | Styling | Tailwind CSS + shadcn/ui (New York) | 3.4.17 |
 | State | TanStack React Query | 5.60.5 |
 | Routing | wouter (frontend), Express (backend) | 3.3.5 |
@@ -26,7 +27,7 @@ A full-stack, AI-powered document annotation and research management tool. Resea
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    Browser (React)                   │
-│  Pages: Home | Projects | ProjectWorkspace | ProjDoc │
+│  Pages: Home | Projects | Workspace | ProjDoc | Write│
 │  State: React Query | Local State | Toast            │
 │  UI: shadcn/ui + Tailwind + Radix Primitives         │
 └──────────────────────┬──────────────────────────────┘
@@ -35,8 +36,10 @@ A full-stack, AI-powered document annotation and research management tool. Resea
 │                  Express Server (:5001)               │
 │  routes.ts ──── Document/Annotation CRUD              │
 │  projectRoutes.ts ── Projects/Folders/Batch/Citations │
+│  writingRoutes.ts ── Writing Pipeline (SSE)           │
 │  openai.ts ──── Embeddings, Analysis, Citation AI     │
 │  pipelineV2.ts ── 3-Phase Annotation Pipeline         │
+│  writingPipeline.ts ── 3-Phase Writing Engine          │
 │  storage.ts / projectStorage.ts ── Data Access        │
 └──────────────────────┬──────────────────────────────┘
                        │ Drizzle ORM
@@ -51,6 +54,12 @@ A full-stack, AI-powered document annotation and research management tool. Resea
 │                    OpenAI API                         │
 │  gpt-4o-mini ── Analysis, Verification, Refinement   │
 │  text-embedding-3-small ── Semantic Embeddings        │
+└─────────────────────────────────────────────────────┘
+                       │
+┌──────────────────────┴──────────────────────────────┐
+│                   Anthropic API                       │
+│  Claude Haiku ── Writing Pipeline (default)           │
+│  Claude Sonnet ── Deep Write (extended thinking)      │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -74,13 +83,16 @@ A full-stack, AI-powered document annotation and research management tool. Resea
 │   ├── db.ts               # SQLite/Drizzle setup
 │   ├── routes.ts           # Document/annotation API routes
 │   ├── projectRoutes.ts    # Project management API routes
+│   ├── writingRoutes.ts    # Writing pipeline SSE endpoint
 │   ├── storage.ts          # Document CRUD layer
 │   ├── projectStorage.ts   # Project CRUD layer
 │   ├── openai.ts           # OpenAI integration + V1 pipeline
 │   ├── pipelineV2.ts       # V2 annotation pipeline (primary)
+│   ├── writingPipeline.ts  # AI writing engine (Anthropic Claude)
 │   ├── chunker.ts          # Text segmentation
 │   ├── contextGenerator.ts # AI context generation
 │   ├── citationGenerator.ts# Chicago-style citations
+│   ├── ocrProcessor.ts     # Background OCR (PaddleOCR + Vision)
 │   ├── projectSearch.ts    # Semantic + text search
 │   ├── vite.ts             # Dev server (HMR)
 │   ├── static.ts           # Production file serving
@@ -107,6 +119,8 @@ A full-stack, AI-powered document annotation and research management tool. Resea
 6. **Citation Management** - AI-extracted metadata, Chicago-style formatting
 7. **Manual Annotations** - Text selection to create custom highlights
 8. **Prompt Templates** - Save and reuse prompt sets per project
+9. **AI Writing Pipeline** - Planner→Writer→Stitcher, SSE streaming, Deep Write mode
+10. **OCR Processing** - Standard/Advanced (PaddleOCR)/Vision (GPT-4o) modes
 
 ## File Dependency Graph
 
@@ -117,6 +131,10 @@ index.ts (entry)
 │   ├── openai.ts (embeddings, V1 pipeline, citations)
 │   ├── pipelineV2.ts (V2 pipeline, uses openai.ts)
 │   ├── chunker.ts
+│   ├── writingRoutes.ts
+│   │   ├── writingPipeline.ts → @anthropic-ai/sdk
+│   │   ├── projectStorage.ts (annotation lookup)
+│   │   └── storage.ts (legacy annotation fallback)
 │   └── projectRoutes.ts
 │       ├── projectStorage.ts → db.ts
 │       ├── projectSearch.ts → openai.ts, storage.ts
