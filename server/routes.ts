@@ -117,34 +117,38 @@ async function getDirectorySizeBytes(path: string): Promise<number> {
   }
 }
 
-// Detect garbled text from failed PDF extraction
-// Checks for high ratio of non-word characters or unusual patterns
+// Detect garbled text from failed PDF extraction.
+// Requires multiple heuristics to agree before rejecting — previous thresholds
+// were too aggressive and rejected legitimate PDFs with technical content.
 function isGarbledText(text: string): boolean {
   if (!text || text.length < 100) return false;
-  
+
   // Sample the first 2000 characters for analysis
   const sample = text.slice(0, 2000);
-  
+
   // Count normal words (sequences of 3+ alphabetic characters)
   const words = sample.match(/[a-zA-Z]{3,}/g) || [];
-  
+
   // Count special/unusual character patterns
-  const specialChars = sample.match(/[^\w\s.,;:!?'"()-]/g) || [];
   const brackets = sample.match(/[\[\]{}\\|^~`@#$%&*+=<>]/g) || [];
-  
+
   // Calculate ratios
   const wordChars = words.join("").length;
   const totalChars = sample.replace(/\s/g, "").length;
   const wordRatio = totalChars > 0 ? wordChars / totalChars : 0;
   const bracketRatio = totalChars > 0 ? brackets.length / totalChars : 0;
-  
-  // Text is likely garbled if:
-  // - Less than 40% of non-space characters form recognizable words
-  // - Or more than 10% are unusual bracket/symbol characters
-  // - Or average "word" length is very short (fragmented characters)
   const avgWordLen = words.length > 0 ? wordChars / words.length : 0;
-  
-  return wordRatio < 0.4 || bracketRatio > 0.1 || (words.length > 10 && avgWordLen < 3);
+
+  // Require at least two signals to flag as garbled (reduces false positives):
+  // - Very low word ratio (<25% — relaxed from 40%)
+  // - High bracket/symbol density (>15% — relaxed from 10%)
+  // - Fragmented characters (avg word < 3 with enough samples)
+  let signals = 0;
+  if (wordRatio < 0.25) signals += 1;
+  if (bracketRatio > 0.15) signals += 1;
+  if (words.length > 10 && avgWordLen < 3) signals += 1;
+
+  return signals >= 2;
 }
 
 const upload = multer({
@@ -273,18 +277,30 @@ export async function registerRoutes(
         let fullText: string;
 
         if (isPdf) {
-          // Use pdf-parse to properly extract text from PDF
-          const parser = new PDFParse({ data: file.buffer });
-          const textResult = await parser.getText();
-          fullText = textResult.text;
-          await parser.destroy();
+          // Use pdf-parse to extract text from PDF. Wrap in try/finally to ensure
+          // the parser is always destroyed even if extraction fails.
+          let parser: InstanceType<typeof PDFParse> | null = null;
+          try {
+            parser = new PDFParse({ data: file.buffer });
+            const textResult = await parser.getText();
+            fullText = textResult.text;
+          } catch (pdfError) {
+            console.error("Standard PDF parse failed for", file.originalname, pdfError);
+            return res.status(400).json({
+              message: "Failed to extract text from this PDF. Try re-uploading with Advanced OCR or Vision OCR mode.",
+              code: "standard_parse_failed",
+            });
+          } finally {
+            try { await parser?.destroy(); } catch { /* ignore cleanup errors */ }
+          }
           // Clean up whitespace
-          fullText = fullText.replace(/\s+/g, " ").trim();
+          fullText = fullText!.replace(/\s+/g, " ").trim();
 
           // Check if extracted text appears garbled (common with scanned PDFs or custom fonts)
           if (isGarbledText(fullText)) {
             return res.status(400).json({
-              message: "This PDF appears to be scanned or uses custom fonts that cannot be read. Please try: (1) Using a PDF with selectable text, (2) Copy the text content into a .txt file and upload that instead, or (3) Re-upload with Advanced OCR, Vision OCR, or Vision OCR Batch mode."
+              message: "This PDF appears to be scanned or uses custom fonts that cannot be read. Try re-uploading with Advanced OCR, Vision OCR, or Vision OCR Batch mode.",
+              code: "standard_garbled_text",
             });
           }
         } else {
@@ -292,7 +308,10 @@ export async function registerRoutes(
         }
 
         if (!fullText || fullText.length < 10) {
-          return res.status(400).json({ message: "Could not extract text from file" });
+          return res.status(400).json({
+            message: "Could not extract any text from this file. If it is a scanned PDF, try Advanced OCR or Vision OCR mode.",
+            code: "standard_empty_text",
+          });
         }
 
         // Create document

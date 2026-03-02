@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -49,14 +49,23 @@ const SUGGESTED_PROMPTS = [
   },
 ];
 
+/** Strip any residual tool-request XML that may exist in persisted messages. */
+function stripToolTags(text: string): string {
+  return text
+    .replace(/<(chunk_request|context_request)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .trim();
+}
+
 function parseMessageContent(content: string): ParsedSegment[] {
+  // Safety-net: remove tool tags before parsing document segments
+  const cleaned = stripToolTags(content);
   const regex = /<document\s+title="([^"]*)">([\s\S]*?)<\/document>/gi;
   const segments: ParsedSegment[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(content)) !== null) {
-    const chatChunk = content.slice(lastIndex, match.index);
+  while ((match = regex.exec(cleaned)) !== null) {
+    const chatChunk = cleaned.slice(lastIndex, match.index);
     if (chatChunk.trim().length > 0) {
       segments.push({ type: "chat", content: chatChunk.trim() });
     }
@@ -70,7 +79,7 @@ function parseMessageContent(content: string): ParsedSegment[] {
     lastIndex = regex.lastIndex;
   }
 
-  const remainder = content.slice(lastIndex);
+  const remainder = cleaned.slice(lastIndex);
   if (remainder.trim().length > 0) {
     segments.push({ type: "chat", content: remainder.trim() });
   }
@@ -110,9 +119,14 @@ function AssistantMessage({
   message: Message;
   onDocumentSelect?: (document: { title: string; content: string }) => void;
 }) {
+  const cleanedContent = stripToolTags(message.content);
+  if (!cleanedContent) {
+    return null;
+  }
   const segments = parseMessageContent(message.content);
   if (segments.length === 0) {
-    return <AssistantMarkdownBubble content={message.content} />;
+    // Use stripped content (not raw) so legacy stored XML doesn't leak through
+    return <AssistantMarkdownBubble content={cleanedContent} />;
   }
 
   return (
@@ -156,15 +170,60 @@ export function ChatMessages({
   projects = [],
 }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
+  const prevMessageCountRef = useRef(messages.length);
+  const prevConversationIdRef = useRef(conversation?.id ?? null);
   const activeStreamingChat = streamingChatText ?? streamingText;
 
   const linkedProject = conversation?.projectId
     ? projects.find((p) => p.id === conversation.projectId)
     : null;
 
+  // Track whether the user is near the bottom of the scroll area
+  const handleScroll = useCallback(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const threshold = 120;
+    isNearBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+  }, []);
+
+  // Attach scroll listener to the Radix viewport.
+  // Include messages.length so the effect re-fires when the component
+  // transitions from the empty-state (no ScrollArea) to the message list.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeStreamingChat, streamingDocumentText, isDocumentStreaming]);
+    const el = viewportRef.current;
+    if (!el) return;
+    handleScroll();
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [handleScroll, messages.length]);
+
+  // Auto-scroll only when user is near bottom (streaming updates)
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [activeStreamingChat, streamingDocumentText, isDocumentStreaming]);
+
+  // Force-scroll to bottom when a new user message appears or conversation switches
+  const conversationId = conversation?.id ?? null;
+  useEffect(() => {
+    const newCount = messages.length;
+    const lastMsg = messages[newCount - 1];
+    const isNewUserMessage =
+      newCount > prevMessageCountRef.current && lastMsg?.role === "user";
+    // Detect conversation switch by ID change (handles equal/larger message counts too)
+    const isConversationSwitch = conversationId !== prevConversationIdRef.current;
+
+    if (isNewUserMessage || isConversationSwitch) {
+      isNearBottomRef.current = true;
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 0);
+    }
+    prevMessageCountRef.current = newCount;
+    prevConversationIdRef.current = conversationId;
+  }, [messages, conversationId]);
 
   if (messages.length === 0 && !isStreaming) {
     return (
@@ -210,15 +269,17 @@ export function ChatMessages({
           </Badge>
         </div>
       )}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1" viewportRef={viewportRef}>
         <div className="max-w-3xl mx-auto p-4">
-        {messages.map((msg) =>
-          msg.role === "user" ? (
-            <UserBubble key={msg.id} content={msg.content} />
-          ) : (
-            <AssistantMessage key={msg.id} message={msg} onDocumentSelect={onDocumentSelect} />
-          )
-        )}
+        {messages
+          .filter((msg) => msg.role === "user" || msg.role === "assistant")
+          .map((msg) =>
+            msg.role === "user" ? (
+              <UserBubble key={msg.id} content={msg.content} />
+            ) : (
+              <AssistantMessage key={msg.id} message={msg} onDocumentSelect={onDocumentSelect} />
+            )
+          )}
 
         {isStreaming && activeStreamingChat && (
           <AssistantMarkdownBubble content={activeStreamingChat} isStreaming />

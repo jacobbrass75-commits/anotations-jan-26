@@ -60,6 +60,22 @@ const BASE_SYSTEM_PROMPT =
   "You are ScholarMark AI, a helpful academic writing assistant. You help students with research, writing, citations, and understanding academic sources. Be concise, accurate, and helpful.";
 
 const TOOL_REQUEST_REGEX = /<(chunk_request|context_request)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+
+/** Strip tool-request XML blocks from text before persisting to chat history. */
+function stripToolTagsForStorage(text: string): string {
+  return text.replace(/<(chunk_request|context_request)\b[^>]*>[\s\S]*?<\/\1>/gi, "").trim();
+}
+
+/** Marker prefix used for internal context injection messages (not shown to users). */
+const INTERNAL_CONTEXT_PREFIX = "[CONTEXT RETRIEVAL" as const;
+const INTERNAL_DEEP_DIVE_PREFIX = "[DEEP DIVE FINDINGS" as const;
+
+/** Check if a message is an internally-injected context payload (not user-authored). */
+function isInternalContextMessage(msg: Pick<Message, "role" | "content">): boolean {
+  if (msg.role !== "user") return false;
+  const trimmed = msg.content.trimStart();
+  return trimmed.startsWith(INTERNAL_CONTEXT_PREFIX) || trimmed.startsWith(INTERNAL_DEEP_DIVE_PREFIX);
+}
 const STREAM_TAG_PREFIXES = [
   "<document",
   "</document",
@@ -1000,12 +1016,22 @@ export function registerChatRoutes(app: Express) {
         totalInputTokens += inputTokens;
         totalOutputTokens += outputTokens;
 
-        await chatStorage.createMessage({
-          conversationId: conv.id,
-          role: "assistant",
-          content: turn.fullText,
-          tokensUsed: inputTokens + outputTokens,
-        });
+        // Strip tool-request XML from assistant text before persisting to DB.
+        // The raw fullText (with tags) is still used for the in-memory Anthropic
+        // history so multi-turn tool escalation continues to work.
+        const cleanedAssistantText = stripToolTagsForStorage(turn.fullText);
+
+        // Only persist if there is visible content after stripping. Tool-only
+        // turns (where the model emitted nothing but XML tags) are skipped to
+        // avoid blank bubbles in chat history.
+        if (cleanedAssistantText.length > 0) {
+          await chatStorage.createMessage({
+            conversationId: conv.id,
+            role: "assistant",
+            content: cleanedAssistantText,
+            tokensUsed: inputTokens + outputTokens,
+          });
+        }
 
         if (!hasAutoTitled && isFirstExchange && conv.title === "New Chat") {
           const autoTitle = content.length <= 50 ? content : `${content.slice(0, 47)}...`;
@@ -1099,14 +1125,13 @@ ${chunkContext}`;
           break;
         }
 
-        await chatStorage.createMessage({
-          conversationId: conv.id,
-          role: "user",
-          content: contextMessage,
-        });
-
-        history = await chatStorage.getMessagesForConversation(conv.id);
-        anthropicMessages = toAnthropicMessages(history);
+        // Keep context injections in-memory only — don't persist them to chat
+        // history so they won't show up as user bubbles in the UI. The Anthropic
+        // message array carries them for multi-turn escalation within this request.
+        anthropicMessages.push(
+          { role: "assistant", content: turn.fullText },
+          { role: "user", content: contextMessage },
+        );
         usageEstimate = estimateContextUsage(systemPrompt, anthropicMessages, mode);
         sendContextWarningIfNeeded(usageEstimate);
         deepDiveAllowed = usageEstimate.warningLevel !== "critical";
@@ -1157,6 +1182,7 @@ ${chunkContext}`;
 
       const transcript = history
         .filter((message) => message.role === "user" || message.role === "assistant")
+        .filter((message) => !isInternalContextMessage(message))
         .map((message) => `[${message.role.toUpperCase()}]: ${message.content}`)
         .join("\n\n---\n\n");
 
