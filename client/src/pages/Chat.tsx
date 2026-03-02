@@ -32,7 +32,7 @@ export default function Chat() {
   const createConversation = useCreateConversation();
   const deleteConversation = useDeleteConversation();
   const updateConversation = useUpdateConversation();
-  const { send, streamingText, isStreaming } = useSendMessage(activeConversationId);
+  const { send, streamingText, isStreaming, activeToolStatus } = useSendMessage(activeConversationId);
 
   const messages = conversationData?.messages || [];
 
@@ -156,6 +156,7 @@ export default function Chat() {
           messages={messages}
           streamingText={streamingText}
           isStreaming={isStreaming}
+          activeToolStatus={activeToolStatus}
           onSuggestedPrompt={handleSend}
         />
         <ChatInput onSend={handleSend} disabled={isStreaming} />

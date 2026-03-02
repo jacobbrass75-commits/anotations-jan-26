@@ -531,6 +531,7 @@ export type BatchAddDocumentsResponse = z.infer<typeof batchAddDocumentsResponse
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey().$defaultFn(genId),
   userId: text("user_id"), // nullable until auth is merged
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   title: text("title").notNull().default("New Chat"),
   model: text("model").notNull().default("claude-haiku-4-5"), // claude-haiku-4-5 or claude-sonnet-4-6
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),

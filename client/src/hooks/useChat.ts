@@ -8,6 +8,12 @@ export interface ConversationWithMessages extends Conversation {
   messages: Message[];
 }
 
+export interface ToolStatus {
+  tool: string;
+  status: "running" | "complete";
+  label?: string;
+}
+
 export function useConversations() {
   return useQuery<Conversation[]>({
     queryKey: ["/api/chat/conversations"],
@@ -33,7 +39,7 @@ export function useConversation(id: string | null) {
 
 export function useCreateConversation() {
   return useMutation({
-    mutationFn: async (data: { title?: string; model?: string } | void) => {
+    mutationFn: async (data: { title?: string; model?: string; projectId?: string } | void) => {
       const res = await apiRequest("POST", "/api/chat/conversations", data || {});
       return res.json() as Promise<Conversation>;
     },
@@ -69,6 +75,7 @@ export function useDeleteConversation() {
 export function useSendMessage(conversationId: string | null) {
   const [streamingText, setStreamingText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [activeToolStatus, setActiveToolStatus] = useState<ToolStatus | null>(null);
 
   const send = useCallback(
     async (content: string) => {
@@ -76,6 +83,7 @@ export function useSendMessage(conversationId: string | null) {
 
       setIsStreaming(true);
       setStreamingText("");
+      setActiveToolStatus(null);
 
       try {
         const response = await fetch(
@@ -110,8 +118,24 @@ export function useSendMessage(conversationId: string | null) {
                 if (data.type === "text") {
                   accumulated += data.text;
                   setStreamingText(accumulated);
+                } else if (data.type === "tool_status") {
+                  if (data.status === "running") {
+                    setActiveToolStatus({
+                      tool: data.tool,
+                      status: "running",
+                      label: data.label,
+                    });
+                  } else if (data.status === "complete") {
+                    setActiveToolStatus(null);
+                  }
+                } else if (data.type === "document_start") {
+                  // Document is being produced — keep showing tool status
+                } else if (data.type === "document_text") {
+                  // Document content — don't append to streaming text
+                  // (it gets wrapped in <document> tags in the stored message)
+                } else if (data.type === "document_end") {
+                  // Document complete
                 } else if (data.type === "done") {
-                  // Stream complete, invalidate queries to refresh data
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations", conversationId],
                   });
@@ -132,10 +156,11 @@ export function useSendMessage(conversationId: string | null) {
       } finally {
         setIsStreaming(false);
         setStreamingText("");
+        setActiveToolStatus(null);
       }
     },
     [conversationId]
   );
 
-  return { send, streamingText, isStreaming };
+  return { send, streamingText, isStreaming, activeToolStatus };
 }
