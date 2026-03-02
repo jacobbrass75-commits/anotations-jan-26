@@ -41,7 +41,8 @@ async function resolveUser(req: Request): Promise<Express.User | null> {
   // Get Clerk user details for email + metadata
   const clerkUser = await clerkClient.users.getUser(auth.userId);
   const email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
-  const tier = (clerkUser.publicMetadata?.tier as string) || "free";
+  // TODO: revert to "free" default when leaving testing phase
+  const tier = (clerkUser.publicMetadata?.tier as string) || "max";
 
   // Ensure a local DB row exists (for usage tracking)
   await getOrCreateUser(auth.userId, email, tier);
