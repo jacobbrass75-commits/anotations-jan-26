@@ -198,7 +198,7 @@ export function registerChatRoutes(app: Express) {
       try {
         await runToolUseLoop({
           anthropic,
-          model: "claude-haiku-4-5-20251001",
+          model: conv.model || "claude-haiku-4-5-20251001",
           maxTokens: 4096,
           systemPrompt,
           messages: anthropicMessages,

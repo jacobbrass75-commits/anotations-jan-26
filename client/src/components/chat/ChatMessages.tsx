@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BookOpen, Lightbulb, FileText, PenLine } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { BookOpen, Lightbulb, FileText, PenLine, FolderOpen } from "lucide-react";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { DocumentCard } from "./DocumentCard";
-import type { Message } from "@shared/schema";
-import type { ToolStatus } from "@/hooks/useChat";
+import type { Message, Project } from "@shared/schema";
+import type { ConversationWithMessages, ToolStatus } from "@/hooks/useChat";
 
 interface ChatMessagesProps {
   messages: Message[];
@@ -13,6 +14,8 @@ interface ChatMessagesProps {
   isStreaming: boolean;
   activeToolStatus?: ToolStatus | null;
   onSuggestedPrompt?: (prompt: string) => void;
+  conversation?: ConversationWithMessages | null;
+  projects?: Project[];
 }
 
 const SUGGESTED_PROMPTS = [
@@ -169,12 +172,19 @@ export function ChatMessages({
   isStreaming,
   activeToolStatus,
   onSuggestedPrompt,
+  conversation,
+  projects = [],
 }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, activeToolStatus]);
+
+  // Resolve project for this conversation
+  const linkedProject = conversation?.projectId
+    ? projects.find((p) => p.id === conversation.projectId)
+    : null;
 
   // Empty state
   if (messages.length === 0 && !isStreaming) {
@@ -206,8 +216,24 @@ export function ChatMessages({
   }
 
   return (
-    <ScrollArea className="flex-1">
-      <div className="max-w-3xl mx-auto p-4">
+    <>
+      {linkedProject && (
+        <div className="border-b bg-muted/40 px-4 py-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <FolderOpen className="h-3.5 w-3.5" />
+          <span className="font-medium text-foreground">{linkedProject.name}</span>
+          {linkedProject.thesis && (
+            <>
+              <span className="mx-1">&middot;</span>
+              <span className="truncate">{linkedProject.thesis}</span>
+            </>
+          )}
+          <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0">
+            Writing tools active
+          </Badge>
+        </div>
+      )}
+      <ScrollArea className="flex-1">
+        <div className="max-w-3xl mx-auto p-4">
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
@@ -232,5 +258,6 @@ export function ChatMessages({
         <div ref={bottomRef} />
       </div>
     </ScrollArea>
+    </>
   );
 }
