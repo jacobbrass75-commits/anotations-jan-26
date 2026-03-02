@@ -67,7 +67,7 @@ export function ChatSidebar({
   onNew,
   onDelete,
   onRename,
-  projects,
+  projects = [],
   selectedProjectId,
   onProjectChange,
 }: ChatSidebarProps) {
