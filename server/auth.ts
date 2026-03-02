@@ -39,8 +39,7 @@ async function resolveUser(req: Request): Promise<Express.User | null> {
   if (!auth?.userId) return null;
 
   // Get Clerk user details for email + metadata
-  const client = clerkClient();
-  const clerkUser = await client.users.getUser(auth.userId);
+  const clerkUser = await clerkClient.users.getUser(auth.userId);
   const email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
   const tier = (clerkUser.publicMetadata?.tier as string) || "free";
 
