@@ -4,7 +4,6 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DataTicker } from "@/components/DataTicker";
 import { BootSequence } from "@/components/BootSequence";
@@ -14,6 +13,7 @@ import ProjectWorkspace from "@/pages/ProjectWorkspace";
 import ProjectDocument from "@/pages/ProjectDocument";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import Pricing from "@/pages/Pricing";
 import Chat from "@/pages/Chat";
 import WritingPage from "@/pages/WritingPage";
 import WebClips from "@/pages/WebClips";
@@ -22,8 +22,9 @@ import NotFound from "@/pages/not-found";
 function Router() {
   return (
     <Switch>
-      <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
+      <Route path="/sign-in" component={Login} />
+      <Route path="/sign-up" component={Register} />
+      <Route path="/pricing" component={Pricing} />
       <Route path="/">{() => <ProtectedRoute><Home /></ProtectedRoute>}</Route>
       <Route path="/projects">{() => <ProtectedRoute><Projects /></ProtectedRoute>}</Route>
       <Route path="/web-clips">{() => <ProtectedRoute><WebClips /></ProtectedRoute>}</Route>
@@ -43,16 +44,14 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          {!booted && <BootSequence onComplete={() => setBooted(true)} />}
-          <div className="min-h-screen pb-6 eva-scanlines">
-            <Router />
-          </div>
-          <DataTicker />
-        </TooltipProvider>
-      </AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        {!booted && <BootSequence onComplete={() => setBooted(true)} />}
+        <div className="min-h-screen pb-6 eva-scanlines">
+          <Router />
+        </div>
+        <DataTicker />
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }

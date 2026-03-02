@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { requireAuth } from "./auth";
+import { requireAuth, requireTier } from "./auth";
 import { projectStorage } from "./projectStorage";
 import { globalSearch, searchProjectDocument } from "./projectSearch";
 import { generateChicagoFootnote, generateChicagoBibliography, generateFootnoteWithQuote, generateInlineCitation, generateFootnote, generateInTextCitation, generateBibliographyEntry } from "./citationGenerator";
@@ -839,7 +839,7 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Multi-prompt parallel analysis
-  app.post("/api/project-documents/:id/analyze-multi", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/analyze-multi", requireAuth, requireTier("max"), async (req: Request, res: Response) => {
     try {
       const { prompts, thoroughness } = req.body;
 
@@ -1047,7 +1047,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/projects/:projectId/batch-analyze", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/batch-analyze", requireAuth, requireTier("max"), async (req: Request, res: Response) => {
     try {
       const validated = batchAnalysisRequestSchema.parse(req.body);
       const { projectDocumentIds, intent, thoroughness, constraints } = validated;

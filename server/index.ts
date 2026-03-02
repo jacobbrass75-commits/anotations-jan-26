@@ -5,7 +5,7 @@ import cors from "cors";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { registerAuthRoutes } from "./authRoutes";
-import { configurePassport } from "./auth";
+import { configureClerk } from "./auth";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
@@ -66,8 +66,8 @@ app.use((req, res, next) => {
   }
 });
 
-// Initialize Passport
-configurePassport(app);
+// Initialize Clerk authentication
+configureClerk(app);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

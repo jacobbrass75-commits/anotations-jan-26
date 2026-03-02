@@ -5,7 +5,7 @@ import { chatStorage } from "./chatStorage";
 import { db } from "./db";
 import { projectStorage } from "./projectStorage";
 import { storage } from "./storage";
-import { requireAuth } from "./auth";
+import { requireAuth, requireTier } from "./auth";
 import {
   formatSourceForPrompt,
   formatSourceForPromptTiered,
@@ -696,7 +696,7 @@ function formatDeepDiveFindings(filename: string, findings: ResearchFinding[]): 
 }
 
 export function registerChatRoutes(app: Express) {
-  app.get("/api/chat/conversations", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/chat/conversations", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const rawProjectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
       const projectId = rawProjectId && rawProjectId !== "null" ? rawProjectId : undefined;
@@ -711,7 +711,7 @@ export function registerChatRoutes(app: Express) {
     }
   });
 
-  app.post("/api/chat/conversations", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const {
         title,
@@ -745,7 +745,7 @@ export function registerChatRoutes(app: Express) {
     }
   });
 
-  app.get("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/chat/conversations/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const conv = await chatStorage.getConversation(req.params.id);
       if (!conv) {
@@ -762,7 +762,7 @@ export function registerChatRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
+  app.delete("/api/chat/conversations/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const conv = await chatStorage.getConversation(req.params.id);
       if (!conv) {
@@ -779,7 +779,7 @@ export function registerChatRoutes(app: Express) {
     }
   });
 
-  app.put("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
+  app.put("/api/chat/conversations/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const {
         title,
@@ -808,7 +808,7 @@ export function registerChatRoutes(app: Express) {
     }
   });
 
-  app.put("/api/chat/conversations/:id/sources", requireAuth, async (req: Request, res: Response) => {
+  app.put("/api/chat/conversations/:id/sources", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const { selectedSourceIds } = req.body;
       if (!Array.isArray(selectedSourceIds)) {
@@ -822,7 +822,7 @@ export function registerChatRoutes(app: Express) {
     }
   });
 
-  app.post("/api/chat/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/messages", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const { content } = req.body;
       if (!content || typeof content !== "string") {
@@ -1115,7 +1115,7 @@ ${chunkContext}`;
     }
   });
 
-  app.post("/api/chat/conversations/:id/compile", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/compile", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const conv = await chatStorage.getConversation(req.params.id);
       if (!conv) {
@@ -1225,7 +1225,7 @@ ${transcript}${sourcesBlock}`;
     }
   });
 
-  app.post("/api/chat/conversations/:id/verify", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/verify", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const conv = await chatStorage.getConversation(req.params.id);
       if (!conv) {

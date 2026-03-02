@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { requireAuth } from "./auth";
+import { requireAuth, requireTier } from "./auth";
 import { incrementTokenUsage } from "./authStorage";
 import { humanizeText, MAX_HUMANIZER_TEXT_LENGTH } from "./humanizer";
 
@@ -18,7 +18,7 @@ function getErrorStatus(message: string): number {
 }
 
 export function registerHumanizerRoutes(app: Express): void {
-  app.post("/api/humanize", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/humanize", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     const startedAt = Date.now();
     try {
       const { text, model, temperature } = req.body ?? {};

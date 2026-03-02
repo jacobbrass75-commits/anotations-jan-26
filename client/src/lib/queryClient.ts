@@ -1,27 +1,11 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-function getStoredToken(): string | null {
-  try {
-    return localStorage.getItem("scholarmark_token");
-  } catch {
-    return null;
-  }
-}
-
-function getAuthHeaders(): Record<string, string> {
-  const token = getStoredToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     if (res.status === 401) {
-      // Clear stored token and redirect to login
-      try {
-        localStorage.removeItem("scholarmark_token");
-      } catch {}
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login";
+      // Clerk session expired — redirect to sign-in
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/sign-in")) {
+        window.location.href = "/sign-in";
       }
     }
     const text = (await res.text()) || res.statusText;
@@ -34,9 +18,7 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const headers: Record<string, string> = {
-    ...getAuthHeaders(),
-  };
+  const headers: Record<string, string> = {};
   if (data) {
     headers["Content-Type"] = "application/json";
   }
@@ -60,7 +42,6 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
-      headers: getAuthHeaders(),
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

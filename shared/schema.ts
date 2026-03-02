@@ -210,7 +210,7 @@ export const users = sqliteTable("users", {
   id: text("id").primaryKey().$defaultFn(genId),
   email: text("email").notNull().unique(),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(), // bcrypt hash
+  password: text("password").default(""), // legacy, unused with Clerk auth
   firstName: text("first_name"),
   lastName: text("last_name"),
   tier: text("tier").notNull().default("free"), // "free" | "pro" | "max"
