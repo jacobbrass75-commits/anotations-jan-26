@@ -1,0 +1,19 @@
+{
+  "name": "scholarmark-mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ScholarMark MCP server for Claude and other MCP clients.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "express": "^4.22.1",
+    "zod": "^4.3.6"
+  }
+}
