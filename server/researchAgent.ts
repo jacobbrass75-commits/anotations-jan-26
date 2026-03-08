@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Message } from "@shared/schema";
 import { storage } from "./storage";
+import { findTextRange, textsLooselyEqual } from "./textAnchors";
 
 const RESEARCH_MODEL = "claude-sonnet-4-5-20250929";
 const RESEARCH_MAX_TOKENS = 8192;
@@ -224,25 +225,17 @@ export function verifyQuote(finding: ResearchFinding, fullText: string): Researc
     };
   }
 
-  const normalizedFullText = normalizeWhitespace(fullText);
-  const directMatchIndex = normalizedFullText.indexOf(normalizedQuote);
-  if (directMatchIndex !== -1) {
-    return {
-      ...finding,
-      verified: true,
-    };
-  }
+  let mismatchNote: string | undefined;
 
   if (
     finding.startPosition >= 0 &&
     finding.endPosition > finding.startPosition &&
     finding.endPosition <= fullText.length
   ) {
-    const atPosition = normalizeWhitespace(
-      fullText.slice(finding.startPosition, finding.endPosition)
-    );
+    const rawAtPosition = fullText.slice(finding.startPosition, finding.endPosition);
+    const atPosition = normalizeWhitespace(rawAtPosition);
 
-    if (atPosition === normalizedQuote) {
+    if (textsLooselyEqual(rawAtPosition, finding.quote) || atPosition === normalizedQuote) {
       return {
         ...finding,
         verified: true,
@@ -263,36 +256,29 @@ export function verifyQuote(finding: ResearchFinding, fullText: string): Researc
     }
 
     if (atPosition.length > 0) {
-      return {
-        ...finding,
-        verified: false,
-        verificationNote: `Quote did not match text at reported position. Actual text: "${atPosition}"`,
-      };
+      mismatchNote = `Quote did not match text at reported position. Actual text: "${atPosition}"`;
     }
   }
 
-  const quoteWords = normalizedQuote.split(" ").filter(Boolean);
-  if (quoteWords.length >= 5) {
-    const prefix = quoteWords.slice(0, 5).join(" ");
-    const prefixIndex = normalizedFullText.indexOf(prefix);
-    if (prefixIndex !== -1) {
-      const correctedQuote = normalizedFullText.slice(
-        prefixIndex,
-        prefixIndex + normalizedQuote.length
-      );
-      return {
-        ...finding,
-        quote: correctedQuote,
-        verified: false,
-        verificationNote: "Quote corrected to match source text.",
-      };
-    }
+  const matchedRange = findTextRange(fullText, finding.quote);
+  if (matchedRange) {
+    return {
+      ...finding,
+      quote: fullText.slice(matchedRange.startPosition, matchedRange.endPosition),
+      startPosition: matchedRange.startPosition,
+      endPosition: matchedRange.endPosition,
+      verified: true,
+      verificationNote:
+        matchedRange.matchType === "exact"
+          ? undefined
+          : `Quote verified using ${matchedRange.matchType.replace(/_/g, " ")} matching.`,
+    };
   }
 
   return {
     ...finding,
     verified: false,
-    verificationNote: "Quote could not be located in source document. May be fabricated.",
+    verificationNote: mismatchNote || "Quote could not be located in source document. May be fabricated.",
   };
 }
 

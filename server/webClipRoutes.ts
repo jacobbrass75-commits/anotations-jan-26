@@ -16,6 +16,7 @@ import { db } from "./db";
 import { generateChicagoBibliography, generateChicagoFootnote } from "./citationGenerator";
 import { storage } from "./storage";
 import { projectStorage } from "./projectStorage";
+import { findTextRange } from "./textAnchors";
 
 const WEB_CLIP_CATEGORY_VALUES = [...annotationCategories, "web_clip"] as const;
 const webClipCategorySet = new Set<string>(WEB_CLIP_CATEGORY_VALUES);
@@ -187,21 +188,11 @@ function findHighlightRangeInText(fullText: string, highlightedText: string): { 
     return { startPosition: 0, endPosition: Math.max(1, highlightedText.length) };
   }
 
-  const directIndex = fullText.indexOf(highlightedText);
-  if (directIndex >= 0) {
+  const matchedRange = findTextRange(fullText, highlightedText);
+  if (matchedRange) {
     return {
-      startPosition: directIndex,
-      endPosition: directIndex + highlightedText.length,
-    };
-  }
-
-  const foldedText = fullText.toLowerCase();
-  const foldedHighlight = highlightedText.toLowerCase();
-  const insensitiveIndex = foldedText.indexOf(foldedHighlight);
-  if (insensitiveIndex >= 0) {
-    return {
-      startPosition: insensitiveIndex,
-      endPosition: insensitiveIndex + highlightedText.length,
+      startPosition: matchedRange.startPosition,
+      endPosition: matchedRange.endPosition,
     };
   }
 
