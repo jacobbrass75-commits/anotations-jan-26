@@ -166,16 +166,21 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 async function saveAnnotation(annotation, token) {
   try {
     const { sm_project } = await chrome.storage.local.get("sm_project");
-    if (sm_project) {
-      annotation.projectId = sm_project;
-    }
+    const payload = {
+      highlightedText: annotation.highlightedText,
+      sourceUrl: annotation.pageUrl,
+      pageTitle: annotation.pageTitle || "Untitled Page",
+      surroundingContext: annotation.context || "",
+      projectId: sm_project || undefined,
+      category: "web_clip",
+    };
 
-    const response = await apiFetch("/api/extension/save", token, {
+    const response = await apiFetch("/api/web-clips", token, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(annotation),
+      body: JSON.stringify(payload),
     });
 
     if (response.ok) {
@@ -183,7 +188,7 @@ async function saveAnnotation(annotation, token) {
         type: "basic",
         iconUrl: "icons/icon48.png",
         title: "ScholarMark",
-        message: "Highlight saved to your project!",
+        message: sm_project ? "Highlight saved to your project!" : "Highlight saved to Web Clips!",
       });
       return;
     }
@@ -278,22 +283,22 @@ async function handleSaveSelection(message) {
   }
 
   const { sm_project } = await chrome.storage.local.get("sm_project");
-  const annotation = {
+  const payload = {
     highlightedText: message.text,
-    pageUrl: message.url,
+    sourceUrl: message.url,
     pageTitle: message.title,
-    context: "",
+    surroundingContext: "",
     projectId: sm_project || undefined,
-    timestamp: new Date().toISOString(),
+    category: "web_clip",
   };
 
   try {
-    const response = await apiFetch("/api/extension/save", active.account.apiKey, {
+    const response = await apiFetch("/api/web-clips", active.account.apiKey, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(annotation),
+      body: JSON.stringify(payload),
     });
 
     if (response.ok) {
