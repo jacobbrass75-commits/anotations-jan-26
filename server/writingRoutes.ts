@@ -125,6 +125,7 @@ export function registerWritingRoutes(app: Express): void {
         for (const projectDoc of selectedProjectDocs) {
           const fullDoc = await storage.getDocument(projectDoc.documentId);
           if (!fullDoc) continue;
+          const projectAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDoc.id);
 
           const citationData = (projectDoc.citationData as CitationData | null) || null;
           const summaryExcerpt =
@@ -145,6 +146,20 @@ export function registerWritingRoutes(app: Express): void {
             note: projectDoc.roleInProject || null,
             citationData,
             documentFilename: projectDoc.document.filename,
+            projectId: request.projectId,
+            projectDocumentId: projectDoc.id,
+            quoteTargets: projectAnnotations
+              .slice(0, 8)
+              .map((annotation) => ({
+                quote: annotation.highlightedText,
+                jumpPath: buildProjectAnnotationJumpPath({
+                  projectId: request.projectId!,
+                  projectDocumentId: projectDoc.id,
+                  annotationId: annotation.id,
+                  startPosition: annotation.startPosition,
+                  anchorFingerprint: buildTextFingerprint(annotation.highlightedText),
+                }),
+              })),
           });
         }
       }

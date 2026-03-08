@@ -29,6 +29,7 @@ import {
   type Project,
 } from "@shared/schema";
 import { buildProjectAnnotationJumpPath, buildTextFingerprint } from "@shared/annotationLinks";
+import { applyJumpLinksToMarkdown, type QuoteJumpTarget } from "./quoteJumpLinks";
 
 const MAX_SOURCE_EXCERPT_CHARS = 2000;
 const MAX_SOURCE_FULLTEXT_CHARS = 30000;
@@ -342,6 +343,37 @@ function buildSourceStubBlock(sources: PromptSource[]): string {
       return `--- Source ${i + 1} ---\n${sourceText}`;
     })
     .join("\n\n");
+}
+
+function collectConversationQuoteTargets(sources: PromptSource[]): QuoteJumpTarget[] {
+  const targets: QuoteJumpTarget[] = [];
+
+  for (const source of sources) {
+    if (isTieredSource(source)) {
+      for (const annotation of source.annotations) {
+        targets.push({
+          quote: annotation.highlightedText,
+          jumpPath: buildProjectAnnotationJumpPath({
+            projectId: source.projectId,
+            projectDocumentId: source.id,
+            annotationId: annotation.id,
+            startPosition: annotation.startPosition,
+            anchorFingerprint: buildTextFingerprint(annotation.highlightedText),
+          }),
+        });
+      }
+      continue;
+    }
+
+    if (source.annotationJumpPath && source.excerpt) {
+      targets.push({
+        quote: source.excerpt,
+        jumpPath: source.annotationJumpPath,
+      });
+    }
+  }
+
+  return targets;
 }
 
 function normalizeTitle(value: string): string {
@@ -1655,12 +1687,18 @@ export function registerChatRoutes(app: Express) {
             continue;
           }
 
-          finalAssistantText = stripToolTagsForStorage(turn.fullText);
+          finalAssistantText = applyJumpLinksToMarkdown(
+            stripToolTagsForStorage(turn.fullText),
+            collectConversationQuoteTargets(sources)
+          );
           break;
         }
 
         // Legacy XML path: keep prior behavior for rollback safety.
-        const cleanedAssistantText = stripToolTagsForStorage(turn.fullText);
+        const cleanedAssistantText = applyJumpLinksToMarkdown(
+          stripToolTagsForStorage(turn.fullText),
+          collectConversationQuoteTargets(sources)
+        );
         if (cleanedAssistantText.length > 0) {
           await chatStorage.createMessage({
             conversationId: conv.id,
@@ -1870,7 +1908,8 @@ RULES:
 9. Compile a bibliography from all cited sources using ${style.toUpperCase()} format.
 10. Write naturally: vary sentence length, prefer active voice, and avoid filler phrases.
 11. Do not fabricate source details not grounded in the provided sources.${noEnDashesRule}
-12. Output clean markdown using ## section headings.
+12. When direct quotes come from source materials that include Jump Links, preserve or add those markdown Jump Links around the verbatim quoted text.
+13. Output clean markdown using ## section headings.
 
 CONVERSATION TRANSCRIPT:
 ${transcript}${sourcesBlock}`;
@@ -1882,6 +1921,8 @@ ${transcript}${sourcesBlock}`;
 
       const anthropic = getAnthropicClient();
       let aborted = false;
+      let compiledText = "";
+      const compileQuoteTargets = collectConversationQuoteTargets(sources);
 
       req.on("close", () => {
         aborted = true;
@@ -1895,12 +1936,17 @@ ${transcript}${sourcesBlock}`;
 
       stream.on("text", (text) => {
         if (!aborted) {
+          compiledText += text;
           res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
         }
       });
 
       stream.on("message", () => {
         if (aborted) return;
+        const linkedText = applyJumpLinksToMarkdown(compiledText, compileQuoteTargets);
+        if (linkedText && linkedText !== compiledText) {
+          res.write(`data: ${JSON.stringify({ type: "replace_text", text: linkedText })}\n\n`);
+        }
         res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         res.end();
       });

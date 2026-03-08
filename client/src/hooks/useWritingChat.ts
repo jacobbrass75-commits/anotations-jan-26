@@ -377,6 +377,9 @@ export function useCompilePaper(conversationId: string | null) {
                 if (data.type === "text") {
                   accumulated += data.text;
                   setCompiledContent(accumulated);
+                } else if (data.type === "replace_text") {
+                  accumulated = String(data.text || "");
+                  setCompiledContent(accumulated);
                 } else if (data.type === "error") {
                   console.error("Compile error:", data.error);
                 }
