@@ -26,6 +26,27 @@ type TableInfoRow = {
   name: string;
 };
 
+function indexExists(indexName: string): boolean {
+  const row = sqlite
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ? LIMIT 1")
+    .get(indexName);
+  return Boolean(row);
+}
+
+function tableHasDuplicates(tableName: string, columnName: string): boolean {
+  const row = sqlite
+    .prepare(
+      `SELECT 1
+       FROM ${tableName}
+       WHERE ${columnName} IS NOT NULL
+       GROUP BY ${columnName}
+       HAVING COUNT(*) > 1
+       LIMIT 1`
+    )
+    .get();
+  return Boolean(row);
+}
+
 function ensureBaseTables(): void {
   sqlite.exec(`
 CREATE TABLE IF NOT EXISTS documents (
@@ -60,8 +81,6 @@ CREATE TABLE IF NOT EXISTS users (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email);
-CREATE UNIQUE INDEX IF NOT EXISTS users_username_unique ON users(username);
 
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY NOT NULL,
@@ -228,6 +247,22 @@ function ensureLegacyCompatibility(): void {
   }
 }
 
+function ensureUsersIndexes(): void {
+  if (!indexExists("users_username_unique") && !tableHasDuplicates("users", "username")) {
+    sqlite.exec("CREATE UNIQUE INDEX users_username_unique ON users(username);");
+  }
+
+  if (!indexExists("users_email_unique")) {
+    if (!tableHasDuplicates("users", "email")) {
+      sqlite.exec("CREATE UNIQUE INDEX users_email_unique ON users(email);");
+    } else if (!indexExists("idx_users_email")) {
+      // Legacy auth imports can contain duplicate emails for the same real user.
+      // Keep startup non-fatal when opening a production snapshot locally.
+      sqlite.exec("CREATE INDEX idx_users_email ON users(email);");
+    }
+  }
+}
+
 function ensureSupportTables(): void {
   // Persistent OCR queue and auth tables that are not defined in shared/schema.ts.
   sqlite.exec(`
@@ -364,6 +399,7 @@ ON ocr_page_results(job_id, page_number);
 
 ensureBaseTables();
 ensureLegacyCompatibility();
+ensureUsersIndexes();
 ensureSupportTables();
 
 // Export the raw sqlite connection for direct queries if needed
