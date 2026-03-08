@@ -28,6 +28,7 @@ import {
   type Message,
   type Project,
 } from "@shared/schema";
+import { buildProjectAnnotationJumpPath, buildTextFingerprint } from "@shared/annotationLinks";
 
 const MAX_SOURCE_EXCERPT_CHARS = 2000;
 const MAX_SOURCE_FULLTEXT_CHARS = 30000;
@@ -589,6 +590,7 @@ async function loadProjectSourcesTiered(
       annotations,
       excerpt,
       documentId: fullDoc.id,
+      projectId,
     });
   }
 
@@ -745,11 +747,13 @@ What you need from the full source and why
 - Quotes from get_source_annotations() are pre-verified from annotation data.
 - If you quote from get_source_chunks(), mention that it came from full-text chunk context.
 - Include annotation ID or character position when citing evidence.
+- When an annotation includes a Jump Link, wrap the direct quote in markdown link syntax using that Jump Link when practical so the student can click back to the source.
 - Do not fabricate quotes.`
     : `QUOTING RULES:
 - Quotes from annotation blocks are pre-verified.
 - If you quote from chunk retrieval or deep dive findings, mention that it came from full-text review.
 - Include annotation ID or character position when citing evidence.
+- When an annotation includes a Jump Link, you may use it in markdown links for direct quotes.
 - Do not fabricate quotes.`;
 
   return `You are ScholarMark AI, an expert academic writing partner. You are collaborating with a student on a research paper.
@@ -1052,6 +1056,15 @@ async function executeWritingTool(
           lines.push(`Note: ${annotation.note}`);
         }
         lines.push(`Position: chars ${annotation.startPosition}-${annotation.endPosition}`);
+        lines.push(
+          `Jump Link: ${buildProjectAnnotationJumpPath({
+            projectId: source.projectId,
+            projectDocumentId: source.id,
+            annotationId: annotation.id,
+            startPosition: annotation.startPosition,
+            anchorFingerprint: buildTextFingerprint(annotation.highlightedText),
+          })}`
+        );
         lines.push("");
       }
 

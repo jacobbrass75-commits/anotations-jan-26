@@ -9,6 +9,7 @@ import {
   type WritingSSEEvent,
 } from "./writingPipeline";
 import type { CitationData } from "@shared/schema";
+import { buildProjectAnnotationJumpPath, buildTextFingerprint } from "@shared/annotationLinks";
 
 const MAX_SOURCE_EXCERPT_CHARS = 700;
 const MAX_SOURCE_FULLTEXT_CHARS = 7000;
@@ -174,6 +175,17 @@ export function registerWritingRoutes(app: Express): void {
               note: projectAnnotation.note,
               citationData,
               documentFilename: docFilename,
+              projectId: request.projectId,
+              projectDocumentId: projectAnnotation.projectDocumentId,
+              annotationId: projectAnnotation.id,
+              startPosition: projectAnnotation.startPosition,
+              annotationJumpPath: buildProjectAnnotationJumpPath({
+                projectId: request.projectId,
+                projectDocumentId: projectAnnotation.projectDocumentId,
+                annotationId: projectAnnotation.id,
+                startPosition: projectAnnotation.startPosition,
+                anchorFingerprint: buildTextFingerprint(projectAnnotation.highlightedText),
+              }),
             });
             continue;
           }

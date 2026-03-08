@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { CitationData, ProjectAnnotation } from "@shared/schema";
+import { buildProjectAnnotationJumpPath, buildTextFingerprint } from "@shared/annotationLinks";
 
 // --- Interfaces ---
 
@@ -39,6 +40,11 @@ export interface WritingSource {
   note: string | null;
   citationData: CitationData | null;
   documentFilename: string;
+  projectId?: string;
+  projectDocumentId?: string;
+  annotationId?: string;
+  startPosition?: number;
+  annotationJumpPath?: string;
 }
 
 export interface TieredSource {
@@ -57,6 +63,7 @@ export interface TieredSource {
   annotations: ProjectAnnotation[];
   excerpt: string;
   documentId: string;
+  projectId: string;
 }
 
 export interface WritingSSEEvent {
@@ -110,6 +117,7 @@ export function formatSourceForPrompt(source: WritingSource): string {
   parts.push(`Author(s): ${source.author}`);
   parts.push(`Category: ${source.category}`);
   if (source.note) parts.push(`Note: ${source.note}`);
+  if (source.annotationJumpPath) parts.push(`Jump Link: ${source.annotationJumpPath}`);
   if (source.citationData) {
     const cd = source.citationData;
     const authorStr =
@@ -182,6 +190,15 @@ export function formatSourceForPromptTiered(source: TieredSource): string {
       parts.push(`"${ann.highlightedText}"`);
       if (ann.note) parts.push(`Note: ${ann.note}`);
       parts.push(`Position: chars ${ann.startPosition}-${ann.endPosition}`);
+      parts.push(
+        `Jump Link: ${buildProjectAnnotationJumpPath({
+          projectId: source.projectId,
+          projectDocumentId: source.id,
+          annotationId: ann.id,
+          startPosition: ann.startPosition,
+          anchorFingerprint: buildTextFingerprint(ann.highlightedText),
+        })}`
+      );
       parts.push(`Document: ${source.documentId}`);
       parts.push("");
     }
@@ -384,6 +401,7 @@ Requirements:
 - Include in-text citations in ${request.citationStyle.toUpperCase()} format where appropriate
 - Use ONLY the provided sources as primary evidence
 - Match the specified tone${noEnDashesLine}
+- If a source quote includes a Jump Link and you use that quote verbatim, wrap the quote in markdown link syntax using the Jump Link
 - Do not fabricate quotations, page numbers, publication details, or bibliography entries
 - If uncertain, cite conservatively and state uncertainty plainly
 
@@ -441,6 +459,7 @@ Your job is to:
 5. Append a complete bibliography/works cited section in ${request.citationStyle.toUpperCase()} format
 6. Do NOT rewrite the sections - only add transitions, intro, conclusion, and bibliography${noEnDashesLine}
 7. Do not fabricate source details that are not supported by the source material
+8. Preserve any markdown Jump Links already attached to direct quotes
 
 The thesis of the paper is: ${plan.thesis}
 

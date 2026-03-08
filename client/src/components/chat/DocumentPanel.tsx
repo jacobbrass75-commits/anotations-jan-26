@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,6 +18,10 @@ interface DocumentPanelProps {
   onClose?: () => void;
 }
 
+function isProjectDocumentJumpLink(href?: string): boolean {
+  return typeof href === "string" && /^\/projects\/[^/]+\/documents\/[^/?#]+/.test(href);
+}
+
 export function DocumentPanel({
   title,
   content,
@@ -28,6 +33,39 @@ export function DocumentPanel({
   onDownloadPdf,
   onClose,
 }: DocumentPanelProps) {
+  const documentMarkdownComponents: Components = {
+    ...markdownComponents,
+    a({ href, children, ...props }) {
+      if (isProjectDocumentJumpLink(href)) {
+        return (
+          <a
+            {...props}
+            href={href}
+            className="font-medium underline decoration-dotted underline-offset-4"
+            onClick={(event) => {
+              event.preventDefault();
+              window.open(href, "_blank", "noopener,noreferrer");
+            }}
+          >
+            {children}
+          </a>
+        );
+      }
+
+      return (
+        <a
+          {...props}
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-dotted underline-offset-4"
+        >
+          {children}
+        </a>
+      );
+    },
+  };
+
   return (
     <Card className="border-border bg-background/90 h-full min-h-0 flex flex-col">
       <CardHeader className="pb-2 shrink-0">
@@ -60,7 +98,7 @@ export function DocumentPanel({
       <CardContent className="min-h-0 flex-1">
         <ScrollArea className="h-full pr-1">
           <article className="prose prose-sm dark:prose-invert max-w-none font-serif leading-relaxed">
-            <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+            <ReactMarkdown remarkPlugins={remarkPlugins} components={documentMarkdownComponents}>
               {content}
             </ReactMarkdown>
             {isStreaming && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />}
