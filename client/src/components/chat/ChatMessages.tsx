@@ -12,6 +12,7 @@ interface ChatMessagesProps {
   messages: Message[];
   streamingText: string;
   isStreaming: boolean;
+  statusText?: string;
   streamingChatText?: string;
   streamingDocumentTitle?: string;
   streamingDocumentText?: string;
@@ -160,6 +161,7 @@ export function ChatMessages({
   messages,
   streamingText,
   isStreaming,
+  statusText,
   streamingChatText,
   streamingDocumentTitle,
   streamingDocumentText,
@@ -314,6 +316,9 @@ export function ChatMessages({
                 <span className="w-2 h-2 bg-foreground/40 rounded-full animate-bounce [animation-delay:150ms]" />
                 <span className="w-2 h-2 bg-foreground/40 rounded-full animate-bounce [animation-delay:300ms]" />
               </div>
+              {statusText ? (
+                <div className="mt-2 text-xs text-muted-foreground">{statusText}</div>
+              ) : null}
             </div>
           </div>
         )}

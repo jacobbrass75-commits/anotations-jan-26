@@ -30,12 +30,12 @@ import {
 } from "@shared/schema";
 
 const MAX_SOURCE_EXCERPT_CHARS = 2000;
-const MAX_SOURCE_FULLTEXT_CHARS = 30000;
-const MAX_SOURCE_TOTAL_FULLTEXT_CHARS = 150000;
+const MAX_SOURCE_FULLTEXT_CHARS = 18000;
+const MAX_SOURCE_TOTAL_FULLTEXT_CHARS = 90000;
 const CHAT_MAX_TOKENS = 8192;
 const COMPILE_MAX_TOKENS = 8192;
 const VERIFY_MAX_TOKENS = 8192;
-const MAX_CONTEXT_ESCALATIONS = 4;
+const MAX_CONTEXT_ESCALATIONS = 2;
 const USE_NATIVE_TOOL_USE = true;
 
 const MODELS = {
@@ -215,7 +215,7 @@ function prettyToneLabel(tone?: string): string {
 }
 
 function getWritingMode(conv: Pick<Conversation, "writingModel">): WritingMode {
-  return conv.writingModel === "extended" ? "extended" : "precision";
+  return conv.writingModel === "precision" ? "precision" : "extended";
 }
 
 function getModelsForConversation(conv: Pick<Conversation, "writingModel">) {
@@ -720,13 +720,13 @@ WRITING STYLE:
     ? `CONTEXT TOOLS:
 You have native tools to load source context on demand. The source list above is stub-only.
 
-Escalation strategy:
-1. Start with get_source_summary() for sources likely relevant to the user's request.
-2. For usable evidence, call get_source_annotations().
-3. For deeper quote context, call get_source_chunks().
-4. Use get_web_clips() when web evidence is needed.
+Use tools selectively:
+1. Start by answering from the current conversation when no source lookup is needed.
+2. Only call get_source_summary(), get_source_annotations(), get_source_chunks(), or get_web_clips() when you need source-backed evidence, exact quotes, or web evidence.
+3. Prefer the smallest tool that can answer the question.
+4. Stop calling tools as soon as you have enough evidence to respond well.
 
-Use tools proactively and only load what is needed. After deciding what evidence you will use, stop calling tools and write the response.
+Avoid proactive source loading for casual chat, brainstorming, stylistic revisions, or other requests that do not require evidence retrieval.
 Do not ask the student to provide context you can retrieve with tools.`
     : `CONTEXT TOOLS:
 You are seeing annotated highlights and summaries from each source. This is your primary working material.
@@ -762,25 +762,12 @@ SOURCE MATERIALS:
 ${sourceMaterials}
 
 CONVERSATION FLOW:
-When a student brings a new writing task, follow this collaborative process:
-
-PHASE 1 - DISCOVERY (first message on a new topic):
-Ask the student about their thesis/argument, what angle they want to take, the scope (paragraph, section, full essay), and intended audience/tone. Keep it to 2-3 focused questions, not an interrogation.
-
-PHASE 2 - SOURCE REVIEW:
-Review the available source materials and tell the student which sources you found most relevant to their topic. Briefly explain why each source connects. Let them confirm or redirect.
-
-PHASE 3 - OUTLINE:
-Propose a structured outline showing how you'd organize the argument and where each source fits. Wait for the student to approve, modify, or redirect before writing.
-
-PHASE 4 - DRAFTING:
-Only after outline approval, write the content. Wrap substantial writing in <document> tags.
-
-IMPORTANT EXCEPTIONS:
-- If the student says "just write it", "go ahead", or explicitly asks you to skip planning - go straight to drafting.
-- If the student asks to revise, expand, or edit existing text - do it immediately without re-doing discovery.
-- If continuing an ongoing writing thread where thesis/sources are already established - skip to the relevant phase.
-- Short requests like "add a transition sentence" or "fix this paragraph" should be done immediately.
+- Default to a normal back-and-forth chat. Answer the student's request directly when you can.
+- Ask clarifying questions only when missing details would materially improve the answer. Keep it to 1-2 focused questions.
+- Do not force a thesis interview, source review, or outline step unless the student asks for planning help or the task clearly requires it.
+- For brainstorming, revision, explanation, summarization, or short edits, respond immediately.
+- If the student wants substantial draft text, you may briefly frame the structure first, but if they say "just write it" or clearly want drafting now, go straight to drafting.
+- Wrap substantial written content in <document> tags. Keep short conversational replies outside document tags.
 
 WRITING RULES:
 1. Write in ${prettyToneLabel(tone)} register with ${styleLabel} citations.
@@ -1233,10 +1220,10 @@ export function registerChatRoutes(app: Express) {
         writingModel,
       } = req.body || {};
 
-      const normalizedWritingModel = writingModel === "extended" ? "extended" : "precision";
+      const normalizedWritingModel = writingModel === "precision" ? "precision" : "extended";
       const conv = await chatStorage.createConversation({
         title: title || "New Chat",
-        model: model || MODELS.precision.chat,
+        model: model || MODELS.extended.chat,
         writingModel: normalizedWritingModel,
         userId: req.user!.userId,
         projectId: projectId || null,
@@ -1302,7 +1289,7 @@ export function registerChatRoutes(app: Express) {
       const updates: Record<string, unknown> = {};
       if (title !== undefined) updates.title = title;
       if (model !== undefined) updates.model = model;
-      if (writingModel !== undefined) updates.writingModel = writingModel === "extended" ? "extended" : "precision";
+      if (writingModel !== undefined) updates.writingModel = writingModel === "precision" ? "precision" : "extended";
       if (citationStyle !== undefined) updates.citationStyle = citationStyle;
       if (tone !== undefined) updates.tone = tone;
       if (humanize !== undefined) updates.humanize = humanize;

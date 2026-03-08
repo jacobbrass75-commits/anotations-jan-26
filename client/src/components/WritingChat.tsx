@@ -79,6 +79,7 @@ interface WritingChatProps {
 }
 
 const NO_PROJECT_VALUE = "__no_project__";
+const AUTO_SELECTED_SOURCE_LIMIT = 5;
 
 const WRITING_PROMPTS = [
   {
@@ -147,6 +148,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     streamingDocumentText,
     isDocumentStreaming,
     isStreaming,
+    streamingPhase,
     toolSteps,
     isToolPhaseActive,
     contextWarning,
@@ -175,8 +177,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       !autoSelectedRef.current.has(selectedProjectId)
     ) {
       autoSelectedRef.current.add(selectedProjectId);
-      const allIds = projectSources.map((s) => s.id);
-      setLocalSelectedSourceIds(allIds);
+      const initialIds = projectSources.slice(0, AUTO_SELECTED_SOURCE_LIMIT).map((source) => source.id);
+      setLocalSelectedSourceIds(initialIds);
     } else if (!hasSelectedProject) {
       setLocalSelectedSourceIds([]);
     }
@@ -186,7 +188,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const [citationStyle, setCitationStyle] = useState(conversationData?.citationStyle || "chicago");
   const [tone, setTone] = useState(conversationData?.tone || "academic");
   const [writingModel, setWritingModel] = useState<"precision" | "extended">(
-    conversationData?.writingModel === "extended" ? "extended" : "precision"
+    conversationData?.writingModel === "precision" ? "precision" : "extended"
   );
   const [humanize, setHumanize] = useState(conversationData?.humanize ?? true);
   const [noEnDashes, setNoEnDashes] = useState(conversationData?.noEnDashes || false);
@@ -201,7 +203,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (conversationData) {
       if (conversationData.citationStyle) setCitationStyle(conversationData.citationStyle);
       if (conversationData.tone) setTone(conversationData.tone);
-      setWritingModel(conversationData.writingModel === "extended" ? "extended" : "precision");
+      setWritingModel(conversationData.writingModel === "precision" ? "precision" : "extended");
       if (conversationData.humanize !== undefined && conversationData.humanize !== null) {
         setHumanize(conversationData.humanize);
       }
@@ -274,6 +276,15 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const wordCount = useMemo(() => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0), [plainText]);
   const pageEstimate = useMemo(() => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0), [wordCount]);
   const conversationProjectId = hasSelectedProject ? selectedProjectId : null;
+  const streamingStatusText = !isStreaming
+    ? null
+    : streamingPhase === "researching"
+    ? "Checking sources..."
+    : streamingPhase === "drafting"
+    ? "Drafting response..."
+    : streamingPhase === "responding"
+    ? "Responding..."
+    : "Thinking...";
 
   useEffect(() => {
     setHumanizedCompiledContent(null);
@@ -651,6 +662,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         <ChatMessages
           messages={messages}
           streamingText={streamingText}
+          statusText={streamingStatusText || undefined}
           streamingChatText={streamingChatText}
           streamingDocumentTitle={documentTitle}
           streamingDocumentText={streamingDocumentText}
@@ -706,8 +718,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               <Select value={writingModel} onValueChange={(v) => handleSettingChange("writingModel", v)}>
                 <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="precision">Precision (Opus)</SelectItem>
-                  <SelectItem value="extended">Extended (Sonnet)</SelectItem>
+                  <SelectItem value="extended">Balanced (Sonnet)</SelectItem>
+                  <SelectItem value="precision">Deep Research (Opus)</SelectItem>
                 </SelectContent>
               </Select>
               <div className="grid grid-cols-2 gap-2">

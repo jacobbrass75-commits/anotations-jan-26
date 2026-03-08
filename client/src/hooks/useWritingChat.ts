@@ -16,6 +16,8 @@ export interface ToolStep {
   startedAt: number;
 }
 
+export type StreamingPhase = "idle" | "thinking" | "researching" | "responding" | "drafting";
+
 // --- Conversation queries (project-scoped) ---
 
 export function useProjectConversations(projectId?: string | null) {
@@ -74,13 +76,13 @@ export function useCreateWritingConversation() {
       humanize?: boolean;
       noEnDashes?: boolean;
     }) => {
-      const res = await apiRequest("POST", "/api/chat/conversations", {
-        projectId: data.projectId ?? null,
-        selectedSourceIds: data.selectedSourceIds || [],
-        writingModel: data.writingModel ?? "precision",
-        citationStyle: data.citationStyle ?? "chicago",
-        tone: data.tone ?? "academic",
-        humanize: data.humanize ?? true,
+        const res = await apiRequest("POST", "/api/chat/conversations", {
+          projectId: data.projectId ?? null,
+          selectedSourceIds: data.selectedSourceIds || [],
+          writingModel: data.writingModel ?? "extended",
+          citationStyle: data.citationStyle ?? "chicago",
+          tone: data.tone ?? "academic",
+          humanize: data.humanize ?? true,
         noEnDashes: data.noEnDashes ?? false,
       });
       return res.json() as Promise<Conversation>;
@@ -149,6 +151,7 @@ export function useWritingSendMessage(conversationId: string | null) {
   const [toolSteps, setToolSteps] = useState<ToolStep[]>([]);
   const [isToolPhaseActive, setIsToolPhaseActive] = useState(false);
   const [contextWarning, setContextWarning] = useState<{ id: number; message: string; available?: number } | null>(null);
+  const [streamingPhase, setStreamingPhase] = useState<StreamingPhase>("idle");
 
   const send = useCallback(
     async (content: string, conversationIdOverride?: string | null) => {
@@ -156,6 +159,7 @@ export function useWritingSendMessage(conversationId: string | null) {
       if (!targetConversationId) return;
 
       setIsStreaming(true);
+      setStreamingPhase("thinking");
       setStreamingText("");
       setStreamingChatText("");
       setDocumentTitle("");
@@ -196,20 +200,24 @@ export function useWritingSendMessage(conversationId: string | null) {
               try {
                 const data = JSON.parse(line.slice(6));
                 if (data.type === "text" || data.type === "chat_text") {
+                  setStreamingPhase("responding");
                   accumulatedChat += String(data.text || "");
                   setStreamingText(accumulatedChat);
                   setStreamingChatText(accumulatedChat);
                 } else if (data.type === "document_start") {
+                  setStreamingPhase("drafting");
                   accumulatedDocument = "";
                   setDocumentTitle(String(data.title || "Draft"));
                   setStreamingDocumentText("");
                   setIsDocumentStreaming(true);
                 } else if (data.type === "document_text") {
+                  setStreamingPhase("drafting");
                   accumulatedDocument += String(data.text || "");
                   setStreamingDocumentText(accumulatedDocument);
                 } else if (data.type === "document_end") {
                   setIsDocumentStreaming(false);
                 } else if (data.type === "context_loading") {
+                  setStreamingPhase("researching");
                   const toolCallId = typeof data.toolCallId === "string" && data.toolCallId.trim()
                     ? data.toolCallId.trim()
                     : `${String(data.toolName || "tool")}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -295,6 +303,7 @@ export function useWritingSendMessage(conversationId: string | null) {
                 } else if (data.type === "error") {
                   console.error("Stream error:", data.error);
                   setIsToolPhaseActive(false);
+                  setStreamingPhase("idle");
                 }
               } catch {
                 // Ignore malformed SSE
@@ -306,6 +315,7 @@ export function useWritingSendMessage(conversationId: string | null) {
         console.error("Send message error:", error);
       } finally {
         setIsStreaming(false);
+        setStreamingPhase("idle");
         setStreamingText("");
         setStreamingChatText("");
         setIsDocumentStreaming(false);
@@ -323,6 +333,7 @@ export function useWritingSendMessage(conversationId: string | null) {
     streamingDocumentText,
     isDocumentStreaming,
     isStreaming,
+    streamingPhase,
     toolSteps,
     isToolPhaseActive,
     contextWarning,
