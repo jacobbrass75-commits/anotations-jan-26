@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -7,19 +7,35 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DataTicker } from "@/components/DataTicker";
 import { BootSequence } from "@/components/BootSequence";
-import Home from "@/pages/Home";
-import Projects from "@/pages/Projects";
-import ProjectWorkspace from "@/pages/ProjectWorkspace";
-import ProjectDocument from "@/pages/ProjectDocument";
-import Login from "@/pages/Login";
-import Register from "@/pages/Register";
-import Pricing from "@/pages/Pricing";
-import Chat from "@/pages/Chat";
-import WritingPage from "@/pages/WritingPage";
-import WebClips from "@/pages/WebClips";
-import ExtensionAuth from "@/pages/ExtensionAuth";
-import AdminAnalytics from "@/pages/AdminAnalytics";
-import NotFound from "@/pages/not-found";
+
+const Home = lazy(() => import("@/pages/Home"));
+const Projects = lazy(() => import("@/pages/Projects"));
+const ProjectWorkspace = lazy(() => import("@/pages/ProjectWorkspace"));
+const ProjectDocument = lazy(() => import("@/pages/ProjectDocument"));
+const Login = lazy(() => import("@/pages/Login"));
+const Register = lazy(() => import("@/pages/Register"));
+const Pricing = lazy(() => import("@/pages/Pricing"));
+const Chat = lazy(() => import("@/pages/Chat"));
+const WritingPage = lazy(() => import("@/pages/WritingPage"));
+const WebClips = lazy(() => import("@/pages/WebClips"));
+const ExtensionAuth = lazy(() => import("@/pages/ExtensionAuth"));
+const AdminAnalytics = lazy(() => import("@/pages/AdminAnalytics"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+
+function RouteFallback() {
+  return (
+    <div className="min-h-[40vh] flex items-center justify-center px-6">
+      <div className="text-center space-y-2">
+        <div className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground">
+          Loading View
+        </div>
+        <div className="h-2 w-40 rounded-full bg-border overflow-hidden">
+          <div className="h-full w-1/2 animate-pulse bg-primary/60" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Router() {
   return (
@@ -52,7 +68,9 @@ function App() {
         <Toaster />
         {!booted && <BootSequence onComplete={() => setBooted(true)} />}
         <div className="min-h-screen pb-6 eva-scanlines">
-          <Router />
+          <Suspense fallback={<RouteFallback />}>
+            <Router />
+          </Suspense>
         </div>
         <DataTicker />
       </TooltipProvider>

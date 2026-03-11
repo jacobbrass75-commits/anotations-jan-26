@@ -1,5 +1,5 @@
 import { build as esbuild } from "esbuild";
-import { build as viteBuild } from "vite";
+import { build as viteBuild, createLogger } from "vite";
 import { readFile, rm } from "fs/promises";
 
 // Keep frequently used server dependencies bundled while leaving heavy/native deps external.
@@ -28,7 +28,35 @@ async function buildAll() {
   await rm("dist", { recursive: true, force: true });
 
   console.log("building client...");
-  await viteBuild();
+  const viteLogger = createLogger();
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    const message = args.map((part) => String(part)).join(" ");
+    if (message.includes("A PostCSS plugin did not pass the `from` option to `postcss.parse`.")) {
+      return;
+    }
+    originalWarn(...args);
+  };
+
+  try {
+    await viteBuild({
+      customLogger: {
+        ...viteLogger,
+        warn(message, options) {
+          if (
+            message.includes(
+              "A PostCSS plugin did not pass the `from` option to `postcss.parse`."
+            )
+          ) {
+            return;
+          }
+          viteLogger.warn(message, options);
+        },
+      },
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));

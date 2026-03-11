@@ -18,13 +18,11 @@ import {
 import { useHumanizeText } from "@/hooks/useHumanizer";
 import { useWritingPipeline, type WritingRequest } from "@/hooks/useWriting";
 import {
-  stripMarkdown,
-  buildDocxBlob,
-  buildPdfBlob,
   downloadBlob,
-  toSafeFilename,
   getDocTypeLabel,
-} from "@/lib/documentExport";
+  stripMarkdown,
+  toSafeFilename,
+} from "@/lib/documentExportUtils";
 import { ChatMessages } from "@/components/chat/ChatMessages";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
@@ -102,6 +100,14 @@ const WRITING_PROMPTS = [
     prompt: "Write a conclusion that ties together the main arguments of my paper.",
   },
 ];
+
+async function loadDocxExporter() {
+  return import("@/lib/docxExport");
+}
+
+async function loadPdfExporter() {
+  return import("@/lib/pdfExport");
+}
 
 export default function WritingChat({ initialProjectId, lockProject }: WritingChatProps) {
   const { toast } = useToast();
@@ -419,6 +425,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (!effectiveCompiledContent) return;
     setIsPreparingDocx(true);
     try {
+      const { buildDocxBlob } = await loadDocxExporter();
       const blob = await buildDocxBlob(conversationData?.title || "Paper", effectiveCompiledContent);
       downloadBlob(blob, `${toSafeFilename(conversationData?.title || "Paper")}.docx`);
     } catch (e) {
@@ -432,6 +439,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (!effectiveCompiledContent) return;
     setIsPreparingPdf(true);
     try {
+      const { buildPdfBlob } = await loadPdfExporter();
       const blob = await buildPdfBlob(conversationData?.title || "Paper", effectiveCompiledContent);
       downloadBlob(blob, `${toSafeFilename(conversationData?.title || "Paper")}.pdf`);
     } catch (e) {
@@ -451,6 +459,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
     setIsPreparingPdf(true);
     try {
+      const { buildPdfBlob } = await loadPdfExporter();
       const blob = await buildPdfBlob(conversationData?.title || "Paper", effectiveCompiledContent);
       if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(URL.createObjectURL(blob));
@@ -560,6 +569,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (!activeDocument?.content) return;
     setIsPreparingDocx(true);
     try {
+      const { buildDocxBlob } = await loadDocxExporter();
       const blob = await buildDocxBlob(activeDocument.title || "Document", activeDocument.content);
       downloadBlob(blob, `${toSafeFilename(activeDocument.title || "Document")}.docx`);
     } catch (e) {
@@ -577,6 +587,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (!activeDocument?.content) return;
     setIsPreparingPdf(true);
     try {
+      const { buildPdfBlob } = await loadPdfExporter();
       const blob = await buildPdfBlob(activeDocument.title || "Document", activeDocument.content);
       downloadBlob(blob, `${toSafeFilename(activeDocument.title || "Document")}.pdf`);
     } catch (e) {

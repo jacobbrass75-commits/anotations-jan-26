@@ -2,13 +2,6 @@ import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { markdownToDocx } from "./markdownToDocx";
-export {
-  downloadBlob,
-  getDocTypeLabel,
-  stripMarkdown,
-  toSafeFilename,
-} from "./documentExportUtils";
 
 type MdNode = {
   type: string;
@@ -106,10 +99,6 @@ function getFontKey(style: TextStyle): "regular" | "bold" | "italic" | "boldItal
   return "regular";
 }
 
-export async function buildDocxBlob(title: string, markdownContent: string): Promise<Blob> {
-  return markdownToDocx(markdownContent, { title });
-}
-
 export async function buildPdfBlob(title: string, markdownContent: string): Promise<Blob> {
   const root = parseMarkdownAst(markdownContent);
   const topLevelChildren = root.children || [];
@@ -142,7 +131,7 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
   const pageHeight = 792;
   const margin = 72;
   const contentWidth = pageWidth - margin * 2;
-  const lineHeight = 24; // 12pt double-spaced
+  const lineHeight = 24;
 
   let page = pdf.addPage([pageWidth, pageHeight]);
   const pages = [page];
@@ -255,7 +244,6 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
     }
   };
 
-  // Title
   wrapAndDrawSegments([{ text: title, style: { bold: true } }], 15);
   y -= 8;
 
@@ -280,7 +268,6 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
     }
   }
 
-  // Page numbers (bottom-right)
   pages.forEach((p, index) => {
     const label = `${index + 1}`;
     const width = fonts.regular.widthOfTextAtSize(label, 10);
@@ -295,4 +282,3 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
 
   return new Blob([await pdf.save()], { type: "application/pdf" });
 }
-

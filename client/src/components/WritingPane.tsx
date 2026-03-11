@@ -7,13 +7,11 @@ import {
   type SavedPaper,
 } from "@/hooks/useWriting";
 import {
-  buildDocxBlob,
-  buildPdfBlob,
   downloadBlob,
   getDocTypeLabel,
   stripMarkdown,
   toSafeFilename,
-} from "@/lib/documentExport";
+} from "@/lib/documentExportUtils";
 import { markdownComponents, remarkPlugins } from "@/lib/markdownConfig";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,6 +57,14 @@ interface GeneratedPaper {
   content: string;
   createdAt: number;
   savedPaper: SavedPaper | null;
+}
+
+async function loadDocxExporter() {
+  return import("@/lib/docxExport");
+}
+
+async function loadPdfExporter() {
+  return import("@/lib/pdfExport");
 }
 
 export default function WritingPane({
@@ -276,6 +282,7 @@ export default function WritingPane({
     if (!activeContent) return;
     setIsPreparingDocx(true);
     try {
+      const { buildDocxBlob } = await loadDocxExporter();
       const blob = await buildDocxBlob(activeTopic, activeContent);
       downloadBlob(blob, `${toSafeFilename(activeTopic)}.docx`);
     } catch (downloadError) {
@@ -293,6 +300,7 @@ export default function WritingPane({
     if (!activeContent) return;
     setIsPreparingPdf(true);
     try {
+      const { buildPdfBlob } = await loadPdfExporter();
       const blob = await buildPdfBlob(activeTopic, activeContent);
       downloadBlob(blob, `${toSafeFilename(activeTopic)}.pdf`);
     } catch (downloadError) {
@@ -315,6 +323,7 @@ export default function WritingPane({
     }
     setIsPreparingPdf(true);
     try {
+      const { buildPdfBlob } = await loadPdfExporter();
       const blob = await buildPdfBlob(activeTopic, activeContent);
       clearPdfPreview();
       setPdfPreviewUrl(URL.createObjectURL(blob));
