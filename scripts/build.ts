@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { build as esbuild } from "esbuild";
 import { build as viteBuild, createLogger } from "vite";
 import { readFile, rm } from "fs/promises";
