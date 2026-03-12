@@ -8,6 +8,8 @@ export interface ConversationWithMessages extends Conversation {
   messages: Message[];
 }
 
+export type SourceRole = "evidence" | "style_reference" | "background";
+
 // --- Conversation queries (project-scoped) ---
 
 export function useProjectConversations(projectId?: string | null) {
@@ -125,6 +127,45 @@ export function useUpdateSources() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations", data.id] });
+    },
+  });
+}
+
+export function useUpdateSourceRole() {
+  return useMutation({
+    mutationFn: async ({
+      sourceId,
+      projectId,
+      sourceRole,
+    }: {
+      sourceId: string;
+      projectId: string;
+      sourceRole: SourceRole;
+    }) => {
+      const res = await apiRequest("PUT", `/api/project-documents/${sourceId}`, { sourceRole });
+      return { projectId, sourceId, result: await res.json() };
+    },
+    onMutate: async ({ sourceId, projectId, sourceRole }) => {
+      const queryKey = ["/api/projects", projectId, "documents"] as const;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Array<Record<string, unknown>>>(queryKey);
+
+      if (previous) {
+        queryClient.setQueryData(
+          queryKey,
+          previous.map((doc) => (doc.id === sourceId ? { ...doc, sourceRole } : doc)),
+        );
+      }
+
+      return { previous, queryKey };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+    },
+    onSuccess: ({ projectId }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "documents"] });
     },
   });
 }
