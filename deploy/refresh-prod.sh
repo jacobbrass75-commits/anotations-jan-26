@@ -14,8 +14,8 @@ git reset --hard "$APP_REF"
 echo "[deploy] installing app deps"
 npm install
 
-echo "[deploy] syncing database schema"
-npm run db:push
+echo "[deploy] bootstrapping database schema"
+npx tsx scripts/bootstrap-db.ts
 
 echo "[deploy] building app"
 npm run build
