@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -769,5 +769,7 @@ export const ocrPageResults = sqliteTable("ocr_page_results", {
   text: text("text").notNull(),
   createdAt: integer("created_at").notNull().default(0),
   updatedAt: integer("updated_at").notNull().default(0),
-});
+}, (table) => [
+  uniqueIndex("idx_ocr_page_results_job_page").on(table.jobId, table.pageNumber),
+]);
 
