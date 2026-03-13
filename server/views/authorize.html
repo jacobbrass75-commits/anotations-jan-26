@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Authorize - ScholarMark</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      max-width: 480px;
+      width: 100%;
+      padding: 2rem;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .header p {
+      color: #666;
+      font-size: 0.875rem;
+    }
+    .info {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.875rem;
+    }
+    .info dt { color: #666; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.125rem; }
+    .info dd { margin-bottom: 0.75rem; word-break: break-all; }
+    .info dd:last-child { margin-bottom: 0; }
+    .scopes {
+      margin-bottom: 1.25rem;
+    }
+    .scopes h2 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .scopes ul {
+      list-style: none;
+      padding: 0;
+    }
+    .scopes li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 0.875rem;
+    }
+    .scopes li:last-child { border-bottom: none; }
+    .notice {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      margin-bottom: 1.25rem;
+    }
+    .notice.warning {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+    }
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+    .actions form { flex: 1; }
+    .actions button {
+      width: 100%;
+      padding: 0.625rem 1rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-approve {
+      background: #2563eb;
+      color: #fff;
+    }
+    .btn-approve:hover { background: #1d4ed8; }
+    .btn-deny {
+      background: #fff;
+      color: #374151;
+      border-color: #d1d5db;
+    }
+    .btn-deny:hover { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>Authorize {{CLIENT_NAME}}</h1>
+      <p>This application is requesting access to your ScholarMark account.</p>
+    </div>
+
+    <div class="info">
+      <dl>
+        <dt>Signed in as</dt>
+        <dd>{{USER_EMAIL}}</dd>
+        <dt>Application</dt>
+        <dd>{{CLIENT_NAME}}</dd>
+      </dl>
+    </div>
+
+    <div class="scopes">
+      <h2>Permissions requested</h2>
+      <ul>
+        {{SCOPE_ITEMS}}
+      </ul>
+    </div>
+
+    {{TIER_NOTICE}}
+
+    <div class="actions">
+      <form method="POST" action="/oauth/authorize">
+        <input type="hidden" name="client_id" value="{{CLIENT_ID}}" />
+        <input type="hidden" name="redirect_uri" value="{{REDIRECT_URI}}" />
+        <input type="hidden" name="response_type" value="{{RESPONSE_TYPE}}" />
+        <input type="hidden" name="state" value="{{STATE}}" />
+        <input type="hidden" name="scope" value="{{SCOPE}}" />
+        <input type="hidden" name="code_challenge" value="{{CODE_CHALLENGE}}" />
+        <input type="hidden" name="code_challenge_method" value="{{CODE_CHALLENGE_METHOD}}" />
+        <input type="hidden" name="resource" value="{{RESOURCE}}" />
+        <input type="hidden" name="decision" value="deny" />
+        <button type="submit" class="btn-deny">Deny</button>
+      </form>
+      <form method="POST" action="/oauth/authorize">
+        <input type="hidden" name="client_id" value="{{CLIENT_ID}}" />
+        <input type="hidden" name="redirect_uri" value="{{REDIRECT_URI}}" />
+        <input type="hidden" name="response_type" value="{{RESPONSE_TYPE}}" />
+        <input type="hidden" name="state" value="{{STATE}}" />
+        <input type="hidden" name="scope" value="{{SCOPE}}" />
+        <input type="hidden" name="code_challenge" value="{{CODE_CHALLENGE}}" />
+        <input type="hidden" name="code_challenge_method" value="{{CODE_CHALLENGE_METHOD}}" />
+        <input type="hidden" name="resource" value="{{RESOURCE}}" />
+        <input type="hidden" name="decision" value="approve" />
+        <button type="submit" class="btn-approve">Approve</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
