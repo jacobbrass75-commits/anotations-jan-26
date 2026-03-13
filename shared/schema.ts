@@ -671,7 +671,7 @@ export type Message = typeof messages.$inferSelect;
 export const apiKeys = sqliteTable("api_keys", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  name: text("name"),
+  label: text("label"),
   keyHash: text("key_hash").notNull().unique(),
   keyPrefix: text("key_prefix").notNull(),
   lastUsedAt: integer("last_used_at"),

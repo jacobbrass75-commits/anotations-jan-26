@@ -41,7 +41,7 @@ sqlite.exec(`
 CREATE TABLE IF NOT EXISTS api_keys (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
-  name TEXT,
+  label TEXT,
   key_hash TEXT NOT NULL,
   key_prefix TEXT NOT NULL,
   last_used_at INTEGER,
@@ -198,6 +198,7 @@ ensureColumn("project_documents", "style_analysis", "style_analysis TEXT");
 ensureColumn("conversations", "evidence_clipboard", "evidence_clipboard TEXT");
 ensureColumn("conversations", "compaction_summary", "compaction_summary TEXT");
 ensureColumn("conversations", "compacted_at_turn", "compacted_at_turn INTEGER DEFAULT 0");
+ensureColumn("api_keys", "label", "label TEXT");
 
 // Export the raw sqlite connection for direct queries if needed
 export { sqlite };
