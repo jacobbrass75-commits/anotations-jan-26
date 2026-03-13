@@ -14,6 +14,9 @@ git reset --hard "$APP_REF"
 echo "[deploy] installing app deps"
 npm install
 
+echo "[deploy] syncing database schema"
+npm run db:push
+
 echo "[deploy] building app"
 npm run build
 

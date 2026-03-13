@@ -666,3 +666,81 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 
+// === INFRASTRUCTURE TABLES ===
+
+export const apiKeys = sqliteTable("api_keys", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name"),
+  keyHash: text("key_hash").notNull().unique(),
+  keyPrefix: text("key_prefix").notNull(),
+  lastUsedAt: integer("last_used_at"),
+  revokedAt: integer("revoked_at"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const mcpOauthClients = sqliteTable("mcp_oauth_clients", {
+  clientId: text("client_id").primaryKey(),
+  clientSecretHash: text("client_secret_hash"),
+  clientName: text("client_name").notNull(),
+  redirectUris: text("redirect_uris").notNull(),
+  grantTypes: text("grant_types").notNull(),
+  responseTypes: text("response_types").notNull(),
+  tokenEndpointAuthMethod: text("token_endpoint_auth_method").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const mcpAuthCodes = sqliteTable("mcp_auth_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  clientId: text("client_id").notNull().references(() => mcpOauthClients.clientId, { onDelete: "cascade" }),
+  redirectUri: text("redirect_uri").notNull(),
+  scope: text("scope").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  codeChallengeMethod: text("code_challenge_method").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  used: integer("used").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const mcpTokens = sqliteTable("mcp_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  clientId: text("client_id").notNull().references(() => mcpOauthClients.clientId, { onDelete: "cascade" }),
+  keyHash: text("key_hash").notNull().unique(),
+  keyPrefix: text("key_prefix").notNull(),
+  scope: text("scope").notNull(),
+  refreshTokenHash: text("refresh_token_hash"),
+  expiresAt: integer("expires_at"),
+  lastUsedAt: integer("last_used_at"),
+  revokedAt: integer("revoked_at"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const analyticsToolCalls = sqliteTable("analytics_tool_calls", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull(),
+  userId: text("user_id").notNull(),
+  projectId: text("project_id"),
+  toolName: text("tool_name").notNull(),
+  documentId: text("document_id"),
+  escalationRound: integer("escalation_round").notNull(),
+  turnNumber: integer("turn_number").notNull(),
+  resultSizeChars: integer("result_size_chars").notNull(),
+  success: integer("success").notNull(),
+  metadata: text("metadata"),
+  timestamp: integer("timestamp").notNull(),
+});
+
+export const analyticsContextSnapshots = sqliteTable("analytics_context_snapshots", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull(),
+  turnNumber: integer("turn_number").notNull(),
+  escalationRound: integer("escalation_round").notNull(),
+  estimatedTokens: integer("estimated_tokens").notNull(),
+  warningLevel: text("warning_level").notNull(),
+  trigger: text("trigger"),
+  metadata: text("metadata"),
+  timestamp: integer("timestamp").notNull(),
+});
+
