@@ -24,6 +24,34 @@ const ALLOWED_TOKEN_AUTH_METHODS = new Set(["none", "client_secret_post"]);
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.MCP_ACCESS_TOKEN_TTL_SECONDS ?? 3600);
 const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.MCP_REFRESH_TOKEN_TTL_SECONDS ?? 90 * 24 * 60 * 60);
 const AUTH_CODE_TTL_SECONDS = Number(process.env.MCP_AUTH_CODE_TTL_SECONDS ?? 600);
+const KNOWN_METADATA_CLIENTS = new Map<string, {
+  clientName: string;
+  redirectUris: string[];
+  grantTypes: string[];
+  responseTypes: string[];
+  tokenEndpointAuthMethod: string;
+}>([
+  [
+    "https://claude.ai/oauth/mcp-oauth-client-metadata",
+    {
+      clientName: "Claude",
+      redirectUris: ["https://claude.ai/api/mcp/auth_callback"],
+      grantTypes: ["authorization_code", "refresh_token"],
+      responseTypes: ["code"],
+      tokenEndpointAuthMethod: "none",
+    },
+  ],
+  [
+    "https://claude.ai/api/oauth/mcp-oauth-client-metadata",
+    {
+      clientName: "Claude",
+      redirectUris: ["https://claude.ai/api/mcp/auth_callback"],
+      grantTypes: ["authorization_code", "refresh_token"],
+      responseTypes: ["code"],
+      tokenEndpointAuthMethod: "none",
+    },
+  ],
+]);
 
 interface SessionUser {
   userId: string;
@@ -308,6 +336,23 @@ function parseMetadataClient(rawMetadata: unknown, clientId: string): OAuthClien
   };
 }
 
+function resolveKnownMetadataClient(clientId: string): OAuthClientLike | null {
+  const knownClient = KNOWN_METADATA_CLIENTS.get(clientId);
+  if (!knownClient) {
+    return null;
+  }
+
+  return {
+    clientId,
+    clientSecretHash: null,
+    clientName: knownClient.clientName,
+    redirectUris: knownClient.redirectUris,
+    grantTypes: knownClient.grantTypes,
+    responseTypes: knownClient.responseTypes,
+    tokenEndpointAuthMethod: knownClient.tokenEndpointAuthMethod,
+  };
+}
+
 async function resolveOAuthClient(clientId: string): Promise<OAuthClientLike | null> {
   const storedClient = getOAuthClientById(clientId);
   if (storedClient) {
@@ -316,6 +361,22 @@ async function resolveOAuthClient(clientId: string): Promise<OAuthClientLike | n
 
   if (!isValidUrl(clientId)) {
     return null;
+  }
+
+  const knownClient = resolveKnownMetadataClient(clientId);
+  if (knownClient) {
+    createOAuthClient({
+      clientId: knownClient.clientId,
+      clientSecretHash: knownClient.clientSecretHash,
+      clientName: knownClient.clientName,
+      redirectUris: knownClient.redirectUris,
+      grantTypes: knownClient.grantTypes,
+      responseTypes: knownClient.responseTypes,
+      tokenEndpointAuthMethod: knownClient.tokenEndpointAuthMethod,
+      createdAt: getUnixSeconds(),
+    });
+
+    return knownClient;
   }
 
   try {
