@@ -330,7 +330,25 @@ async function resolveOAuthClient(clientId: string): Promise<OAuthClientLike | n
 
     if (!response.ok) return null;
     const metadata = await response.json();
-    return parseMetadataClient(metadata, clientId);
+    const parsedClient = parseMetadataClient(metadata, clientId);
+    if (!parsedClient) {
+      return null;
+    }
+
+    // Dynamic client_id metadata documents still need a local row because
+    // auth codes and tokens enforce foreign keys against mcp_oauth_clients.
+    createOAuthClient({
+      clientId: parsedClient.clientId,
+      clientSecretHash: parsedClient.clientSecretHash,
+      clientName: parsedClient.clientName,
+      redirectUris: parsedClient.redirectUris,
+      grantTypes: parsedClient.grantTypes,
+      responseTypes: parsedClient.responseTypes,
+      tokenEndpointAuthMethod: parsedClient.tokenEndpointAuthMethod,
+      createdAt: getUnixSeconds(),
+    });
+
+    return parsedClient;
   } catch {
     return null;
   }
