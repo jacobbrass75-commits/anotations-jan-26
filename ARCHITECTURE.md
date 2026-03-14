@@ -1,6 +1,6 @@
 # ScholarMark Architecture Reference
 
-> Updated 2026-03-13. Covers the full codebase after context optimization + Clerk auth + writing model selection + production deployment stabilization.
+> Updated 2026-03-14. Covers the full codebase after MCP OAuth fix, Sonnet 4.6 upgrade, context optimization, Clerk auth, writing model selection, and production deployment stabilization.
 
 ---
 
@@ -546,7 +546,7 @@ A **two-phase turn** architecture optimized for token efficiency:
 
 A **single-phase turn** with XML tag context escalation:
 
-- Model: `claude-sonnet-4-5-20250929`
+- Model: `claude-sonnet-4-6`
 - Sonnet writes with full source context and can request additional context mid-stream
 - `<chunk_request>` and `<context_request>` XML tags parsed from the streamed response
 - `MAX_CONTEXT_ESCALATIONS = 2` rounds per turn
@@ -564,11 +564,11 @@ const MODELS = {
     verify: "claude-opus-4-6",
   },
   extended: {
-    chat: "claude-sonnet-4-5-20250929",
-    compile: "claude-sonnet-4-5-20250929",
-    verify: "claude-sonnet-4-5-20250929",
+    chat: "claude-sonnet-4-6",
+    compile: "claude-sonnet-4-6",
+    verify: "claude-sonnet-4-6",
   },
-  research: "claude-sonnet-4-5-20250929",
+  research: "claude-sonnet-4-6",
 };
 ```
 
@@ -793,7 +793,7 @@ Deep-dive source analysis triggered by `<research_request>` tags in extended mod
 
 | Aspect | Detail |
 |--------|--------|
-| Model | `claude-sonnet-4-5-20250929` (constant `RESEARCH_MODEL`) |
+| Model | `claude-sonnet-4-6` (constant `RESEARCH_MODEL`) |
 | Max tokens | 8192 |
 | Max chars per call | 220,000 (splits large documents into overlapping chunks with 1,000 char overlap) |
 | Max returned findings | 8 |
@@ -854,7 +854,7 @@ Accessible via "Quick Generate" dialog in WritingChat. Generates a complete pape
 ### Deep Write Mode
 
 When `deepWrite: true`:
-- Uses `claude-sonnet-4-5-20241022` instead of Haiku
+- Uses `claude-sonnet-4-6` instead of Haiku
 - Enables extended thinking (4096 budget tokens)
 - Increases max output tokens to 8192+
 
@@ -1057,29 +1057,60 @@ OAuth 2.0 authorization server for MCP token issuance:
 ## 20. MCP Server
 
 **Directory:** `mcp-server/`
+**Entry point:** `server.mjs` (NOT `dist/index.js`)
+**Production URL:** `https://mcp.scholarmark.ai`
+**Status:** Working as of 2026-03-14. See `mcp-server/MCP-AUTH-GUIDE.md` for detailed maintenance docs.
 
-A standalone Model Context Protocol server that exposes ScholarMark capabilities to Claude Desktop and other MCP clients.
+A standalone Model Context Protocol server that exposes ScholarMark capabilities to Claude.ai and other MCP clients.
 
 | Aspect | Detail |
 |--------|--------|
 | Package | `scholarmark-mcp-server` |
 | Port | 5002 (via `MCP_SERVER_PORT` env var) |
 | Transport | Streamable HTTP + SSE fallback |
-| Auth | Bearer token passthrough (MCP OAuth tokens, `mcp_sm_` prefix) |
+| Auth | OAuth 2.0 with PKCE → Bearer token (`mcp_sm_` prefix) |
 | Backend | Proxies to main app at `SCHOLARMARK_BACKEND_URL` (default `http://127.0.0.1:5001`) |
 | SDK | `@modelcontextprotocol/sdk` 1.27 |
 
-**Source files:**
-- `src/index.ts` -- Express server, transport setup, session management
+### OAuth Authentication Flow (Claude.ai → MCP)
+
+```
+1. initialize (no auth)     → allowed (health probe)
+2. notifications/initialized → allowed (session reuse)
+3. tools/list (no auth)     → 401 with WWW-Authenticate header
+4. Claude starts OAuth      → discovers app.scholarmark.ai
+5. User approves in browser → Clerk login + consent page
+6. Claude gets Bearer token → all subsequent requests authenticated
+7. tools/list (with token)  → returns tool manifest
+8. tools/call (with token)  → proxied to backend with Bearer token
+```
+
+**Critical auth rules in `server.mjs`:**
+- Session reuse check runs BEFORE auth gate (so `notifications/initialized` works)
+- `tools/*` methods require auth even on existing sessions (triggers OAuth)
+- `initialize` allowed without auth (health probe pattern)
+- Simple `WWW-Authenticate: Bearer resource_metadata="url"` (no extra fields)
+
+### Source files
+- `server.mjs` -- Express server, transport setup, session management, auth logic
 - `src/mcp-tools.ts` -- Tool registration (proxies to main backend API)
 - `src/backend-client.ts` -- `ScholarMarkBackendClient` HTTP client with SSE support
 - `src/sse-buffer.ts` -- SSE stream consumption utility
-- `src/discovery.ts` -- OAuth protected resource metadata (`/.well-known/oauth-protected-resource`)
+- `src/discovery.ts` -- OAuth protected resource metadata
 
-**Endpoints:**
+### Endpoints
 - `GET /healthz` -- health check
-- `GET /.well-known/oauth-protected-resource` -- OAuth discovery metadata
-- MCP transport endpoints (streamable HTTP + SSE)
+- `GET /.well-known/oauth-protected-resource` -- OAuth resource metadata
+- `ALL /mcp` -- Streamable HTTP MCP protocol
+- `GET /sse` -- Legacy SSE transport
+
+### Environment Variables (MCP-specific)
+| Variable | Production Value | Notes |
+|----------|-----------------|-------|
+| `MCP_SERVER_PORT` | `5002` | |
+| `SCHOLARMARK_BACKEND_URL` | `http://127.0.0.1:5001` | Internal |
+| `MCP_AUTHORIZATION_SERVER` | `https://app.scholarmark.ai` | OAuth server |
+| `MCP_RESOURCE_URL` | `https://mcp.scholarmark.ai` | **No `/mcp` suffix!** |
 
 ---
 
@@ -1259,21 +1290,21 @@ A standalone Model Context Protocol server that exposes ScholarMark capabilities
 | Feature | Model | Notes |
 |---------|-------|-------|
 | Precision chat | `claude-opus-4-6` | Two-phase: receives evidence brief, no tools |
-| Extended chat | `claude-sonnet-4-5-20250929` | Single-phase with XML escalation |
+| Extended chat | `claude-sonnet-4-6` | Single-phase with XML escalation |
 | Precision compile | `claude-opus-4-6` | Full conversation -> paper |
-| Extended compile | `claude-sonnet-4-5-20250929` | Full conversation -> paper |
+| Extended compile | `claude-sonnet-4-6` | Full conversation -> paper |
 | Precision verify | `claude-opus-4-6` | Source verification |
-| Extended verify | `claude-sonnet-4-5-20250929` | Source verification |
+| Extended verify | `claude-sonnet-4-6` | Source verification |
 | Evidence gathering | `claude-haiku-4-5-20251001` | Phase 1 of precision mode, max 3 tool iterations |
 | Context compaction | `claude-haiku-4-5-20251001` | Summarizes old turns (300-500 tokens) |
 | Evidence extraction | `claude-haiku-4-5-20251001` | Post-turn clipboard update |
 | Style analysis | `claude-haiku-4-5-20251001` | One-shot per style_reference source |
-| Research agent | `claude-sonnet-4-5-20250929` | Deep dive with quote verification |
+| Research agent | `claude-sonnet-4-6` | Deep dive with quote verification |
 | Auto-title | `claude-haiku-4-5-20251001` | Short title from first message |
 | Planning (pipeline) | `claude-haiku-4-5-20251001` | One-shot pipeline outline |
-| Planning (deep) | `claude-sonnet-4-5-20241022` | Extended thinking pipeline |
+| Planning (deep) | `claude-sonnet-4-6` | Extended thinking pipeline |
 | Section writing (pipeline) | `claude-haiku-4-5-20251001` | Per section, one-shot pipeline |
-| Section writing (deep) | `claude-sonnet-4-5-20241022` | Extended thinking pipeline |
+| Section writing (deep) | `claude-sonnet-4-6` | Extended thinking pipeline |
 | Stitching (pipeline) | `claude-haiku-4-5-20251001` | Final assembly, one-shot pipeline |
 | Humanizer (primary) | `gemini-2.5-flash-lite` | Via Google Gemini REST API |
 | Humanizer (fallback) | `claude-opus-4-6` | Via Anthropic SDK when Gemini unavailable |
