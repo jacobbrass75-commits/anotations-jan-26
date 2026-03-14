@@ -164,20 +164,7 @@ async function handleStreamableMcpRequest(req, res) {
 
     attachAuthInfo(req);
 
-    const isInitialize = bodyMethod === "initialize";
-    if (req.method === "POST" && !req.auth && !isInitialize) {
-      const resourceUrl = getResourceMetadataUrl(req);
-      console.log("[AUTH] 401 for method:", bodyMethod);
-      res.status(401)
-        .set("WWW-Authenticate", `Bearer resource_metadata="${resourceUrl}"`)
-        .json({ error: "unauthorized", message: "Bearer token required." });
-      return;
-    }
-
-    if (isInitialize && !req.auth) {
-      console.log("[AUTH] Allowing unauthenticated initialize (health probe)");
-    }
-
+    // Reuse existing sessions first — auth was validated when the session was created.
     if (req.method === "DELETE") {
       if (sessionHeader && mcpSessions.has(sessionHeader)) {
         const session = mcpSessions.get(sessionHeader);
@@ -208,6 +195,21 @@ async function handleStreamableMcpRequest(req, res) {
         id: null,
       });
       return;
+    }
+
+    // No existing session — require auth for everything except initialize.
+    const isInitialize = bodyMethod === "initialize";
+    if (req.method === "POST" && !req.auth && !isInitialize) {
+      const resourceUrl = getResourceMetadataUrl(req);
+      console.log("[AUTH] 401 for method:", bodyMethod);
+      res.status(401)
+        .set("WWW-Authenticate", `Bearer resource_metadata="${resourceUrl}"`)
+        .json({ error: "unauthorized", message: "Bearer token required." });
+      return;
+    }
+
+    if (isInitialize && !req.auth) {
+      console.log("[AUTH] Allowing unauthenticated initialize (health probe)");
     }
 
     console.log("[SESSION] Creating new session");
