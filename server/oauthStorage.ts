@@ -76,7 +76,7 @@ interface McpTokenRow {
   created_at: number;
 }
 
-const insertOAuthClient = sqlite.prepare(
+const upsertOAuthClientStmt = sqlite.prepare(
   `INSERT INTO mcp_oauth_clients (
      client_id,
      client_secret_hash,
@@ -86,7 +86,14 @@ const insertOAuthClient = sqlite.prepare(
      response_types,
      token_endpoint_auth_method,
      created_at
-   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+   ON CONFLICT(client_id) DO UPDATE SET
+     client_secret_hash = excluded.client_secret_hash,
+     client_name = excluded.client_name,
+     redirect_uris = excluded.redirect_uris,
+     grant_types = excluded.grant_types,
+     response_types = excluded.response_types,
+     token_endpoint_auth_method = excluded.token_endpoint_auth_method`
 );
 
 const selectOAuthClientById = sqlite.prepare(
@@ -261,7 +268,7 @@ export function createOAuthClient(input: {
   tokenEndpointAuthMethod: string;
   createdAt: number;
 }): void {
-  insertOAuthClient.run(
+  upsertOAuthClientStmt.run(
     input.clientId,
     input.clientSecretHash,
     input.clientName,
@@ -319,6 +326,12 @@ const consumeAuthCodeTx = sqlite.transaction((codeHash: string, now: number): Au
 
 export function consumeAuthorizationCode(codeHash: string, now: number): AuthCodeRecord | null {
   return consumeAuthCodeTx(codeHash, now);
+}
+
+export function getAuthorizationCodeByHash(codeHash: string): AuthCodeRecord | null {
+  const row = selectAuthCodeByHash.get(codeHash) as AuthCodeRow | undefined;
+  if (!row) return null;
+  return mapAuthCodeRow(row);
 }
 
 export function pruneExpiredAuthorizationCodes(now: number): void {

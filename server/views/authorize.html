@@ -177,6 +177,12 @@
       transform: translateY(0);
     }
 
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.66;
+      transform: none;
+    }
+
     .approve {
       background: linear-gradient(180deg, var(--accent), var(--accent-strong));
       color: #061018;
@@ -294,5 +300,33 @@
       </p>
     </section>
   </main>
+  <script>
+    (() => {
+      let submitted = false;
+      const buttons = Array.from(document.querySelectorAll("button"));
+
+      for (const form of document.querySelectorAll("form")) {
+        form.addEventListener("submit", (event) => {
+          if (submitted) {
+            event.preventDefault();
+            return;
+          }
+
+          submitted = true;
+          for (const button of buttons) {
+            button.disabled = true;
+          }
+
+          const submitter = event.submitter;
+          if (submitter instanceof HTMLButtonElement) {
+            submitter.disabled = false;
+            submitter.textContent = submitter.classList.contains("approve")
+              ? "Approving..."
+              : "Denying...";
+          }
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

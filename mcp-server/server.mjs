@@ -9,6 +9,7 @@ import { registerScholarMarkTools } from "./dist/mcp-tools.js";
 const app = express();
 const port = Number(process.env.MCP_SERVER_PORT ?? 5002);
 const backendBaseUrl = process.env.SCHOLARMARK_BACKEND_URL ?? "http://127.0.0.1:5001";
+const MCP_SCOPE_CHALLENGE = "read write";
 
 const mcpSessions = new Map();
 const sseSessions = new Map();
@@ -60,6 +61,40 @@ function accepts(req, mimeType) {
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false }));
+app.use((error, req, res, next) => {
+  if (!error) {
+    next();
+    return;
+  }
+
+  const isJsonParseError =
+    error instanceof SyntaxError
+    || error?.type === "entity.parse.failed";
+
+  if (!isJsonParseError) {
+    next(error);
+    return;
+  }
+
+  const isMcpRoute =
+    req.path === "/mcp"
+    || req.path === "/mcp."
+    || req.path === "/messages"
+    || req.path === "/sse";
+  if (isMcpRoute) {
+    res.status(400).json({
+      jsonrpc: "2.0",
+      error: { code: -32700, message: "Parse error: Invalid JSON" },
+      id: null,
+    });
+    return;
+  }
+
+  res.status(400).json({
+    error: "invalid_json",
+    message: "Malformed JSON request body",
+  });
+});
 
 app.get("/healthz", (_req, res) => {
   res.status(200).json({ ok: true, service: "scholarmark-mcp-server" });
@@ -80,11 +115,40 @@ app.get("/.well-known/oauth-protected-resource", (req, res) => {
 app.get("/.well-known/oauth-protected-resource/mcp", (req, res) => {
   res.status(200).json(buildProtectedResourceMetadata(req));
 });
+app.get("/.well-known/oauth-protected-resource/mcp.", (req, res) => {
+  res.status(200).json(buildProtectedResourceMetadata(req));
+});
 
 function getResourceMetadataUrl(req) {
   const host = req.headers.host ?? `localhost:${port}`;
   const proto = req.headers["x-forwarded-proto"] ?? "https";
-  return `${proto}://${host}/.well-known/oauth-protected-resource`;
+  return `${proto}://${host}/.well-known/oauth-protected-resource/mcp`;
+}
+
+function sendAuthChallenge(req, res, options = {}) {
+  const resourceUrl = getResourceMetadataUrl(req);
+  const hasAuthHeader = typeof req.headers.authorization === "string"
+    && req.headers.authorization.trim().length > 0;
+  const error = options.error ?? (hasAuthHeader ? "invalid_token" : null);
+  const description = options.description ?? "Authorization required.";
+  const challengeParts = [
+    'Bearer realm="ScholarMark MCP"',
+    `resource_metadata="${resourceUrl}"`,
+    `scope="${MCP_SCOPE_CHALLENGE}"`,
+  ];
+
+  if (error) {
+    challengeParts.push(`error="${error}"`);
+    challengeParts.push(`error_description="${description}"`);
+  }
+
+  res.status(401)
+    .set("Cache-Control", "no-store")
+    .set("WWW-Authenticate", challengeParts.join(", "))
+    .json({
+      error: error ?? "unauthorized",
+      error_description: description,
+    });
 }
 
 async function handleStreamableMcpRequest(req, res) {
@@ -118,7 +182,7 @@ async function handleStreamableMcpRequest(req, res) {
     const bodyMethod = req.body?.method;
 
     console.log(
-      `[MCP] ${req.method} /mcp`
+      `[MCP] ${req.method} ${req.path}`
       + ` | auth=${!!req.headers.authorization}`
       + ` | session=${(sessionHeader ?? "none").substring(0, 8)}`
       + ` | method=${bodyMethod ?? "-"}`
@@ -128,34 +192,18 @@ async function handleStreamableMcpRequest(req, res) {
 
     attachAuthInfo(req);
 
-    const isInitialize = bodyMethod === "initialize";
-    const isInitializedNotification = bodyMethod === "notifications/initialized";
-    if (req.method === "POST" && !req.auth && !isInitialize && !isInitializedNotification) {
-      const resourceUrl = getResourceMetadataUrl(req);
-      console.log("[AUTH] 401 for method:", bodyMethod);
-      res.status(401)
-        .set("WWW-Authenticate", `Bearer resource_metadata=\"${resourceUrl}\"`)
-        .json({ error: "unauthorized", message: "Bearer token required." });
+    // Use per-server auth so the MCP host starts OAuth before attempting
+    // initialize/tools/list on an unauthenticated session.
+    if (!req.auth) {
+      console.log("[AUTH] 401 for method:", bodyMethod ?? req.method);
+      sendAuthChallenge(req, res);
       return;
-    }
-
-    if (isInitialize && !req.auth) {
-      console.log("[AUTH] Allowing unauthenticated initialize (health probe)");
-    }
-
-    if (isInitializedNotification && !req.auth) {
-      console.log("[AUTH] Allowing unauthenticated notifications/initialized");
     }
 
     if (req.method === "DELETE") {
       if (sessionHeader && mcpSessions.has(sessionHeader)) {
         const session = mcpSessions.get(sessionHeader);
         mcpSessions.delete(sessionHeader);
-        try {
-          await session.transport.close();
-        } catch (error) {
-          void error;
-        }
         try {
           await session.server.close();
         } catch (error) {
@@ -187,6 +235,7 @@ async function handleStreamableMcpRequest(req, res) {
     console.log("[SESSION] Creating new session");
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true,
     });
     const mcpServer = createMcpServer();
 
@@ -207,11 +256,6 @@ async function handleStreamableMcpRequest(req, res) {
       console.log(`[SESSION] Stored ${sid.substring(0, 8)}, total: ${mcpSessions.size}`);
     } else {
       console.log("[SESSION] Warning: no session ID generated");
-      try {
-        await transport.close();
-      } catch (error) {
-        void error;
-      }
       try {
         await mcpServer.close();
       } catch (error) {
@@ -278,6 +322,7 @@ async function handleLegacySseMessage(req, res) {
 }
 
 app.all("/mcp", handleStreamableMcpRequest);
+app.all("/mcp.", handleStreamableMcpRequest);
 app.post("/", (_req, res) => sendServiceInfo(res));
 app.options("/", (_req, res) => {
   res.status(204)
