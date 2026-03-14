@@ -10,6 +10,7 @@ import {
   createMcpToken,
   createOAuthClient,
   getActiveMcpTokenByRefreshHash,
+  getAuthorizationCodeByHash,
   getOAuthClientById,
   pruneExpiredAuthorizationCodes,
   revokeMcpTokenByAnyHash,
@@ -24,6 +25,7 @@ const ALLOWED_TOKEN_AUTH_METHODS = new Set(["none", "client_secret_post"]);
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.MCP_ACCESS_TOKEN_TTL_SECONDS ?? 3600);
 const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.MCP_REFRESH_TOKEN_TTL_SECONDS ?? 90 * 24 * 60 * 60);
 const AUTH_CODE_TTL_SECONDS = Number(process.env.MCP_AUTH_CODE_TTL_SECONDS ?? 600);
+const AUTHORIZE_DEDUP_WINDOW_SECONDS = Number(process.env.OAUTH_AUTHORIZE_DEDUP_WINDOW_SECONDS ?? 15);
 const KNOWN_METADATA_CLIENTS = new Map<string, {
   clientName: string;
   redirectUris: string[];
@@ -80,8 +82,15 @@ interface AuthorizeRequestParams {
   resource: string;
 }
 
+interface AuthorizationDecisionCacheEntry {
+  codeHash: string;
+  redirectUrl: string;
+  createdAt: number;
+}
+
 const AUTHORIZE_TEMPLATE_PATH = join(process.cwd(), "server", "views", "authorize.html");
 let authorizeTemplateCache: string | null = null;
+const recentAuthorizationDecisions = new Map<string, AuthorizationDecisionCacheEntry>();
 
 function getUnixSeconds(): number {
   return Math.floor(Date.now() / 1000);
@@ -513,6 +522,94 @@ function buildAuthorizationCodeRedirect(
   return redirectTarget.toString();
 }
 
+function buildAuthorizationDecisionCacheKey(userId: string, params: AuthorizeRequestParams): string {
+  return JSON.stringify([
+    userId,
+    params.clientId,
+    params.redirectUri,
+    params.responseType,
+    params.state,
+    params.scope,
+    params.codeChallenge,
+    params.codeChallengeMethod,
+    params.resource,
+  ]);
+}
+
+function pruneRecentAuthorizationDecisions(now: number): void {
+  for (const [key, entry] of recentAuthorizationDecisions.entries()) {
+    if (entry.createdAt + AUTHORIZE_DEDUP_WINDOW_SECONDS <= now) {
+      recentAuthorizationDecisions.delete(key);
+    }
+  }
+}
+
+function sendDuplicateApprovalResponse(res: Response): void {
+  res
+    .status(202)
+    .setHeader("Cache-Control", "no-store")
+    .setHeader("Content-Type", "text/html; charset=utf-8")
+    .send(`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Authorization Already Submitted</title>
+  </head>
+  <body>
+    <p>Authorization is already in progress. You can return to Claude.</p>
+  </body>
+</html>`);
+}
+
+function approveAuthorizationRequest(
+  res: Response,
+  sessionUser: SessionUser,
+  params: AuthorizeRequestParams,
+): void {
+  const now = getUnixSeconds();
+  pruneRecentAuthorizationDecisions(now);
+
+  const cacheKey = buildAuthorizationDecisionCacheKey(sessionUser.userId, params);
+  const cachedDecision = recentAuthorizationDecisions.get(cacheKey);
+  if (cachedDecision && cachedDecision.createdAt + AUTHORIZE_DEDUP_WINDOW_SECONDS > now) {
+    const existingAuthCode = getAuthorizationCodeByHash(cachedDecision.codeHash);
+    if (existingAuthCode && existingAuthCode.used === 0 && existingAuthCode.expiresAt > now) {
+      res.redirect(303, cachedDecision.redirectUrl);
+      return;
+    }
+
+    sendDuplicateApprovalResponse(res);
+    return;
+  }
+
+  const authorizationCode = randomBytes(32).toString("hex");
+  const codeHash = hashSha256Hex(authorizationCode);
+
+  createAuthorizationCode({
+    codeHash,
+    userId: sessionUser.userId,
+    clientId: params.clientId,
+    redirectUri: params.redirectUri,
+    scope: params.scope,
+    codeChallenge: params.codeChallenge,
+    codeChallengeMethod: params.codeChallengeMethod,
+    expiresAt: now + AUTH_CODE_TTL_SECONDS,
+    createdAt: now,
+  });
+
+  pruneExpiredAuthorizationCodes(now);
+
+  const redirectUrl = buildAuthorizationCodeRedirect(params.redirectUri, params.state, authorizationCode);
+  recentAuthorizationDecisions.set(cacheKey, {
+    codeHash,
+    redirectUrl,
+    createdAt: now,
+  });
+
+  res.redirect(303, redirectUrl);
+}
+
 export function registerOAuthRoutes(app: Express): void {
   app.get("/.well-known/oauth-authorization-server", (req: Request, res: Response) => {
     const issuer = getIssuerBaseUrl(req);
@@ -619,25 +716,9 @@ export function registerOAuthRoutes(app: Express): void {
           );
         }
 
-        const authorizationCode = randomBytes(32).toString("hex");
-        const now = getUnixSeconds();
-
-        createAuthorizationCode({
-          codeHash: hashSha256Hex(authorizationCode),
-          userId: sessionUser.userId,
-          clientId: params.clientId,
-          redirectUri: params.redirectUri,
-          scope: params.scope,
-          codeChallenge: params.codeChallenge,
-          codeChallengeMethod: params.codeChallengeMethod,
-          expiresAt: now + AUTH_CODE_TTL_SECONDS,
-          createdAt: now,
-        });
-
-        pruneExpiredAuthorizationCodes(now);
-
         // Keep callback redirect strictly GET for maximum client compatibility.
-        return res.redirect(303, buildAuthorizationCodeRedirect(params.redirectUri, params.state, authorizationCode));
+        approveAuthorizationRequest(res, sessionUser, params);
+        return;
       }
 
       const userTierLevel = TIER_LEVELS[sessionUser.tier] ?? 0;
@@ -660,6 +741,7 @@ export function registerOAuthRoutes(app: Express): void {
         tierNotice,
       });
 
+      res.setHeader("Cache-Control", "no-store");
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.status(200).send(html);
     } catch (error) {
@@ -701,25 +783,9 @@ export function registerOAuthRoutes(app: Express): void {
         );
       }
 
-      const authorizationCode = randomBytes(32).toString("hex");
-      const now = getUnixSeconds();
-
-      createAuthorizationCode({
-        codeHash: hashSha256Hex(authorizationCode),
-        userId: sessionUser.userId,
-        clientId: params.clientId,
-        redirectUri: params.redirectUri,
-        scope: params.scope,
-        codeChallenge: params.codeChallenge,
-        codeChallengeMethod: params.codeChallengeMethod,
-        expiresAt: now + AUTH_CODE_TTL_SECONDS,
-        createdAt: now,
-      });
-
-      pruneExpiredAuthorizationCodes(now);
-
       // Use 303 so clients never replay POST against the callback endpoint.
-      return res.redirect(303, buildAuthorizationCodeRedirect(params.redirectUri, params.state, authorizationCode));
+      approveAuthorizationRequest(res, sessionUser, params);
+      return;
     } catch (error) {
       console.error("OAuth authorize decision error:", error);
       return sendOAuthError(res, 500, "server_error", "Failed to process authorization decision");

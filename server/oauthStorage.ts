@@ -328,6 +328,12 @@ export function consumeAuthorizationCode(codeHash: string, now: number): AuthCod
   return consumeAuthCodeTx(codeHash, now);
 }
 
+export function getAuthorizationCodeByHash(codeHash: string): AuthCodeRecord | null {
+  const row = selectAuthCodeByHash.get(codeHash) as AuthCodeRow | undefined;
+  if (!row) return null;
+  return mapAuthCodeRow(row);
+}
+
 export function pruneExpiredAuthorizationCodes(now: number): void {
   cleanupExpiredAuthCodes.run(now);
 }
