@@ -87,6 +87,16 @@ function getResourceMetadataUrl(req) {
   return `${proto}://${host}/.well-known/oauth-protected-resource`;
 }
 
+function sendAuthChallenge(req, res, error = "invalid_token", description = "Authorization required.") {
+  const resourceUrl = getResourceMetadataUrl(req);
+  res.status(401)
+    .set(
+      "WWW-Authenticate",
+      `Bearer realm="ScholarMark MCP", resource_metadata="${resourceUrl}", error="${error}", error_description="${description}"`
+    )
+    .json({ error, error_description: description });
+}
+
 async function handleStreamableMcpRequest(req, res) {
   try {
     if (req.method === "OPTIONS") {
@@ -128,34 +138,18 @@ async function handleStreamableMcpRequest(req, res) {
 
     attachAuthInfo(req);
 
-    const isInitialize = bodyMethod === "initialize";
-    const isInitializedNotification = bodyMethod === "notifications/initialized";
-    if (req.method === "POST" && !req.auth && !isInitialize && !isInitializedNotification) {
-      const resourceUrl = getResourceMetadataUrl(req);
-      console.log("[AUTH] 401 for method:", bodyMethod);
-      res.status(401)
-        .set("WWW-Authenticate", `Bearer resource_metadata=\"${resourceUrl}\"`)
-        .json({ error: "unauthorized", message: "Bearer token required." });
+    // Use per-server auth so the MCP host starts OAuth before attempting
+    // initialize/tools/list on an unauthenticated session.
+    if (!req.auth) {
+      console.log("[AUTH] 401 for method:", bodyMethod ?? req.method);
+      sendAuthChallenge(req, res);
       return;
-    }
-
-    if (isInitialize && !req.auth) {
-      console.log("[AUTH] Allowing unauthenticated initialize (health probe)");
-    }
-
-    if (isInitializedNotification && !req.auth) {
-      console.log("[AUTH] Allowing unauthenticated notifications/initialized");
     }
 
     if (req.method === "DELETE") {
       if (sessionHeader && mcpSessions.has(sessionHeader)) {
         const session = mcpSessions.get(sessionHeader);
         mcpSessions.delete(sessionHeader);
-        try {
-          await session.transport.close();
-        } catch (error) {
-          void error;
-        }
         try {
           await session.server.close();
         } catch (error) {
@@ -207,11 +201,6 @@ async function handleStreamableMcpRequest(req, res) {
       console.log(`[SESSION] Stored ${sid.substring(0, 8)}, total: ${mcpSessions.size}`);
     } else {
       console.log("[SESSION] Warning: no session ID generated");
-      try {
-        await transport.close();
-      } catch (error) {
-        void error;
-      }
       try {
         await mcpServer.close();
       } catch (error) {
