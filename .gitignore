@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+coverage/
+.coverage-test/
 *.cjs
 
 # Environment variables (contains secrets!)

@@ -1,0 +1,13 @@
+export const testFiles = [
+  "tests/shared/annotationLinks.test.ts",
+  "tests/client/documentExportUtils.test.ts",
+  "tests/server/quoteJumpLinks.test.ts",
+  "tests/server/chunker.test.ts",
+  "tests/server/citationGenerator.test.ts",
+  "tests/server/sourceFiles.test.ts",
+  "tests/server/db.test.ts",
+  "tests/server/humanizer.test.ts",
+  "tests/server/authRoutes.integration.test.ts",
+  "tests/server/extensionRoutes.integration.test.ts",
+  "tests/server/appBootstrap.e2e.test.ts",
+];

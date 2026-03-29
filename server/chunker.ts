@@ -11,17 +11,26 @@ export function chunkText(
 ): TextChunkData[] {
   const chunks: TextChunkData[] = [];
   let start = 0;
+  const safeChunkSize = Math.max(1, chunkSize);
+  const safeOverlap = Math.max(0, Math.min(overlap, safeChunkSize - 1));
 
   while (start < text.length) {
-    let end = start + chunkSize;
+    const fallbackEnd = Math.min(text.length, start + safeChunkSize);
+    let end = fallbackEnd;
 
     // Try to end at a sentence boundary
     if (end < text.length) {
       const slice = text.slice(start, Math.min(end + 100, text.length));
       const sentenceEnd = findSentenceEnd(slice, chunkSize);
-      if (sentenceEnd > 0) {
+      // Ignore boundaries that would keep us inside the overlap window and
+      // cause the next iteration to reuse the same start offset forever.
+      if (sentenceEnd > safeOverlap) {
         end = start + sentenceEnd;
       }
+    }
+
+    if (end <= start) {
+      end = fallbackEnd;
     }
 
     const chunkText = text.slice(start, end);
@@ -34,8 +43,11 @@ export function chunkText(
       });
     }
 
-    start = end - overlap;
-    if (start >= text.length - overlap) break;
+    if (end >= text.length) break;
+
+    const nextStart = Math.max(start + 1, end - safeOverlap);
+    if (nextStart <= start) break;
+    start = nextStart;
   }
 
   return chunks;

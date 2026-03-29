@@ -1,6 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
 import { createHash } from "crypto";
+import jwt from "jsonwebtoken";
+import type { User } from "@shared/schema";
 import { getOrCreateUser, getUserById } from "./authStorage";
 import { sqlite } from "./db";
 
@@ -30,6 +32,9 @@ const TIER_STORAGE_LIMITS: Record<string, number> = {
   max: 5_368_709_120,     // 5 GB
 };
 
+const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt-secret-change-in-production-64chars-long-string-placeholder!!";
+const JWT_EXPIRY = "7d";
+
 interface ApiKeyRow {
   id: string;
   user_id: string;
@@ -39,6 +44,14 @@ interface McpTokenRow {
   id: string;
   user_id: string;
   expires_at: number | null;
+}
+
+export interface JwtPayload {
+  userId: string;
+  email: string;
+  tier: string;
+  iat: number;
+  exp: number;
 }
 
 type ApiKeyAuthResult =
@@ -82,6 +95,26 @@ function hashApiKey(rawKey: string): string {
   return createHash("sha256").update(rawKey).digest("hex");
 }
 
+export function generateToken(user: Pick<User, "id" | "email" | "tier"> | Express.User): string {
+  const userId = "id" in user ? user.id : user.userId;
+  const email = user.email;
+  const tier = user.tier;
+
+  return jwt.sign({ userId, email, tier }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+}
+
+export function verifyToken(token: string): JwtPayload | null {
+  try {
+    return jwt.verify(token, JWT_SECRET) as JwtPayload;
+  } catch {
+    return null;
+  }
+}
+
+function isStructuredJwt(token: string): boolean {
+  return token.split(".").length === 3;
+}
+
 function extractBearerToken(req: Request): string | null {
   const authHeader = req.headers.authorization;
   if (!authHeader) return null;
@@ -99,7 +132,11 @@ function shouldBypassClerk(req: Request): boolean {
     return false;
   }
 
-  return token.startsWith("sk_sm_") || token.startsWith("mcp_sm_");
+  if (token.startsWith("sk_sm_") || token.startsWith("mcp_sm_")) {
+    return true;
+  }
+
+  return isStructuredJwt(token) && verifyToken(token) !== null;
 }
 
 async function resolveApiKeyUser(req: Request): Promise<ApiKeyAuthResult> {
@@ -163,6 +200,29 @@ async function resolveApiKeyUser(req: Request): Promise<ApiKeyAuthResult> {
   return { status: "none" };
 }
 
+async function resolveJwtUser(req: Request): Promise<Express.User | null> {
+  const token = extractBearerToken(req);
+  if (!token || token.startsWith("sk_sm_") || token.startsWith("mcp_sm_") || !isStructuredJwt(token)) {
+    return null;
+  }
+
+  const payload = verifyToken(token);
+  if (!payload) {
+    return null;
+  }
+
+  const dbUser = await getUserById(payload.userId);
+  if (!dbUser) {
+    return null;
+  }
+
+  return {
+    userId: dbUser.id,
+    email: dbUser.email,
+    tier: dbUser.tier,
+  };
+}
+
 // ── Install Clerk middleware globally ────────────────────────────────
 export function configureClerk(app: Express): void {
   const clerk = clerkMiddleware();
@@ -192,7 +252,7 @@ async function resolveUser(req: Request): Promise<Express.User | null> {
   return { userId: auth.userId, email, tier };
 }
 
-// ── Middleware: requires a valid Clerk session ───────────────────────
+// ── Middleware: requires a valid Clerk session, API key, or legacy JWT ───────
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const apiKeyResult = await resolveApiKeyUser(req);
@@ -203,6 +263,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
     if (apiKeyResult.status === "invalid") {
       res.status(401).json({ message: "Invalid API key" });
+      return;
+    }
+
+    const jwtUser = await resolveJwtUser(req);
+    if (jwtUser) {
+      req.user = jwtUser;
+      next();
       return;
     }
 
@@ -222,8 +289,24 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 // ── Middleware: attaches user if present, doesn't reject ─────────────
 export async function optionalAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const apiKeyResult = await resolveApiKeyUser(req);
+    if (apiKeyResult.status === "success") {
+      req.user = apiKeyResult.user;
+      next();
+      return;
+    }
+
+    const jwtUser = await resolveJwtUser(req);
+    if (jwtUser) {
+      req.user = jwtUser;
+      next();
+      return;
+    }
+
     const user = await resolveUser(req);
-    if (user) req.user = user;
+    if (user) {
+      req.user = user;
+    }
   } catch {
     // silently ignore
   }
