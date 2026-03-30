@@ -5,6 +5,7 @@ export const testFiles = [
   "tests/server/chunker.test.ts",
   "tests/server/citationGenerator.test.ts",
   "tests/server/sourceFiles.test.ts",
+  "tests/server/uploadMiddleware.test.ts",
   "tests/server/db.test.ts",
   "tests/server/humanizer.test.ts",
   "tests/server/authRoutes.integration.test.ts",

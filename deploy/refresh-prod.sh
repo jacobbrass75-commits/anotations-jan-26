@@ -4,15 +4,59 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/app}"
 APP_REF="${APP_REF:-origin/master}"
 MCP_DIR="${MCP_DIR:-/opt/app/mcp-server}"
+APP_HEALTHCHECK_URL="${APP_HEALTHCHECK_URL:-http://127.0.0.1:5001/api/system/status}"
+MCP_HEALTHCHECK_URL="${MCP_HEALTHCHECK_URL:-http://127.0.0.1:5002/healthz}"
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "[deploy] missing required command: $1" >&2
+    exit 1
+  fi
+}
+
+require_file() {
+  if [[ ! -f "$1" ]]; then
+    echo "[deploy] missing required file: $1" >&2
+    exit 1
+  fi
+}
+
+wait_for_http() {
+  local url="$1"
+  local label="$2"
+  local attempts="${3:-20}"
+
+  for ((attempt=1; attempt<=attempts; attempt++)); do
+    if curl --silent --show-error --fail "$url" >/dev/null; then
+      echo "[deploy] ${label} healthy"
+      return 0
+    fi
+
+    sleep 2
+  done
+
+  echo "[deploy] ${label} health check failed: ${url}" >&2
+  return 1
+}
+
+require_command git
+require_command npm
+require_command pm2
+require_command curl
 
 cd "$APP_DIR"
+require_file package-lock.json
+require_file deploy/ecosystem.config.js
 
 echo "[deploy] fetching latest code"
-git fetch origin
+git fetch --prune origin
 git reset --hard "$APP_REF"
 
+DEPLOYED_COMMIT="$(git rev-parse --short HEAD)"
+echo "[deploy] deploying commit ${DEPLOYED_COMMIT}"
+
 echo "[deploy] installing app deps"
-npm install
+npm ci --no-audit --fund=false
 
 echo "[deploy] bootstrapping database schema"
 npx tsx scripts/bootstrap-db.ts
@@ -21,20 +65,19 @@ echo "[deploy] building app"
 npm run build
 
 echo "[deploy] replacing web app with built production process"
-pm2 delete sourceannotator >/dev/null 2>&1 || true
-NODE_ENV=production PORT=5001 MCP_RESOURCE_URL=https://mcp.scholarmark.ai/mcp pm2 start dist/index.cjs --name sourceannotator --cwd "$APP_DIR" --interpreter /usr/bin/node
+pm2 startOrReload deploy/ecosystem.config.js --update-env
 
 if [[ -d "$MCP_DIR" ]]; then
+  require_file "$MCP_DIR/package-lock.json"
+  require_file "$MCP_DIR/deploy/ecosystem.config.js"
   echo "[deploy] ensuring MCP deps"
   cd "$MCP_DIR"
-  npm install
-  pm2 delete scholarmark-mcp >/dev/null 2>&1 || true
-  MCP_SERVER_PORT=5002 \
-  SCHOLARMARK_BACKEND_URL=http://127.0.0.1:5001 \
-  MCP_AUTHORIZATION_SERVER=https://app.scholarmark.ai \
-  MCP_RESOURCE_URL=https://mcp.scholarmark.ai \
-  pm2 start server.mjs --name scholarmark-mcp --cwd "$MCP_DIR" --interpreter /usr/bin/node
+  npm ci --no-audit --fund=false
+  pm2 startOrReload deploy/ecosystem.config.js --update-env
+  wait_for_http "$MCP_HEALTHCHECK_URL" "MCP"
 fi
+
+wait_for_http "$APP_HEALTHCHECK_URL" "app"
 
 echo "[deploy] saving PM2 process list"
 pm2 save

@@ -8,6 +8,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: "5001",
+        MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
       },
       max_memory_restart: "750M",
       exp_backoff_restart_delay: 100,

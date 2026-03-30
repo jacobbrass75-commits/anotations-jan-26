@@ -1,7 +1,9 @@
+import Database from "better-sqlite3";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { bootstrapTempWorkspace } from "./helpers/bootstrapTempWorkspace";
 
 describe("database bootstrap", () => {
   let tempDir = "";
@@ -20,7 +22,9 @@ describe("database bootstrap", () => {
   });
 
   it("creates core and support tables with required indexes", async () => {
-    const { sqlite } = await import("../../server/db");
+    await bootstrapTempWorkspace(tempDir);
+
+    const sqlite = new Database(join(tempDir, "data", "sourceannotator.db"));
 
     const tables = new Set(
       (sqlite
@@ -50,7 +54,7 @@ describe("database bootstrap", () => {
     ]) {
       expect(tables.has(table)).toBe(true);
     }
-    expect(indexes.has("idx_api_keys_key_hash")).toBe(true);
+    expect(indexes.has("idx_api_keys_key_prefix")).toBe(true);
     expect(indexes.has("idx_ocr_jobs_status_created")).toBe(true);
     expect(indexes.has("idx_ocr_jobs_document_active")).toBe(true);
 

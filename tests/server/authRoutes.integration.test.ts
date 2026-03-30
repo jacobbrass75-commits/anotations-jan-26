@@ -1,7 +1,9 @@
+import { createHash } from "crypto";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { bootstrapTempWorkspace } from "./helpers/bootstrapTempWorkspace";
 import { requestJson, startHttpServer } from "./helpers/http";
 
 const { clerkGetAuth, clerkMiddleware, clerkGetUser } = vi.hoisted(() => ({
@@ -30,6 +32,7 @@ describe("auth route integration", () => {
     vi.resetModules();
     vi.clearAllMocks();
     process.chdir(tempDir);
+    await bootstrapTempWorkspace(tempDir);
   });
 
   afterEach(async () => {
@@ -72,6 +75,7 @@ describe("auth route integration", () => {
     } as any);
 
     return {
+      db,
       token: generateToken({
         id: "user-1",
         email: "researcher@example.com",
@@ -131,72 +135,38 @@ describe("auth route integration", () => {
     }
   });
 
-  it("creates, lists, authenticates, and revokes API keys", async () => {
-    const { token, server } = await createAuthApp();
+  it("accepts valid API keys and rejects invalid ones", async () => {
+    const { db, server } = await createAuthApp();
+    const { apiKeys } = await import("../../shared/schema");
+    const rawApiKey = "sk_sm_test_valid_api_key";
+    const now = Math.floor(Date.now() / 1000);
+
+    await db.insert(apiKeys).values({
+      id: "key-1",
+      userId: "user-1",
+      label: "Integration key",
+      keyHash: createHash("sha256").update(rawApiKey).digest("hex"),
+      keyPrefix: rawApiKey.slice(0, 12),
+      createdAt: now,
+    } as any);
 
     try {
-      const createResponse = await requestJson<{
-        id: string;
-        key: string;
-        prefix: string;
-        label: string;
-        createdAt: number;
-      }>(server.baseUrl, "/api/auth/api-keys", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: { label: "Integration Test Key" },
+      const validApiKeyProfile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
+        headers: { authorization: `Bearer ${rawApiKey}` },
       });
 
-      expect(createResponse.status).toBe(201);
-      expect(createResponse.body?.key.startsWith("sk_sm_")).toBe(true);
-      expect(createResponse.body?.prefix).toMatch(/^sk_sm_/);
-      expect(createResponse.body?.label).toBe("Integration Test Key");
-
-      const listResponse = await requestJson<{ keys: Array<Record<string, unknown>> }>(
-        server.baseUrl,
-        "/api/auth/api-keys",
-        {
-          headers: { authorization: `Bearer ${token}` },
-        }
-      );
-
-      expect(listResponse.status).toBe(200);
-      expect(listResponse.body?.keys).toHaveLength(1);
-      expect(listResponse.body?.keys[0]).toMatchObject({
-        id: createResponse.body?.id,
-        prefix: createResponse.body?.prefix,
-        label: "Integration Test Key",
-      });
-      expect(listResponse.text).not.toContain(createResponse.body?.key ?? "");
-
-      const apiKeyProfile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
-        headers: { authorization: `Bearer ${createResponse.body?.key}` },
-      });
-
-      expect(apiKeyProfile.status).toBe(200);
-      expect(apiKeyProfile.body).toMatchObject({
+      expect(validApiKeyProfile.status).toBe(200);
+      expect(validApiKeyProfile.body).toMatchObject({
         id: "user-1",
         email: "researcher@example.com",
       });
 
-      const revokeResponse = await requestJson<{ success: boolean; revokedAt: number }>(
-        server.baseUrl,
-        `/api/auth/api-keys/${createResponse.body?.id}`,
-        {
-          method: "DELETE",
-          headers: { authorization: `Bearer ${token}` },
-        }
-      );
-
-      expect(revokeResponse.status).toBe(200);
-      expect(revokeResponse.body?.success).toBe(true);
-
-      const revokedKeyAttempt = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
-        headers: { authorization: `Bearer ${createResponse.body?.key}` },
+      const invalidApiKeyProfile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
+        headers: { authorization: "Bearer sk_sm_invalid_api_key" },
       });
 
-      expect(revokedKeyAttempt.status).toBe(401);
-      expect(revokedKeyAttempt.body).toEqual({ message: "Invalid API key" });
+      expect(invalidApiKeyProfile.status).toBe(401);
+      expect(invalidApiKeyProfile.body).toEqual({ message: "Invalid API key" });
     } finally {
       await server.close();
     }

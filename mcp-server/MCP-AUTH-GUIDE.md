@@ -99,16 +99,15 @@ transport.onclose = () => {
 ## Deployment
 
 ```bash
-ssh root@89.167.10.34 "cd /opt/app && bash deploy/refresh-prod.sh"
+ssh deploy@89.167.10.34 "sudo bash /opt/app/deploy/refresh-prod.sh"
 ```
 
 If MCP env vars need fixing after deploy:
 ```bash
-ssh root@89.167.10.34 "pm2 delete scholarmark-mcp && cd /opt/app/mcp-server && \
-MCP_SERVER_PORT=5002 SCHOLARMARK_BACKEND_URL=http://127.0.0.1:5001 \
-MCP_AUTHORIZATION_SERVER=https://app.scholarmark.ai MCP_RESOURCE_URL=https://mcp.scholarmark.ai \
-pm2 start server.mjs --name scholarmark-mcp --cwd /opt/app/mcp-server --interpreter /usr/bin/node && pm2 save"
+ssh deploy@89.167.10.34 "sudo pm2 startOrReload /opt/app/mcp-server/deploy/ecosystem.config.js --update-env && sudo pm2 save"
 ```
+
+Access hardening guidance lives in [`../deploy/HETZNER-HARDENING.md`](../deploy/HETZNER-HARDENING.md).
 
 ## Things NOT to Change
 

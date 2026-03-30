@@ -70,7 +70,7 @@
 - **Main app:** PM2 `sourceannotator`, port 5001, `https://app.scholarmark.ai`
 - **MCP server:** PM2 `scholarmark-mcp`, port 5002, `https://mcp.scholarmark.ai`
 - **Database:** SQLite at `/opt/app/data/sourceannotator.db` (~780 MB)
-- **Deploy:** `ssh root@89.167.10.34 "cd /opt/app && bash deploy/refresh-prod.sh"`
+- **Deploy:** `ssh deploy@89.167.10.34 "sudo bash /opt/app/deploy/refresh-prod.sh"`
 
 ## Known Issues
 1. **MCP `onclose` stack overflow** — `transport.onclose` → `server.close()` → `transport.close()` → infinite recursion → crash. PM2 restarts the process but Claude sees "credentials reverted."

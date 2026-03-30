@@ -2,7 +2,6 @@ import type { Express as ExpressApp, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { readdir, stat } from "fs/promises";
 import { join } from "path";
-import multer from "multer";
 import { PDFParse } from "pdf-parse";
 import { storage } from "./storage";
 import { db } from "./db";
@@ -49,44 +48,15 @@ import {
   inferDocumentSourceMimeType,
   saveDocumentSource,
 } from "./sourceFiles";
+import { getFileExtension, isImageFile, upload } from "./uploadMiddleware";
 import { annotations, documents, projectAnnotations, projects } from "@shared/schema";
 import { sql } from "drizzle-orm";
 import { requireAuth } from "./auth";
-
-const IMAGE_EXTENSIONS = new Set([
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".webp",
-  ".gif",
-  ".bmp",
-  ".tif",
-  ".tiff",
-  ".heic",
-  ".heif",
-]);
-
-const IMAGE_MIME_TYPES = new Set([
-  "image/heic",
-  "image/heif",
-  "image/heic-sequence",
-  "image/heif-sequence",
-]);
 const MAX_COMBINED_UPLOAD_FILES = Number.isFinite(Number(process.env.MAX_COMBINED_UPLOAD_FILES))
   ? Math.max(1, Math.floor(Number(process.env.MAX_COMBINED_UPLOAD_FILES)))
   : 25;
 const DATABASE_PATH = join(process.cwd(), "data", "sourceannotator.db");
 const SOURCE_UPLOADS_PATH = join(process.cwd(), "data", "uploads");
-
-function getFileExtension(filename: string): string {
-  const extStart = filename.lastIndexOf(".");
-  if (extStart < 0) return "";
-  return filename.slice(extStart).toLowerCase();
-}
-
-function isImageFile(mimeType: string, extension: string): boolean {
-  return mimeType.startsWith("image/") || IMAGE_MIME_TYPES.has(mimeType) || IMAGE_EXTENSIONS.has(extension);
-}
 
 async function getFileSizeBytes(path: string): Promise<number> {
   try {
@@ -146,23 +116,6 @@ function isGarbledText(text: string): boolean {
   
   return wordRatio < 0.4 || bracketRatio > 0.1 || (words.length > 10 && avgWordLen < 3);
 }
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-  fileFilter: (req, file, cb) => {
-    const ext = getFileExtension(file.originalname);
-    const isPdf = file.mimetype === "application/pdf" || ext === ".pdf";
-    const isTxt = file.mimetype === "text/plain" || ext === ".txt";
-    const isImage = isImageFile(file.mimetype, ext);
-
-    if (isPdf || isTxt || isImage) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only PDF, TXT, and image files (including HEIC/HEIF) are allowed"));
-    }
-  },
-});
 
 export async function registerRoutes(
   httpServer: Server,

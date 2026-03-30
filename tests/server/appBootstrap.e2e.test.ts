@@ -4,6 +4,7 @@ import { createServer } from "http";
 import path from "path";
 import { tmpdir } from "os";
 import { afterEach, describe, expect, it } from "vitest";
+import { bootstrapTempWorkspace } from "./helpers/bootstrapTempWorkspace";
 import { requestJson } from "./helpers/http";
 
 async function getAvailablePort(): Promise<number> {
@@ -98,6 +99,7 @@ describe("full app bootstrap smoke", () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "scholarmark-e2e-"));
     const port = await getAvailablePort();
     tempDirs.push(tempDir);
+    await bootstrapTempWorkspace(tempDir);
 
     const repoRoot = "/Users/brass/Documents/New project/anotations-jan-26";
     const wrapper = `(async () => {

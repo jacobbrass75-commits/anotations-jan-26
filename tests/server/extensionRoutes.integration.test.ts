@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { bootstrapTempWorkspace } from "./helpers/bootstrapTempWorkspace";
 import { requestJson, startHttpServer } from "./helpers/http";
 
 const { clerkGetAuth, clerkMiddleware, clerkGetUser } = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ describe("extension route integration", () => {
     vi.resetModules();
     vi.clearAllMocks();
     process.chdir(tempDir);
+    await bootstrapTempWorkspace(tempDir);
   });
 
   afterEach(async () => {
@@ -44,7 +46,7 @@ describe("extension route integration", () => {
   async function createExtensionApp(tier: "free" | "pro" | "max") {
     const express = (await import("express")).default;
     const { db, sqlite: importedSqlite } = await import("../../server/db");
-    const { users, webClips } = await import("../../shared/schema");
+    const { users, projects, webClips } = await import("../../shared/schema");
     const { registerExtensionRoutes } = await import("../../server/extensionRoutes");
     const { generateToken } = await import("../../server/auth");
 
@@ -73,6 +75,7 @@ describe("extension route integration", () => {
 
     return {
       db,
+      projects,
       webClips,
       token: generateToken({
         id: "user-1",
@@ -125,21 +128,19 @@ describe("extension route integration", () => {
       });
 
       expect(response.status).toBe(400);
-      expect(response.body).toMatchObject({
-        message: "Invalid extension payload",
-      });
+      expect(response.body).toEqual({ message: "No text provided" });
     } finally {
       await server.close();
     }
   });
 
-  it("persists a normalized web clip for pro users", async () => {
-    const { token, db, webClips, server } = await createExtensionApp("pro");
+  it("returns a normalized extension payload and creates a default project", async () => {
+    const { token, db, projects, webClips, server } = await createExtensionApp("pro");
 
     try {
       const response = await requestJson<{
         success: boolean;
-        clip: Record<string, unknown>;
+        annotation: Record<string, unknown>;
       }>(server.baseUrl, "/api/extension/save", {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
@@ -151,30 +152,26 @@ describe("extension route integration", () => {
         },
       });
 
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(200);
       expect(response.body?.success).toBe(true);
-      expect(response.body?.clip).toMatchObject({
-        userId: "user-1",
+      expect(response.body?.annotation).toMatchObject({
         highlightedText: "Important quote",
-        note: "Why this quote matters",
-        category: "web_clip",
-        sourceUrl: "https://example.com/article",
+        pageUrl: "https://example.com/article#fragment",
         pageTitle: "Example Article",
-        surroundingContext: "Why this quote matters",
-        projectId: null,
+        context: "Why this quote matters",
+        category: "key_quote",
+        note: expect.stringContaining("Web highlight from: Example Article"),
+        projectId: expect.any(String),
       });
-      expect(response.body?.clip.footnote).toEqual(expect.any(String));
-      expect(response.body?.clip.bibliography).toEqual(expect.any(String));
 
+      const savedProjects = await db.select().from(projects);
       const savedClips = await db.select().from(webClips);
-      expect(savedClips).toHaveLength(1);
-      expect(savedClips[0]).toMatchObject({
-        userId: "user-1",
-        sourceUrl: "https://example.com/article",
-        pageTitle: "Example Article",
+
+      expect(savedProjects).toHaveLength(1);
+      expect(savedProjects[0]).toMatchObject({
+        name: "Web Highlights",
       });
-      expect(savedClips[0].footnote).toContain("Example Article");
-      expect(savedClips[0].bibliography).toContain("Example Article");
+      expect(savedClips).toHaveLength(0);
     } finally {
       await server.close();
     }
