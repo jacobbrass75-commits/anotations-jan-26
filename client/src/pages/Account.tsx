@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { UserButton } from "@clerk/clerk-react";
+import { UserButton, UserProfile } from "@clerk/clerk-react";
 import { Link } from "wouter";
 import {
   ArrowLeft,
@@ -296,6 +296,23 @@ export default function Account() {
                 Open Chat
               </Button>
             </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80 overflow-hidden">
+          <CardHeader>
+            <div className="eva-section-title">Profile Management</div>
+            <CardTitle className="mt-2 text-2xl font-sans uppercase tracking-[0.12em] text-primary">
+              Clerk Settings
+            </CardTitle>
+            <CardDescription>
+              Update your email, profile details, and security settings from the account center.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-0 pb-0">
+            <div className="border-t border-border bg-background/50 p-2 md:p-4">
+              <UserProfile path="/account" routing="hash" />
+            </div>
           </CardContent>
         </Card>
       </main>

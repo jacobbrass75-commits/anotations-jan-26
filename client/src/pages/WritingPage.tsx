@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, FolderOpen, MessageSquare, PenTool } from "lucide-react";
+import { ArrowLeft, FolderOpen, MessageSquare, PenTool, UserRound } from "lucide-react";
 import WritingChat from "@/components/WritingChat";
 
 export default function WritingPage() {
@@ -34,6 +34,17 @@ export default function WritingPage() {
               <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono">
                 <MessageSquare className="h-4 w-4 mr-2" />
                 Chat
+              </Button>
+            </Link>
+            <Link href="/account">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-open-account"
+              >
+                <UserRound className="h-4 w-4 mr-2" />
+                Account
               </Button>
             </Link>
           </div>

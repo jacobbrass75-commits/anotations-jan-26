@@ -53,6 +53,11 @@ declare module "@clerk/clerk-react" {
   }>;
 
   export const UserButton: React.ComponentType<Record<string, unknown>>;
+
+  export const UserProfile: React.ComponentType<{
+    routing?: string;
+    path?: string;
+  }>;
 }
 
 declare module "@clerk/express" {

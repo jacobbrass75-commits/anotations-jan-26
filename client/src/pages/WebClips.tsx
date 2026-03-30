@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Trash2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -123,7 +123,20 @@ export default function WebClips() {
             </Link>
             <h1 className="eva-section-title text-lg">WEB CLIPS</h1>
           </div>
-          <div className="text-xs text-muted-foreground">{clips.length} clips loaded</div>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-muted-foreground">{clips.length} clips loaded</div>
+            <Link href="/account">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-web-clips-account"
+              >
+                <UserRound className="h-4 w-4 mr-2" />
+                Account
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, Search, Trash2, Pencil, MessageSquare } from "lucide-react";
+import { Link } from "wouter";
+import { House, MessageSquare, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -173,6 +174,25 @@ export function ChatSidebar({
           )}
         </div>
       </ScrollArea>
+
+      <div className="border-t p-3 space-y-2">
+        <Link href="/">
+          <Button variant="ghost" className="w-full justify-start gap-2 uppercase tracking-wider text-xs font-mono">
+            <House className="h-4 w-4" />
+            Dashboard
+          </Button>
+        </Link>
+        <Link href="/account">
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-2 uppercase tracking-wider text-xs font-mono"
+            data-testid="button-chat-account"
+          >
+            <UserRound className="h-4 w-4" />
+            Account
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }

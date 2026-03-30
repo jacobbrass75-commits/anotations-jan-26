@@ -155,6 +155,8 @@ describe("full app bootstrap smoke", () => {
     );
     const pricingResponse = await fetch(`http://127.0.0.1:${port}/pricing`);
     const pricingHtml = await pricingResponse.text();
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/account`);
+    const accountHtml = await accountResponse.text();
 
     expect(status.status).toBe(200);
     expect(status.body).toMatchObject({
@@ -182,5 +184,10 @@ describe("full app bootstrap smoke", () => {
     expect(pricingResponse.headers.get("content-type")).toContain("text/html");
     expect(pricingHtml).toContain('<div id="root"></div>');
     expect(pricingHtml).toContain('/src/main.tsx');
+
+    expect(accountResponse.status).toBe(200);
+    expect(accountResponse.headers.get("content-type")).toContain("text/html");
+    expect(accountHtml).toContain('<div id="root"></div>');
+    expect(accountHtml).toContain('/src/main.tsx');
   }, 45_000);
 });
