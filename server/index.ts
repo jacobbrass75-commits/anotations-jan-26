@@ -3,6 +3,7 @@ import "dotenv/config";
 
 import cors from "cors";
 import express, { type Request, Response, NextFunction } from "express";
+import multer from "multer";
 import { registerRoutes } from "./routes";
 import { registerAuthRoutes } from "./authRoutes";
 import { registerOAuthRoutes } from "./oauthRoutes";
@@ -158,6 +159,12 @@ app.use((req, res, next) => {
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) {
       return next(err);
+    }
+
+    if (err instanceof multer.MulterError) {
+      const status =
+        err.code === "LIMIT_FILE_SIZE" || err.code === "LIMIT_FIELD_VALUE" ? 413 : 400;
+      return res.status(status).json({ message: err.message, code: err.code });
     }
 
     const status = err.status || err.statusCode || 500;

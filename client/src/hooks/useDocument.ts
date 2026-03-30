@@ -102,6 +102,44 @@ export function useUploadDocument() {
   });
 }
 
+export function useUploadTextDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      title,
+      text,
+    }: {
+      title?: string;
+      text: string;
+    }) => {
+      const formData = new FormData();
+      if (title) {
+        formData.append("title", title);
+      }
+      formData.append("text", text);
+
+      const response = await fetch("/api/upload-text", {
+        method: "POST",
+        headers: { ...getAuthHeaders() },
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error((error as any)?.message || "Paste upload failed");
+      }
+
+      return response.json() as Promise<Document>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/documents/meta"] });
+    },
+  });
+}
+
 export function useUploadDocumentGroup() {
   const queryClient = useQueryClient();
 

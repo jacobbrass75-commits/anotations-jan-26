@@ -21,6 +21,7 @@ const IMAGE_MIME_TYPES = new Set([
 ]);
 
 export const DEFAULT_UPLOAD_FILE_SIZE_LIMIT_BYTES = 50 * 1024 * 1024;
+export const DEFAULT_UPLOAD_FIELD_SIZE_LIMIT_BYTES = 5 * 1024 * 1024;
 
 export function getFileExtension(filename: string): string {
   const extStart = filename.lastIndexOf(".");
@@ -34,12 +35,17 @@ export function isImageFile(mimeType: string, extension: string): boolean {
 
 export function createUploadMiddleware(options: {
   maxFileSizeBytes?: number;
+  maxFieldSizeBytes?: number;
 } = {}) {
   const maxFileSizeBytes = options.maxFileSizeBytes ?? DEFAULT_UPLOAD_FILE_SIZE_LIMIT_BYTES;
+  const maxFieldSizeBytes = options.maxFieldSizeBytes ?? DEFAULT_UPLOAD_FIELD_SIZE_LIMIT_BYTES;
 
   return multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: maxFileSizeBytes },
+    limits: {
+      fileSize: maxFileSizeBytes,
+      fieldSize: maxFieldSizeBytes,
+    },
     fileFilter: (_req, file, cb) => {
       const ext = getFileExtension(file.originalname);
       const isPdf = file.mimetype === "application/pdf" || ext === ".pdf";

@@ -9,7 +9,6 @@ import { extractTextFromTxt } from "./chunker";
 import {
   getEmbedding,
   analyzeChunkForIntent,
-  generateDocumentSummary,
   searchDocument,
   findHighlightPosition,
   cosineSimilarity,
@@ -20,7 +19,6 @@ import {
 // V2 Pipeline - improved annotation system
 import {
   processChunksWithPipelineV2,
-  chunkTextV2,
   clearDocumentContextCacheV2,
   PIPELINE_V2_CONFIG,
 } from "./pipelineV2";
@@ -48,15 +46,20 @@ import {
   inferDocumentSourceMimeType,
   saveDocumentSource,
 } from "./sourceFiles";
-import { getFileExtension, isImageFile, upload } from "./uploadMiddleware";
+import { createUploadMiddleware, getFileExtension, isImageFile, upload } from "./uploadMiddleware";
 import { annotations, documents, projectAnnotations, projects } from "@shared/schema";
 import { sql } from "drizzle-orm";
 import { requireAuth } from "./auth";
+import {
+  createTextBackedDocument,
+  normalizePastedSourceFilename,
+} from "./documentIngestion";
 const MAX_COMBINED_UPLOAD_FILES = Number.isFinite(Number(process.env.MAX_COMBINED_UPLOAD_FILES))
   ? Math.max(1, Math.floor(Number(process.env.MAX_COMBINED_UPLOAD_FILES)))
   : 25;
 const DATABASE_PATH = join(process.cwd(), "data", "sourceannotator.db");
 const SOURCE_UPLOADS_PATH = join(process.cwd(), "data", "uploads");
+const textUpload = createUploadMiddleware();
 
 async function getFileSizeBytes(path: string): Promise<number> {
   try {
@@ -244,44 +247,12 @@ export async function registerRoutes(
           fullText = extractTextFromTxt(file.buffer.toString("utf-8"));
         }
 
-        if (!fullText || fullText.length < 10) {
-          return res.status(400).json({ message: "Could not extract text from file" });
-        }
-
-        // Create document
-        const doc = await storage.createDocument({
+        const updatedDoc = await createTextBackedDocument({
           filename: file.originalname,
           fullText,
+          sourceBuffer: file.buffer,
           userId: req.user!.userId,
-        } as any);
-        await saveDocumentSource(doc.id, file.originalname, file.buffer);
-
-        // Chunk the text using V2 chunking (with noise filtering and larger chunks)
-        const chunks = chunkTextV2(fullText);
-
-        // Store chunks (don't generate embeddings yet - do it during analysis)
-        for (const chunk of chunks) {
-          await storage.createChunk({
-            documentId: doc.id,
-            text: chunk.text,
-            startPosition: chunk.originalStartPosition,
-            endPosition: chunk.originalStartPosition + chunk.text.length,
-          });
-        }
-
-        // Update document with chunk count
-        await storage.updateDocument(doc.id, { chunkCount: chunks.length });
-
-        // Generate summary in background
-        generateDocumentSummary(fullText).then(async (summaryData) => {
-          await storage.updateDocument(doc.id, {
-            summary: summaryData.summary,
-            mainArguments: summaryData.mainArguments,
-            keyConcepts: summaryData.keyConcepts,
-          });
         });
-
-        const updatedDoc = await storage.getDocument(doc.id);
         return res.json(updatedDoc);
       }
 
@@ -330,6 +301,35 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Upload error:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
+    }
+  });
+
+  app.post("/api/upload-text", requireAuth, textUpload.none(), async (req: Request, res: Response) => {
+    try {
+      const rawText = typeof req.body.text === "string" ? req.body.text : "";
+      const normalizedText = extractTextFromTxt(rawText);
+
+      if (!normalizedText || normalizedText.length < 10) {
+        return res.status(400).json({
+          message: "Paste at least a few sentences so ScholarMark can create a usable source.",
+        });
+      }
+
+      const title = typeof req.body.title === "string" ? req.body.title : "";
+      const filename = normalizePastedSourceFilename(title);
+      const doc = await createTextBackedDocument({
+        filename,
+        fullText: normalizedText,
+        sourceBuffer: Buffer.from(rawText, "utf-8"),
+        userId: req.user!.userId,
+      });
+
+      return res.json(doc);
+    } catch (error) {
+      console.error("Upload text error:", error);
+      return res.status(500).json({
+        message: error instanceof Error ? error.message : "Paste upload failed",
+      });
     }
   });
 

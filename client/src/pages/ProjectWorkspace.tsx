@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useProject, useFolders, useProjectDocuments, useCreateFolder, useDeleteFolder, useAddDocumentToProject, useRemoveDocumentFromProject } from "@/hooks/useProjects";
 import { useGlobalSearch, useGenerateCitation } from "@/hooks/useProjectSearch";
-import { useUploadDocument, useUploadDocumentGroup } from "@/hooks/useDocument";
+import { useUploadDocument, useUploadDocumentGroup, useUploadTextDocument } from "@/hooks/useDocument";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -325,12 +325,15 @@ export default function ProjectWorkspace() {
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadOcrMode, setUploadOcrMode] = useState<string>("standard");
   const [uploadOcrModel, setUploadOcrModel] = useState<string>("gpt-4o");
+  const [pastedSourceTitle, setPastedSourceTitle] = useState("");
+  const [pastedSourceText, setPastedSourceText] = useState("");
   const [isUploadingAndAdding, setIsUploadingAndAdding] = useState(false);
   const [combineImageUploads, setCombineImageUploads] = useState(true);
-  const [addDocTab, setAddDocTab] = useState<"library" | "upload">("library");
+  const [addDocTab, setAddDocTab] = useState<"library" | "upload" | "paste">("library");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadDocument = useUploadDocument();
   const uploadDocumentGroup = useUploadDocumentGroup();
+  const uploadTextDocument = useUploadTextDocument();
   
   const filteredDocuments = useMemo(() => {
     if (selectedFolderId === null) return projectDocuments;
@@ -565,6 +568,42 @@ export default function ProjectWorkspace() {
           variant: "destructive",
         });
       }
+    } finally {
+      setIsUploadingAndAdding(false);
+    }
+  };
+
+  const handlePasteTextAndAddDocument = async () => {
+    if (!pastedSourceText.trim()) return;
+    setIsUploadingAndAdding(true);
+
+    try {
+      const doc = await uploadTextDocument.mutateAsync({
+        title: pastedSourceTitle.trim(),
+        text: pastedSourceText,
+      });
+
+      await addDocument.mutateAsync({
+        projectId,
+        data: {
+          documentId: doc.id,
+          folderId: selectedFolderId || undefined,
+        },
+      });
+
+      toast({
+        title: "Source added",
+        description: "Pasted text was saved as a source and added to the project.",
+      });
+      setIsAddDocOpen(false);
+      setPastedSourceTitle("");
+      setPastedSourceText("");
+    } catch (error) {
+      toast({
+        title: "Paste failed",
+        description: error instanceof Error ? error.message : "Could not create a source from pasted text.",
+        variant: "destructive",
+      });
     } finally {
       setIsUploadingAndAdding(false);
     }
@@ -968,16 +1007,18 @@ export default function ProjectWorkspace() {
           setCombineImageUploads(true);
           setSelectedDocId("");
           setAddDocTab("library");
+          setPastedSourceTitle("");
+          setPastedSourceText("");
         }
       }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Document to Project</DialogTitle>
             <DialogDescription>
-              Add a document from your library or upload a new file.
+              Add a document from your library, upload a file, or paste text as a source.
             </DialogDescription>
           </DialogHeader>
-          <Tabs value={addDocTab} onValueChange={(v) => setAddDocTab(v as "library" | "upload")} className="py-2">
+          <Tabs value={addDocTab} onValueChange={(v) => setAddDocTab(v as "library" | "upload" | "paste")} className="py-2">
             <TabsList className="w-full">
               <TabsTrigger value="library" className="flex-1" data-testid="tab-library">
                 <BookOpen className="h-4 w-4 mr-2" />
@@ -985,7 +1026,11 @@ export default function ProjectWorkspace() {
               </TabsTrigger>
               <TabsTrigger value="upload" className="flex-1" data-testid="tab-upload">
                 <Upload className="h-4 w-4 mr-2" />
-                Upload New
+                Upload File
+              </TabsTrigger>
+              <TabsTrigger value="paste" className="flex-1" data-testid="tab-paste-text">
+                <FileText className="h-4 w-4 mr-2" />
+                Paste Text
               </TabsTrigger>
             </TabsList>
             <TabsContent value="library" className="mt-4 space-y-2">
@@ -1121,6 +1166,35 @@ export default function ProjectWorkspace() {
                 </div>
               )}
             </TabsContent>
+            <TabsContent value="paste" className="mt-4 space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pasted-source-title">Source Title</Label>
+                <Input
+                  id="pasted-source-title"
+                  value={pastedSourceTitle}
+                  onChange={(e) => setPastedSourceTitle(e.target.value)}
+                  placeholder="e.g., Interview Transcript or Draft Notes"
+                  data-testid="input-pasted-source-title"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional. ScholarMark will save this as a `.txt` source.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pasted-source-text">Paste Text</Label>
+                <Textarea
+                  id="pasted-source-text"
+                  value={pastedSourceText}
+                  onChange={(e) => setPastedSourceText(e.target.value)}
+                  placeholder="Paste article text, notes, transcripts, or excerpts here..."
+                  className="min-h-48"
+                  data-testid="textarea-pasted-source-text"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Pasted text becomes a normal source with chunking, search, summary, and citation support.
+                </p>
+              </div>
+            </TabsContent>
           </Tabs>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDocOpen(false)}>Cancel</Button>
@@ -1133,7 +1207,7 @@ export default function ProjectWorkspace() {
                 {addDocument.isPending && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
                 Add
               </Button>
-            ) : (
+            ) : addDocTab === "upload" ? (
               <Button 
                 onClick={handleUploadAndAddDocuments}
                 disabled={uploadFiles.length === 0 || isUploadingAndAdding}
@@ -1145,6 +1219,15 @@ export default function ProjectWorkspace() {
                   : `Upload & Add ${uploadFiles.length > 0 ? uploadFiles.length : ""} ${
                       uploadFiles.length === 1 ? "File" : "Files"
                     }`}
+              </Button>
+            ) : (
+              <Button
+                onClick={handlePasteTextAndAddDocument}
+                disabled={!pastedSourceText.trim() || isUploadingAndAdding}
+                data-testid="button-paste-text-add"
+              >
+                {isUploadingAndAdding && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
+                Save & Add Source
               </Button>
             )}
           </DialogFooter>
