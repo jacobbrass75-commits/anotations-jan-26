@@ -1,0 +1,8 @@
+[Unit]
+Description=ScholarMark backup snapshot
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/app
+ExecStart=/bin/bash /opt/app/deploy/backup-data.sh

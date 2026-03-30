@@ -73,6 +73,7 @@ export default function ExtensionAuth() {
             email: me.email ?? "",
             userId: me.id ?? me.userId ?? "",
             tier: me.tier ?? "free",
+            serverUrl: window.location.origin,
           },
           "*"
         );

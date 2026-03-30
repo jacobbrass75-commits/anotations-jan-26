@@ -171,4 +171,76 @@ describe("auth route integration", () => {
       await server.close();
     }
   });
+
+  it("creates, lists, and revokes API keys for the authenticated user", async () => {
+    const { server, token } = await createAuthApp();
+
+    try {
+      const created = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/api-keys", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: { label: "Chrome Extension" },
+      });
+
+      expect(created.status).toBe(201);
+      expect(created.body).toMatchObject({
+        id: expect.any(String),
+        label: "Chrome Extension",
+        keyPrefix: expect.stringMatching(/^sk_sm_/),
+        key: expect.stringMatching(/^sk_sm_/),
+      });
+
+      const listBeforeRevoke = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/api-keys", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(listBeforeRevoke.status).toBe(200);
+      expect(listBeforeRevoke.body).toEqual({
+        apiKeys: [
+          expect.objectContaining({
+            id: created.body?.id,
+            label: "Chrome Extension",
+            keyPrefix: created.body?.keyPrefix,
+          }),
+        ],
+      });
+
+      const keyProfile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
+        headers: { authorization: `Bearer ${created.body?.key}` },
+      });
+
+      expect(keyProfile.status).toBe(200);
+      expect(keyProfile.body).toMatchObject({
+        id: "user-1",
+        email: "researcher@example.com",
+      });
+
+      const revoke = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        `/api/auth/api-keys/${created.body?.id}`,
+        {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${token}` },
+        }
+      );
+
+      expect(revoke.status).toBe(204);
+
+      const listAfterRevoke = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/api-keys", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(listAfterRevoke.status).toBe(200);
+      expect(listAfterRevoke.body).toEqual({ apiKeys: [] });
+
+      const revokedKeyProfile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
+        headers: { authorization: `Bearer ${created.body?.key}` },
+      });
+
+      expect(revokedKeyProfile.status).toBe(401);
+      expect(revokedKeyProfile.body).toEqual({ message: "Invalid API key" });
+    } finally {
+      await server.close();
+    }
+  });
 });

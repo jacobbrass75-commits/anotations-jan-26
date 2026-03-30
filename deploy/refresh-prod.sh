@@ -6,6 +6,7 @@ APP_REF="${APP_REF:-origin/master}"
 MCP_DIR="${MCP_DIR:-/opt/app/mcp-server}"
 APP_HEALTHCHECK_URL="${APP_HEALTHCHECK_URL:-http://127.0.0.1:5001/api/system/status}"
 MCP_HEALTHCHECK_URL="${MCP_HEALTHCHECK_URL:-http://127.0.0.1:5002/healthz}"
+SKIP_PREDEPLOY_BACKUP="${SKIP_PREDEPLOY_BACKUP:-0}"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -47,6 +48,11 @@ require_command curl
 cd "$APP_DIR"
 require_file package-lock.json
 require_file deploy/ecosystem.config.cjs
+
+if [[ "$SKIP_PREDEPLOY_BACKUP" != "1" && -x deploy/backup-data.sh ]]; then
+  echo "[deploy] creating pre-deploy backup"
+  bash deploy/backup-data.sh
+fi
 
 echo "[deploy] fetching latest code"
 git fetch --prune origin

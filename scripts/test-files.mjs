@@ -8,6 +8,7 @@ export const testFiles = [
   "tests/server/sourceFiles.test.ts",
   "tests/server/uploadMiddleware.test.ts",
   "tests/server/documentIngestion.test.ts",
+  "tests/server/backupScript.test.ts",
   "tests/server/db.test.ts",
   "tests/server/humanizer.test.ts",
   "tests/server/authRoutes.integration.test.ts",

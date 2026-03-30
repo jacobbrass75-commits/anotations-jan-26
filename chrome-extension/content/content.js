@@ -1,38 +1,66 @@
-// Content script — injected into every page
-// Handles:
-// 1. Getting selection context (surrounding text)
-// 2. Visual highlight feedback
-// 3. Keyboard shortcut (Ctrl+Shift+S to save selection)
+const EXTENSION_AUTH_MESSAGE = "SM_EXTENSION_AUTH";
+const EXTENSION_AUTH_ACK = "SM_EXTENSION_AUTH_ACK";
+const ALLOWED_EXTENSION_AUTH_ORIGINS = new Set([
+  "https://app.scholarmark.ai",
+  "https://scholarmark.ai",
+  "http://localhost:5001",
+]);
 
-// Listen for messages from background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "GET_SELECTION_CONTEXT") {
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      const container = range.commonAncestorContainer;
-      const parentText = container.textContent || "";
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.action === "getSelectionData" || message.type === "GET_SELECTION_CONTEXT") {
+    sendResponse(getSelectionData());
+    return;
+  }
 
-      // Get ~200 chars of surrounding context
-      const selectedText = selection.toString();
-      const startIdx = parentText.indexOf(selectedText);
-      const contextStart = Math.max(0, startIdx - 100);
-      const contextEnd = Math.min(parentText.length, startIdx + selectedText.length + 100);
-
-      sendResponse({
-        surroundingText: parentText.substring(contextStart, contextEnd),
-        selectedText,
-      });
-    } else {
-      sendResponse({ surroundingText: "", selectedText: "" });
-    }
+  if (message.action === "clipSaved") {
+    showSaveIndicator();
   }
 });
 
-// Keyboard shortcut: Ctrl+Shift+S
-document.addEventListener("keydown", (e) => {
-  if (e.ctrlKey && e.shiftKey && e.key === "S") {
-    e.preventDefault();
+window.addEventListener("message", (event) => {
+  if (event.source !== window) {
+    return;
+  }
+
+  if (event.data?.type !== EXTENSION_AUTH_MESSAGE) {
+    return;
+  }
+
+  if (!ALLOWED_EXTENSION_AUTH_ORIGINS.has(event.origin)) {
+    window.postMessage(
+      {
+        type: EXTENSION_AUTH_ACK,
+        success: false,
+      },
+      event.origin,
+    );
+    return;
+  }
+
+  chrome.runtime.sendMessage(
+    {
+      type: "STORE_EXTENSION_AUTH",
+      apiKey: event.data.apiKey,
+      email: event.data.email,
+      userId: event.data.userId,
+      tier: event.data.tier,
+      serverUrl: event.data.serverUrl,
+    },
+    (response) => {
+      window.postMessage(
+        {
+          type: EXTENSION_AUTH_ACK,
+          success: Boolean(response?.success),
+        },
+        event.origin,
+      );
+    },
+  );
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey && event.shiftKey && event.key === "S") {
+    event.preventDefault();
     const selection = window.getSelection();
     if (selection && selection.toString().trim()) {
       chrome.runtime.sendMessage({
@@ -41,12 +69,43 @@ document.addEventListener("keydown", (e) => {
         url: window.location.href,
         title: document.title,
       });
-
-      // Visual feedback — brief highlight flash
-      showSaveIndicator();
     }
   }
 });
+
+function getSelectionData() {
+  const selection = window.getSelection();
+  const selectedText = selection?.toString().trim() || "";
+
+  let surroundingContext = "";
+  if (selection && selection.rangeCount > 0 && selectedText) {
+    const range = selection.getRangeAt(0);
+    const parentText = range.commonAncestorContainer.textContent || "";
+    const startIdx = parentText.indexOf(selectedText);
+    const contextStart = Math.max(0, startIdx - 100);
+    const contextEnd = Math.min(parentText.length, startIdx + selectedText.length + 100);
+    surroundingContext = parentText.substring(contextStart, contextEnd);
+  }
+
+  return {
+    selectedText,
+    sourceUrl: window.location.href,
+    pageTitle: document.title || "Untitled",
+    siteName: readMetaValue("og:site_name"),
+    authorName: readMetaValue("author"),
+    publishDate:
+      readMetaValue("article:published_time") ||
+      readMetaValue("publication_date") ||
+      readMetaValue("date"),
+    surroundingContext,
+  };
+}
+
+function readMetaValue(name) {
+  const byProperty = document.querySelector(`meta[property="${name}"]`);
+  const byName = document.querySelector(`meta[name="${name}"]`);
+  return byProperty?.getAttribute("content") || byName?.getAttribute("content") || null;
+}
 
 function showSaveIndicator() {
   const indicator = document.createElement("div");

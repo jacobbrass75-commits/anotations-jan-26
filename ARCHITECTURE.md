@@ -221,7 +221,9 @@ Use these files first when changing architecture-critical behavior:
 - SQLite and uploaded files live under `data/`
 - Production builds emit `dist/index.cjs` and `dist/public/`
 - Production refresh runs through `deploy/refresh-prod.sh`, which does `git fetch/reset`, `npm ci`, schema bootstrap, app build, PM2 reload, MCP dependency install, health checks, and `pm2 save`
+- Data backups run through `deploy/backup-data.sh`, which snapshots the SQLite database plus uploaded source files into timestamped backup directories
 - Verified non-root deploy path: `ssh deploy@89.167.10.34 "sudo bash /opt/app/deploy/refresh-prod.sh"`
+- Verified manual backup path: `ssh deploy@89.167.10.34 "sudo bash /opt/app/deploy/backup-data.sh"`
 - Break-glass root/password access still exists today and should be disabled only after every operator machine is confirmed to work through the deploy-key path
 - MCP production metadata expects `MCP_RESOURCE_URL=https://mcp.scholarmark.ai` with no `/mcp` suffix
 - The MCP server is designed for a reverse-proxy setup where `/mcp` accepts both JSON and SSE-style negotiation
@@ -234,3 +236,4 @@ Use these files first when changing architecture-critical behavior:
 - The repo includes both root app code and a separate MCP service plus extension, but there is no unified end-to-end release suite covering all three.
 - `server/auth.ts` currently defaults Clerk-derived tiers to `max` when metadata is absent, which is suitable for testing but not a production-safe default.
 - The deploy user path is now verified from this machine, but root password auth has not yet been disabled as a final hardening step.
+- Backups now exist in-repo, but off-box retention and recurring restore drills still need to be operationalized.

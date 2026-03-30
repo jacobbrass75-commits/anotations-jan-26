@@ -10,6 +10,7 @@
   ],
   "host_permissions": [
     "http://localhost:5001/*",
+    "https://app.scholarmark.ai/*",
     "https://scholarmark.ai/*"
   ],
   "action": {

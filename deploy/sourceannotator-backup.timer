@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ScholarMark backups nightly
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+Unit=sourceannotator-backup.service
+
+[Install]
+WantedBy=timers.target

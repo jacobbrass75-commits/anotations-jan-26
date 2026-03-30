@@ -1,21 +1,22 @@
-// Options page — manages extension settings
+const DEFAULT_SETTINGS = {
+  serverUrl: "https://app.scholarmark.ai",
+  defaultProjectId: "",
+  defaultCategory: "key_quote",
+};
 
 document.addEventListener("DOMContentLoaded", async () => {
   const apiUrlInput = document.getElementById("api-url");
   const saveBtn = document.getElementById("save-btn");
   const savedMsg = document.getElementById("saved-msg");
 
-  // Load saved settings
-  const { sm_api_url } = await chrome.storage.local.get("sm_api_url");
-  if (sm_api_url) {
-    apiUrlInput.value = sm_api_url;
-  } else {
-    apiUrlInput.value = "http://localhost:5001";
-  }
+  const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+  apiUrlInput.value = settings.serverUrl || DEFAULT_SETTINGS.serverUrl;
 
   saveBtn.addEventListener("click", async () => {
-    const apiUrl = apiUrlInput.value.trim().replace(/\/+$/, ""); // Remove trailing slashes
-    await chrome.storage.local.set({ sm_api_url: apiUrl || "http://localhost:5001" });
+    const serverUrl = (apiUrlInput.value || DEFAULT_SETTINGS.serverUrl).trim().replace(/\/+$/, "");
+    await chrome.storage.sync.set({
+      serverUrl: serverUrl || DEFAULT_SETTINGS.serverUrl,
+    });
 
     savedMsg.style.display = "block";
     setTimeout(() => {
