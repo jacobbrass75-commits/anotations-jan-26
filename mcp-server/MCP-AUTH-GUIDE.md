@@ -104,7 +104,7 @@ ssh deploy@89.167.10.34 "sudo bash /opt/app/deploy/refresh-prod.sh"
 
 If MCP env vars need fixing after deploy:
 ```bash
-ssh deploy@89.167.10.34 "sudo pm2 startOrReload /opt/app/mcp-server/deploy/ecosystem.config.js --update-env && sudo pm2 save"
+ssh deploy@89.167.10.34 "sudo pm2 startOrReload /opt/app/mcp-server/deploy/ecosystem.config.cjs --update-env && sudo pm2 save"
 ```
 
 Access hardening guidance lives in [`../deploy/HETZNER-HARDENING.md`](../deploy/HETZNER-HARDENING.md).

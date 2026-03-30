@@ -46,7 +46,7 @@ require_command curl
 
 cd "$APP_DIR"
 require_file package-lock.json
-require_file deploy/ecosystem.config.js
+require_file deploy/ecosystem.config.cjs
 
 echo "[deploy] fetching latest code"
 git fetch --prune origin
@@ -65,15 +65,15 @@ echo "[deploy] building app"
 npm run build
 
 echo "[deploy] replacing web app with built production process"
-pm2 startOrReload deploy/ecosystem.config.js --update-env
+pm2 startOrReload deploy/ecosystem.config.cjs --update-env
 
 if [[ -d "$MCP_DIR" ]]; then
   require_file "$MCP_DIR/package-lock.json"
-  require_file "$MCP_DIR/deploy/ecosystem.config.js"
+  require_file "$MCP_DIR/deploy/ecosystem.config.cjs"
   echo "[deploy] ensuring MCP deps"
   cd "$MCP_DIR"
   npm ci --no-audit --fund=false
-  pm2 startOrReload deploy/ecosystem.config.js --update-env
+  pm2 startOrReload deploy/ecosystem.config.cjs --update-env
   wait_for_http "$MCP_HEALTHCHECK_URL" "MCP"
 fi
 
