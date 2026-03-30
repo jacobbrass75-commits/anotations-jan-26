@@ -1,11 +1,18 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>SourceAnnotator - AI-Powered Research Annotation</title>
     <meta name="description" content="Upload academic PDFs, organize projects, and let AI automatically highlight and annotate relevant passages. Intelligent source management for researchers." />
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <script>
+      (() => {
+        const storageKey = "sm-theme";
+        const storedTheme = window.localStorage.getItem(storageKey);
+        document.documentElement.classList.toggle("dark", storedTheme === "dark");
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">

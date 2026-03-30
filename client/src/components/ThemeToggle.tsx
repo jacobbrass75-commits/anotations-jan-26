@@ -6,11 +6,28 @@ import { Button } from "@/components/ui/button";
 // Default: light mode (system default overridden to "light")
 const STORAGE_KEY = "sm-theme";
 
+function readStoredTheme(): "light" | "dark" | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === "dark" || stored === "light" ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistTheme(theme: "light" | "dark") {
+  try {
+    localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    // Ignore storage failures and still apply the theme to the current session.
+  }
+}
+
 export function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as "light" | "dark" | null;
+    const stored = readStoredTheme();
     if (stored) {
       setTheme(stored);
       document.documentElement.classList.toggle("dark", stored === "dark");
@@ -18,14 +35,14 @@ export function ThemeToggle() {
       // Default to light mode — no system preference override
       setTheme("light");
       document.documentElement.classList.remove("dark");
-      localStorage.setItem(STORAGE_KEY, "light");
+      persistTheme("light");
     }
   }, []);
 
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
     setTheme(newTheme);
-    localStorage.setItem(STORAGE_KEY, newTheme);
+    persistTheme(newTheme);
     document.documentElement.classList.toggle("dark", newTheme === "dark");
   };
 
