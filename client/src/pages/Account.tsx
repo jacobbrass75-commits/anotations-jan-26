@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { UserButton, UserProfile } from "@clerk/clerk-react";
+import { UserButton, useClerk } from "@clerk/clerk-react";
 import { Link } from "wouter";
 import {
   ArrowLeft,
@@ -49,6 +49,7 @@ const featureChecks = [
 export default function Account() {
   const { user, isLoading, logout } = useAuth();
   const { can } = useUserTier();
+  const clerk = useClerk();
 
   const { data: usage, isLoading: usageLoading } = useQuery<UsageSnapshot>({
     queryKey: ["/api/auth/usage"],
@@ -303,16 +304,28 @@ export default function Account() {
           <CardHeader>
             <div className="eva-section-title">Profile Management</div>
             <CardTitle className="mt-2 text-2xl font-sans uppercase tracking-[0.12em] text-primary">
-              Clerk Settings
+              Identity And Security
             </CardTitle>
             <CardDescription>
-              Update your email, profile details, and security settings from the account center.
+              Open the Clerk-managed account center to update your email, password, profile details, and security settings.
             </CardDescription>
           </CardHeader>
-          <CardContent className="px-0 pb-0">
-            <div className="border-t border-border bg-background/50 p-2 md:p-4">
-              <UserProfile path="/account" routing="hash" />
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-border bg-background/50 p-4 text-sm text-muted-foreground">
+              This keeps authentication and identity updates inside the existing Clerk flow instead of duplicating sensitive account-management forms in the app.
             </div>
+            <Button
+              className="uppercase tracking-wider text-xs font-mono"
+              onClick={() => {
+                const clerkWithProfile = clerk as typeof clerk & {
+                  openUserProfile?: () => void | Promise<void>;
+                };
+                void clerkWithProfile.openUserProfile?.();
+              }}
+              data-testid="button-open-account-center"
+            >
+              Open Account Center
+            </Button>
           </CardContent>
         </Card>
       </main>
