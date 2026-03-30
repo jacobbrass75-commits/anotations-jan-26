@@ -1,6 +1,7 @@
 export const testFiles = [
   "tests/shared/annotationLinks.test.ts",
   "tests/client/documentExportUtils.test.ts",
+  "tests/client/accountUtils.test.ts",
   "tests/server/quoteJumpLinks.test.ts",
   "tests/server/chunker.test.ts",
   "tests/server/citationGenerator.test.ts",

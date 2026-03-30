@@ -59,6 +59,9 @@ export default function Pricing() {
           <div className="flex items-center gap-3">
             {isSignedIn ? (
               <>
+                <Button variant="ghost" onClick={() => setLocation("/account")} data-testid="button-open-account">
+                  Account
+                </Button>
                 <Button variant="ghost" onClick={() => setLocation("/")}>
                   Dashboard
                 </Button>
