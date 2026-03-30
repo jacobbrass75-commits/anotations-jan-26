@@ -53,7 +53,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
           <CardHeader className="cursor-pointer flex flex-row items-center justify-between gap-4 py-3 hover:bg-muted/50 transition-colors">
             <div className="flex items-center gap-2">
               <Search className="h-5 w-5 text-primary" />
-              <h2 className="eva-section-title text-sm">SEMANTIC SEARCH // MAGI</h2>
+              <h2 className="eva-section-title text-sm">SOURCE SEARCH</h2>
               {results.length > 0 && (
                 <Badge variant="secondary" className="text-xs">
                   {results.length} results
@@ -75,7 +75,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="ENTER SEARCH QUERY..."
+                  placeholder="Search this document..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   className="pl-9 font-mono bg-muted/50 text-foreground eva-focus-glow border-border"
@@ -90,7 +90,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                 )}
               </div>
               <Button type="submit" disabled={!documentId || !query.trim() || isSearching} data-testid="button-search">
-                <Sparkles className="h-4 w-4 mr-2 text-primary eva-glitch" />
+                <Sparkles className="h-4 w-4 mr-2 text-primary" />
                 Search
               </Button>
             </form>

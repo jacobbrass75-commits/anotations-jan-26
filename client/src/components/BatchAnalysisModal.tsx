@@ -157,10 +157,10 @@ export function BatchAnalysisModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            <span className="eva-section-title text-sm">BATCH ANALYSIS // MAGI PROTOCOL</span>
+            <span className="eva-section-title text-sm">BATCH ANALYSIS</span>
           </DialogTitle>
           <DialogDescription>
-            Analyze multiple documents with the same research focus
+            Run the same research question across multiple documents
           </DialogDescription>
         </DialogHeader>
 

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 
 const TICKER_MESSAGES = [
-  "MAGI SYSTEM: ONLINE",
-  "NERV DOCUMENT ANALYSIS: ACTIVE",
-  "SEMANTIC SEARCH: STANDING BY",
-  "PATTERN RECOGNITION: NOMINAL",
-  "ANNOTATION ENGINE: READY",
-  "ENCRYPTION: AES-256",
+  "SCHOLARMARK WORKSPACE: LIVE",
+  "SOURCE SEARCH: READY",
+  "ANNOTATION REVIEW: ACTIVE",
+  "WRITING STUDIO: AVAILABLE",
+  "WEB CLIPS: CONNECTED",
+  "CITATION TOOLS: READY",
 ];
 
 export function DataTicker() {
@@ -46,7 +46,7 @@ export function DataTicker() {
       </div>
       <div className="flex-shrink-0 px-3 border-l border-border flex items-center gap-2">
         <div className="eva-status-active" />
-        <span className="text-chart-2">OPERATIONAL</span>
+        <span className="text-chart-2">LIVE</span>
       </div>
     </div>
   );
