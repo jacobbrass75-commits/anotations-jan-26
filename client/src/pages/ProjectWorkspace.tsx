@@ -16,11 +16,12 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Upload, Quote, PenTool } from "lucide-react";
+import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Upload, Quote, PenTool, Mic } from "lucide-react";
 import { BatchAnalysisModal } from "@/components/BatchAnalysisModal";
 import { BatchUploadModal } from "@/components/BatchUploadModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import WritingChat from "@/components/WritingChat";
+import VoiceProfileEditor from "@/components/VoiceProfileEditor";
 import { useToast } from "@/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Folder as FolderType, GlobalSearchResult, Document } from "@shared/schema";
@@ -309,7 +310,7 @@ export default function ProjectWorkspace() {
   const generateCitation = useGenerateCitation();
   
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [workspaceTab, setWorkspaceTab] = useState<"documents" | "write">("documents");
+  const [workspaceTab, setWorkspaceTab] = useState<"documents" | "write" | "voice">("documents");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -798,7 +799,7 @@ export default function ProjectWorkspace() {
       <main className="flex-1 flex flex-col eva-grid-bg">
         <header className="border-b border-border bg-background/95 backdrop-blur-md p-4">
           <div className="flex items-center justify-between gap-4">
-            <Tabs value={workspaceTab} onValueChange={(v) => setWorkspaceTab(v as "documents" | "write")}>
+            <Tabs value={workspaceTab} onValueChange={(v) => setWorkspaceTab(v as "documents" | "write" | "voice")}>
               <TabsList>
                 <TabsTrigger value="documents" data-testid="tab-workspace-documents">
                   <FileText className="h-4 w-4 mr-2" />
@@ -807,6 +808,10 @@ export default function ProjectWorkspace() {
                 <TabsTrigger value="write" data-testid="tab-workspace-write">
                   <PenTool className="h-4 w-4 mr-2" />
                   Write
+                </TabsTrigger>
+                <TabsTrigger value="voice" data-testid="tab-workspace-voice">
+                  <Mic className="h-4 w-4 mr-2" />
+                  Voice
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -825,20 +830,20 @@ export default function ProjectWorkspace() {
                   <Search className="h-4 w-4 mr-2" />
                   {isSearching ? "Searching..." : "Search"}
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="uppercase tracking-wider text-xs"
-                  onClick={() => setIsBatchModalOpen(true)} 
+                  onClick={() => setIsBatchModalOpen(true)}
                   disabled={projectDocuments.length === 0}
                   data-testid="button-batch-analyze"
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
                   Batch Analyze
                 </Button>
-                <Button 
+                <Button
                   variant="outline"
                   className="uppercase tracking-wider text-xs"
-                  onClick={() => setIsBatchUploadOpen(true)} 
+                  onClick={() => setIsBatchUploadOpen(true)}
                   disabled={availableDocuments.length === 0}
                   data-testid="button-batch-upload"
                 >
@@ -851,7 +856,7 @@ export default function ProjectWorkspace() {
                 </Button>
                 <ThemeToggle />
               </div>
-            ) : (
+            ) : workspaceTab === "write" ? (
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -870,11 +875,19 @@ export default function ProjectWorkspace() {
                 </Link>
                 <ThemeToggle />
               </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+              </div>
             )}
           </div>
         </header>
 
-        {workspaceTab === "write" ? (
+        {workspaceTab === "voice" ? (
+          <div className="flex-1 overflow-auto p-6 pb-8 eva-grid-bg">
+            <VoiceProfileEditor projectId={projectId} />
+          </div>
+        ) : workspaceTab === "write" ? (
           <div className="flex-1 min-h-0 eva-grid-bg">
             <WritingChat initialProjectId={projectId} lockProject />
           </div>

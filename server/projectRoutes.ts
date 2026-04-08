@@ -1369,4 +1369,145 @@ export function registerProjectRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to update view state" });
     }
   });
+
+  // === VOICE PROFILE ===
+
+  /** Analyze writing samples and generate a voice profile */
+  app.post("/api/projects/:id/voice-profile/analyze", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
+    try {
+      const project = await verifyProjectOwnership(req, res, req.params.id);
+      if (!project) return;
+
+      const { samples } = req.body;
+      if (!Array.isArray(samples) || samples.length < 2 || samples.length > 10) {
+        return res.status(400).json({ error: "Provide 2-10 writing samples" });
+      }
+
+      const totalLength = samples.reduce((sum: number, s: string) => sum + (s?.length || 0), 0);
+      if (totalLength < 500) {
+        return res.status(400).json({ error: "Writing samples are too short. Provide at least 500 characters total." });
+      }
+      if (totalLength > 200_000) {
+        return res.status(400).json({ error: "Writing samples are too long. Keep total under 200,000 characters." });
+      }
+
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+      const samplesBlock = samples
+        .map((s: string, i: number) => `--- SAMPLE ${i + 1} ---\n${s.trim()}\n`)
+        .join("\n");
+
+      const response = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 4096,
+        system: `You are a writing style analyst. You produce precise, actionable voice profiles that allow an AI to replicate a specific author's writing style. Focus on what makes this writer DISTINCTIVE — skip universal or obvious traits. For every observation, ground it in specific patterns from the text. Bad: "Uses varied sentence length." Good: "Alternates 8-12 word declarative sentences with 25-35 word complex sentences when building arguments."`,
+        messages: [{
+          role: "user",
+          content: `Analyze these writing samples from the same author. Extract a voice profile.
+
+${samplesBlock}
+
+Return ONLY valid JSON matching this exact schema:
+{
+  "avgSentenceLength": "specific description of sentence length patterns with word count ranges",
+  "vocabularyLevel": "academic" | "conversational" | "mixed",
+  "paragraphStructure": "how they build paragraphs — length, opening moves, internal logic",
+  "toneMarkers": ["3-5 specific tone descriptors with examples"],
+  "commonTransitions": ["5-8 transition phrases they actually use, quoted from text"],
+  "evidenceIntroduction": "exactly how they set up quotes, citations, or evidence — with example patterns",
+  "argumentStructure": "how they sequence and build claims — do they lead with thesis or build to it",
+  "hedgingStyle": "certainty level — do they hedge, assert, qualify? with example phrases",
+  "openingPattern": "how they typically start paragraphs or sections",
+  "closingPattern": "how they conclude paragraphs or sections",
+  "distinctivePhrases": ["3-6 verbal tics, signature expressions, or recurring word choices"],
+  "avoidedPatterns": ["3-5 things this writer conspicuously never does"],
+  "voiceSummary": "2-3 sentence overall description capturing the gestalt of this writer's voice"
+}`
+        }],
+      });
+
+      const text = response.content
+        .filter((b): b is { type: "text"; text: string } => b.type === "text")
+        .map((b) => b.text)
+        .join("");
+
+      // Extract JSON from response (handle markdown code blocks)
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return res.status(500).json({ error: "Failed to parse voice profile from AI response" });
+      }
+
+      const voiceProfile = JSON.parse(jsonMatch[0]);
+
+      // Store both the profile and the original samples (for re-analysis later)
+      await projectStorage.updateProject(req.params.id, {
+        voiceProfile: JSON.stringify(voiceProfile),
+        voiceProfileSamples: JSON.stringify(samples),
+      } as any);
+
+      res.json({ voiceProfile });
+    } catch (error) {
+      console.error("Error analyzing voice profile:", error);
+      res.status(500).json({ error: "Failed to analyze writing style" });
+    }
+  });
+
+  /** Get the voice profile for a project */
+  app.get("/api/projects/:id/voice-profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const project = await verifyProjectOwnership(req, res, req.params.id);
+      if (!project) return;
+
+      const voiceProfile = (project as any).voiceProfile
+        ? JSON.parse((project as any).voiceProfile)
+        : null;
+      const hasSamples = !!(project as any).voiceProfileSamples;
+
+      res.json({ voiceProfile, hasSamples });
+    } catch (error) {
+      console.error("Error fetching voice profile:", error);
+      res.status(500).json({ error: "Failed to fetch voice profile" });
+    }
+  });
+
+  /** Update (manually edit) the voice profile */
+  app.put("/api/projects/:id/voice-profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const project = await verifyProjectOwnership(req, res, req.params.id);
+      if (!project) return;
+
+      const { voiceProfile } = req.body;
+      if (!voiceProfile || typeof voiceProfile !== "object") {
+        return res.status(400).json({ error: "Invalid voice profile" });
+      }
+
+      await projectStorage.updateProject(req.params.id, {
+        voiceProfile: JSON.stringify(voiceProfile),
+      } as any);
+
+      res.json({ voiceProfile });
+    } catch (error) {
+      console.error("Error updating voice profile:", error);
+      res.status(500).json({ error: "Failed to update voice profile" });
+    }
+  });
+
+  /** Delete the voice profile */
+  app.delete("/api/projects/:id/voice-profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const project = await verifyProjectOwnership(req, res, req.params.id);
+      if (!project) return;
+
+      await projectStorage.updateProject(req.params.id, {
+        voiceProfile: null,
+        voiceProfileSamples: null,
+      } as any);
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting voice profile:", error);
+      res.status(500).json({ error: "Failed to delete voice profile" });
+    }
+  });
 }

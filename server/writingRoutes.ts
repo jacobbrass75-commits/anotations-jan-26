@@ -92,6 +92,15 @@ export function registerWritingRoutes(app: Express): void {
         ? (body.sourceDocumentIds as unknown[]).filter((id): id is string => typeof id === "string")
         : undefined;
 
+      // Load project voice profile if available
+      let voiceProfile: string | null = null;
+      if (body.projectId) {
+        const project = await projectStorage.getProject(body.projectId as string);
+        if (project?.voiceProfile) {
+          voiceProfile = project.voiceProfile;
+        }
+      }
+
       const request: WritingRequest = {
         topic: body.topic.trim(),
         annotationIds: Array.isArray(body.annotationIds) ? body.annotationIds : [],
@@ -102,6 +111,7 @@ export function registerWritingRoutes(app: Express): void {
         targetLength: body.targetLength || "medium",
         noEnDashes: body.noEnDashes ?? false,
         deepWrite: body.deepWrite ?? false,
+        voiceProfile,
       };
 
       const sources: WritingSource[] = [];

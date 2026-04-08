@@ -18,6 +18,7 @@ export interface WritingRequest {
   targetLength: "short" | "medium" | "long";
   noEnDashes: boolean;
   deepWrite: boolean;
+  voiceProfile?: string | null;
 }
 
 export interface WritingPlanSection {
@@ -94,7 +95,7 @@ const TARGET_WORDS: Record<string, number> = {
   long: 4000,
 };
 
-const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEEP_WRITE_MODEL = "claude-sonnet-4-6";
 
 // --- Helpers ---
@@ -237,13 +238,52 @@ function parseStyleAnalysis(raw: string | null | undefined): StyleAnalysis | nul
   }
 }
 
+export function buildVoiceProfileBlock(voiceProfileJson: string | null | undefined): string {
+  if (!voiceProfileJson) return "";
+
+  try {
+    const vp = JSON.parse(voiceProfileJson) as Record<string, unknown>;
+    if (!vp || typeof vp !== "object") return "";
+
+    const distinctivePhrases = Array.isArray(vp.distinctivePhrases)
+      ? (vp.distinctivePhrases as string[]).join(", ")
+      : "";
+    const avoidedPatterns = Array.isArray(vp.avoidedPatterns)
+      ? (vp.avoidedPatterns as string[]).join(", ")
+      : "";
+    const toneMarkers = Array.isArray(vp.toneMarkers)
+      ? (vp.toneMarkers as string[]).join(", ")
+      : "";
+
+    return `
+
+[VOICE PROFILE — match this author's writing style]
+${vp.voiceSummary || ""}
+
+Sentence rhythm: ${vp.avgSentenceLength || ""}
+Vocabulary: ${vp.vocabularyLevel || ""}
+Paragraph style: ${vp.paragraphStructure || ""}
+Evidence introduction: ${vp.evidenceIntroduction || ""}
+Argument structure: ${vp.argumentStructure || ""}
+Hedging style: ${vp.hedgingStyle || ""}
+Opens with: ${vp.openingPattern || ""}
+Closes with: ${vp.closingPattern || ""}
+Distinctive phrases to use naturally: ${distinctivePhrases}
+NEVER do these: ${avoidedPatterns}
+Tone: ${toneMarkers}`;
+  } catch {
+    return "";
+  }
+}
+
 // --- Phase 1: PLANNER ---
 
 async function runPlanner(
   client: Anthropic,
   request: WritingRequest,
   sources: WritingSource[],
-  model: string
+  model: string,
+  voiceBlock: string
 ): Promise<WritingPlan> {
   const totalWords = TARGET_WORDS[request.targetLength] || 2500;
 
@@ -271,7 +311,7 @@ Target lengths:
 - long: ~4000 words (8 pages)
 
 Always include an Introduction and Conclusion section. Distribute sources logically across sections.
-Do not invent fake source metadata. If source metadata is missing, use conservative placeholders in bibliography entries.`;
+Do not invent fake source metadata. If source metadata is missing, use conservative placeholders in bibliography entries.${voiceBlock}`;
 
   const userPrompt = `Topic: ${request.topic}
 Tone: ${request.tone}
@@ -351,7 +391,8 @@ async function writeSection(
   sectionIndex: number,
   request: WritingRequest,
   sources: WritingSource[],
-  model: string
+  model: string,
+  voiceBlock: string
 ): Promise<string> {
   const section = plan.sections[sectionIndex];
 
@@ -396,7 +437,7 @@ Requirements:
 - Use ONLY the provided sources as primary evidence
 - Match the specified tone${noEnDashesLine}
 - Do not fabricate quotations, page numbers, publication details, or bibliography entries
-- If uncertain, cite conservatively and state uncertainty plainly
+- If uncertain, cite conservatively and state uncertainty plainly${voiceBlock}
 
 Output the section text in markdown format. Start with the section heading as ## ${section.title}`;
 
@@ -435,7 +476,8 @@ async function stitch(
   plan: WritingPlan,
   sectionTexts: string[],
   request: WritingRequest,
-  model: string
+  model: string,
+  voiceBlock: string
 ): Promise<string> {
   const combinedSections = sectionTexts.join("\n\n---\n\n");
 
@@ -455,7 +497,7 @@ Your job is to:
 
 The thesis of the paper is: ${plan.thesis}
 
-Output the complete paper in markdown format.`;
+Output the complete paper in markdown format.${voiceBlock}`;
 
   const response = await client.messages.create({
     model,
@@ -484,6 +526,7 @@ export async function runWritingPipeline(
 ): Promise<void> {
   const client = getClient();
   const model = request.deepWrite ? DEEP_WRITE_MODEL : DEFAULT_MODEL;
+  const voiceBlock = buildVoiceProfileBlock(request.voiceProfile);
 
   let totalInput = 0;
   let totalOutput = 0;
@@ -496,7 +539,7 @@ export async function runWritingPipeline(
       message: "Creating outline...",
     });
 
-    const plan = await runPlanner(client, request, sources, model);
+    const plan = await runPlanner(client, request, sources, model, voiceBlock);
 
     onEvent({ type: "plan", plan });
 
@@ -517,7 +560,8 @@ export async function runWritingPipeline(
         i,
         request,
         sources,
-        model
+        model,
+        voiceBlock
       );
       sectionTexts.push(sectionContent);
 
@@ -536,7 +580,7 @@ export async function runWritingPipeline(
       message: "Polishing and adding transitions...",
     });
 
-    const fullText = await stitch(client, plan, sectionTexts, request, model);
+    const fullText = await stitch(client, plan, sectionTexts, request, model, voiceBlock);
 
     onEvent({
       type: "complete",

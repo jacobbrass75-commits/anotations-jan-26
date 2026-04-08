@@ -32,6 +32,7 @@ import {
   truncateToolResult,
 } from "./contextCompaction";
 import {
+  buildVoiceProfileBlock,
   formatSourceForPrompt,
   formatSourceForPromptTiered,
   type TieredSource,
@@ -102,7 +103,7 @@ const STREAM_TAG_PREFIXES = [
   "</context_request",
 ];
 
-type WritingProjectContext = Pick<Project, "name" | "thesis" | "scope" | "contextSummary">;
+type WritingProjectContext = Pick<Project, "name" | "thesis" | "scope" | "contextSummary" | "voiceProfile">;
 type PromptSource = WritingSource | TieredSource;
 type WritingMode = "precision" | "extended";
 type ToolRequestType = "chunk_request" | "context_request";
@@ -752,6 +753,7 @@ async function loadConversationContext(
           thesis: project.thesis,
           scope: project.scope,
           contextSummary: project.contextSummary,
+          voiceProfile: project.voiceProfile,
         }
         : null,
       sources,
@@ -783,6 +785,7 @@ function buildWritingSystemPrompt(
         styleAnalysis: parseStyleAnalysisValue(source.styleAnalysis),
       })),
   );
+  const voiceProfileBlock = buildVoiceProfileBlock(project?.voiceProfile);
   const styleLabel = (citationStyle || "chicago").toUpperCase();
   const noEnDashesRule = noEnDashes
     ? "\n9. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
@@ -805,7 +808,7 @@ ${buildProjectContextBlock(project)}
 You have access to ${sources.length} source document(s).
 
 SOURCE MATERIALS:
-${buildSourceBlock(sources)}${styleSection}
+${buildSourceBlock(sources)}${styleSection}${voiceProfileBlock}
 
 CONVERSATION FLOW:
 When a student brings a new writing task, follow this collaborative process:

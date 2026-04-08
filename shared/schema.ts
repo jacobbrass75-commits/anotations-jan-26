@@ -319,6 +319,8 @@ export const projects = sqliteTable("projects", {
   scope: text("scope"),
   contextSummary: text("context_summary"),
   contextEmbedding: text("context_embedding", { mode: "json" }).$type<number[]>(),
+  voiceProfile: text("voice_profile"),
+  voiceProfileSamples: text("voice_profile_samples"),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
 });
