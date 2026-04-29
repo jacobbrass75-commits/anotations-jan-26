@@ -1,6 +1,6 @@
-import { useAuth } from "@clerk/clerk-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 
 type AuthState = "connecting" | "waiting" | "connected" | "error";

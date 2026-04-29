@@ -1,4 +1,4 @@
-import { useAuth } from "@/lib/auth";
+import { isLocalDevAuthEnabled, useAuth } from "@/lib/auth";
 import { UserButton } from "@clerk/clerk-react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +41,7 @@ function VenmoButton({ amount, label }: { amount: string; label: string }) {
 }
 
 export default function Pricing() {
+  const localDevAuth = isLocalDevAuthEnabled();
   const { user, isSignedIn } = useAuth();
   const [, setLocation] = useLocation();
   const currentTier = user?.tier ?? "free";
@@ -65,7 +66,7 @@ export default function Pricing() {
                 <Button variant="ghost" onClick={() => setLocation("/")}>
                   Dashboard
                 </Button>
-                <UserButton />
+                {!localDevAuth ? <UserButton /> : null}
               </>
             ) : (
               <Button onClick={() => setLocation("/sign-in")}>Sign In</Button>

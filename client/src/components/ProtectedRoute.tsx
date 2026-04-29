@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth } from "@/lib/auth";
 import { Redirect } from "wouter";
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {

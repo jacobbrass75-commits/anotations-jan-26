@@ -1,18 +1,33 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ClerkProvider } from "@clerk/clerk-react";
 import App from "./App";
 import "./index.css";
 
+const LOCAL_DEV_AUTH = import.meta.env.VITE_LOCAL_DEV_AUTH === "true";
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-if (!PUBLISHABLE_KEY) {
+if (!LOCAL_DEV_AUTH && !PUBLISHABLE_KEY) {
   throw new Error("Missing Clerk Publishable Key");
 }
 
-createRoot(document.getElementById("root")!).render(
+const root = createRoot(document.getElementById("root")!);
+const app = (
   <StrictMode>
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
-      <App />
-    </ClerkProvider>
+    <App />
   </StrictMode>
 );
+
+async function renderApp() {
+  if (LOCAL_DEV_AUTH) {
+    root.render(app);
+    return;
+  }
+
+  const { ClerkProvider } = await import("@clerk/clerk-react");
+  root.render(
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+      {app}
+    </ClerkProvider>
+  );
+}
+
+void renderApp();

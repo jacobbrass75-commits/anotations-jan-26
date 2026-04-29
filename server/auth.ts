@@ -3,7 +3,7 @@ import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
 import { createHash } from "crypto";
 import jwt from "jsonwebtoken";
 import type { User } from "@shared/schema";
-import { getOrCreateUser, getUserById } from "./authStorage";
+import { getOrCreateUser, getUserByEmail, getUserById } from "./authStorage";
 import { sqlite } from "./db";
 
 // Extend Express Request to include user property (same shape as before)
@@ -34,6 +34,14 @@ const TIER_STORAGE_LIMITS: Record<string, number> = {
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt-secret-change-in-production-64chars-long-string-placeholder!!";
 const JWT_EXPIRY = "7d";
+const LOCAL_DEV_AUTH = process.env.LOCAL_DEV_AUTH === "true";
+const LOCAL_DEV_USER_ID = process.env.LOCAL_DEV_USER_ID?.trim() || "";
+const LOCAL_DEV_USER_EMAIL = process.env.LOCAL_DEV_USER_EMAIL?.trim() || "";
+const CLERK_PUBLISHABLE_KEY =
+  process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY || "";
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || "";
+const ALLOW_TEST_CLERK_KEYS_IN_PRODUCTION =
+  process.env.CLERK_ALLOW_TEST_KEYS_IN_PRODUCTION === "true";
 
 interface ApiKeyRow {
   id: string;
@@ -44,6 +52,12 @@ interface McpTokenRow {
   id: string;
   user_id: string;
   expires_at: number | null;
+}
+
+interface LocalDevUserRow {
+  id: string;
+  email: string;
+  tier: string;
 }
 
 export interface JwtPayload {
@@ -87,6 +101,29 @@ const touchMcpTokenLastUsed = sqlite.prepare(
    WHERE id = ?`
 );
 
+const selectLatestLocalDevUser = sqlite.prepare(
+  `SELECT id, email, tier
+   FROM users
+   ORDER BY updated_at DESC
+   LIMIT 1`
+);
+
+function assertProductionClerkConfig(): void {
+  if (process.env.NODE_ENV !== "production") {
+    return;
+  }
+
+  if (LOCAL_DEV_AUTH) {
+    throw new Error("LOCAL_DEV_AUTH must not be enabled in production.");
+  }
+  if (!ALLOW_TEST_CLERK_KEYS_IN_PRODUCTION && !CLERK_PUBLISHABLE_KEY.startsWith("pk_live_")) {
+    throw new Error("Production Clerk publishable key must be configured with a pk_live_ key.");
+  }
+  if (!ALLOW_TEST_CLERK_KEYS_IN_PRODUCTION && !CLERK_SECRET_KEY.startsWith("sk_live_")) {
+    throw new Error("Production Clerk secret key must be configured with an sk_live_ key.");
+  }
+}
+
 function getUnixSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
@@ -127,6 +164,10 @@ function extractBearerToken(req: Request): string | null {
 }
 
 function shouldBypassClerk(req: Request): boolean {
+  if (LOCAL_DEV_AUTH) {
+    return true;
+  }
+
   const token = extractBearerToken(req);
   if (!token) {
     return false;
@@ -137,6 +178,34 @@ function shouldBypassClerk(req: Request): boolean {
   }
 
   return isStructuredJwt(token) && verifyToken(token) !== null;
+}
+
+async function resolveLocalDevUser(): Promise<Express.User | null> {
+  if (!LOCAL_DEV_AUTH) {
+    return null;
+  }
+
+  let dbUser =
+    (LOCAL_DEV_USER_ID && await getUserById(LOCAL_DEV_USER_ID)) ||
+    (LOCAL_DEV_USER_EMAIL && await getUserByEmail(LOCAL_DEV_USER_EMAIL)) ||
+    null;
+
+  if (!dbUser) {
+    const fallback = selectLatestLocalDevUser.get() as LocalDevUserRow | undefined;
+    if (fallback) {
+      dbUser = await getUserById(fallback.id);
+    }
+  }
+
+  if (!dbUser) {
+    return null;
+  }
+
+  return {
+    userId: dbUser.id,
+    email: dbUser.email,
+    tier: dbUser.tier,
+  };
 }
 
 async function resolveApiKeyUser(req: Request): Promise<ApiKeyAuthResult> {
@@ -225,6 +294,12 @@ async function resolveJwtUser(req: Request): Promise<Express.User | null> {
 
 // ── Install Clerk middleware globally ────────────────────────────────
 export function configureClerk(app: Express): void {
+  if (LOCAL_DEV_AUTH) {
+    return;
+  }
+
+  assertProductionClerkConfig();
+
   const clerk = clerkMiddleware();
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (shouldBypassClerk(req)) {
@@ -237,6 +312,11 @@ export function configureClerk(app: Express): void {
 
 // ── Resolve Clerk user → local DB user, set req.user ────────────────
 async function resolveUser(req: Request): Promise<Express.User | null> {
+  const localDevUser = await resolveLocalDevUser();
+  if (localDevUser) {
+    return localDevUser;
+  }
+
   const auth = getAuth(req);
   if (!auth?.userId) return null;
 

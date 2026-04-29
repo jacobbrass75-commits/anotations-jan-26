@@ -1428,8 +1428,7 @@ Return ONLY valid JSON matching this exact schema:
       });
 
       const text = response.content
-        .filter((b): b is { type: "text"; text: string } => b.type === "text")
-        .map((b) => b.text)
+        .flatMap((block) => (block.type === "text" ? [block.text] : []))
         .join("");
 
       // Extract JSON from response (handle markdown code blocks)

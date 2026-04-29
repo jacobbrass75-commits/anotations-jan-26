@@ -14,7 +14,7 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { useAuth, useUserTier } from "@/lib/auth";
+import { isLocalDevAuthEnabled, useAuth, useUserTier } from "@/lib/auth";
 import {
   formatAccountBytes,
   formatAccountDate,
@@ -46,10 +46,47 @@ const featureChecks = [
   { label: "Source-verified drafting", feature: "source_verified" as const },
 ];
 
+function ClerkHeaderControls({ onLogout }: { onLogout: () => void }) {
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="uppercase tracking-wider text-xs font-mono"
+        onClick={onLogout}
+        data-testid="button-sign-out"
+      >
+        <LogOut className="mr-2 h-4 w-4" />
+        Sign Out
+      </Button>
+      <UserButton />
+    </>
+  );
+}
+
+function ClerkAccountCenterButton() {
+  const clerk = useClerk();
+
+  return (
+    <Button
+      className="uppercase tracking-wider text-xs font-mono"
+      onClick={() => {
+        const clerkWithProfile = clerk as typeof clerk & {
+          openUserProfile?: () => void | Promise<void>;
+        };
+        void clerkWithProfile.openUserProfile?.();
+      }}
+      data-testid="button-open-account-center"
+    >
+      Open Account Center
+    </Button>
+  );
+}
+
 export default function Account() {
+  const localDevAuth = isLocalDevAuthEnabled();
   const { user, isLoading, logout } = useAuth();
   const { can } = useUserTier();
-  const clerk = useClerk();
 
   const { data: usage, isLoading: usageLoading } = useQuery<UsageSnapshot>({
     queryKey: ["/api/auth/usage"],
@@ -121,17 +158,13 @@ export default function Account() {
                 Manage Plan
               </Button>
             </Link>
-            <Button
-              variant="outline"
-              size="sm"
-              className="uppercase tracking-wider text-xs font-mono"
-              onClick={logout}
-              data-testid="button-sign-out"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign Out
-            </Button>
-            <UserButton />
+            {localDevAuth ? (
+              <Badge variant="secondary" className="uppercase tracking-wider text-[10px] font-mono">
+                Local Dev Auth
+              </Badge>
+            ) : (
+              <ClerkHeaderControls onLogout={logout} />
+            )}
           </div>
         </div>
       </header>
@@ -307,25 +340,28 @@ export default function Account() {
               Identity And Security
             </CardTitle>
             <CardDescription>
-              Open the Clerk-managed account center to update your email, password, profile details, and security settings.
+              {localDevAuth
+                ? "Local dev auth bypass is active for this restored demo session."
+                : "Open the Clerk-managed account center to update your email, password, profile details, and security settings."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border border-border bg-background/50 p-4 text-sm text-muted-foreground">
-              This keeps authentication and identity updates inside the existing Clerk flow instead of duplicating sensitive account-management forms in the app.
+              {localDevAuth
+                ? "The app is using the restored local account directly, so Clerk profile management is intentionally disabled."
+                : "This keeps authentication and identity updates inside the existing Clerk flow instead of duplicating sensitive account-management forms in the app."}
             </div>
-            <Button
-              className="uppercase tracking-wider text-xs font-mono"
-              onClick={() => {
-                const clerkWithProfile = clerk as typeof clerk & {
-                  openUserProfile?: () => void | Promise<void>;
-                };
-                void clerkWithProfile.openUserProfile?.();
-              }}
-              data-testid="button-open-account-center"
-            >
-              Open Account Center
-            </Button>
+            {localDevAuth ? (
+              <Button
+                className="uppercase tracking-wider text-xs font-mono"
+                disabled
+                data-testid="button-open-account-center-disabled"
+              >
+                Local Auth Active
+              </Button>
+            ) : (
+              <ClerkAccountCenterButton />
+            )}
           </CardContent>
         </Card>
       </main>

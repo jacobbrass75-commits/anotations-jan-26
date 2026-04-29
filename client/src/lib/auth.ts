@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useUser, useAuth as useClerkAuth, useClerk } from "@clerk/clerk-react";
 import { queryClient } from "./queryClient";
 
@@ -21,10 +22,13 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
+  isLoaded: boolean;
   isSignedIn: boolean;
   tier: string;
   logout: () => void;
 }
+
+const LOCAL_DEV_AUTH = import.meta.env.VITE_LOCAL_DEV_AUTH === "true";
 
 const TIER_LIMITS: Record<string, { tokenLimit: number; storageLimit: number }> = {
   free: { tokenLimit: 50_000, storageLimit: 52_428_800 },
@@ -32,8 +36,44 @@ const TIER_LIMITS: Record<string, { tokenLimit: number; storageLimit: number }> 
   max: { tokenLimit: 2_000_000, storageLimit: 5_368_709_120 },
 };
 
-/** Drop-in replacement for the old useAuth() hook, now backed by Clerk */
-export function useAuth(): AuthContextType {
+async function fetchLocalDevUser(): Promise<AuthUser | null> {
+  const response = await fetch("/api/auth/me", {
+    credentials: "include",
+  });
+
+  if (response.status === 401) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error("Failed to resolve local auth user");
+  }
+
+  return response.json();
+}
+
+function useLocalDevAuth(): AuthContextType {
+  const { data: user = null, isLoading } = useQuery<AuthUser | null>({
+    queryKey: ["/api/auth/me", "local-dev-auth"],
+    queryFn: fetchLocalDevUser,
+    staleTime: Infinity,
+    retry: false,
+  });
+
+  return {
+    user,
+    isLoading,
+    isLoaded: !isLoading,
+    isSignedIn: !!user,
+    tier: user?.tier ?? "free",
+    logout: () => {
+      queryClient.clear();
+      window.location.assign("/");
+    },
+  };
+}
+
+function useClerkBackedAuth(): AuthContextType {
   const { user: clerkUser, isLoaded: isUserLoaded } = useUser();
   const { isLoaded: isAuthLoaded, isSignedIn } = useClerkAuth();
   const { signOut } = useClerk();
@@ -70,10 +110,20 @@ export function useAuth(): AuthContextType {
   return {
     user,
     isLoading,
+    isLoaded: !isLoading,
     isSignedIn: !!isSignedIn,
     tier,
     logout,
   };
+}
+
+/** Drop-in replacement for the old useAuth() hook, now backed by Clerk or local dev auth */
+export function useAuth(): AuthContextType {
+  return LOCAL_DEV_AUTH ? useLocalDevAuth() : useClerkBackedAuth();
+}
+
+export function isLocalDevAuthEnabled(): boolean {
+  return LOCAL_DEV_AUTH;
 }
 
 // ── Tier feature gating ────────────────────────────────────────────

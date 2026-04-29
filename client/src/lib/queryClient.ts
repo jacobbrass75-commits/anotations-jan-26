@@ -1,8 +1,10 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+const LOCAL_DEV_AUTH = import.meta.env.VITE_LOCAL_DEV_AUTH === "true";
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    if (res.status === 401) {
+    if (res.status === 401 && !LOCAL_DEV_AUTH) {
       // Clerk session expired — redirect to sign-in
       if (typeof window !== "undefined" && !window.location.pathname.startsWith("/sign-in")) {
         window.location.href = "/sign-in";
