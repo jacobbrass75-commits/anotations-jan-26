@@ -60,6 +60,19 @@ interface LocalDevUserRow {
   tier: string;
 }
 
+interface ClerkEmailAddressLike {
+  id?: string | null;
+  emailAddress?: string | null;
+  verification?: {
+    status?: string | null;
+  } | null;
+}
+
+interface ClerkUserEmailLike {
+  emailAddresses?: ClerkEmailAddressLike[] | null;
+  primaryEmailAddressId?: string | null;
+}
+
 export interface JwtPayload {
   userId: string;
   email: string;
@@ -126,6 +139,35 @@ function assertProductionClerkConfig(): void {
 
 function getUnixSeconds(): number {
   return Math.floor(Date.now() / 1000);
+}
+
+function normalizeClerkTier(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  if (typeof value === "string" && TIER_LEVELS[value] !== undefined) {
+    return value;
+  }
+  throw new Error("Invalid Clerk tier metadata");
+}
+
+function getPrimaryClerkEmail(clerkUser: ClerkUserEmailLike): string {
+  const addresses = Array.isArray(clerkUser.emailAddresses) ? clerkUser.emailAddresses : [];
+  const primary =
+    addresses.find((address) => address.id && address.id === clerkUser.primaryEmailAddressId) ??
+    null;
+  const verified =
+    (primary?.verification?.status === "verified" ? primary : null) ??
+    addresses.find((address) => address.verification?.status === "verified") ??
+    null;
+  const selected = verified ?? primary ?? addresses[0] ?? null;
+  const email = selected?.emailAddress?.trim();
+
+  if (!email) {
+    throw new Error("Clerk user is missing an email address");
+  }
+
+  return email;
 }
 
 function hashApiKey(rawKey: string): string {
@@ -322,14 +364,13 @@ async function resolveUser(req: Request): Promise<Express.User | null> {
 
   // Get Clerk user details for email + metadata
   const clerkUser = await clerkClient.users.getUser(auth.userId);
-  const email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
-  // TODO: revert to "free" default when leaving testing phase
-  const tier = (clerkUser.publicMetadata?.tier as string) || "max";
+  const email = getPrimaryClerkEmail(clerkUser);
+  const tier = normalizeClerkTier(clerkUser.publicMetadata?.tier);
 
   // Ensure a local DB row exists (for usage tracking)
-  await getOrCreateUser(auth.userId, email, tier);
+  const dbUser = await getOrCreateUser(auth.userId, email, tier);
 
-  return { userId: auth.userId, email, tier };
+  return { userId: dbUser.id, email: dbUser.email, tier: dbUser.tier };
 }
 
 // ── Middleware: requires a valid Clerk session, API key, or legacy JWT ───────

@@ -61,6 +61,19 @@ interface SessionUser {
   tier: string;
 }
 
+interface ClerkEmailAddressLike {
+  id?: string | null;
+  emailAddress?: string | null;
+  verification?: {
+    status?: string | null;
+  } | null;
+}
+
+interface ClerkUserEmailLike {
+  emailAddresses?: ClerkEmailAddressLike[] | null;
+  primaryEmailAddressId?: string | null;
+}
+
 interface OAuthClientLike {
   clientId: string;
   clientSecretHash: string | null;
@@ -239,6 +252,35 @@ function sendOAuthError(res: Response, status: number, error: string, descriptio
   });
 }
 
+function normalizeClerkTier(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  if (typeof value === "string" && TIER_LEVELS[value] !== undefined) {
+    return value;
+  }
+  throw new Error("Invalid Clerk tier metadata");
+}
+
+function getPrimaryClerkEmail(clerkUser: ClerkUserEmailLike): string {
+  const addresses = Array.isArray(clerkUser.emailAddresses) ? clerkUser.emailAddresses : [];
+  const primary =
+    addresses.find((address) => address.id && address.id === clerkUser.primaryEmailAddressId) ??
+    null;
+  const verified =
+    (primary?.verification?.status === "verified" ? primary : null) ??
+    addresses.find((address) => address.verification?.status === "verified") ??
+    null;
+  const selected = verified ?? primary ?? addresses[0] ?? null;
+  const email = selected?.emailAddress?.trim();
+
+  if (!email) {
+    throw new Error("Clerk user is missing an email address");
+  }
+
+  return email;
+}
+
 async function resolveSessionUser(req: Request): Promise<SessionUser | null> {
   const auth = getAuth(req);
   if (!auth?.userId) {
@@ -246,14 +288,14 @@ async function resolveSessionUser(req: Request): Promise<SessionUser | null> {
   }
 
   const clerkUser = await clerkClient.users.getUser(auth.userId);
-  const email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
-  const tier = (clerkUser.publicMetadata?.tier as string) || "max";
-  await getOrCreateUser(auth.userId, email, tier);
+  const email = getPrimaryClerkEmail(clerkUser);
+  const tier = normalizeClerkTier(clerkUser.publicMetadata?.tier);
+  const dbUser = await getOrCreateUser(auth.userId, email, tier);
 
   return {
-    userId: auth.userId,
-    email,
-    tier,
+    userId: dbUser.id,
+    email: dbUser.email,
+    tier: dbUser.tier,
   };
 }
 

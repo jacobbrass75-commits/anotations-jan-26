@@ -76,6 +76,7 @@ describe("auth route integration", () => {
 
     return {
       db,
+      sqlite: importedSqlite,
       token: generateToken({
         id: "user-1",
         email: "researcher@example.com",
@@ -130,6 +131,55 @@ describe("auth route integration", () => {
         tier: "pro",
       });
       expect(typeof usage.body?.billingCycleStart).toBe("string");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("adopts an existing local user when a new Clerk user signs in with the same email", async () => {
+    const { server, sqlite } = await createAuthApp();
+    clerkGetAuth.mockReturnValue({ userId: "user_new_clerk_instance" });
+    clerkGetUser.mockResolvedValue({
+      primaryEmailAddressId: "email_primary",
+      emailAddresses: [
+        {
+          id: "email_primary",
+          emailAddress: "Researcher@Example.com",
+          verification: { status: "verified" },
+        },
+      ],
+      publicMetadata: {},
+    });
+
+    try {
+      const profile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me");
+      const usage = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/usage");
+      const usersAfterAuth = sqlite
+        .prepare("SELECT id, email, tier, tokens_used FROM users ORDER BY email")
+        .all() as Array<{ id: string; email: string; tier: string; tokens_used: number }>;
+
+      expect(profile.status).toBe(200);
+      expect(profile.body).toMatchObject({
+        id: "user-1",
+        email: "researcher@example.com",
+        tier: "pro",
+        tokensUsed: 1250,
+      });
+
+      expect(usage.status).toBe(200);
+      expect(usage.body).toMatchObject({
+        tokensUsed: 1250,
+        tier: "pro",
+      });
+
+      expect(usersAfterAuth).toEqual([
+        {
+          id: "user-1",
+          email: "researcher@example.com",
+          tier: "pro",
+          tokens_used: 1250,
+        },
+      ]);
     } finally {
       await server.close();
     }
