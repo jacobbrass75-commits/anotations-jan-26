@@ -40,6 +40,14 @@ app_pm2() {
   fi
 }
 
+ensure_app_data_writable() {
+  mkdir -p "$APP_DIR/data/uploads"
+
+  if [[ "$(id -u)" == "0" ]]; then
+    chown -R "$APP_PM2_USER" "$APP_DIR/data"
+  fi
+}
+
 wait_for_http() {
   local url="$1"
   local label="$2"
@@ -85,6 +93,7 @@ npm ci --no-audit --fund=false
 
 echo "[deploy] bootstrapping database schema"
 npx tsx scripts/bootstrap-db.ts
+ensure_app_data_writable
 
 echo "[deploy] building app"
 SCHOLARMARK_VALIDATE_PRODUCTION_BUILD=true npm run build
