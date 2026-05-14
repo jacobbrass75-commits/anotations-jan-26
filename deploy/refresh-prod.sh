@@ -8,6 +8,7 @@ if [[ -z "${APP_REF:-}" && -f "$APP_REF_FILE" ]]; then
 fi
 APP_REF="${APP_REF:-origin/master}"
 MCP_DIR="${MCP_DIR:-/opt/app/mcp-server}"
+APP_PM2_USER="${APP_PM2_USER:-deploy}"
 APP_HEALTHCHECK_URL="${APP_HEALTHCHECK_URL:-http://127.0.0.1:5001/readyz}"
 MCP_HEALTHCHECK_URL="${MCP_HEALTHCHECK_URL:-http://127.0.0.1:5002/readyz}"
 SKIP_PREDEPLOY_BACKUP="${SKIP_PREDEPLOY_BACKUP:-0}"
@@ -28,6 +29,14 @@ require_file() {
   if [[ ! -f "$1" ]]; then
     echo "[deploy] missing required file: $1" >&2
     exit 1
+  fi
+}
+
+app_pm2() {
+  if [[ "$(id -un)" == "$APP_PM2_USER" ]]; then
+    pm2 "$@"
+  else
+    sudo -H -u "$APP_PM2_USER" env PATH="$PATH" pm2 "$@"
   fi
 }
 
@@ -81,7 +90,8 @@ echo "[deploy] building app"
 SCHOLARMARK_VALIDATE_PRODUCTION_BUILD=true npm run build
 
 echo "[deploy] replacing web app with built production process"
-pm2 startOrReload deploy/ecosystem.config.cjs --update-env
+pm2 delete sourceannotator >/dev/null 2>&1 || true
+app_pm2 startOrReload deploy/ecosystem.config.cjs --update-env
 
 if [[ -d "$MCP_DIR" ]]; then
   require_file "$MCP_DIR/package-lock.json"
@@ -103,4 +113,5 @@ MCP_BASE_URL="${MCP_SMOKE_BASE_URL:-http://127.0.0.1:5002}" \
 node "$APP_DIR/scripts/smoke-prod.mjs"
 
 echo "[deploy] saving PM2 process list"
+app_pm2 save
 pm2 save
