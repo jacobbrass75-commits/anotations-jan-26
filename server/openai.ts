@@ -18,6 +18,7 @@ import {
   refinerResponseSchema,
   documentContextSchema,
 } from "@shared/schema";
+import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -65,12 +66,17 @@ export function getMaxChunksForLevel(level: ThoroughnessLevel): number {
   }
 }
 
-export async function getEmbedding(text: string): Promise<number[]> {
+export async function getEmbeddingWithUsage(text: string, onTokenUsage?: TokenUsageReporter): Promise<number[]> {
   const response = await getOpenAI().embeddings.create({
     model: EMBEDDING_MODEL,
     input: text,
   });
+  reportProviderUsage(response, onTokenUsage);
   return response.data[0].embedding;
+}
+
+export async function getEmbedding(text: string): Promise<number[]> {
+  return getEmbeddingWithUsage(text);
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -198,7 +204,8 @@ Respond with JSON:
 export async function searchDocument(
   query: string,
   intent: string,
-  relevantChunks: { text: string; startPosition: number; endPosition: number }[]
+  relevantChunks: { text: string; startPosition: number; endPosition: number }[],
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<SearchResult[]> {
   try {
     const chunksText = relevantChunks
@@ -242,6 +249,7 @@ Respond with JSON array of results (max 5):
       ],
       response_format: { type: "json_object" },
     });
+    reportProviderUsage(response, onTokenUsage);
 
     const content = response.choices[0].message.content;
     if (!content) {
@@ -839,7 +847,8 @@ export async function processChunksWithPipeline(
  */
 export async function extractCitationMetadata(
   documentText: string,
-  highlightedText?: string
+  highlightedText?: string,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<CitationData | null> {
   const textSample = documentText.substring(0, 3000);
   const contextHint = highlightedText 
@@ -891,6 +900,7 @@ If you cannot identify any citation information, respond with: {"error": "Unable
       response_format: { type: "json_object" },
       max_tokens: 800,
     });
+    reportProviderUsage(response, onTokenUsage);
 
     const content = response.choices[0].message.content;
     if (!content) return null;

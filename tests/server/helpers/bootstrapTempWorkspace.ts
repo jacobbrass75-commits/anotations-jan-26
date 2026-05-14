@@ -1,8 +1,9 @@
 import { spawnSync } from "child_process";
 import { copyFile, mkdir, symlink } from "fs/promises";
-import { join } from "path";
+import { dirname, join, resolve } from "path";
+import { fileURLToPath } from "url";
 
-const repoRoot = "/Users/brass/Documents/New project/anotations-jan-26";
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const tsxEntrypoint = join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
 const bootstrapScript = join(repoRoot, "scripts", "bootstrap-db.ts");
 

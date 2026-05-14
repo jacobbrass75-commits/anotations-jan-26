@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { requireAuth, requireTier } from "./auth";
+import { checkTokenBudget, requireAuth, requireTier } from "./auth";
 import { incrementTokenUsage } from "./authStorage";
 import { humanizeText, MAX_HUMANIZER_TEXT_LENGTH } from "./humanizer";
 
@@ -18,7 +18,7 @@ function getErrorStatus(message: string): number {
 }
 
 export function registerHumanizerRoutes(app: Express): void {
-  app.post("/api/humanize", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
+  app.post("/api/humanize", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     const startedAt = Date.now();
     try {
       const { text, model, temperature } = req.body ?? {};
@@ -44,12 +44,14 @@ export function registerHumanizerRoutes(app: Express): void {
       });
 
       if (result.tokensUsed && result.tokensUsed > 0) {
-        incrementTokenUsage(req.user!.userId, result.tokensUsed).catch((error) => {
+        try {
+          await incrementTokenUsage(req.user!.userId, result.tokensUsed);
+        } catch (error) {
           console.warn("[Humanizer] Failed to increment token usage", {
             userId: req.user?.userId,
             error: error instanceof Error ? error.message : String(error),
           });
-        });
+        }
       }
 
       const durationMs = Date.now() - startedAt;

@@ -30,19 +30,16 @@ interface AuthContextType {
 
 const LOCAL_DEV_AUTH = import.meta.env.VITE_LOCAL_DEV_AUTH === "true";
 
-const TIER_LIMITS: Record<string, { tokenLimit: number; storageLimit: number }> = {
-  free: { tokenLimit: 50_000, storageLimit: 52_428_800 },
-  pro: { tokenLimit: 500_000, storageLimit: 524_288_000 },
-  max: { tokenLimit: 2_000_000, storageLimit: 5_368_709_120 },
-};
-
-async function fetchLocalDevUser(): Promise<AuthUser | null> {
+async function fetchServerAuthUser(options: { allowUnauthorized: boolean }): Promise<AuthUser | null> {
   const response = await fetch("/api/auth/me", {
     credentials: "include",
   });
 
   if (response.status === 401) {
-    return null;
+    if (options.allowUnauthorized) {
+      return null;
+    }
+    throw new Error("Server rejected the authenticated session");
   }
 
   if (!response.ok) {
@@ -55,7 +52,7 @@ async function fetchLocalDevUser(): Promise<AuthUser | null> {
 function useLocalDevAuth(): AuthContextType {
   const { data: user = null, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/me", "local-dev-auth"],
-    queryFn: fetchLocalDevUser,
+    queryFn: () => fetchServerAuthUser({ allowUnauthorized: true }),
     staleTime: Infinity,
     retry: false,
   });
@@ -75,32 +72,28 @@ function useLocalDevAuth(): AuthContextType {
 
 function useClerkBackedAuth(): AuthContextType {
   const { user: clerkUser, isLoaded: isUserLoaded } = useUser();
-  const { isLoaded: isAuthLoaded, isSignedIn } = useClerkAuth();
+  const { isLoaded: isAuthLoaded, isSignedIn, userId: clerkAuthUserId } = useClerkAuth();
   const { signOut } = useClerk();
 
-  const isLoading = !isUserLoaded || !isAuthLoaded;
+  const clerkLoading = !isUserLoaded || !isAuthLoaded;
+  const activeClerkUserId = clerkUser?.id ?? clerkAuthUserId ?? null;
+  const shouldLoadServerUser = !clerkLoading && !!isSignedIn && !!activeClerkUserId;
+  const {
+    data: serverUser = null,
+    isLoading: isServerUserLoading,
+    isError: isServerUserError,
+  } = useQuery<AuthUser | null>({
+    queryKey: ["/api/auth/me", "clerk-backed", activeClerkUserId ?? "signed-out"],
+    queryFn: () => fetchServerAuthUser({ allowUnauthorized: false }),
+    enabled: shouldLoadServerUser,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const isLoading = clerkLoading || (shouldLoadServerUser && isServerUserLoading);
 
-  const tier = (clerkUser?.publicMetadata?.tier as string) || "free";
-  const limits = TIER_LIMITS[tier] ?? TIER_LIMITS.free;
-
-  const user: AuthUser | null = clerkUser
-    ? {
-        id: clerkUser.id,
-        email: clerkUser.primaryEmailAddress?.emailAddress ?? "",
-        username: clerkUser.username ?? clerkUser.primaryEmailAddress?.emailAddress ?? "",
-        firstName: clerkUser.firstName,
-        lastName: clerkUser.lastName,
-        tier,
-        tokensUsed: 0, // populated from /api/auth/usage
-        tokenLimit: limits.tokenLimit,
-        storageUsed: 0,
-        storageLimit: limits.storageLimit,
-        emailVerified: clerkUser.primaryEmailAddress?.verification?.status === "verified",
-        billingCycleStart: null,
-        createdAt: clerkUser.createdAt?.toISOString() ?? "",
-        updatedAt: clerkUser.updatedAt?.toISOString() ?? "",
-      }
-    : null;
+  const tier = serverUser?.tier || (clerkUser?.publicMetadata?.tier as string) || "free";
+  const user: AuthUser | null = serverUser;
+  const effectiveSignedIn = !!isSignedIn && !!serverUser && !isServerUserError;
 
   const logout = () => {
     signOut();
@@ -111,7 +104,7 @@ function useClerkBackedAuth(): AuthContextType {
     user,
     isLoading,
     isLoaded: !isLoading,
-    isSignedIn: !!isSignedIn,
+    isSignedIn: effectiveSignedIn,
     tier,
     logout,
   };

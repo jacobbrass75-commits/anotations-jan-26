@@ -6,6 +6,8 @@ dist/
 coverage/
 .coverage-test/
 *.cjs
+/*.js
+!/postcss.config.js
 
 # Environment variables (contains secrets!)
 .env

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "crypto";
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { apiKeys } from "@shared/schema";
 import { requireAuth } from "./auth";
@@ -25,6 +25,15 @@ function normalizeApiKeyLabel(label: unknown): string | null {
   }
 
   return trimmed.slice(0, 100);
+}
+
+function requireFirstPartyAccountAuth(req: Request, res: Response, next: NextFunction): void {
+  if (req.user?.authType === "mcp") {
+    res.status(403).json({ message: "OAuth tokens cannot manage API keys" });
+    return;
+  }
+
+  next();
 }
 
 export function registerAuthRoutes(app: Express): void {
@@ -75,7 +84,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/auth/api-keys", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/auth/api-keys", requireAuth, requireFirstPartyAccountAuth, async (req: Request, res: Response) => {
     try {
       const keys = await db
         .select({
@@ -96,7 +105,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/auth/api-keys", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/auth/api-keys", requireAuth, requireFirstPartyAccountAuth, async (req: Request, res: Response) => {
     try {
       const rawKey = generateApiKey();
       const now = Math.floor(Date.now() / 1000);
@@ -129,7 +138,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/auth/api-keys/:id", requireAuth, async (req: Request, res: Response) => {
+  app.delete("/api/auth/api-keys/:id", requireAuth, requireFirstPartyAccountAuth, async (req: Request, res: Response) => {
     try {
       const [existingKey] = await db
         .select({

@@ -40,6 +40,16 @@ ls -lah /opt/backups/scholarmark/latest
 
 ## Restore drill
 
+Run the automated restore drill against the latest backup:
+
+```bash
+ssh deploy@89.167.10.34 "cd /opt/app && BACKUP_DIR=/opt/backups/scholarmark/latest node scripts/restore-drill.mjs"
+```
+
+The script restores the SQLite database and uploads archive into a temporary workspace, runs `PRAGMA integrity_check`, bootstraps the schema against the restored copy, boots the app against that restored data tree, and runs app smoke checks. Set `SKIP_RESTORE_DRILL_BOOT=1` only when you need a DB-only drill.
+
+Manual drill steps, if needed:
+
 1. Copy the backup snapshot to a temp directory.
 2. Extract `uploads.tar.gz` into a fresh `data/uploads`.
 3. Place `sourceannotator.db` into the matching `data/` directory.

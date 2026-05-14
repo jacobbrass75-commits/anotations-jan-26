@@ -4,10 +4,10 @@ import { readdir, stat } from "fs/promises";
 import { join } from "path";
 import { PDFParse } from "pdf-parse";
 import { storage } from "./storage";
-import { db } from "./db";
+import { db, sqlite } from "./db";
 import { extractTextFromTxt } from "./chunker";
 import {
-  getEmbedding,
+  getEmbeddingWithUsage,
   analyzeChunkForIntent,
   searchDocument,
   findHighlightPosition,
@@ -28,7 +28,8 @@ import { registerWritingRoutes } from "./writingRoutes";
 import { registerHumanizerRoutes } from "./humanizerRoutes";
 import { registerExtensionRoutes } from "./extensionRoutes";
 import { registerWebClipRoutes } from "./webClipRoutes";
-import type { AnnotationCategory, InsertAnnotation } from "@shared/schema";
+import { registerAnalyticsRoutes } from "./analyticsRoutes";
+import type { AnnotationCategory, Document, InsertAnnotation } from "@shared/schema";
 import {
   createZipFromImageUploads,
   SUPPORTED_VISION_OCR_MODELS,
@@ -46,10 +47,18 @@ import {
   inferDocumentSourceMimeType,
   saveDocumentSource,
 } from "./sourceFiles";
-import { createUploadMiddleware, getFileExtension, isImageFile, upload } from "./uploadMiddleware";
+import {
+  DEFAULT_UPLOAD_FILE_SIZE_LIMIT_BYTES,
+  createUploadMiddleware,
+  getFileExtension,
+  isImageFile,
+  upload,
+} from "./uploadMiddleware";
 import { annotations, documents, projectAnnotations, projects } from "@shared/schema";
 import { sql } from "drizzle-orm";
-import { requireAuth } from "./auth";
+import { checkTokenBudget, requireAuth } from "./auth";
+import { decrementStorageUsage, reserveStorageUsage } from "./authStorage";
+import { createTokenUsageAccumulator } from "./aiUsage";
 import {
   createTextBackedDocument,
   normalizePastedSourceFilename,
@@ -57,9 +66,17 @@ import {
 const MAX_COMBINED_UPLOAD_FILES = Number.isFinite(Number(process.env.MAX_COMBINED_UPLOAD_FILES))
   ? Math.max(1, Math.floor(Number(process.env.MAX_COMBINED_UPLOAD_FILES)))
   : 25;
+const MAX_COMBINED_UPLOAD_TOTAL_BYTES = Number.isFinite(Number(process.env.MAX_COMBINED_UPLOAD_TOTAL_BYTES))
+  ? Math.max(1, Math.floor(Number(process.env.MAX_COMBINED_UPLOAD_TOTAL_BYTES)))
+  : DEFAULT_UPLOAD_FILE_SIZE_LIMIT_BYTES;
 const DATABASE_PATH = join(process.cwd(), "data", "sourceannotator.db");
 const SOURCE_UPLOADS_PATH = join(process.cwd(), "data", "uploads");
 const textUpload = createUploadMiddleware();
+const groupUpload = createUploadMiddleware({
+  maxFileCount: MAX_COMBINED_UPLOAD_FILES,
+  maxFileSizeBytes: MAX_COMBINED_UPLOAD_TOTAL_BYTES,
+  maxTotalFileSizeBytes: MAX_COMBINED_UPLOAD_TOTAL_BYTES,
+});
 
 async function getFileSizeBytes(path: string): Promise<number> {
   try {
@@ -88,6 +105,87 @@ async function getDirectorySizeBytes(path: string): Promise<number> {
   } catch {
     return 0;
   }
+}
+
+async function getOwnedDocumentOr404(
+  req: Request,
+  res: Response,
+): Promise<Document | null> {
+  const doc = await storage.getDocument(req.params.id);
+  if (!doc || doc.userId !== req.user!.userId) {
+    res.status(404).json({ message: "Document not found" });
+    return null;
+  }
+  return doc;
+}
+
+async function assertAnnotationOwnerOr404(
+  annotationId: string,
+  userId: string,
+  res: Response,
+): Promise<boolean> {
+  const annotation = await storage.getAnnotation(annotationId);
+  if (!annotation) {
+    res.status(404).json({ message: "Annotation not found" });
+    return false;
+  }
+
+  const doc = await storage.getDocument(annotation.documentId);
+  if (!doc || doc.userId !== userId) {
+    res.status(404).json({ message: "Annotation not found" });
+    return false;
+  }
+
+  return true;
+}
+
+async function reserveStorageBudget(req: Request, res: Response, additionalBytes: number): Promise<number | null> {
+  const reservation = await reserveStorageUsage(req.user!.userId, additionalBytes);
+  if (reservation.ok) {
+    return reservation.requestedBytes;
+  }
+
+  if (reservation.reason === "not_found") {
+    res.status(401).json({ message: "Authentication required" });
+    return null;
+  }
+
+  res.status(403).json({
+    message: "Storage budget exceeded",
+    storageLimit: reservation.storageLimit,
+    storageUsed: reservation.storageUsed,
+    requestedBytes: reservation.requestedBytes,
+  });
+  return null;
+}
+
+async function releaseReservedStorage(userId: string, bytes: number): Promise<void> {
+  if (bytes <= 0) return;
+  try {
+    await decrementStorageUsage(userId, bytes);
+  } catch (error) {
+    console.warn("Failed to release reserved storage usage", {
+      userId,
+      bytes,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function enforceContentLengthLimit(maxBytes: number) {
+  return (req: Request, res: Response, next: () => void): void => {
+    const rawLength = req.headers["content-length"];
+    const contentLength = typeof rawLength === "string" ? Number(rawLength) : Number.NaN;
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      res.status(413).json({
+        message: "Upload payload is too large",
+        maxBytes,
+      });
+      return;
+    }
+
+    next();
+  };
 }
 
 // Detect garbled text from failed PDF extraction
@@ -126,7 +224,21 @@ export async function registerRoutes(
 ): Promise<Server> {
   await initializeOcrQueue();
 
-  app.get("/api/system/status", async (_req: Request, res: Response) => {
+  app.get("/healthz", (_req: Request, res: Response) => {
+    return res.json({ ok: true, service: "scholarmark-app" });
+  });
+
+  app.get("/readyz", async (_req: Request, res: Response) => {
+    try {
+      sqlite.prepare("SELECT 1").get();
+      return res.json({ ok: true, service: "scholarmark-app", database: "ok" });
+    } catch (error) {
+      console.error("Readiness check failed:", error);
+      return res.status(503).json({ ok: false, service: "scholarmark-app", database: "error" });
+    }
+  });
+
+  app.get("/api/system/status", requireAuth, async (_req: Request, res: Response) => {
     try {
       const [projectCountRow] = await db
         .select({ count: sql<number>`count(*)` })
@@ -193,13 +305,15 @@ export async function registerRoutes(
   });
 
   // Upload document
-  app.post("/api/upload", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload", requireAuth, checkTokenBudget, upload.single("file"), async (req: Request, res: Response) => {
+    let reservedStorageBytes = 0;
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
       const file = req.file;
+      const fileBytes = file.size || file.buffer.length;
       const requestedOcrMode = ((req.body.ocrMode as string) || "standard").toLowerCase();
       const ocrMode =
         requestedOcrMode === "vision-batch"
@@ -247,16 +361,25 @@ export async function registerRoutes(
           fullText = extractTextFromTxt(file.buffer.toString("utf-8"));
         }
 
+        const reservation = await reserveStorageBudget(req, res, fileBytes);
+        if (reservation === null) return;
+        reservedStorageBytes = reservation;
+
         const updatedDoc = await createTextBackedDocument({
           filename: file.originalname,
           fullText,
           sourceBuffer: file.buffer,
           userId: req.user!.userId,
         });
+        reservedStorageBytes = 0;
         return res.json(updatedDoc);
       }
 
       if (isPdf) {
+        const reservation = await reserveStorageBudget(req, res, fileBytes);
+        if (reservation === null) return;
+        reservedStorageBytes = reservation;
+
         // OCR modes for PDFs: queue durable background OCR against persisted source.
         const doc = await storage.createDocument({
           filename: file.originalname,
@@ -264,6 +387,7 @@ export async function registerRoutes(
           userId: req.user!.userId,
         } as any);
         await saveDocumentSource(doc.id, file.originalname, file.buffer);
+        reservedStorageBytes = 0;
         await storage.updateDocument(doc.id, { status: "processing" });
         await enqueuePdfOcrJob({
           documentId: doc.id,
@@ -277,6 +401,10 @@ export async function registerRoutes(
       }
 
       if (isImage) {
+        const reservation = await reserveStorageBudget(req, res, fileBytes);
+        if (reservation === null) return;
+        reservedStorageBytes = reservation;
+
         // Image OCR runs as a durable queued job.
         const doc = await storage.createDocument({
           filename: file.originalname,
@@ -284,6 +412,7 @@ export async function registerRoutes(
           userId: req.user!.userId,
         } as any);
         await saveDocumentSource(doc.id, file.originalname, file.buffer);
+        reservedStorageBytes = 0;
         await storage.updateDocument(doc.id, { status: "processing" });
         const imageOcrMode = ocrMode === "vision_batch" ? "vision_batch" : "vision";
         await enqueueImageOcrJob({
@@ -299,21 +428,27 @@ export async function registerRoutes(
 
       return res.status(400).json({ message: "Unsupported OCR mode for this file type" });
     } catch (error) {
+      await releaseReservedStorage(req.user!.userId, reservedStorageBytes);
       console.error("Upload error:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
     }
   });
 
-  app.post("/api/upload-text", requireAuth, textUpload.none(), async (req: Request, res: Response) => {
+  app.post("/api/upload-text", requireAuth, checkTokenBudget, textUpload.none(), async (req: Request, res: Response) => {
+    let reservedStorageBytes = 0;
     try {
       const rawText = typeof req.body.text === "string" ? req.body.text : "";
       const normalizedText = extractTextFromTxt(rawText);
+      const textBytes = Buffer.byteLength(rawText, "utf-8");
 
       if (!normalizedText || normalizedText.length < 10) {
         return res.status(400).json({
           message: "Paste at least a few sentences so ScholarMark can create a usable source.",
         });
       }
+      const reservation = await reserveStorageBudget(req, res, textBytes);
+      if (reservation === null) return;
+      reservedStorageBytes = reservation;
 
       const title = typeof req.body.title === "string" ? req.body.title : "";
       const filename = normalizePastedSourceFilename(title);
@@ -323,9 +458,11 @@ export async function registerRoutes(
         sourceBuffer: Buffer.from(rawText, "utf-8"),
         userId: req.user!.userId,
       });
+      reservedStorageBytes = 0;
 
       return res.json(doc);
     } catch (error) {
+      await releaseReservedStorage(req.user!.userId, reservedStorageBytes);
       console.error("Upload text error:", error);
       return res.status(500).json({
         message: error instanceof Error ? error.message : "Paste upload failed",
@@ -334,11 +471,26 @@ export async function registerRoutes(
   });
 
   // Upload multiple images as a single combined document (preserves upload order).
-  app.post("/api/upload-group", requireAuth, upload.array("files", 100), async (req: Request, res: Response) => {
+  app.post(
+    "/api/upload-group",
+    requireAuth,
+    checkTokenBudget,
+    enforceContentLengthLimit(MAX_COMBINED_UPLOAD_TOTAL_BYTES),
+    groupUpload.array("files", MAX_COMBINED_UPLOAD_FILES),
+    async (req: Request, res: Response) => {
+    let reservedStorageBytes = 0;
     try {
       const files = (req.files as Express.Multer.File[] | undefined) || [];
       if (!files.length) {
         return res.status(400).json({ message: "No files uploaded" });
+      }
+      const totalUploadedBytes = files.reduce((sum, file) => sum + (file.size || file.buffer.length), 0);
+      if (totalUploadedBytes > MAX_COMBINED_UPLOAD_TOTAL_BYTES) {
+        return res.status(413).json({
+          message: "Combined upload is too large",
+          maxBytes: MAX_COMBINED_UPLOAD_TOTAL_BYTES,
+          requestedBytes: totalUploadedBytes,
+        });
       }
       if (files.length > MAX_COMBINED_UPLOAD_FILES) {
         return res.status(400).json({
@@ -382,6 +534,12 @@ export async function registerRoutes(
       const primaryName = files[0].originalname || "image-upload";
       const baseName = primaryName.replace(/\.[^/.]+$/, "");
       const combinedFilename = `${baseName} (${files.length} images).zip`;
+      const combinedZipBuffer = await createZipFromImageUploads(
+        files.map((file) => ({ buffer: file.buffer, originalFilename: file.originalname }))
+      );
+      const reservation = await reserveStorageBudget(req, res, combinedZipBuffer.length);
+      if (reservation === null) return;
+      reservedStorageBytes = reservation;
 
       const doc = await storage.createDocument({
         filename: combinedFilename,
@@ -389,10 +547,8 @@ export async function registerRoutes(
         userId: req.user!.userId,
       } as any);
       await storage.updateDocument(doc.id, { status: "processing" });
-      const combinedZipBuffer = await createZipFromImageUploads(
-        files.map((file) => ({ buffer: file.buffer, originalFilename: file.originalname }))
-      );
       await saveDocumentSource(doc.id, combinedFilename, combinedZipBuffer);
+      reservedStorageBytes = 0;
 
       const combinedOcrMode = ocrMode === "vision" ? "vision" : "vision_batch";
       await enqueueImageBundleOcrJob({
@@ -405,21 +561,18 @@ export async function registerRoutes(
       const updatedDoc = await storage.getDocument(doc.id);
       return res.status(202).json(updatedDoc);
     } catch (error) {
+      await releaseReservedStorage(req.user!.userId, reservedStorageBytes);
       console.error("Upload-group error:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
     }
-  });
+    }
+  );
 
   // Get document processing status (for polling)
   app.get("/api/documents/:id/status", requireAuth, async (req: Request, res: Response) => {
     try {
-      const doc = await storage.getDocument(req.params.id);
-      if (!doc) {
-        return res.status(404).json({ message: "Document not found" });
-      }
-      if ((doc as any).userId && (doc as any).userId !== req.user!.userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
       res.json({
         id: doc.id,
         status: doc.status,
@@ -458,13 +611,8 @@ export async function registerRoutes(
   // Get single document
   app.get("/api/documents/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const doc = await storage.getDocument(req.params.id);
-      if (!doc) {
-        return res.status(404).json({ message: "Document not found" });
-      }
-      if ((doc as any).userId && (doc as any).userId !== req.user!.userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
       res.json(doc);
     } catch (error) {
       console.error("Error fetching document:", error);
@@ -475,10 +623,8 @@ export async function registerRoutes(
   // Get original source metadata for a document
   app.get("/api/documents/:id/source-meta", requireAuth, async (req: Request, res: Response) => {
     try {
-      const doc = await storage.getDocument(req.params.id);
-      if (!doc) {
-        return res.status(404).json({ message: "Document not found" });
-      }
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
 
       const available = await hasDocumentSource(doc.id, doc.filename);
       res.json({
@@ -497,10 +643,8 @@ export async function registerRoutes(
   // Stream original uploaded source file for side-by-side reference
   app.get("/api/documents/:id/source", requireAuth, async (req: Request, res: Response) => {
     try {
-      const doc = await storage.getDocument(req.params.id);
-      if (!doc) {
-        return res.status(404).json({ message: "Document not found" });
-      }
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
 
       const available = await hasDocumentSource(doc.id, doc.filename);
       if (!available) {
@@ -526,7 +670,8 @@ export async function registerRoutes(
   });
 
   // Set intent and trigger AI analysis
-  app.post("/api/documents/:id/set-intent", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/set-intent", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
     try {
       const { intent, thoroughness = 'standard' } = req.body;
       if (!intent || typeof intent !== "string") {
@@ -537,10 +682,8 @@ export async function registerRoutes(
       const validLevels: ThoroughnessLevel[] = ['quick', 'standard', 'thorough', 'exhaustive'];
       const level: ThoroughnessLevel = validLevels.includes(thoroughness) ? thoroughness : 'standard';
 
-      const doc = await storage.getDocument(req.params.id);
-      if (!doc) {
-        return res.status(404).json({ message: "Document not found" });
-      }
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
 
       if (doc.status === "processing") {
         return res.status(409).json({ message: "Document is still processing. Please wait until processing completes." });
@@ -559,13 +702,13 @@ export async function registerRoutes(
       }
 
       // Generate intent embedding
-      const intentEmbedding = await getEmbedding(intent);
+      const intentEmbedding = await getEmbeddingWithUsage(intent, tokenUsage.add);
 
       // Generate embeddings for chunks if not already done
       const chunksWithEmbeddings = await Promise.all(
         chunks.map(async (chunk) => {
           if (!chunk.embedding) {
-            const embedding = await getEmbedding(chunk.text);
+            const embedding = await getEmbeddingWithUsage(chunk.text, tokenUsage.add);
             await storage.updateChunkEmbedding(chunk.id, embedding);
             return { ...chunk, embedding };
           }
@@ -595,6 +738,7 @@ export async function registerRoutes(
         }));
 
       if (topChunks.length === 0) {
+        await tokenUsage.flush(req.user!.userId, "document_analysis");
         return res.json([]);
       }
 
@@ -619,7 +763,8 @@ export async function registerRoutes(
         intent,
         doc.id,
         doc.fullText,
-        userAnnotations
+        userAnnotations,
+        { onTokenUsage: tokenUsage.add },
       );
 
       // Clear document context cache
@@ -640,6 +785,7 @@ export async function registerRoutes(
       }
 
       const finalAnnotations = await storage.getAnnotationsForDocument(doc.id);
+      await tokenUsage.flush(req.user!.userId, "document_analysis");
       res.json(finalAnnotations);
     } catch (error) {
       console.error("Analysis error:", error);
@@ -650,7 +796,10 @@ export async function registerRoutes(
   // Get annotations for document
   app.get("/api/documents/:id/annotations", requireAuth, async (req: Request, res: Response) => {
     try {
-      const annotations = await storage.getAnnotationsForDocument(req.params.id);
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
+
+      const annotations = await storage.getAnnotationsForDocument(doc.id);
       res.json(annotations);
     } catch (error) {
       console.error("Error fetching annotations:", error);
@@ -673,10 +822,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const doc = await storage.getDocument(req.params.id);
-      if (!doc) {
-        return res.status(404).json({ message: "Document not found" });
-      }
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
 
       const annotation = await storage.createAnnotation({
         documentId: doc.id,
@@ -704,6 +851,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Note and category are required" });
       }
 
+      const ownsAnnotation = await assertAnnotationOwnerOr404(req.params.id, req.user!.userId, res);
+      if (!ownsAnnotation) return;
+
       const annotation = await storage.updateAnnotation(
         req.params.id,
         note,
@@ -724,6 +874,9 @@ export async function registerRoutes(
   // Delete annotation
   app.delete("/api/annotations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const ownsAnnotation = await assertAnnotationOwnerOr404(req.params.id, req.user!.userId, res);
+      if (!ownsAnnotation) return;
+
       await storage.deleteAnnotation(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -733,7 +886,8 @@ export async function registerRoutes(
   });
 
   // Search document
-  app.post("/api/documents/:id/search", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/search", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
     try {
       const { query } = req.body;
 
@@ -741,16 +895,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Query is required" });
       }
 
-      const doc = await storage.getDocument(req.params.id);
-      if (!doc) {
-        return res.status(404).json({ message: "Document not found" });
-      }
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
 
       // Get chunks with embeddings
       const chunks = await storage.getChunksForDocument(doc.id);
       
       // Generate query embedding
-      const queryEmbedding = await getEmbedding(query);
+      const queryEmbedding = await getEmbeddingWithUsage(query, tokenUsage.add);
 
       // Rank chunks by similarity
       const rankedChunks = chunks
@@ -765,6 +917,7 @@ export async function registerRoutes(
         .slice(0, 5);
 
       if (rankedChunks.length === 0) {
+        await tokenUsage.flush(req.user!.userId, "document_search");
         return res.json([]);
       }
 
@@ -772,9 +925,11 @@ export async function registerRoutes(
       const results = await searchDocument(
         query,
         doc.userIntent || "",
-        rankedChunks
+        rankedChunks,
+        tokenUsage.add,
       );
 
+      await tokenUsage.flush(req.user!.userId, "document_search");
       res.json(results);
     } catch (error) {
       console.error("Search error:", error);
@@ -785,10 +940,8 @@ export async function registerRoutes(
   // Get document summary
   app.get("/api/documents/:id/summary", requireAuth, async (req: Request, res: Response) => {
     try {
-      const doc = await storage.getDocument(req.params.id);
-      if (!doc) {
-        return res.status(404).json({ message: "Document not found" });
-      }
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
 
       res.json({
         summary: doc.summary,
@@ -816,6 +969,9 @@ export async function registerRoutes(
 
   // Register extension routes (Chrome extension API)
   registerExtensionRoutes(app);
+
+  // Register admin analytics routes
+  registerAnalyticsRoutes(app);
 
   // Register A/B test routes
   // registerABTestRoutes(app); // TODO: Not implemented yet

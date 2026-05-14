@@ -10,8 +10,9 @@ import {
   type AnnotationCategory,
   type SearchResult,
 } from "@shared/schema";
-import { getEmbedding, cosineSimilarity, searchDocument } from "./openai";
+import { getEmbeddingWithUsage, cosineSimilarity, searchDocument } from "./openai";
 import { storage } from "./storage";
+import type { TokenUsageReporter } from "./aiUsage";
 
 const TEXT_MATCH_SCORE = 0.6;
 
@@ -185,7 +186,8 @@ function getRelevanceLevel(similarity: number): 'high' | 'medium' | 'low' {
  */
 export async function searchProjectDocument(
   projectDocId: string,
-  query: string
+  query: string,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<SearchResult[]> {
   // Get the project document
   const [projectDoc] = await db
@@ -221,7 +223,7 @@ export async function searchProjectDocument(
   }
 
   // Generate query embedding
-  const queryEmbedding = await getEmbedding(query);
+  const queryEmbedding = await getEmbeddingWithUsage(query, onTokenUsage);
 
   // Rank chunks by similarity
   const rankedChunks = docChunks
@@ -243,7 +245,7 @@ export async function searchProjectDocument(
   const researchContext = project?.thesis || doc.userIntent || "";
 
   // Use LLM to find relevant quotes
-  const results = await searchDocument(query, researchContext, rankedChunks);
+  const results = await searchDocument(query, researchContext, rankedChunks, onTokenUsage);
 
   return results;
 }

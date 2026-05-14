@@ -9,7 +9,8 @@ import {
 import { db } from "./db";
 import { projectStorage } from "./projectStorage";
 import { storage } from "./storage";
-import { requireAuth, requireTier } from "./auth";
+import { checkTokenBudget, requireAuth, requireTier } from "./auth";
+import { incrementTokenUsage } from "./authStorage";
 import { logContextSnapshot, logToolCall } from "./analyticsLogger";
 import {
   gatherEvidence,
@@ -125,6 +126,20 @@ interface ToolRequest {
   rawTag: string;
 }
 
+async function getOwnedConversationOr404(req: Request, res: Response): Promise<Conversation | null> {
+  const conv = await chatStorage.getConversation(req.params.id);
+  if (!conv || conv.userId !== req.user!.userId) {
+    res.status(404).json({ message: "Conversation not found" });
+    return null;
+  }
+  return conv;
+}
+
+async function getOwnedProjectOr404(projectId: string, userId: string): Promise<Project | null> {
+  const project = await projectStorage.getProject(projectId);
+  return project?.userId === userId ? project : null;
+}
+
 interface ContextUsageEstimate {
   systemTokens: number;
   historyTokens: number;
@@ -138,6 +153,24 @@ interface StreamTurnResult {
   fullText: string;
   usage: { input_tokens?: number; output_tokens?: number };
   toolRequests: ToolRequest[];
+}
+
+function getUsageTokenTotal(usage: { input_tokens?: number; output_tokens?: number } | null | undefined): number {
+  return (usage?.input_tokens || 0) + (usage?.output_tokens || 0);
+}
+
+async function recordUserTokenUsage(userId: string, tokensUsed: number, source: string): Promise<void> {
+  if (!Number.isFinite(tokensUsed) || tokensUsed <= 0) return;
+  try {
+    await incrementTokenUsage(userId, tokensUsed);
+  } catch (error) {
+    console.warn("[chatRoutes] failed to increment token usage", {
+      userId,
+      source,
+      tokensUsed,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 type SourceToolName = "get_source_summary" | "get_source_chunks";
@@ -741,8 +774,13 @@ async function loadConversationContext(
   userId: string
 ): Promise<{ project: WritingProjectContext | null; sources: PromptSource[] }> {
   if (conv.projectId) {
+    const ownedProject = await getOwnedProjectOr404(conv.projectId, userId);
+    if (!ownedProject) {
+      return { project: null, sources: [] };
+    }
+
     const [project, sources] = await Promise.all([
-      projectStorage.getProject(conv.projectId),
+      Promise.resolve(ownedProject),
       loadProjectSourcesTiered(conv.projectId, conv.selectedSourceIds),
     ]);
 
@@ -968,6 +1006,12 @@ export function registerChatRoutes(app: Express) {
       const rawProjectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
       const projectId = rawProjectId && rawProjectId !== "null" ? rawProjectId : undefined;
       const standaloneOnly = req.query.standalone === "true";
+      if (projectId) {
+        const project = await getOwnedProjectOr404(projectId, req.user!.userId);
+        if (!project) {
+          return res.status(404).json({ message: "Project not found" });
+        }
+      }
       const conversations = standaloneOnly
         ? await chatStorage.getStandaloneConversations(req.user!.userId)
         : await chatStorage.getConversationsForUser(req.user!.userId, projectId);
@@ -993,6 +1037,12 @@ export function registerChatRoutes(app: Express) {
       } = req.body || {};
 
       const normalizedWritingModel = writingModel === "extended" ? "extended" : "precision";
+      if (projectId) {
+        const project = await getOwnedProjectOr404(projectId, req.user!.userId);
+        if (!project) {
+          return res.status(404).json({ message: "Project not found" });
+        }
+      }
       const conv = await chatStorage.createConversation({
         title: title || "New Chat",
         model: model || MODELS.precision.chat,
@@ -1014,13 +1064,8 @@ export function registerChatRoutes(app: Express) {
 
   app.get("/api/chat/conversations/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
-      const conv = await chatStorage.getConversation(req.params.id);
-      if (!conv) {
-        return res.status(404).json({ message: "Conversation not found" });
-      }
-      if (conv.userId && conv.userId !== req.user!.userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const conv = await getOwnedConversationOr404(req, res);
+      if (!conv) return;
       const messages = await chatStorage.getMessagesForConversation(conv.id);
       res.json({ ...conv, messages });
     } catch (error) {
@@ -1031,13 +1076,8 @@ export function registerChatRoutes(app: Express) {
 
   app.delete("/api/chat/conversations/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
-      const conv = await chatStorage.getConversation(req.params.id);
-      if (!conv) {
-        return res.status(404).json({ message: "Conversation not found" });
-      }
-      if (conv.userId && conv.userId !== req.user!.userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const conv = await getOwnedConversationOr404(req, res);
+      if (!conv) return;
       await chatStorage.deleteConversation(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -1067,6 +1107,8 @@ export function registerChatRoutes(app: Express) {
       if (humanize !== undefined) updates.humanize = humanize;
       if (noEnDashes !== undefined) updates.noEnDashes = noEnDashes;
 
+      const existing = await getOwnedConversationOr404(req, res);
+      if (!existing) return;
       const conv = await chatStorage.updateConversation(req.params.id, updates);
       res.json(conv);
     } catch (error) {
@@ -1081,6 +1123,8 @@ export function registerChatRoutes(app: Express) {
       if (!Array.isArray(selectedSourceIds)) {
         return res.status(400).json({ message: "selectedSourceIds must be an array" });
       }
+      const existing = await getOwnedConversationOr404(req, res);
+      if (!existing) return;
       const conv = await chatStorage.updateSelectedSources(req.params.id, selectedSourceIds);
       res.json(conv);
     } catch (error) {
@@ -1089,20 +1133,15 @@ export function registerChatRoutes(app: Express) {
     }
   });
 
-  app.post("/api/chat/conversations/:id/messages", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/messages", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     try {
       const { content } = req.body;
       if (!content || typeof content !== "string") {
         return res.status(400).json({ message: "Content is required" });
       }
 
-      const conv = await chatStorage.getConversation(req.params.id);
-      if (!conv) {
-        return res.status(404).json({ message: "Conversation not found" });
-      }
-      if (conv.userId && conv.userId !== req.user!.userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const conv = await getOwnedConversationOr404(req, res);
+      if (!conv) return;
 
       await chatStorage.createMessage({
         conversationId: conv.id,
@@ -1142,6 +1181,8 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
 
       const anthropic = getAnthropicClient();
       const tieredSources = sources.filter((source): source is TieredSource => isTieredSource(source));
+      const allowedSourceDocumentIds = new Set(tieredSources.map((source) => source.documentId));
+      const allowedProjectDocumentIds = new Set(tieredSources.map((source) => source.id));
       const sourceTools = buildSourceTools();
       const executeSourceTool = createSourceToolExecutor(tieredSources);
       const clipboard: EvidenceClipboard = conv.evidenceClipboard
@@ -1337,6 +1378,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           content: turn.fullText,
           tokensUsed: inputTokens + outputTokens,
         });
+        await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_message");
 
         if (!hasAutoTitled && isFirstExchange && conv.title === "New Chat") {
           const autoTitle = content.length <= 50 ? content : `${content.slice(0, 47)}...`;
@@ -1368,24 +1410,28 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
 
           if (!request.annotationId) {
             contextMessage = "[CONTEXT RETRIEVAL - ERROR]\nMissing annotation_id in chunk request.";
-          } else {
-            const annotation = await projectStorage.getProjectAnnotation(request.annotationId);
-            if (!annotation) {
-              contextMessage = `[CONTEXT RETRIEVAL - ERROR]\nAnnotation "${request.annotationId}" was not found.`;
             } else {
-              const projectDocument = await projectStorage.getProjectDocument(annotation.projectDocumentId);
-              const resolvedDocumentId = projectDocument?.documentId || request.documentId;
-              const chunkContext = await loadSurroundingChunks(
-                resolvedDocumentId,
-                annotation.startPosition,
-                annotation.endPosition
-              );
-              contextMessage = `[CONTEXT RETRIEVAL - Surrounding text for annotation ${request.annotationId}]
+              const annotation = await projectStorage.getProjectAnnotation(request.annotationId);
+              if (!annotation) {
+                contextMessage = `[CONTEXT RETRIEVAL - ERROR]\nAnnotation "${request.annotationId}" was not found.`;
+              } else {
+                const projectDocument = await projectStorage.getProjectDocument(annotation.projectDocumentId);
+                if (!projectDocument || !allowedProjectDocumentIds.has(projectDocument.id)) {
+                  contextMessage = `[CONTEXT RETRIEVAL - ERROR]\nAnnotation "${request.annotationId}" is not attached to this conversation.`;
+                } else {
+                  const resolvedDocumentId = projectDocument.documentId;
+                  const chunkContext = await loadSurroundingChunks(
+                    resolvedDocumentId,
+                    annotation.startPosition,
+                    annotation.endPosition
+                  );
+                  contextMessage = `[CONTEXT RETRIEVAL - Surrounding text for annotation ${request.annotationId}]
 Reason: ${request.reason || "No reason provided."}
 
 ${chunkContext}`;
+                }
+              }
             }
-          }
 
           sendEvent({ type: "context_loaded", level: 2, documentId: request.documentId });
           void logToolCall({
@@ -1415,7 +1461,9 @@ ${chunkContext}`;
           try {
             history = await chatStorage.getMessagesForConversation(conv.id);
             const recentWritingTopic = extractRecentWritingTopic(history);
-            const sourceDocument = await storage.getDocument(request.documentId);
+            const sourceDocument = allowedSourceDocumentIds.has(request.documentId)
+              ? await storage.getDocument(request.documentId)
+              : null;
 
             if (!sourceDocument) {
               contextMessage = `[DEEP DIVE FINDINGS - ERROR]\nDocument "${request.documentId}" was not found.`;
@@ -1512,15 +1560,10 @@ ${chunkContext}`;
     }
   });
 
-  app.post("/api/chat/conversations/:id/compile", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/compile", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     try {
-      const conv = await chatStorage.getConversation(req.params.id);
-      if (!conv) {
-        return res.status(404).json({ message: "Conversation not found" });
-      }
-      if (conv.userId && conv.userId !== req.user!.userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const conv = await getOwnedConversationOr404(req, res);
+      if (!conv) return;
 
       const { citationStyle, tone, noEnDashes } = req.body;
       const style = citationStyle || conv.citationStyle || "chicago";
@@ -1596,7 +1639,8 @@ ${transcript}${sourcesBlock}`;
         }
       });
 
-      stream.on("message", () => {
+      stream.on("message", async (message) => {
+        await recordUserTokenUsage(req.user!.userId, getUsageTokenTotal(message?.usage), "chat_compile");
         if (aborted) return;
         res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         res.end();
@@ -1622,15 +1666,10 @@ ${transcript}${sourcesBlock}`;
     }
   });
 
-  app.post("/api/chat/conversations/:id/verify", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/verify", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     try {
-      const conv = await chatStorage.getConversation(req.params.id);
-      if (!conv) {
-        return res.status(404).json({ message: "Conversation not found" });
-      }
-      if (conv.userId && conv.userId !== req.user!.userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const conv = await getOwnedConversationOr404(req, res);
+      if (!conv) return;
 
       const { compiledContent } = req.body;
       if (!compiledContent || typeof compiledContent !== "string") {
@@ -1693,7 +1732,8 @@ ${compiledContent}${sourcesBlock}`;
         }
       });
 
-      stream.on("message", () => {
+      stream.on("message", async (message) => {
+        await recordUserTokenUsage(req.user!.userId, getUsageTokenTotal(message?.usage), "chat_verify");
         if (!aborted) {
           res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
           res.end();

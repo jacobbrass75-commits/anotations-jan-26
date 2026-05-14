@@ -1,9 +1,11 @@
 import { type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
-import { Redirect } from "wouter";
+import { Redirect, useLocation, useSearch } from "wouter";
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
+  const [location] = useLocation();
+  const search = useSearch();
 
   if (!isLoaded) {
     return (
@@ -14,7 +16,8 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   if (!isSignedIn) {
-    return <Redirect to="/sign-in" />;
+    const returnTo = `${location}${search ? `?${search}` : ""}`;
+    return <Redirect to={`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`} />;
   }
 
   return <>{children}</>;

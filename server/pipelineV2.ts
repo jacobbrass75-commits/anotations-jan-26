@@ -26,6 +26,7 @@ import {
   documentContextSchema,
 } from "@shared/schema";
 import { PIPELINE_CONFIG, cosineSimilarity, getEmbedding } from "./openai";
+import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -49,6 +50,10 @@ export const PIPELINE_V2_CONFIG = {
   VERIFIER_MAX_TOKENS: 800,
   REFINER_MAX_TOKENS: 600,
 };
+
+interface PipelineUsageOptions {
+  onTokenUsage?: TokenUsageReporter;
+}
 
 // Document context cache for V2
 const documentContextCacheV2 = new Map<string, DocumentContext>();
@@ -376,7 +381,8 @@ function findBestBoundary(text: string, targetLength: number): number {
 export async function generateCandidatesV2(
   chunk: string,
   intent: string,
-  documentContext?: DocumentContext
+  documentContext?: DocumentContext,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<CandidateAnnotation[]> {
   const contextStr = documentContext
     ? `Document summary: ${documentContext.summary}\nKey concepts: ${documentContext.keyConcepts.join(", ")}\n\n`
@@ -432,6 +438,7 @@ If nothing genuinely relevant, return: {"candidates": []}`;
       max_tokens: PIPELINE_V2_CONFIG.GENERATOR_MAX_TOKENS,
       temperature: 0.5, // Slightly lower for more consistent selection
     });
+    reportProviderUsage(response, onTokenUsage);
 
     const content = response.choices[0].message.content;
     if (!content) return buildHeuristicCandidates(chunk, intent);
@@ -524,7 +531,8 @@ export function hardVerifyCandidateV2(
 export async function softVerifyCandidatesV2(
   candidates: CandidateAnnotation[],
   chunk: string,
-  intent: string
+  intent: string,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<VerifierVerdict[]> {
   if (candidates.length === 0) return [];
 
@@ -599,6 +607,7 @@ Return JSON:
       max_tokens: PIPELINE_V2_CONFIG.VERIFIER_MAX_TOKENS,
       temperature: 0.1,
     });
+    reportProviderUsage(response, onTokenUsage);
 
     const content = response.choices[0].message.content;
     if (!content) {
@@ -668,7 +677,8 @@ export async function verifyCandidatesV2(
   chunk: string,
   chunkStart: number,
   intent: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<VerifiedCandidate[]> {
   const verified: VerifiedCandidate[] = [];
 
@@ -692,7 +702,8 @@ export async function verifyCandidatesV2(
   const softVerdicts = await softVerifyCandidatesV2(
     hardVerified.map(h => h.candidate),
     chunk,
-    intent
+    intent,
+    onTokenUsage,
   );
 
   // Merge results
@@ -720,7 +731,8 @@ export async function verifyCandidatesV2(
 export async function refineAnnotationsV2(
   verified: VerifiedCandidate[],
   intent: string,
-  documentContext?: DocumentContext
+  documentContext?: DocumentContext,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<RefinedAnnotation[]> {
   if (verified.length === 0) return [];
 
@@ -786,6 +798,7 @@ Return JSON:
       max_tokens: PIPELINE_V2_CONFIG.REFINER_MAX_TOKENS,
       temperature: 0.3,
     });
+    reportProviderUsage(response, onTokenUsage);
 
     const content = response.choices[0].message.content;
     if (!content) {
@@ -832,7 +845,8 @@ Return JSON:
 
 export async function getDocumentContextV2(
   documentId: string,
-  fullText: string
+  fullText: string,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<DocumentContext | undefined> {
   if (documentContextCacheV2.has(documentId)) {
     return documentContextCacheV2.get(documentId);
@@ -861,6 +875,7 @@ Return JSON:
       max_tokens: 600,
       temperature: 0.3,
     });
+    reportProviderUsage(response, onTokenUsage);
 
     const content = response.choices[0].message.content;
     if (!content) return undefined;
@@ -895,18 +910,19 @@ export async function analyzeChunkWithPipelineV2(
   intent: string,
   documentId: string,
   fullText: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>,
+  options: PipelineUsageOptions = {},
 ): Promise<PipelineAnnotation[]> {
   let context: DocumentContext | undefined;
   try {
-    context = await getDocumentContextV2(documentId, fullText);
+    context = await getDocumentContextV2(documentId, fullText, options.onTokenUsage);
   } catch (error) {
     logStageFailure("context", { chunkStart, chunkLength: chunk.length, documentId }, error);
   }
 
   let candidates: CandidateAnnotation[];
   try {
-    candidates = await generateCandidatesV2(chunk, intent, context);
+    candidates = await generateCandidatesV2(chunk, intent, context, options.onTokenUsage);
   } catch (error) {
     logStageFailure("generator", { chunkStart, chunkLength: chunk.length, documentId }, error);
     return [];
@@ -917,7 +933,7 @@ export async function analyzeChunkWithPipelineV2(
 
   let verified: VerifiedCandidate[];
   try {
-    verified = await verifyCandidatesV2(candidates, chunk, chunkStart, intent, existingAnnotations);
+    verified = await verifyCandidatesV2(candidates, chunk, chunkStart, intent, existingAnnotations, options.onTokenUsage);
   } catch (error) {
     logStageFailure("verifier", { chunkStart, chunkLength: chunk.length, documentId }, error);
     return [];
@@ -928,7 +944,7 @@ export async function analyzeChunkWithPipelineV2(
 
   let refined: RefinedAnnotation[];
   try {
-    refined = await refineAnnotationsV2(verified, intent, context);
+    refined = await refineAnnotationsV2(verified, intent, context, options.onTokenUsage);
   } catch (error) {
     logStageFailure("refiner", { chunkStart, chunkLength: chunk.length, documentId }, error);
     return [];
@@ -950,7 +966,8 @@ export async function processChunksWithPipelineV2(
   intent: string,
   documentId: string,
   fullText: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>,
+  options: PipelineUsageOptions = {},
 ): Promise<PipelineAnnotation[]> {
   const allAnnotations: PipelineAnnotation[] = [];
   const runningAnnotations = [...existingAnnotations];
@@ -968,7 +985,8 @@ export async function processChunksWithPipelineV2(
           intent,
           documentId,
           fullText,
-          runningAnnotations
+          runningAnnotations,
+          options,
         )
       )
     );
@@ -1020,7 +1038,8 @@ export async function processChunksWithMultiplePrompts(
   prompts: Array<{ text: string; color: string; index: number }>,
   documentId: string,
   fullText: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>,
+  options: PipelineUsageOptions = {},
 ): Promise<Map<number, PipelineAnnotation[]>> {
   // Run all prompts in parallel
   const results = await Promise.all(
@@ -1032,7 +1051,8 @@ export async function processChunksWithMultiplePrompts(
         prompt.text,
         documentId,
         fullText,
-        [...existingAnnotations]
+        [...existingAnnotations],
+        options,
       );
       return { promptIndex: prompt.index, annotations };
     })

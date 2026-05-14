@@ -13,12 +13,15 @@ declare global {
       userId: string;
       email: string;
       tier: string;
+      authType?: "clerk" | "jwt" | "api_key" | "mcp" | "local_dev";
+      scopes?: string[];
     }
   }
 }
 
 // ── Tier hierarchy ──────────────────────────────────────────────────
 const TIER_LEVELS: Record<string, number> = { free: 0, pro: 1, max: 2 };
+const VALID_TIERS = new Set(Object.keys(TIER_LEVELS));
 
 const TIER_TOKEN_LIMITS: Record<string, number> = {
   free: 50_000,
@@ -32,7 +35,8 @@ const TIER_STORAGE_LIMITS: Record<string, number> = {
   max: 5_368_709_120,     // 5 GB
 };
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt-secret-change-in-production-64chars-long-string-placeholder!!";
+const DEFAULT_JWT_SECRET = "dev-jwt-secret-change-in-production-64chars-long-string-placeholder!!";
+const JWT_SECRET = resolveJwtSecret();
 const JWT_EXPIRY = "7d";
 const LOCAL_DEV_AUTH = process.env.LOCAL_DEV_AUTH === "true";
 const LOCAL_DEV_USER_ID = process.env.LOCAL_DEV_USER_ID?.trim() || "";
@@ -51,6 +55,7 @@ interface ApiKeyRow {
 interface McpTokenRow {
   id: string;
   user_id: string;
+  scope: string;
   expires_at: number | null;
 }
 
@@ -58,6 +63,24 @@ interface LocalDevUserRow {
   id: string;
   email: string;
   tier: string;
+}
+
+interface ClerkEmailAddressLike {
+  id?: string | null;
+  emailAddress?: string | null;
+  verification?: {
+    status?: string | null;
+  } | null;
+}
+
+interface ClerkUserEmailLike {
+  emailAddresses?: ClerkEmailAddressLike[] | null;
+  primaryEmailAddressId?: string | null;
+}
+
+interface ClerkEmailSelection {
+  email: string;
+  verified: boolean;
 }
 
 export interface JwtPayload {
@@ -88,7 +111,7 @@ const touchApiKeyLastUsed = sqlite.prepare(
 );
 
 const selectMcpTokenByHash = sqlite.prepare(
-  `SELECT id, user_id, expires_at
+  `SELECT id, user_id, scope, expires_at
    FROM mcp_tokens
    WHERE key_hash = ?
      AND revoked_at IS NULL
@@ -128,6 +151,84 @@ function getUnixSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
+function resolveJwtSecret(): string {
+  const configured = process.env.JWT_SECRET?.trim();
+  if (configured) {
+    return configured;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET must be set in production.");
+  }
+  return DEFAULT_JWT_SECRET;
+}
+
+function normalizeClerkTier(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  if (typeof value === "string" && VALID_TIERS.has(value)) {
+    return value;
+  }
+  throw new Error("Invalid Clerk tier metadata");
+}
+
+function getPrimaryClerkEmail(clerkUser: ClerkUserEmailLike): ClerkEmailSelection {
+  const addresses = Array.isArray(clerkUser.emailAddresses) ? clerkUser.emailAddresses : [];
+  const primary =
+    addresses.find((address) => address.id && address.id === clerkUser.primaryEmailAddressId) ??
+    null;
+  const verified =
+    (primary?.verification?.status === "verified" ? primary : null) ??
+    addresses.find((address) => address.verification?.status === "verified") ??
+    null;
+  const selected = verified ?? primary ?? addresses[0] ?? null;
+  const email = selected?.emailAddress?.trim();
+
+  if (!email) {
+    throw new Error("Clerk user is missing an email address");
+  }
+
+  return {
+    email,
+    verified: selected?.verification?.status === "verified",
+  };
+}
+
+function parseScopes(scope: string | null | undefined): string[] {
+  return Array.from(new Set((scope ?? "").split(/\s+/).map((entry) => entry.trim()).filter(Boolean)));
+}
+
+function requiredScopeForRequest(req: Request): "read" | "write" {
+  if (
+    req.method === "POST" &&
+    (
+      /^\/api\/documents\/[^/]+\/search$/.test(req.path) ||
+      /^\/api\/project-documents\/[^/]+\/search$/.test(req.path) ||
+      /^\/api\/projects\/[^/]+\/search$/.test(req.path)
+    )
+  ) {
+    return "read";
+  }
+
+  return req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS" ? "read" : "write";
+}
+
+function finishAuth(req: Request, res: Response, next: NextFunction, user: Express.User): void {
+  if (user.authType === "mcp") {
+    const requiredScope = requiredScopeForRequest(req);
+    if (!user.scopes?.includes(requiredScope)) {
+      res.status(403).json({
+        message: "OAuth token lacks required scope",
+        requiredScope,
+      });
+      return;
+    }
+  }
+
+  req.user = user;
+  next();
+}
+
 function hashApiKey(rawKey: string): string {
   return createHash("sha256").update(rawKey).digest("hex");
 }
@@ -164,6 +265,10 @@ function extractBearerToken(req: Request): string | null {
 }
 
 function shouldBypassClerk(req: Request): boolean {
+  if (req.path === "/healthz" || req.path === "/readyz") {
+    return true;
+  }
+
   if (LOCAL_DEV_AUTH) {
     return true;
   }
@@ -205,6 +310,7 @@ async function resolveLocalDevUser(): Promise<Express.User | null> {
     userId: dbUser.id,
     email: dbUser.email,
     tier: dbUser.tier,
+    authType: "local_dev",
   };
 }
 
@@ -236,6 +342,7 @@ async function resolveApiKeyUser(req: Request): Promise<ApiKeyAuthResult> {
         userId: dbUser.id,
         email: dbUser.email,
         tier: dbUser.tier,
+        authType: "api_key",
       },
     };
   }
@@ -262,6 +369,8 @@ async function resolveApiKeyUser(req: Request): Promise<ApiKeyAuthResult> {
         userId: dbUser.id,
         email: dbUser.email,
         tier: dbUser.tier,
+        authType: "mcp",
+        scopes: parseScopes(tokenRow.scope),
       },
     };
   }
@@ -289,6 +398,7 @@ async function resolveJwtUser(req: Request): Promise<Express.User | null> {
     userId: dbUser.id,
     email: dbUser.email,
     tier: dbUser.tier,
+    authType: "jwt",
   };
 }
 
@@ -322,14 +432,13 @@ async function resolveUser(req: Request): Promise<Express.User | null> {
 
   // Get Clerk user details for email + metadata
   const clerkUser = await clerkClient.users.getUser(auth.userId);
-  const email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
-  // TODO: revert to "free" default when leaving testing phase
-  const tier = (clerkUser.publicMetadata?.tier as string) || "max";
+  const { email, verified: emailVerified } = getPrimaryClerkEmail(clerkUser);
+  const tier = normalizeClerkTier(clerkUser.publicMetadata?.tier);
 
   // Ensure a local DB row exists (for usage tracking)
-  await getOrCreateUser(auth.userId, email, tier);
+  const dbUser = await getOrCreateUser(auth.userId, email, tier, { emailVerified });
 
-  return { userId: auth.userId, email, tier };
+  return { userId: dbUser.id, email: dbUser.email, tier: dbUser.tier, authType: "clerk" };
 }
 
 // ── Middleware: requires a valid Clerk session, API key, or legacy JWT ───────
@@ -337,8 +446,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   try {
     const apiKeyResult = await resolveApiKeyUser(req);
     if (apiKeyResult.status === "success") {
-      req.user = apiKeyResult.user;
-      next();
+      finishAuth(req, res, next, apiKeyResult.user);
       return;
     }
     if (apiKeyResult.status === "invalid") {
@@ -348,8 +456,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     const jwtUser = await resolveJwtUser(req);
     if (jwtUser) {
-      req.user = jwtUser;
-      next();
+      finishAuth(req, res, next, jwtUser);
       return;
     }
 
@@ -358,8 +465,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       res.status(401).json({ message: "Authentication required" });
       return;
     }
-    req.user = user;
-    next();
+    finishAuth(req, res, next, user);
   } catch (err) {
     console.error("Auth error:", err);
     res.status(401).json({ message: "Authentication failed" });
@@ -397,6 +503,10 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
 export function requireTier(minTier: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const userTier = req.user?.tier ?? "free";
+    if (!VALID_TIERS.has(userTier)) {
+      res.status(403).json({ message: "Invalid account tier" });
+      return;
+    }
     const userLevel = TIER_LEVELS[userTier] ?? 0;
     const requiredLevel = TIER_LEVELS[minTier] ?? 0;
 
@@ -413,10 +523,56 @@ export function requireTier(minTier: string) {
 }
 
 // ── Middleware: check monthly token budget ───────────────────────────
-export function checkTokenBudget(req: Request, res: Response, next: NextFunction): void {
-  // Actual check happens in the AI call handlers where token counts are known.
-  // This is a placeholder hook — usage is tracked via authStorage.incrementTokenUsage().
-  next();
+export async function hasTokenBudget(req: Request, res: Response): Promise<boolean> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Authentication required" });
+      return false;
+    }
+
+    const user = await getUserById(userId);
+    if (!user) {
+      res.status(401).json({ message: "Authentication required" });
+      return false;
+    }
+
+    if (user.tokenLimit > 0 && user.tokensUsed >= user.tokenLimit) {
+      res.status(403).json({
+        message: "Monthly token budget exceeded",
+        tokenLimit: user.tokenLimit,
+        tokensUsed: user.tokensUsed,
+      });
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Token budget check failed:", error);
+    res.status(500).json({ message: "Failed to check token budget" });
+    return false;
+  }
+}
+
+export async function hasTokenBudgetAvailable(req: Request): Promise<boolean> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return false;
+
+    const user = await getUserById(userId);
+    if (!user) return false;
+
+    return !(user.tokenLimit > 0 && user.tokensUsed >= user.tokenLimit);
+  } catch (error) {
+    console.error("Token budget availability check failed:", error);
+    return false;
+  }
+}
+
+export async function checkTokenBudget(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (await hasTokenBudget(req, res)) {
+    next();
+  }
 }
 
 // ── Helper exports for route handlers ───────────────────────────────

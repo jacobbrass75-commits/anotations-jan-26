@@ -11,6 +11,9 @@ import { configureClerk } from "./auth";
 import { serveStatic } from "./static";
 import { initAnalytics } from "./analyticsLogger";
 import { createServer } from "http";
+import { assertProductionConfig } from "./productionConfig";
+
+assertProductionConfig(process.env, { phase: "runtime" });
 
 const app = express();
 const httpServer = createServer(app);
@@ -20,6 +23,11 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+const allowedChromeExtensionIds = (process.env.CHROME_EXTENSION_IDS ?? "")
+  .split(",")
+  .map((extensionId) => extensionId.trim())
+  .filter(Boolean);
+const extensionCorsEnabled = process.env.EXTENSION_CORS_MODE !== "disabled";
 
 const ALWAYS_ALLOWED_ORIGINS = new Set([
   "https://claude.ai",
@@ -28,6 +36,7 @@ const ALWAYS_ALLOWED_ORIGINS = new Set([
   "https://app.scholarmark.ai",
 ]);
 const ALLOWED_ORIGIN_SET = new Set(allowedOrigins.map((origin) => normalizeOrigin(origin)));
+const ALLOWED_CHROME_EXTENSION_IDS = new Set(allowedChromeExtensionIds);
 
 function normalizeOrigin(origin: string): string {
   return origin.trim().replace(/\/+$/, "");
@@ -36,9 +45,15 @@ function normalizeOrigin(origin: string): string {
 function isAllowedOrigin(origin?: string): boolean {
   if (!origin) return true;
   const normalizedOrigin = normalizeOrigin(origin);
-  if (origin.startsWith("chrome-extension://")) return true;
-  if (/^https?:\/\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/i.test(origin)) return true;
-  if (/^https?:\/\/89\\.167\\.10\\.34(:\\d+)?$/i.test(origin)) return true;
+  if (origin.startsWith("chrome-extension://")) {
+    const extensionId = origin.slice("chrome-extension://".length).replace(/\/+$/, "");
+    if (process.env.NODE_ENV === "production") {
+      return extensionCorsEnabled && ALLOWED_CHROME_EXTENSION_IDS.has(extensionId);
+    }
+    return ALLOWED_CHROME_EXTENSION_IDS.size === 0 || ALLOWED_CHROME_EXTENSION_IDS.has(extensionId);
+  }
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
+  if (/^https?:\/\/89\.167\.10\.34(:\d+)?$/i.test(origin)) return true;
   if (ALWAYS_ALLOWED_ORIGINS.has(normalizedOrigin)) return true;
   if (ALLOWED_ORIGIN_SET.has(normalizedOrigin)) return true;
   return false;

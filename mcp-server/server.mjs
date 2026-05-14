@@ -30,7 +30,7 @@ function attachAuthInfo(req) {
   if (!token) {
     return;
   }
-  console.log("[AUTH] Bearer token, prefix:", token.substring(0, 12));
+  console.log("[AUTH] Bearer token received");
   req.auth = {
     token,
     clientId: "mcp-passthrough",
@@ -98,10 +98,30 @@ app.get("/healthz", (_req, res) => {
   res.status(200).json({ ok: true, service: "scholarmark-mcp-server" });
 });
 
+app.get("/readyz", async (_req, res) => {
+  try {
+    const response = await fetch(`${backendBaseUrl.replace(/\/+$/, "")}/readyz`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) {
+      res.status(503).json({ ok: false, service: "scholarmark-mcp-server", backend: "unhealthy" });
+      return;
+    }
+    res.status(200).json({ ok: true, service: "scholarmark-mcp-server", backend: "ok" });
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      service: "scholarmark-mcp-server",
+      backend: "error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 function sendServiceInfo(res) {
   res.status(200).json({
     service: "ScholarMark MCP Server",
-    endpoints: ["/mcp", "/.well-known/oauth-protected-resource", "/healthz"],
+    endpoints: ["/mcp", "/.well-known/oauth-protected-resource", "/healthz", "/readyz"],
   });
 }
 

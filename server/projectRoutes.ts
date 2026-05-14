@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { eq } from "drizzle-orm";
-import { requireAuth, requireTier } from "./auth";
+import { checkTokenBudget, hasTokenBudgetAvailable, requireAuth, requireTier } from "./auth";
 import { projectStorage } from "./projectStorage";
 import { globalSearch, searchProjectDocument } from "./projectSearch";
 import { generateChicagoFootnote, generateChicagoBibliography, generateFootnoteWithQuote, generateInlineCitation, generateFootnote, generateInTextCitation, generateBibliographyEntry } from "./citationGenerator";
@@ -9,13 +9,18 @@ import { db } from "./db";
 import { storage } from "./storage";
 import { isSourceRole } from "./sourceRoles";
 import {
-  getEmbedding,
+  getEmbeddingWithUsage,
   cosineSimilarity,
   extractCitationMetadata,
   PIPELINE_CONFIG,
   getMaxChunksForLevel,
   type ThoroughnessLevel,
 } from "./openai";
+import {
+  createTokenUsageAccumulator,
+  reportProviderUsage,
+  type TokenUsageReporter,
+} from "./aiUsage";
 // V2 Pipeline - improved annotation system
 import { processChunksWithPipelineV2, processChunksWithMultiplePrompts } from "./pipelineV2";
 import { randomUUID } from "crypto";
@@ -65,7 +70,8 @@ function getDefaultPromptColor(index: number): string {
 async function analyzeProjectDocument(
   projectDocId: string,
   intent: string,
-  constraints?: AnalysisConstraints
+  constraints?: AnalysisConstraints,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<{ annotationsCreated: number; filename: string; chunksAnalyzed: number; totalChunks: number }> {
   const projectDoc = await projectStorage.getProjectDocument(projectDocId);
   if (!projectDoc) {
@@ -94,13 +100,13 @@ async function analyzeProjectDocument(
   let topChunks: { text: string; startPosition: number; id: string }[];
   
   try {
-    const intentEmbedding = await getEmbedding(fullIntent);
+    const intentEmbedding = await getEmbeddingWithUsage(fullIntent, onTokenUsage);
     
     const chunksWithEmbeddings = await Promise.all(
       chunks.map(async (chunk) => {
         if (!chunk.embedding) {
           try {
-            const embedding = await getEmbedding(chunk.text);
+            const embedding = await getEmbeddingWithUsage(chunk.text, onTokenUsage);
             await storage.updateChunkEmbedding(chunk.id, embedding);
             return { ...chunk, embedding };
           } catch {
@@ -167,7 +173,8 @@ async function analyzeProjectDocument(
       fullIntent,
       doc.id,
       doc.fullText,
-      existingAnnotationPositions
+      existingAnnotationPositions,
+      { onTokenUsage },
     );
   } catch (pipelineError) {
     console.error("[ProjectAnalyze] Pipeline failed", {
@@ -234,11 +241,46 @@ async function verifyProjectOwnership(req: Request, res: Response, projectId: st
     res.status(404).json({ error: "Project not found" });
     return null;
   }
-  if ((project as any).userId && (project as any).userId !== req.user!.userId) {
+  if (project.userId !== req.user!.userId) {
     res.status(403).json({ error: "Access denied" });
     return null;
   }
   return project;
+}
+
+async function verifyFolderOwnership(req: Request, res: Response, folderId: string) {
+  const folder = await projectStorage.getFolder(folderId);
+  if (!folder) {
+    res.status(404).json({ error: "Folder not found" });
+    return null;
+  }
+
+  const project = await verifyProjectOwnership(req, res, folder.projectId);
+  if (!project) return null;
+
+  return folder;
+}
+
+async function verifyPromptTemplateOwnership(req: Request, res: Response, templateId: string) {
+  const template = await projectStorage.getPromptTemplate(templateId);
+  if (!template) {
+    res.status(404).json({ error: "Template not found" });
+    return null;
+  }
+
+  const project = await verifyProjectOwnership(req, res, template.projectId);
+  if (!project) return null;
+
+  return template;
+}
+
+async function verifyDocumentOwnership(req: Request, res: Response, documentId: string) {
+  const doc = await storage.getDocument(documentId);
+  if (!doc || doc.userId !== req.user!.userId) {
+    res.status(404).json({ error: "Document not found" });
+    return null;
+  }
+  return doc;
 }
 
 /** Verify a project_document exists and belongs to the requesting user. */
@@ -254,6 +296,12 @@ async function verifyProjectDocumentOwnership(req: Request, res: Response, proje
     return null;
   }
 
+  const doc = await storage.getDocument(projectDoc.documentId);
+  if (!doc || doc.userId !== req.user!.userId) {
+    res.status(404).json({ error: "Project document not found" });
+    return null;
+  }
+
   return projectDoc;
 }
 
@@ -263,16 +311,24 @@ export function registerProjectRoutes(app: Express): void {
   app.post("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {
       const validated = insertProjectSchema.parse(req.body);
+      const thesis = typeof validated.thesis === "string" ? validated.thesis : "";
+      const scope = typeof validated.scope === "string" ? validated.scope : "";
+      const shouldGenerateContext = Boolean(thesis && scope);
+      const canGenerateContext = shouldGenerateContext && await hasTokenBudgetAvailable(req);
+
       const project = await projectStorage.createProject({ ...validated, userId: req.user!.userId } as any);
       
       // Context generation is optional - don't block project creation
-      if (validated.thesis && validated.scope) {
+      if (canGenerateContext) {
+        const tokenUsage = createTokenUsageAccumulator();
         try {
-          const contextSummary = await generateProjectContextSummary(validated.thesis, validated.scope, []);
+          const contextSummary = await generateProjectContextSummary(thesis, scope, [], tokenUsage.add);
           // Embeddings may not be available, store context summary without embedding
           await projectStorage.updateProject(project.id, { contextSummary });
         } catch (contextError) {
           console.warn("Context generation failed (non-blocking):", contextError);
+        } finally {
+          await tokenUsage.flush(req.user!.userId, "project_context_create");
         }
       }
       
@@ -308,13 +364,18 @@ export function registerProjectRoutes(app: Express): void {
     try {
       const project = await verifyProjectOwnership(req, res, req.params.id);
       if (!project) return;
-      const updated = await projectStorage.updateProject(req.params.id, req.body);
+      const { userId: _ignoredUserId, id: _ignoredId, ...safeProjectUpdates } = req.body ?? {};
+      const shouldGenerateContext = Boolean(req.body?.thesis || req.body?.scope);
+      const canGenerateContext = shouldGenerateContext && await hasTokenBudgetAvailable(req);
+
+      const updated = await projectStorage.updateProject(req.params.id, safeProjectUpdates);
       if (!updated) {
         return res.status(404).json({ error: "Project not found" });
       }
       
       // Context generation is optional - don't block project update
-      if (req.body.thesis || req.body.scope) {
+      if (canGenerateContext) {
+        const tokenUsage = createTokenUsageAccumulator();
         try {
           const projectDocs = await projectStorage.getProjectDocumentsByProject(req.params.id);
           const docContexts = projectDocs
@@ -324,11 +385,14 @@ export function registerProjectRoutes(app: Express): void {
           const contextSummary = await generateProjectContextSummary(
             updated.thesis || "",
             updated.scope || "",
-            docContexts
+            docContexts,
+            tokenUsage.add,
           );
           await projectStorage.updateProject(req.params.id, { contextSummary });
         } catch (contextError) {
           console.warn("Context generation failed (non-blocking):", contextError);
+        } finally {
+          await tokenUsage.flush(req.user!.userId, "project_context_update");
         }
       }
       
@@ -362,6 +426,8 @@ export function registerProjectRoutes(app: Express): void {
       if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
         return res.status(400).json({ error: "At least one prompt is required" });
       }
+      const project = await verifyProjectOwnership(req, res, req.params.projectId);
+      if (!project) return;
 
       const template = await projectStorage.createPromptTemplate({
         projectId: req.params.projectId,
@@ -377,6 +443,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.get("/api/projects/:projectId/prompt-templates", requireAuth, async (req: Request, res: Response) => {
     try {
+      const project = await verifyProjectOwnership(req, res, req.params.projectId);
+      if (!project) return;
       const templates = await projectStorage.getPromptTemplatesByProject(req.params.projectId);
       res.json(templates);
     } catch (error) {
@@ -388,6 +456,8 @@ export function registerProjectRoutes(app: Express): void {
   app.put("/api/prompt-templates/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const { name, prompts } = req.body;
+      const template = await verifyPromptTemplateOwnership(req, res, req.params.id);
+      if (!template) return;
       const updated = await projectStorage.updatePromptTemplate(req.params.id, {
         ...(name && { name }),
         ...(prompts && { prompts }),
@@ -404,6 +474,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.delete("/api/prompt-templates/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const template = await verifyPromptTemplateOwnership(req, res, req.params.id);
+      if (!template) return;
       await projectStorage.deletePromptTemplate(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -416,6 +488,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.post("/api/projects/:projectId/folders", requireAuth, async (req: Request, res: Response) => {
     try {
+      const project = await verifyProjectOwnership(req, res, req.params.projectId);
+      if (!project) return;
       const validated = insertFolderSchema.parse({
         ...req.body,
         projectId: req.params.projectId,
@@ -430,6 +504,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.get("/api/projects/:projectId/folders", requireAuth, async (req: Request, res: Response) => {
     try {
+      const project = await verifyProjectOwnership(req, res, req.params.projectId);
+      if (!project) return;
       const folders = await projectStorage.getFoldersByProject(req.params.projectId);
       res.json(folders);
     } catch (error) {
@@ -440,7 +516,20 @@ export function registerProjectRoutes(app: Express): void {
 
   app.put("/api/folders/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const updated = await projectStorage.updateFolder(req.params.id, req.body);
+      const folder = await verifyFolderOwnership(req, res, req.params.id);
+      if (!folder) return;
+      const { id: _ignoredId, projectId: _ignoredProjectId, parentFolderId, ...safeFolderUpdates } = req.body ?? {};
+      if (parentFolderId) {
+        const parentFolder = await verifyFolderOwnership(req, res, parentFolderId);
+        if (!parentFolder) return;
+        if (parentFolder.projectId !== folder.projectId) {
+          return res.status(400).json({ error: "Parent folder must belong to the same project" });
+        }
+      }
+      const updated = await projectStorage.updateFolder(req.params.id, {
+        ...safeFolderUpdates,
+        ...(parentFolderId !== undefined ? { parentFolderId: parentFolderId || null } : {}),
+      });
       if (!updated) {
         return res.status(404).json({ error: "Folder not found" });
       }
@@ -453,6 +542,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.delete("/api/folders/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const folder = await verifyFolderOwnership(req, res, req.params.id);
+      if (!folder) return;
       await projectStorage.deleteFolder(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -464,6 +555,15 @@ export function registerProjectRoutes(app: Express): void {
   app.put("/api/folders/:id/move", requireAuth, async (req: Request, res: Response) => {
     try {
       const { parentFolderId } = req.body;
+      const folder = await verifyFolderOwnership(req, res, req.params.id);
+      if (!folder) return;
+      if (parentFolderId) {
+        const parentFolder = await verifyFolderOwnership(req, res, parentFolderId);
+        if (!parentFolder) return;
+        if (parentFolder.projectId !== folder.projectId) {
+          return res.status(400).json({ error: "Parent folder must belong to the same project" });
+        }
+      }
       const updated = await projectStorage.moveFolder(req.params.id, parentFolderId || null);
       if (!updated) {
         return res.status(404).json({ error: "Folder not found" });
@@ -479,41 +579,56 @@ export function registerProjectRoutes(app: Express): void {
 
   app.post("/api/projects/:projectId/documents", requireAuth, async (req: Request, res: Response) => {
     try {
+      const project = await verifyProjectOwnership(req, res, req.params.projectId);
+      if (!project) return;
       const validated = insertProjectDocumentSchema.parse({
         ...req.body,
         projectId: req.params.projectId,
       });
+      const doc = await verifyDocumentOwnership(req, res, validated.documentId);
+      if (!doc) return;
+      if (validated.folderId) {
+        const folder = await verifyFolderOwnership(req, res, validated.folderId);
+        if (!folder) return;
+        if (folder.projectId !== req.params.projectId) {
+          return res.status(400).json({ error: "Folder must belong to the selected project" });
+        }
+      }
 
       const projectDoc = await projectStorage.addDocumentToProject(validated);
 
       // Context and citation generation - don't block document addition
       try {
-        const doc = await storage.getDocument(validated.documentId);
-        const project = await projectStorage.getProject(req.params.projectId);
-
-        if (doc && project) {
+        if (doc && project && await hasTokenBudgetAvailable(req)) {
+          const tokenUsage = createTokenUsageAccumulator();
           // Generate retrieval context
-          const retrievalContext = await generateRetrievalContext(
-            doc.summary || "",
-            doc.mainArguments || [],
-            doc.keyConcepts || [],
-            project.thesis || "",
-            validated.roleInProject || ""
-          );
-
-          // Auto-extract citation metadata using AI
-          let citationData = null;
+          let retrievalContext = "";
           try {
-            citationData = await extractCitationMetadata(doc.fullText);
-            console.log(`[Citation] Auto-extracted citation for ${doc.filename}`);
-          } catch (citationError) {
-            console.warn("Citation extraction failed (non-blocking):", citationError);
-          }
+            retrievalContext = await generateRetrievalContext(
+              doc.summary || "",
+              doc.mainArguments || [],
+              doc.keyConcepts || [],
+              project.thesis || "",
+              validated.roleInProject || "",
+              tokenUsage.add,
+            );
 
-          await projectStorage.updateProjectDocument(projectDoc.id, {
-            retrievalContext,
-            ...(citationData && { citationData }),
-          });
+            // Auto-extract citation metadata using AI
+            let citationData = null;
+            try {
+              citationData = await extractCitationMetadata(doc.fullText, undefined, tokenUsage.add);
+              console.log(`[Citation] Auto-extracted citation for ${doc.filename}`);
+            } catch (citationError) {
+              console.warn("Citation extraction failed (non-blocking):", citationError);
+            }
+
+            await projectStorage.updateProjectDocument(projectDoc.id, {
+              retrievalContext,
+              ...(citationData && { citationData }),
+            });
+          } finally {
+            await tokenUsage.flush(req.user!.userId, "project_document_context");
+          }
         }
       } catch (contextError) {
         console.warn("Context generation failed (non-blocking):", contextError);
@@ -528,6 +643,8 @@ export function registerProjectRoutes(app: Express): void {
 
   app.get("/api/projects/:projectId/documents", requireAuth, async (req: Request, res: Response) => {
     try {
+      const project = await verifyProjectOwnership(req, res, req.params.projectId);
+      if (!project) return;
       const documents = await projectStorage.getProjectDocumentsByProject(req.params.projectId);
       res.json(documents);
     } catch (error) {
@@ -542,13 +659,21 @@ export function registerProjectRoutes(app: Express): void {
       const { documentIds, folderId } = validated;
       const projectId = req.params.projectId;
 
-      const project = await projectStorage.getProject(projectId);
+      const project = await verifyProjectOwnership(req, res, projectId);
       if (!project) {
-        return res.status(404).json({ error: "Project not found" });
+        return;
+      }
+      if (folderId) {
+        const folder = await verifyFolderOwnership(req, res, folderId);
+        if (!folder) return;
+        if (folder.projectId !== projectId) {
+          return res.status(400).json({ error: "Folder must belong to the selected project" });
+        }
       }
 
       const existingDocs = await projectStorage.getProjectDocumentsByProject(projectId);
       const existingDocIds = new Set(existingDocs.map(d => d.documentId));
+      const canGenerateContext = await hasTokenBudgetAvailable(req);
 
       const results: BatchAddDocumentResult[] = [];
       let added = 0;
@@ -558,7 +683,7 @@ export function registerProjectRoutes(app: Express): void {
       for (const documentId of documentIds) {
         try {
           const doc = await storage.getDocument(documentId);
-          if (!doc) {
+          if (!doc || doc.userId !== req.user!.userId) {
             results.push({
               documentId,
               filename: "Unknown",
@@ -594,17 +719,25 @@ export function registerProjectRoutes(app: Express): void {
           added++;
           existingDocIds.add(documentId);
 
-          generateRetrievalContext(
-            doc.summary || "",
-            doc.mainArguments || [],
-            doc.keyConcepts || [],
-            project.thesis || "",
-            ""
-          )
-            .then(retrievalContext => {
-              projectStorage.updateProjectDocument(projectDoc.id, { retrievalContext });
-            })
-            .catch(err => console.warn("Context generation failed (non-blocking):", err));
+          if (canGenerateContext) {
+            const tokenUsage = createTokenUsageAccumulator();
+            generateRetrievalContext(
+              doc.summary || "",
+              doc.mainArguments || [],
+              doc.keyConcepts || [],
+              project.thesis || "",
+              "",
+              tokenUsage.add,
+            )
+              .then(async (retrievalContext) => {
+                await projectStorage.updateProjectDocument(projectDoc.id, { retrievalContext });
+                await tokenUsage.flush(req.user!.userId, "project_batch_document_context");
+              })
+              .catch(async (err) => {
+                await tokenUsage.flush(req.user!.userId, "project_batch_document_context");
+                console.warn("Context generation failed (non-blocking):", err);
+              });
+          }
         } catch (error) {
           results.push({
             documentId,
@@ -647,13 +780,31 @@ export function registerProjectRoutes(app: Express): void {
       const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
       if (!projectDoc) return;
       const { sourceRole, ...otherFields } = req.body ?? {};
+      const {
+        id: _ignoredId,
+        projectId: _ignoredProjectId,
+        documentId: _ignoredDocumentId,
+        folderId,
+        ...safeProjectDocumentUpdates
+      } = otherFields;
+
+      if (folderId !== undefined && folderId !== null && folderId !== "") {
+        const folder = await verifyFolderOwnership(req, res, folderId);
+        if (!folder) return;
+        if (folder.projectId !== projectDoc.projectId) {
+          return res.status(400).json({ error: "Folder must belong to the selected project" });
+        }
+      }
 
       if (sourceRole !== undefined && sourceRole !== null && !isSourceRole(sourceRole)) {
         return res.status(400).json({ error: "Invalid sourceRole" });
       }
 
-      let updated = Object.keys(otherFields).length > 0
-        ? await projectStorage.updateProjectDocument(req.params.id, otherFields)
+      let updated = Object.keys(safeProjectDocumentUpdates).length > 0 || folderId !== undefined
+        ? await projectStorage.updateProjectDocument(req.params.id, {
+            ...safeProjectDocumentUpdates,
+            ...(folderId !== undefined ? { folderId: folderId || null } : {}),
+          })
         : await projectStorage.getProjectDocument(req.params.id);
 
       if (sourceRole && isSourceRole(sourceRole)) {
@@ -692,6 +843,13 @@ export function registerProjectRoutes(app: Express): void {
       const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
       if (!projectDoc) return;
       const { folderId } = req.body;
+      if (folderId) {
+        const folder = await verifyFolderOwnership(req, res, folderId);
+        if (!folder) return;
+        if (folder.projectId !== projectDoc.projectId) {
+          return res.status(400).json({ error: "Folder must belong to the selected project" });
+        }
+      }
       const updated = await projectStorage.updateProjectDocument(req.params.id, {
         folderId: folderId || null,
       });
@@ -810,7 +968,8 @@ export function registerProjectRoutes(app: Express): void {
 
   // === AI ANALYSIS ===
 
-  app.post("/api/project-documents/:id/analyze", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/analyze", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
     try {
       const { intent, thoroughness } = req.body;
       if (!intent || typeof intent !== "string") {
@@ -833,7 +992,12 @@ export function registerProjectRoutes(app: Express): void {
         thoroughness: validThoroughness,
       });
 
-      const result = await analyzeProjectDocument(req.params.id, intent, { thoroughness: validThoroughness });
+      const result = await analyzeProjectDocument(
+        req.params.id,
+        intent,
+        { thoroughness: validThoroughness },
+        tokenUsage.add,
+      );
       const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
 
       console.log("[ProjectAnalyze] Completed single-prompt analysis", {
@@ -845,6 +1009,7 @@ export function registerProjectRoutes(app: Express): void {
         durationMs: Date.now() - startTime,
       });
       
+      await tokenUsage.flush(req.user!.userId, "project_document_analysis");
       res.json({
         annotations: finalAnnotations,
         stats: {
@@ -861,7 +1026,8 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Multi-prompt parallel analysis
-  app.post("/api/project-documents/:id/analyze-multi", requireAuth, requireTier("max"), async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/analyze-multi", requireAuth, requireTier("max"), checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
     try {
       const { prompts, thoroughness } = req.body;
 
@@ -904,13 +1070,13 @@ export function registerProjectRoutes(app: Express): void {
         const firstPromptIntent = project?.thesis
           ? `Project thesis: ${project.thesis}\n\nResearch focus: ${prompts[0].text}`
           : prompts[0].text;
-        const intentEmbedding = await getEmbedding(firstPromptIntent);
+        const intentEmbedding = await getEmbeddingWithUsage(firstPromptIntent, tokenUsage.add);
 
         const chunksWithEmbeddings = await Promise.all(
           chunks.map(async (chunk) => {
             if (!chunk.embedding) {
               try {
-                const embedding = await getEmbedding(chunk.text);
+                const embedding = await getEmbeddingWithUsage(chunk.text, tokenUsage.add);
                 await storage.updateChunkEmbedding(chunk.id, embedding);
                 return { ...chunk, embedding };
               } catch {
@@ -1003,7 +1169,8 @@ export function registerProjectRoutes(app: Express): void {
         promptsWithMeta,
         doc.id,
         doc.fullText,
-        existingAnnotationPositions
+        existingAnnotationPositions,
+        { onTokenUsage: tokenUsage.add },
       );
 
       // Create annotations with prompt metadata
@@ -1052,6 +1219,7 @@ export function registerProjectRoutes(app: Express): void {
         durationMs: Date.now() - startTime,
       });
 
+      await tokenUsage.flush(req.user!.userId, "project_document_multi_analysis");
       res.json({
         analysisRunId,
         results,
@@ -1069,7 +1237,8 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/projects/:projectId/batch-analyze", requireAuth, requireTier("max"), async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/batch-analyze", requireAuth, requireTier("max"), checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
     try {
       const validated = batchAnalysisRequestSchema.parse(req.body);
       const { projectDocumentIds, intent, thoroughness, constraints } = validated;
@@ -1077,9 +1246,16 @@ export function registerProjectRoutes(app: Express): void {
       const startTime = Date.now();
       const jobId = crypto.randomUUID();
       
-      const project = await projectStorage.getProject(req.params.projectId);
-      if (!project) {
-        return res.status(404).json({ error: "Project not found" });
+      const project = await verifyProjectOwnership(req, res, req.params.projectId);
+      if (!project) return;
+
+      const allowedProjectDocumentIds = new Set<string>();
+      for (const projectDocumentId of projectDocumentIds) {
+        const projectDoc = await projectStorage.getProjectDocument(projectDocumentId);
+        const doc = projectDoc ? await storage.getDocument(projectDoc.documentId) : null;
+        if (projectDoc?.projectId === req.params.projectId && doc?.userId === req.user!.userId) {
+          allowedProjectDocumentIds.add(projectDocumentId);
+        }
       }
 
       const results: BatchDocumentResult[] = projectDocumentIds.map(id => ({
@@ -1093,10 +1269,13 @@ export function registerProjectRoutes(app: Express): void {
         projectDocumentIds,
         async (docId, index) => {
           try {
+            if (!allowedProjectDocumentIds.has(docId)) {
+              throw new Error("Project document not found");
+            }
             const result = await analyzeProjectDocument(docId, intent, { 
               ...constraints, 
               thoroughness: thoroughness as ThoroughnessLevel 
-            });
+            }, tokenUsage.add);
             results[index] = {
               projectDocumentId: docId,
               filename: result.filename,
@@ -1132,6 +1311,7 @@ export function registerProjectRoutes(app: Express): void {
         results,
       };
 
+      await tokenUsage.flush(req.user!.userId, "project_batch_analysis");
       res.json(response);
     } catch (error) {
       console.error("Error in batch analysis:", error);
@@ -1149,6 +1329,8 @@ export function registerProjectRoutes(app: Express): void {
         return res.status(400).json({ error: "Query is required" });
       }
 
+      const project = await verifyProjectOwnership(req, res, req.params.projectId);
+      if (!project) return;
       const results = await globalSearch(req.params.projectId, query, filters, limit);
       res.json(results);
     } catch (error) {
@@ -1158,7 +1340,8 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Search within a single project document
-  app.post("/api/project-documents/:id/search", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/search", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
     try {
       const { query } = req.body;
 
@@ -1169,7 +1352,8 @@ export function registerProjectRoutes(app: Express): void {
       const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
       if (!projectDoc) return;
 
-      const results = await searchProjectDocument(req.params.id, query);
+      const results = await searchProjectDocument(req.params.id, query, tokenUsage.add);
+      await tokenUsage.flush(req.user!.userId, "project_document_search");
       res.json(results);
     } catch (error) {
       console.error("Error searching project document:", error);
@@ -1196,7 +1380,8 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/citations/ai", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/citations/ai", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
     try {
       const { documentId, highlightedText, style = "chicago" } = req.body;
       const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
@@ -1205,14 +1390,13 @@ export function registerProjectRoutes(app: Express): void {
         return res.status(400).json({ error: "Document ID is required" });
       }
 
-      const document = await storage.getDocument(documentId);
-      if (!document) {
-        return res.status(404).json({ error: "Document not found" });
-      }
+      const document = await verifyDocumentOwnership(req, res, documentId);
+      if (!document) return;
 
-      const citationData = await extractCitationMetadata(document.fullText, highlightedText);
+      const citationData = await extractCitationMetadata(document.fullText, highlightedText, tokenUsage.add);
 
       if (!citationData) {
+        await tokenUsage.flush(req.user!.userId, "citation_ai");
         return res.status(422).json({
           error: "Unable to extract citation metadata from document",
           footnote: `"${highlightedText?.substring(0, 100) || 'Quote'}..." (Source: ${document.filename})`,
@@ -1223,6 +1407,7 @@ export function registerProjectRoutes(app: Express): void {
       const footnote = generateFootnote(citationData, validStyle);
       const bibliography = generateBibliographyEntry(citationData, validStyle);
 
+      await tokenUsage.flush(req.user!.userId, "citation_ai");
       res.json({ footnote, bibliography, citationData });
     } catch (error) {
       console.error("Error generating AI citation:", error);
@@ -1274,7 +1459,8 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Generate footnote for a specific annotation by ID
-  app.post("/api/project-annotations/:id/footnote", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/project-annotations/:id/footnote", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
     try {
       const annotation = await projectStorage.getProjectAnnotation(req.params.id);
       if (!annotation) {
@@ -1294,7 +1480,7 @@ export function registerProjectRoutes(app: Express): void {
         // Try to extract citation on-the-fly
         const doc = await storage.getDocument(projectDoc.documentId);
         if (doc) {
-          const extractedCitation = await extractCitationMetadata(doc.fullText, annotation.highlightedText);
+          const extractedCitation = await extractCitationMetadata(doc.fullText, annotation.highlightedText, tokenUsage.add);
           if (extractedCitation) {
             // Save for future use
             await projectStorage.updateProjectDocument(projectDoc.id, { citationData: extractedCitation });
@@ -1304,6 +1490,7 @@ export function registerProjectRoutes(app: Express): void {
             const inlineCitation = generateInTextCitation(extractedCitation, validStyle, pageNumber);
             const bibliography = generateBibliographyEntry(extractedCitation, validStyle);
 
+            await tokenUsage.flush(req.user!.userId, "annotation_footnote_citation");
             return res.json({
               footnote,
               footnoteWithQuote,
@@ -1321,6 +1508,7 @@ export function registerProjectRoutes(app: Express): void {
           : cleanQuote;
         const docName = doc?.filename || "Unknown Source";
 
+        await tokenUsage.flush(req.user!.userId, "annotation_footnote_citation");
         return res.json({
           footnote: `${docName}.`,
           footnoteWithQuote: `${docName}: "${displayQuote}."`,
@@ -1335,6 +1523,7 @@ export function registerProjectRoutes(app: Express): void {
       const inlineCitation = generateInTextCitation(citationData as CitationData, validStyle, pageNumber);
       const bibliography = generateBibliographyEntry(citationData as CitationData, validStyle);
 
+      await tokenUsage.flush(req.user!.userId, "annotation_footnote_citation");
       res.json({
         footnote,
         footnoteWithQuote,
@@ -1373,7 +1562,8 @@ export function registerProjectRoutes(app: Express): void {
   // === VOICE PROFILE ===
 
   /** Analyze writing samples and generate a voice profile */
-  app.post("/api/projects/:id/voice-profile/analyze", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/voice-profile/analyze", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
     try {
       const project = await verifyProjectOwnership(req, res, req.params.id);
       if (!project) return;
@@ -1426,6 +1616,7 @@ Return ONLY valid JSON matching this exact schema:
 }`
         }],
       });
+      reportProviderUsage(response, tokenUsage.add);
 
       const text = response.content
         .flatMap((block) => (block.type === "text" ? [block.text] : []))
@@ -1445,6 +1636,7 @@ Return ONLY valid JSON matching this exact schema:
         voiceProfileSamples: JSON.stringify(samples),
       } as any);
 
+      await tokenUsage.flush(req.user!.userId, "voice_profile_analysis");
       res.json({ voiceProfile });
     } catch (error) {
       console.error("Error analyzing voice profile:", error);

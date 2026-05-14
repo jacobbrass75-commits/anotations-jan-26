@@ -87,6 +87,21 @@ export interface WritingSSEEvent {
   };
 }
 
+interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+interface GeneratedText {
+  text: string;
+  usage: TokenUsage;
+}
+
+interface PlannedWriting {
+  plan: WritingPlan;
+  usage: TokenUsage;
+}
+
 // --- Constants ---
 
 const TARGET_WORDS: Record<string, number> = {
@@ -108,6 +123,18 @@ function getClient(): Anthropic {
     );
   }
   return new Anthropic({ apiKey });
+}
+
+function getUsage(response: { usage?: { input_tokens?: number | null; output_tokens?: number | null } }): TokenUsage {
+  return {
+    inputTokens: Math.max(0, response.usage?.input_tokens ?? 0),
+    outputTokens: Math.max(0, response.usage?.output_tokens ?? 0),
+  };
+}
+
+function addUsage(total: TokenUsage, usage: TokenUsage): void {
+  total.inputTokens += usage.inputTokens;
+  total.outputTokens += usage.outputTokens;
 }
 
 export function formatSourceForPrompt(source: WritingSource): string {
@@ -284,7 +311,7 @@ async function runPlanner(
   sources: WritingSource[],
   model: string,
   voiceBlock: string
-): Promise<WritingPlan> {
+): Promise<PlannedWriting> {
   const totalWords = TARGET_WORDS[request.targetLength] || 2500;
 
   const sourceBlock = sources
@@ -372,9 +399,12 @@ ${sourceBlock || "(No sources provided - write based on topic alone)"}`;
     });
 
     return {
-      thesis: parsed.thesis,
-      sections,
-      bibliography: Array.isArray(parsed.bibliography) ? parsed.bibliography : [],
+      plan: {
+        thesis: parsed.thesis,
+        sections,
+        bibliography: Array.isArray(parsed.bibliography) ? parsed.bibliography : [],
+      },
+      usage: getUsage(response),
     };
   } catch (e) {
     throw new Error(
@@ -393,7 +423,7 @@ async function writeSection(
   sources: WritingSource[],
   model: string,
   voiceBlock: string
-): Promise<string> {
+): Promise<GeneratedText> {
   const section = plan.sections[sectionIndex];
 
   // Get relevant sources for this section
@@ -466,7 +496,10 @@ Output the section text in markdown format. Start with the section heading as ##
   const textBlocks = response.content.filter(
     (block): block is Anthropic.TextBlock => block.type === "text"
   );
-  return textBlocks.map((b) => b.text).join("\n\n");
+  return {
+    text: textBlocks.map((b) => b.text).join("\n\n"),
+    usage: getUsage(response),
+  };
 }
 
 // --- Phase 3: STITCHER ---
@@ -478,7 +511,7 @@ async function stitch(
   request: WritingRequest,
   model: string,
   voiceBlock: string
-): Promise<string> {
+): Promise<GeneratedText> {
   const combinedSections = sectionTexts.join("\n\n---\n\n");
 
   const noEnDashesLine = request.noEnDashes
@@ -514,7 +547,10 @@ Output the complete paper in markdown format.${voiceBlock}`;
   const textBlocks = response.content.filter(
     (block): block is Anthropic.TextBlock => block.type === "text"
   );
-  return textBlocks.map((b) => b.text).join("\n\n");
+  return {
+    text: textBlocks.map((b) => b.text).join("\n\n"),
+    usage: getUsage(response),
+  };
 }
 
 // --- Main pipeline (streaming via callback) ---
@@ -528,8 +564,10 @@ export async function runWritingPipeline(
   const model = request.deepWrite ? DEEP_WRITE_MODEL : DEFAULT_MODEL;
   const voiceBlock = buildVoiceProfileBlock(request.voiceProfile);
 
-  let totalInput = 0;
-  let totalOutput = 0;
+  const totalUsage: TokenUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+  };
 
   try {
     // Phase 1: Planning
@@ -539,7 +577,9 @@ export async function runWritingPipeline(
       message: "Creating outline...",
     });
 
-    const plan = await runPlanner(client, request, sources, model, voiceBlock);
+    const plannedWriting = await runPlanner(client, request, sources, model, voiceBlock);
+    const { plan } = plannedWriting;
+    addUsage(totalUsage, plannedWriting.usage);
 
     onEvent({ type: "plan", plan });
 
@@ -554,7 +594,7 @@ export async function runWritingPipeline(
         message: `Writing section ${i + 1} of ${plan.sections.length}: "${section.title}"...`,
       });
 
-      const sectionContent = await writeSection(
+      const sectionResult = await writeSection(
         client,
         plan,
         i,
@@ -563,13 +603,14 @@ export async function runWritingPipeline(
         model,
         voiceBlock
       );
-      sectionTexts.push(sectionContent);
+      sectionTexts.push(sectionResult.text);
+      addUsage(totalUsage, sectionResult.usage);
 
       onEvent({
         type: "section",
         index: i,
         title: section.title,
-        content: sectionContent,
+        content: sectionResult.text,
       });
     }
 
@@ -580,12 +621,13 @@ export async function runWritingPipeline(
       message: "Polishing and adding transitions...",
     });
 
-    const fullText = await stitch(client, plan, sectionTexts, request, model, voiceBlock);
+    const stitchedResult = await stitch(client, plan, sectionTexts, request, model, voiceBlock);
+    addUsage(totalUsage, stitchedResult.usage);
 
     onEvent({
       type: "complete",
-      fullText,
-      usage: { inputTokens: totalInput, outputTokens: totalOutput },
+      fullText: stitchedResult.text,
+      usage: totalUsage,
     });
   } catch (error) {
     const message =

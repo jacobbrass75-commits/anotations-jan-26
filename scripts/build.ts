@@ -2,13 +2,9 @@ import "dotenv/config";
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { readFile, rm } from "fs/promises";
+import { assertProductionConfig } from "../server/productionConfig";
 
-const isProductionBuild = process.env.NODE_ENV !== "development";
-const clerkPublishableKey =
-  process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || "";
-const clerkSecretKey = process.env.CLERK_SECRET_KEY || "";
-const allowTestClerkKeysInProduction =
-  process.env.CLERK_ALLOW_TEST_KEYS_IN_PRODUCTION === "true";
+const shouldValidateProductionBuild = process.env.SCHOLARMARK_VALIDATE_PRODUCTION_BUILD === "true";
 
 // Keep frequently used server dependencies bundled while leaving heavy/native deps external.
 const allowlist = [
@@ -33,23 +29,15 @@ const allowlist = [
 ];
 
 async function buildAll() {
-  await rm("dist", { recursive: true, force: true });
-
   if (process.env.CLERK_PUBLISHABLE_KEY && !process.env.VITE_CLERK_PUBLISHABLE_KEY) {
     process.env.VITE_CLERK_PUBLISHABLE_KEY = process.env.CLERK_PUBLISHABLE_KEY;
   }
 
-  if (isProductionBuild) {
-    if (process.env.LOCAL_DEV_AUTH === "true" || process.env.VITE_LOCAL_DEV_AUTH === "true") {
-      throw new Error("LOCAL_DEV_AUTH must be disabled for production builds.");
-    }
-    if (!allowTestClerkKeysInProduction && !clerkPublishableKey.startsWith("pk_live_")) {
-      throw new Error("Production builds require a Clerk publishable key prefixed with pk_live_.");
-    }
-    if (!allowTestClerkKeysInProduction && !clerkSecretKey.startsWith("sk_live_")) {
-      throw new Error("Production builds require a Clerk secret key prefixed with sk_live_.");
-    }
+  if (shouldValidateProductionBuild) {
+    assertProductionConfig(process.env, { phase: "build" });
   }
+
+  await rm("dist", { recursive: true, force: true });
 
   console.log("building client...");
   await viteBuild();

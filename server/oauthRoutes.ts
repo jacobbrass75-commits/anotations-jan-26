@@ -1,7 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { clerkClient, getAuth } from "@clerk/express";
 import { createHash, randomBytes, randomUUID } from "crypto";
+import { lookup } from "dns/promises";
 import { readFileSync } from "fs";
+import ipaddr from "ipaddr.js";
+import { isIP } from "net";
 import { join } from "path";
 import { TIER_LEVELS } from "./auth";
 import { getOrCreateUser } from "./authStorage";
@@ -20,12 +23,42 @@ import {
 
 const DEFAULT_SCOPES = ["read", "write"];
 const ALLOWED_SCOPES = new Set(DEFAULT_SCOPES);
+const ALLOWED_GRANT_TYPES = new Set(["authorization_code", "refresh_token"]);
+const ALLOWED_RESPONSE_TYPES = new Set(["code"]);
 const ALLOWED_CODE_CHALLENGE_METHODS = new Set(["S256"]);
 const ALLOWED_TOKEN_AUTH_METHODS = new Set(["none", "client_secret_post"]);
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.MCP_ACCESS_TOKEN_TTL_SECONDS ?? 3600);
 const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.MCP_REFRESH_TOKEN_TTL_SECONDS ?? 90 * 24 * 60 * 60);
 const AUTH_CODE_TTL_SECONDS = Number(process.env.MCP_AUTH_CODE_TTL_SECONDS ?? 600);
 const AUTHORIZE_DEDUP_WINDOW_SECONDS = Number(process.env.OAUTH_AUTHORIZE_DEDUP_WINDOW_SECONDS ?? 15);
+const CONSENT_NONCE_TTL_SECONDS = 10 * 60;
+const MAX_DYNAMIC_CLIENT_METADATA_REDIRECTS = 3;
+const DEFAULT_TRUSTED_PROXY_CIDRS = [
+  "127.0.0.1/32",
+  "::1/128",
+  "173.245.48.0/20",
+  "103.21.244.0/22",
+  "103.22.200.0/22",
+  "103.31.4.0/22",
+  "141.101.64.0/18",
+  "108.162.192.0/18",
+  "190.93.240.0/20",
+  "188.114.96.0/20",
+  "197.234.240.0/22",
+  "198.41.128.0/17",
+  "162.158.0.0/15",
+  "104.16.0.0/13",
+  "104.24.0.0/14",
+  "172.64.0.0/13",
+  "131.0.72.0/22",
+  "2400:cb00::/32",
+  "2606:4700::/32",
+  "2803:f800::/32",
+  "2405:b500::/32",
+  "2405:8100::/32",
+  "2a06:98c0::/29",
+  "2c0f:f248::/32",
+];
 const KNOWN_METADATA_CLIENTS = new Map<string, {
   clientName: string;
   redirectUris: string[];
@@ -61,6 +94,24 @@ interface SessionUser {
   tier: string;
 }
 
+interface ClerkEmailAddressLike {
+  id?: string | null;
+  emailAddress?: string | null;
+  verification?: {
+    status?: string | null;
+  } | null;
+}
+
+interface ClerkUserEmailLike {
+  emailAddresses?: ClerkEmailAddressLike[] | null;
+  primaryEmailAddressId?: string | null;
+}
+
+interface ClerkEmailSelection {
+  email: string;
+  verified: boolean;
+}
+
 interface OAuthClientLike {
   clientId: string;
   clientSecretHash: string | null;
@@ -76,6 +127,7 @@ interface AuthorizeRequestParams {
   redirectUri: string;
   responseType: string;
   scope: string;
+  invalidScopes: string[];
   state: string;
   codeChallenge: string;
   codeChallengeMethod: string;
@@ -88,9 +140,132 @@ interface AuthorizationDecisionCacheEntry {
   createdAt: number;
 }
 
+interface ConsentNonceEntry {
+  userId: string;
+  requestKey: string;
+  expiresAt: number;
+}
+
 const AUTHORIZE_TEMPLATE_PATH = join(process.cwd(), "server", "views", "authorize.html");
 let authorizeTemplateCache: string | null = null;
 const recentAuthorizationDecisions = new Map<string, AuthorizationDecisionCacheEntry>();
+const consentNonces = new Map<string, ConsentNonceEntry>();
+
+function splitCsv(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseIpAddress(rawValue: string | undefined | null): ipaddr.IPv4 | ipaddr.IPv6 | null {
+  const value = rawValue?.trim();
+  if (!value) return null;
+
+  try {
+    return ipaddr.process(value);
+  } catch {
+    return null;
+  }
+}
+
+function getTrustedProxyCidrs(): Array<[ipaddr.IPv4 | ipaddr.IPv6, number]> {
+  const configured = splitCsv(process.env.OAUTH_TRUSTED_PROXY_CIDRS);
+  const cidrs = configured.length > 0 ? configured : DEFAULT_TRUSTED_PROXY_CIDRS;
+
+  return cidrs.flatMap((cidr) => {
+    try {
+      return [ipaddr.parseCIDR(cidr)];
+    } catch {
+      console.warn("Ignoring invalid OAUTH_TRUSTED_PROXY_CIDRS entry", { cidr });
+      return [];
+    }
+  });
+}
+
+function isIpv4Address(address: ipaddr.IPv4 | ipaddr.IPv6): address is ipaddr.IPv4 {
+  return address.kind() === "ipv4";
+}
+
+function isIpv6Address(address: ipaddr.IPv4 | ipaddr.IPv6): address is ipaddr.IPv6 {
+  return address.kind() === "ipv6";
+}
+
+function isTrustedProxyAddress(
+  address: ipaddr.IPv4 | ipaddr.IPv6,
+  trustedProxyCidrs: Array<[ipaddr.IPv4 | ipaddr.IPv6, number]>,
+): boolean {
+  return trustedProxyCidrs.some(([network, prefix]) => {
+    if (isIpv4Address(address) && isIpv4Address(network)) {
+      return address.match(network, prefix);
+    }
+    if (isIpv6Address(address) && isIpv6Address(network)) {
+      return address.match(network, prefix);
+    }
+    return false;
+  });
+}
+
+function getForwardedForAddresses(req: Request): Array<ipaddr.IPv4 | ipaddr.IPv6> {
+  const rawHeaders = req.headers["x-forwarded-for"];
+  const values = Array.isArray(rawHeaders) ? rawHeaders : [rawHeaders];
+
+  return values.flatMap((value) =>
+    String(value ?? "")
+      .split(",")
+      .map((item) => parseIpAddress(item))
+      .filter((address): address is ipaddr.IPv4 | ipaddr.IPv6 => Boolean(address)),
+  );
+}
+
+function getOAuthRateLimitClientAddress(req: Request): string {
+  const remoteAddress = parseIpAddress(req.socket.remoteAddress);
+  if (!remoteAddress) return "unknown";
+
+  const trustedProxyCidrs = getTrustedProxyCidrs();
+  if (!isTrustedProxyAddress(remoteAddress, trustedProxyCidrs)) {
+    return remoteAddress.toString();
+  }
+
+  const forwardedFor = getForwardedForAddresses(req);
+  for (let index = forwardedFor.length - 1; index >= 0; index -= 1) {
+    const candidate = forwardedFor[index];
+    if (candidate && !isTrustedProxyAddress(candidate, trustedProxyCidrs)) {
+      return candidate.toString();
+    }
+  }
+
+  const cloudflareClientIp = parseIpAddress(req.header("cf-connecting-ip"));
+  if (cloudflareClientIp && forwardedFor.some((address) => isTrustedProxyAddress(address, trustedProxyCidrs))) {
+    return cloudflareClientIp.toString();
+  }
+
+  return remoteAddress.toString();
+}
+
+function createFixedWindowRateLimiter(options: { windowMs: number; max: number }) {
+  const buckets = new Map<string, { count: number; resetAt: number }>();
+
+  return (req: Request, res: Response, next: () => void): void => {
+    const now = Date.now();
+    const key = `${getOAuthRateLimitClientAddress(req)}:${req.path}`;
+    const current = buckets.get(key);
+    if (!current || current.resetAt <= now) {
+      buckets.set(key, { count: 1, resetAt: now + options.windowMs });
+      next();
+      return;
+    }
+
+    current.count += 1;
+    if (current.count > options.max) {
+      res.status(429).json({ error: "rate_limited", error_description: "Too many OAuth requests" });
+      return;
+    }
+    next();
+  };
+}
+
+const oauthRateLimit = createFixedWindowRateLimiter({ windowMs: 60_000, max: 60 });
 
 function getUnixSeconds(): number {
   return Math.floor(Date.now() / 1000);
@@ -158,19 +333,30 @@ function pickBodyOrQueryString(req: Request, key: string): string {
   return "";
 }
 
-function normalizeScope(scopeValue: string): string {
-  const requested = scopeValue
+function parseScopeList(scopeValue: string): string[] {
+  return scopeValue
     .split(/\s+/)
     .map((scope) => scope.trim())
     .filter(Boolean);
+}
+
+function normalizeScope(scopeValue: string): string {
+  const requested = parseScopeList(scopeValue);
 
   const uniqueScopes = Array.from(new Set(requested.filter((scope) => ALLOWED_SCOPES.has(scope))));
   if (uniqueScopes.length === 0) return DEFAULT_SCOPES.join(" ");
   return uniqueScopes.join(" ");
 }
 
+function hasOnlyAllowedValues(values: string[], allowedValues: Set<string>): boolean {
+  return values.every((value) => allowedValues.has(value));
+}
+
 function normalizeAuthorizeRequestParams(req: Request): AuthorizeRequestParams {
-  const scope = normalizeScope(pickBodyOrQueryString(req, "scope"));
+  const rawScope = pickBodyOrQueryString(req, "scope");
+  const requestedScopes = parseScopeList(rawScope);
+  const invalidScopes = Array.from(new Set(requestedScopes.filter((scope) => !ALLOWED_SCOPES.has(scope))));
+  const scope = normalizeScope(rawScope);
   const state = pickBodyOrQueryString(req, "state");
   const resource = pickBodyOrQueryString(req, "resource");
 
@@ -179,6 +365,7 @@ function normalizeAuthorizeRequestParams(req: Request): AuthorizeRequestParams {
     redirectUri: pickBodyOrQueryString(req, "redirect_uri"),
     responseType: pickBodyOrQueryString(req, "response_type"),
     scope,
+    invalidScopes,
     state,
     codeChallenge: pickBodyOrQueryString(req, "code_challenge"),
     codeChallengeMethod: pickBodyOrQueryString(req, "code_challenge_method") || "S256",
@@ -212,6 +399,150 @@ function isValidUrl(value: string): boolean {
   }
 }
 
+function isAllowedDynamicClientMetadataUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:") {
+      return false;
+    }
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname.endsWith(".local")
+    ) {
+      return false;
+    }
+    if (isPrivateIpAddress(hostname)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isPrivateIpAddress(address: string): boolean {
+  if (isIP(address) === 4) {
+    return (
+      /^10\./.test(address) ||
+      /^127\./.test(address) ||
+      /^169\.254\./.test(address) ||
+      /^192\.168\./.test(address) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(address) ||
+      address === "0.0.0.0"
+    );
+  }
+
+  if (isIP(address) === 6) {
+    const normalized = address.toLowerCase();
+    const mappedIpv4 = parseIpv4MappedAddress(normalized);
+    if (mappedIpv4) {
+      return isPrivateIpAddress(mappedIpv4);
+    }
+    return (
+      normalized === "::1" ||
+      normalized === "::" ||
+      normalized.startsWith("fc") ||
+      normalized.startsWith("fd") ||
+      normalized.startsWith("fe80:")
+    );
+  }
+
+  return false;
+}
+
+function parseIpv4MappedAddress(address: string): string | null {
+  if (!address.startsWith("::ffff:")) {
+    return null;
+  }
+
+  const suffix = address.slice("::ffff:".length);
+  if (isIP(suffix) === 4) {
+    return suffix;
+  }
+
+  const words = suffix.split(":");
+  if (
+    words.length !== 2 ||
+    words.some((word) => !/^[0-9a-f]{1,4}$/.test(word))
+  ) {
+    return null;
+  }
+
+  const first = Number.parseInt(words[0], 16);
+  const second = Number.parseInt(words[1], 16);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) {
+    return null;
+  }
+
+  return [
+    (first >> 8) & 255,
+    first & 255,
+    (second >> 8) & 255,
+    second & 255,
+  ].join(".");
+}
+
+async function resolvesToPublicAddresses(value: string): Promise<boolean> {
+  const hostname = new URL(value).hostname.replace(/^\[|\]$/g, "");
+  if (isIP(hostname)) {
+    return !isPrivateIpAddress(hostname);
+  }
+
+  try {
+    const records = await lookup(hostname, { all: true });
+    return records.length > 0 && records.every((record) => !isPrivateIpAddress(record.address));
+  } catch {
+    return false;
+  }
+}
+
+async function fetchDynamicClientMetadata(clientId: string): Promise<unknown | null> {
+  let metadataUrl = clientId;
+
+  for (let redirectCount = 0; redirectCount <= MAX_DYNAMIC_CLIENT_METADATA_REDIRECTS; redirectCount += 1) {
+    if (!isAllowedDynamicClientMetadataUrl(metadataUrl)) {
+      return null;
+    }
+    if (!(await resolvesToPublicAddresses(metadataUrl))) {
+      return null;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const response = await fetch(metadataUrl, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        redirect: "manual",
+        signal: controller.signal,
+      });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location) {
+          return null;
+        }
+
+        metadataUrl = new URL(location, metadataUrl).toString();
+        continue;
+      }
+
+      if (!response.ok) return null;
+      return await response.json();
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  return null;
+}
+
 function isValidRedirectUri(redirectUri: string, client: OAuthClientLike): boolean {
   return client.redirectUris.includes(redirectUri);
 }
@@ -239,6 +570,42 @@ function sendOAuthError(res: Response, status: number, error: string, descriptio
   });
 }
 
+function isUnverifiedClerkEmailError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes("email must be verified");
+}
+
+function normalizeClerkTier(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  if (typeof value === "string" && TIER_LEVELS[value] !== undefined) {
+    return value;
+  }
+  throw new Error("Invalid Clerk tier metadata");
+}
+
+function getPrimaryClerkEmail(clerkUser: ClerkUserEmailLike): ClerkEmailSelection {
+  const addresses = Array.isArray(clerkUser.emailAddresses) ? clerkUser.emailAddresses : [];
+  const primary =
+    addresses.find((address) => address.id && address.id === clerkUser.primaryEmailAddressId) ??
+    null;
+  const verified =
+    (primary?.verification?.status === "verified" ? primary : null) ??
+    addresses.find((address) => address.verification?.status === "verified") ??
+    null;
+  const selected = verified ?? primary ?? addresses[0] ?? null;
+  const email = selected?.emailAddress?.trim();
+
+  if (!email) {
+    throw new Error("Clerk user is missing an email address");
+  }
+
+  return {
+    email,
+    verified: selected?.verification?.status === "verified",
+  };
+}
+
 async function resolveSessionUser(req: Request): Promise<SessionUser | null> {
   const auth = getAuth(req);
   if (!auth?.userId) {
@@ -246,14 +613,14 @@ async function resolveSessionUser(req: Request): Promise<SessionUser | null> {
   }
 
   const clerkUser = await clerkClient.users.getUser(auth.userId);
-  const email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
-  const tier = (clerkUser.publicMetadata?.tier as string) || "max";
-  await getOrCreateUser(auth.userId, email, tier);
+  const { email, verified: emailVerified } = getPrimaryClerkEmail(clerkUser);
+  const tier = normalizeClerkTier(clerkUser.publicMetadata?.tier);
+  const dbUser = await getOrCreateUser(auth.userId, email, tier, { emailVerified });
 
   return {
-    userId: auth.userId,
-    email,
-    tier,
+    userId: dbUser.id,
+    email: dbUser.email,
+    tier: dbUser.tier,
   };
 }
 
@@ -298,6 +665,7 @@ function renderAuthorizeHtml(input: {
   codeChallenge: string;
   codeChallengeMethod: string;
   resource: string;
+  csrfToken: string;
   tierNotice: string;
 }): string {
   const scopes = input.scope.split(/\s+/).filter(Boolean);
@@ -316,6 +684,7 @@ function renderAuthorizeHtml(input: {
     .replace(/{{CODE_CHALLENGE}}/g, escapeHtml(input.codeChallenge))
     .replace(/{{CODE_CHALLENGE_METHOD}}/g, escapeHtml(input.codeChallengeMethod))
     .replace(/{{RESOURCE}}/g, escapeHtml(input.resource))
+    .replace(/{{CSRF_TOKEN}}/g, escapeHtml(input.csrfToken))
     .replace(/{{SCOPE_ITEMS}}/g, scopeItems || "<li><strong>read</strong> - View projects and conversations</li>")
     .replace(/{{TIER_NOTICE}}/g, input.tierNotice);
 }
@@ -342,6 +711,9 @@ function parseMetadataClient(rawMetadata: unknown, clientId: string): OAuthClien
   const clientName = pickString(metadata.client_name) || "Claude Connector";
   const grantTypes = parseStringArray(metadata.grant_types, ["authorization_code", "refresh_token"]);
   const responseTypes = parseStringArray(metadata.response_types, ["code"]);
+  if (!hasOnlyAllowedValues(grantTypes, ALLOWED_GRANT_TYPES) || !hasOnlyAllowedValues(responseTypes, ALLOWED_RESPONSE_TYPES)) {
+    return null;
+  }
 
   return {
     clientId,
@@ -377,7 +749,7 @@ async function resolveOAuthClient(clientId: string): Promise<OAuthClientLike | n
     return storedClient;
   }
 
-  if (!isValidUrl(clientId)) {
+  if (!isAllowedDynamicClientMetadataUrl(clientId)) {
     return null;
   }
 
@@ -398,17 +770,9 @@ async function resolveOAuthClient(clientId: string): Promise<OAuthClientLike | n
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch(clientId, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    const metadata = await fetchDynamicClientMetadata(clientId);
+    if (!metadata) return null;
 
-    if (!response.ok) return null;
-    const metadata = await response.json();
     const parsedClient = parseMetadataClient(metadata, clientId);
     if (!parsedClient) {
       return null;
@@ -511,6 +875,9 @@ function validateAuthorizeParams(params: AuthorizeRequestParams): { ok: boolean;
   if (!params.redirectUri) return { ok: false, description: "Missing redirect_uri" };
   if (!params.responseType) return { ok: false, description: "Missing response_type" };
   if (params.responseType !== "code") return { ok: false, description: "Unsupported response_type" };
+  if (params.invalidScopes.length > 0) {
+    return { ok: false, description: `Unsupported scope: ${params.invalidScopes.join(" ")}` };
+  }
   if (!params.codeChallenge) return { ok: false, description: "Missing code_challenge" };
   if (!ALLOWED_CODE_CHALLENGE_METHODS.has(params.codeChallengeMethod)) {
     return { ok: false, description: "Unsupported code_challenge_method" };
@@ -543,6 +910,64 @@ function buildAuthorizationDecisionCacheKey(userId: string, params: AuthorizeReq
     params.codeChallengeMethod,
     params.resource,
   ]);
+}
+
+function issueConsentNonce(sessionUser: SessionUser, params: AuthorizeRequestParams): string {
+  const now = getUnixSeconds();
+  const nonce = randomBytes(32).toString("base64url");
+  consentNonces.set(nonce, {
+    userId: sessionUser.userId,
+    requestKey: buildAuthorizationDecisionCacheKey(sessionUser.userId, params),
+    expiresAt: now + CONSENT_NONCE_TTL_SECONDS,
+  });
+  return nonce;
+}
+
+function validateAndConsumeConsentNonce(
+  token: string,
+  sessionUser: SessionUser,
+  params: AuthorizeRequestParams,
+): boolean {
+  const now = getUnixSeconds();
+  for (const [nonce, entry] of Array.from(consentNonces.entries())) {
+    if (entry.expiresAt <= now) {
+      consentNonces.delete(nonce);
+    }
+  }
+
+  const entry = consentNonces.get(token);
+  if (!entry) return false;
+  consentNonces.delete(token);
+  return (
+    entry.userId === sessionUser.userId &&
+    entry.requestKey === buildAuthorizationDecisionCacheKey(sessionUser.userId, params) &&
+    entry.expiresAt > now
+  );
+}
+
+function getOriginFromUrl(value: string): string | null {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function isTrustedAuthorizePostOrigin(req: Request): boolean {
+  const issuerOrigin = getOriginFromUrl(getIssuerBaseUrl(req));
+  if (!issuerOrigin) return false;
+
+  const origin = req.header("origin");
+  if (origin) {
+    return getOriginFromUrl(origin) === issuerOrigin;
+  }
+
+  const referer = req.header("referer");
+  if (referer) {
+    return getOriginFromUrl(referer) === issuerOrigin;
+  }
+
+  return process.env.NODE_ENV !== "production";
 }
 
 function pruneRecentAuthorizationDecisions(now: number): void {
@@ -637,7 +1062,7 @@ export function registerOAuthRoutes(app: Express): void {
     });
   });
 
-  app.post("/oauth/register", async (req: Request, res: Response) => {
+  app.post("/oauth/register", oauthRateLimit, async (req: Request, res: Response) => {
     try {
       const clientNameInput = pickString(req.body?.client_name).trim();
       const redirectUris = parseStringArray(req.body?.redirect_uris, []);
@@ -656,6 +1081,12 @@ export function registerOAuthRoutes(app: Express): void {
       }
       if (!ALLOWED_TOKEN_AUTH_METHODS.has(tokenEndpointAuthMethod)) {
         return sendOAuthError(res, 400, "invalid_client_metadata", "Unsupported token_endpoint_auth_method");
+      }
+      if (!hasOnlyAllowedValues(grantTypes, ALLOWED_GRANT_TYPES)) {
+        return sendOAuthError(res, 400, "invalid_client_metadata", "Unsupported grant_type");
+      }
+      if (!hasOnlyAllowedValues(responseTypes, ALLOWED_RESPONSE_TYPES)) {
+        return sendOAuthError(res, 400, "invalid_client_metadata", "Unsupported response_type");
       }
 
       const clientId = `mcp_client_${randomUUID()}`;
@@ -691,7 +1122,7 @@ export function registerOAuthRoutes(app: Express): void {
     }
   });
 
-  app.get("/oauth/authorize", async (req: Request, res: Response) => {
+  app.get("/oauth/authorize", oauthRateLimit, async (req: Request, res: Response) => {
     try {
       const params = normalizeAuthorizeRequestParams(req);
       const decision = pickBodyOrQueryString(req, "decision");
@@ -715,19 +1146,10 @@ export function registerOAuthRoutes(app: Express): void {
       }
 
       if (decision) {
-        if (decision !== "approve") {
-          return redirectWithError(
-            res,
-            params.redirectUri,
-            params.state,
-            "access_denied",
-            "The user denied the request"
-          );
-        }
-
-        // Keep callback redirect strictly GET for maximum client compatibility.
-        approveAuthorizationRequest(res, sessionUser, params);
-        return;
+        return res.status(405).json({
+          error: "invalid_request",
+          error_description: "Authorization decisions must be submitted with POST",
+        });
       }
 
       const userTierLevel = TIER_LEVELS[sessionUser.tier] ?? 0;
@@ -735,6 +1157,7 @@ export function registerOAuthRoutes(app: Express): void {
       const tierNotice = userTierLevel < proTierLevel
         ? "<p class=\"notice warning\">Note: Chat, compile, and verify endpoints require a Pro plan. Authorization can still proceed.</p>"
         : "";
+      const csrfToken = issueConsentNonce(sessionUser, params);
 
       const html = renderAuthorizeHtml({
         clientName: client.clientName,
@@ -747,6 +1170,7 @@ export function registerOAuthRoutes(app: Express): void {
         codeChallenge: params.codeChallenge,
         codeChallengeMethod: params.codeChallengeMethod,
         resource: params.resource,
+        csrfToken,
         tierNotice,
       });
 
@@ -754,15 +1178,23 @@ export function registerOAuthRoutes(app: Express): void {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.status(200).send(html);
     } catch (error) {
+      if (isUnverifiedClerkEmailError(error)) {
+        return sendOAuthError(res, 403, "access_denied", "Clerk email must be verified before authorization");
+      }
       console.error("OAuth authorize page error:", error);
       return sendOAuthError(res, 500, "server_error", "Failed to render authorization page");
     }
   });
 
-  app.post("/oauth/authorize", async (req: Request, res: Response) => {
+  app.post("/oauth/authorize", oauthRateLimit, async (req: Request, res: Response) => {
     try {
+      if (!isTrustedAuthorizePostOrigin(req)) {
+        return res.status(403).json({ error: "invalid_request", error_description: "Untrusted authorization origin" });
+      }
+
       const params = normalizeAuthorizeRequestParams(req);
       const decision = pickBodyOrQueryString(req, "decision");
+      const csrfToken = pickBodyOrQueryString(req, "csrf_token");
       const paramValidation = validateAuthorizeParams(params);
       if (!paramValidation.ok) {
         return res.status(400).json({ error: "invalid_request", error_description: paramValidation.description });
@@ -782,6 +1214,10 @@ export function registerOAuthRoutes(app: Express): void {
         return res.redirect(302, redirectUrl);
       }
 
+      if (!csrfToken || !validateAndConsumeConsentNonce(csrfToken, sessionUser, params)) {
+        return res.status(403).json({ error: "invalid_request", error_description: "Invalid authorization consent token" });
+      }
+
       if (decision !== "approve") {
         return redirectWithError(
           res,
@@ -796,12 +1232,15 @@ export function registerOAuthRoutes(app: Express): void {
       approveAuthorizationRequest(res, sessionUser, params);
       return;
     } catch (error) {
+      if (isUnverifiedClerkEmailError(error)) {
+        return sendOAuthError(res, 403, "access_denied", "Clerk email must be verified before authorization");
+      }
       console.error("OAuth authorize decision error:", error);
       return sendOAuthError(res, 500, "server_error", "Failed to process authorization decision");
     }
   });
 
-  app.post("/oauth/token", async (req: Request, res: Response) => {
+  app.post("/oauth/token", oauthRateLimit, async (req: Request, res: Response) => {
     try {
       res.setHeader("Cache-Control", "no-store");
       res.setHeader("Pragma", "no-cache");
@@ -916,7 +1355,7 @@ export function registerOAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/oauth/revoke", (req: Request, res: Response) => {
+  app.post("/oauth/revoke", oauthRateLimit, (req: Request, res: Response) => {
     try {
       const token = pickBodyOrQueryString(req, "token");
       if (token) {

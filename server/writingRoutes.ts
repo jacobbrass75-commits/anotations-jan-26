@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
-import { requireAuth, requireTier } from "./auth";
+import { checkTokenBudget, requireAuth, requireTier } from "./auth";
+import { incrementTokenUsage } from "./authStorage";
 import { projectStorage } from "./projectStorage";
 import { storage } from "./storage";
 import {
@@ -76,7 +77,7 @@ export async function savePaperToProject(
 
 export function registerWritingRoutes(app: Express): void {
   // POST /api/write - Start writing pipeline, stream results via SSE
-  app.post("/api/write", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
+  app.post("/api/write", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     try {
       const body = req.body as Partial<WritingRequest> & {
         sourceDocumentIds?: unknown;
@@ -96,6 +97,9 @@ export function registerWritingRoutes(app: Express): void {
       let voiceProfile: string | null = null;
       if (body.projectId) {
         const project = await projectStorage.getProject(body.projectId as string);
+        if (!project || project.userId !== req.user!.userId) {
+          return res.status(404).json({ error: "Project not found" });
+        }
         if (project?.voiceProfile) {
           voiceProfile = project.voiceProfile;
         }
@@ -133,7 +137,7 @@ export function registerWritingRoutes(app: Express): void {
 
         for (const projectDoc of selectedProjectDocs) {
           const fullDoc = await storage.getDocument(projectDoc.documentId);
-          if (!fullDoc) continue;
+          if (!fullDoc || fullDoc.userId !== req.user!.userId) continue;
 
           const citationData = (projectDoc.citationData as CitationData | null) || null;
           const summaryExcerpt =
@@ -167,6 +171,7 @@ export function registerWritingRoutes(app: Express): void {
           const projectAnnotation = await projectStorage.getProjectAnnotation(annotationId);
           if (projectAnnotation) {
             const projectDoc = projectDocById.get(projectAnnotation.projectDocumentId);
+            if (!projectDoc) continue;
             const citationData = (projectDoc?.citationData as CitationData | null) || null;
             const docFilename = projectDoc?.document?.filename || "Unknown Source";
 
@@ -192,6 +197,7 @@ export function registerWritingRoutes(app: Express): void {
           const legacyAnnotation = await storage.getAnnotation(annotationId);
           if (legacyAnnotation) {
             const doc = await storage.getDocument(legacyAnnotation.documentId);
+            if (!doc || doc.userId !== req.user!.userId) continue;
             addSource({
               id: legacyAnnotation.id,
               kind: "annotation",
@@ -227,6 +233,7 @@ export function registerWritingRoutes(app: Express): void {
       // Handle client disconnect
       let aborted = false;
       let completedFullText = "";
+      let tokensUsed = 0;
 
       req.on("close", () => {
         aborted = true;
@@ -236,11 +243,16 @@ export function registerWritingRoutes(app: Express): void {
       await runWritingPipeline(request, sources, (event) => {
         if (event.type === "complete" && event.fullText) {
           completedFullText = event.fullText;
+          tokensUsed = (event.usage?.inputTokens ?? 0) + (event.usage?.outputTokens ?? 0);
         }
         if (!aborted) {
           sendEvent(event);
         }
       });
+
+      if (tokensUsed > 0) {
+        await incrementTokenUsage(req.user!.userId, tokensUsed);
+      }
 
       // End the stream
       if (!aborted) {

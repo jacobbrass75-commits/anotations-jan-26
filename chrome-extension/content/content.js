@@ -41,6 +41,7 @@ window.addEventListener("message", (event) => {
     {
       type: "STORE_EXTENSION_AUTH",
       apiKey: event.data.apiKey,
+      apiKeyId: event.data.apiKeyId,
       email: event.data.email,
       userId: event.data.userId,
       tier: event.data.tier,
@@ -56,21 +57,6 @@ window.addEventListener("message", (event) => {
       );
     },
   );
-});
-
-document.addEventListener("keydown", (event) => {
-  if (event.ctrlKey && event.shiftKey && event.key === "S") {
-    event.preventDefault();
-    const selection = window.getSelection();
-    if (selection && selection.toString().trim()) {
-      chrome.runtime.sendMessage({
-        type: "SAVE_SELECTION",
-        text: selection.toString(),
-        url: window.location.href,
-        title: document.title,
-      });
-    }
-  }
 });
 
 function getSelectionData() {

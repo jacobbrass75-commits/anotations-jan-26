@@ -21,7 +21,7 @@ vi.mock("@clerk/express", () => ({
   },
 }));
 
-describe("extension route integration", () => {
+describe("extension web clip integration", () => {
   let tempDir = "";
   let sqlite: { close: () => void } | null = null;
   const originalCwd = process.cwd();
@@ -47,14 +47,14 @@ describe("extension route integration", () => {
     const express = (await import("express")).default;
     const { db, sqlite: importedSqlite } = await import("../../server/db");
     const { users, projects, webClips } = await import("../../shared/schema");
-    const { registerExtensionRoutes } = await import("../../server/extensionRoutes");
+    const { registerWebClipRoutes } = await import("../../server/webClipRoutes");
     const { generateToken } = await import("../../server/auth");
 
     sqlite = importedSqlite;
 
     const app = express();
     app.use(express.json());
-    registerExtensionRoutes(app);
+    registerWebClipRoutes(app);
 
     const now = new Date("2026-03-01T00:00:00.000Z");
     await db.insert(users).values({
@@ -73,9 +73,16 @@ describe("extension route integration", () => {
       updatedAt: now,
     } as any);
 
+    await db.insert(projects).values({
+      id: "project-1",
+      userId: "user-1",
+      name: "Extension Clips",
+      createdAt: now,
+      updatedAt: now,
+    } as any);
+
     return {
       db,
-      projects,
       webClips,
       token: generateToken({
         id: "user-1",
@@ -86,21 +93,27 @@ describe("extension route integration", () => {
     };
   }
 
-  it("rejects free-tier users before writing clip data", async () => {
+  function extensionClipPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      highlightedText: "Important quote",
+      sourceUrl: "https://example.com/article#fragment",
+      pageTitle: "Example Article",
+      surroundingContext: "Why this quote matters",
+      projectId: "project-1",
+      category: "key_quote",
+      ...overrides,
+    };
+  }
+
+  it("rejects free-tier extension saves before writing clip data", async () => {
     const { token, db, webClips, server } = await createExtensionApp("free");
 
     try {
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/extension/save", {
+      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
-        body: {
-          highlightedText: "Important quote",
-          pageUrl: "https://example.com/article#fragment",
-          pageTitle: "Example Article",
-        },
+        body: extensionClipPayload(),
       });
-
-      const savedClips = await db.select().from(webClips);
 
       expect(response.status).toBe(403);
       expect(response.body).toEqual({
@@ -108,70 +121,64 @@ describe("extension route integration", () => {
         requiredTier: "pro",
         currentTier: "free",
       });
-      expect(savedClips).toHaveLength(0);
+      expect(await db.select().from(webClips)).toHaveLength(0);
     } finally {
       await server.close();
     }
   });
 
-  it("validates the extension payload", async () => {
+  it("validates the real extension web clip payload", async () => {
     const { token, server } = await createExtensionApp("pro");
 
     try {
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/extension/save", {
+      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
-        body: {
+        body: extensionClipPayload({
           highlightedText: "",
-          pageUrl: "not-a-url",
-        },
+          sourceUrl: "not-a-url",
+          pageTitle: "",
+        }),
       });
 
       expect(response.status).toBe(400);
-      expect(response.body).toEqual({ message: "No text provided" });
+      expect(response.body).toMatchObject({ error: "Invalid web clip payload" });
     } finally {
       await server.close();
     }
   });
 
-  it("returns a normalized extension payload and creates a default project", async () => {
-    const { token, db, projects, webClips, server } = await createExtensionApp("pro");
+  it("persists a normalized web clip through the endpoint used by the extension", async () => {
+    const { token, db, webClips, server } = await createExtensionApp("pro");
 
     try {
-      const response = await requestJson<{
-        success: boolean;
-        annotation: Record<string, unknown>;
-      }>(server.baseUrl, "/api/extension/save", {
+      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
-        body: {
-          highlightedText: "Important quote",
-          pageUrl: "https://example.com/article#fragment",
-          pageTitle: "Example Article",
-          context: "Why this quote matters",
-        },
+        body: extensionClipPayload(),
       });
 
-      expect(response.status).toBe(200);
-      expect(response.body?.success).toBe(true);
-      expect(response.body?.annotation).toMatchObject({
+      expect(response.status).toBe(201);
+      expect(response.body).toMatchObject({
+        id: expect.any(String),
         highlightedText: "Important quote",
-        pageUrl: "https://example.com/article#fragment",
+        sourceUrl: "https://example.com/article",
         pageTitle: "Example Article",
-        context: "Why this quote matters",
+        surroundingContext: "Why this quote matters",
         category: "key_quote",
-        note: expect.stringContaining("Web highlight from: Example Article"),
-        projectId: expect.any(String),
+        projectId: "project-1",
+        userId: "user-1",
+        footnote: expect.any(String),
+        bibliography: expect.any(String),
       });
 
-      const savedProjects = await db.select().from(projects);
       const savedClips = await db.select().from(webClips);
-
-      expect(savedProjects).toHaveLength(1);
-      expect(savedProjects[0]).toMatchObject({
-        name: "Web Highlights",
+      expect(savedClips).toHaveLength(1);
+      expect(savedClips[0]).toMatchObject({
+        id: response.body?.id,
+        sourceUrl: "https://example.com/article",
+        userId: "user-1",
       });
-      expect(savedClips).toHaveLength(0);
     } finally {
       await server.close();
     }

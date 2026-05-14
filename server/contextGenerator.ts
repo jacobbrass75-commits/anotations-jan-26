@@ -1,5 +1,6 @@
 import OpenAI from "openai";
-import { getEmbedding } from "./openai";
+import { getEmbeddingWithUsage } from "./openai";
+import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -19,7 +20,8 @@ export async function generateRetrievalContext(
   mainArguments: string[],
   keyConcepts: string[],
   projectThesis: string,
-  roleInProject: string
+  roleInProject: string,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<string> {
   try {
     const prompt = `Generate a concise retrieval context (200-300 words) for this document that will be used for semantic search. Optimize for:
@@ -50,6 +52,7 @@ Generate a search-optimized context paragraph:`;
       max_tokens: 500,
       temperature: 0.3,
     });
+    reportProviderUsage(response, onTokenUsage);
 
     return response.choices[0]?.message?.content || "";
   } catch (error) {
@@ -61,7 +64,8 @@ Generate a search-optimized context paragraph:`;
 export async function generateProjectContextSummary(
   thesis: string,
   scope: string,
-  documentContexts: string[]
+  documentContexts: string[],
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<string> {
   try {
     const prompt = `Generate a unified project context summary (150-200 words) for semantic search across this research project.
@@ -84,6 +88,7 @@ Generate a search-optimized project summary:`;
       max_tokens: 400,
       temperature: 0.3,
     });
+    reportProviderUsage(response, onTokenUsage);
 
     return response.choices[0]?.message?.content || "";
   } catch (error) {
@@ -95,7 +100,8 @@ Generate a search-optimized project summary:`;
 export async function generateFolderContextSummary(
   folderDescription: string,
   documentContexts: string[],
-  parentFolderContext?: string
+  parentFolderContext?: string,
+  onTokenUsage?: TokenUsageReporter,
 ): Promise<string> {
   try {
     const parentInfo = parentFolderContext ? `\nParent Folder Context: ${parentFolderContext}` : "";
@@ -118,6 +124,7 @@ Generate a search-optimized folder summary:`;
       max_tokens: 300,
       temperature: 0.3,
     });
+    reportProviderUsage(response, onTokenUsage);
 
     return response.choices[0]?.message?.content || "";
   } catch (error) {
@@ -135,6 +142,6 @@ export async function generateSearchableContent(
   return `[${category}] ${highlightedText} ${note || ''} ${documentContext?.slice(0, 100) || ''}`.trim();
 }
 
-export async function embedText(text: string): Promise<number[]> {
-  return getEmbedding(text);
+export async function embedText(text: string, onTokenUsage?: TokenUsageReporter): Promise<number[]> {
+  return getEmbeddingWithUsage(text, onTokenUsage);
 }

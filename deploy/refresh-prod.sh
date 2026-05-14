@@ -4,9 +4,14 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/app}"
 APP_REF="${APP_REF:-origin/master}"
 MCP_DIR="${MCP_DIR:-/opt/app/mcp-server}"
-APP_HEALTHCHECK_URL="${APP_HEALTHCHECK_URL:-http://127.0.0.1:5001/api/system/status}"
-MCP_HEALTHCHECK_URL="${MCP_HEALTHCHECK_URL:-http://127.0.0.1:5002/healthz}"
+APP_HEALTHCHECK_URL="${APP_HEALTHCHECK_URL:-http://127.0.0.1:5001/readyz}"
+MCP_HEALTHCHECK_URL="${MCP_HEALTHCHECK_URL:-http://127.0.0.1:5002/readyz}"
 SKIP_PREDEPLOY_BACKUP="${SKIP_PREDEPLOY_BACKUP:-0}"
+
+export CI=1
+export GIT_TERMINAL_PROMPT=0
+export npm_config_audit=false
+export npm_config_fund=false
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -28,7 +33,7 @@ wait_for_http() {
   local attempts="${3:-20}"
 
   for ((attempt=1; attempt<=attempts; attempt++)); do
-    if curl --silent --show-error --fail "$url" >/dev/null; then
+    if curl --silent --show-error --fail --connect-timeout 5 --max-time 10 "$url" >/dev/null; then
       echo "[deploy] ${label} healthy"
       return 0
     fi
@@ -49,7 +54,8 @@ cd "$APP_DIR"
 require_file package-lock.json
 require_file deploy/ecosystem.config.cjs
 
-if [[ "$SKIP_PREDEPLOY_BACKUP" != "1" && -x deploy/backup-data.sh ]]; then
+if [[ "$SKIP_PREDEPLOY_BACKUP" != "1" ]]; then
+  require_file deploy/backup-data.sh
   echo "[deploy] creating pre-deploy backup"
   bash deploy/backup-data.sh
 fi
@@ -68,7 +74,7 @@ echo "[deploy] bootstrapping database schema"
 npx tsx scripts/bootstrap-db.ts
 
 echo "[deploy] building app"
-npm run build
+SCHOLARMARK_VALIDATE_PRODUCTION_BUILD=true npm run build
 
 echo "[deploy] replacing web app with built production process"
 pm2 startOrReload deploy/ecosystem.config.cjs --update-env
@@ -81,9 +87,16 @@ if [[ -d "$MCP_DIR" ]]; then
   npm ci --no-audit --fund=false
   pm2 startOrReload deploy/ecosystem.config.cjs --update-env
   wait_for_http "$MCP_HEALTHCHECK_URL" "MCP"
+else
+  export SKIP_MCP_SMOKE=1
 fi
 
 wait_for_http "$APP_HEALTHCHECK_URL" "app"
+
+echo "[deploy] running production smoke checks"
+APP_BASE_URL="${APP_SMOKE_BASE_URL:-http://127.0.0.1:5001}" \
+MCP_BASE_URL="${MCP_SMOKE_BASE_URL:-http://127.0.0.1:5002}" \
+node "$APP_DIR/scripts/smoke-prod.mjs"
 
 echo "[deploy] saving PM2 process list"
 pm2 save

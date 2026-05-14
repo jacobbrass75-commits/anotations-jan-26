@@ -22,17 +22,23 @@ export function registerExtensionRoutes(app: Express): void {
 
       if (!targetProjectId) {
         // Use the first available project as default
-        const allProjects = await projectStorage.getAllProjects();
+        const allProjects = await projectStorage.getAllProjects(req.user!.userId);
         if (allProjects.length > 0) {
           targetProjectId = allProjects[0].id;
         } else {
           // Create a default "Web Highlights" project
           const newProject = await projectStorage.createProject({
+            userId: req.user!.userId,
             name: "Web Highlights",
             description: "Highlights saved from the ScholarMark Chrome extension",
           });
           targetProjectId = newProject.id;
         }
+      }
+
+      const targetProject = await projectStorage.getProject(targetProjectId);
+      if (!targetProject || targetProject.userId !== req.user!.userId) {
+        return res.status(404).json({ message: "Project not found" });
       }
 
       // Build the annotation note with citation context

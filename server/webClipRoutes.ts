@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { requireAuth } from "./auth";
+import { requireAuth, requireTier } from "./auth";
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -208,13 +208,62 @@ function findHighlightRangeInText(fullText: string, highlightedText: string): { 
   return { startPosition: 0, endPosition: Math.max(1, highlightedText.length) };
 }
 
-async function getWebClip(id: string): Promise<WebClip | undefined> {
-  const [clip] = await db.select().from(webClips).where(eq(webClips.id, id));
+async function getWebClipForUser(id: string, userId: string): Promise<WebClip | undefined> {
+  const [clip] = await db
+    .select()
+    .from(webClips)
+    .where(and(eq(webClips.id, id), eq(webClips.userId, userId)));
   return clip;
 }
 
+async function getOwnedProject(projectId: string, userId: string) {
+  const project = await projectStorage.getProject(projectId);
+  return project?.userId === userId ? project : undefined;
+}
+
+async function getOwnedProjectDocument(projectDocumentId: string, userId: string) {
+  const projectDocument = await projectStorage.getProjectDocument(projectDocumentId);
+  if (!projectDocument) return undefined;
+
+  const project = await getOwnedProject(projectDocument.projectId, userId);
+  if (!project) return undefined;
+
+  return projectDocument;
+}
+
+async function validateClipProjectTargets(input: {
+  userId: string;
+  projectId?: string | null;
+  projectDocumentId?: string | null;
+}): Promise<{ ok: true; projectId: string | null } | { ok: false; status: number; error: string }> {
+  const { userId, projectId, projectDocumentId } = input;
+  let resolvedProjectId = projectId || null;
+
+  if (resolvedProjectId) {
+    const project = await getOwnedProject(resolvedProjectId, userId);
+    if (!project) {
+      return { ok: false, status: 404, error: "Project not found" };
+    }
+  }
+
+  if (projectDocumentId) {
+    const projectDocument = await getOwnedProjectDocument(projectDocumentId, userId);
+    if (!projectDocument) {
+      return { ok: false, status: 404, error: "Project document not found" };
+    }
+
+    if (resolvedProjectId && projectDocument.projectId !== resolvedProjectId) {
+      return { ok: false, status: 400, error: "Project document does not belong to the selected project" };
+    }
+
+    resolvedProjectId = projectDocument.projectId;
+  }
+
+  return { ok: true, projectId: resolvedProjectId };
+}
+
 export function registerWebClipRoutes(app: Express): void {
-  app.post("/api/web-clips", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/web-clips", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
     try {
       const parsed = createWebClipRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -228,6 +277,15 @@ export function registerWebClipRoutes(app: Express): void {
         tags: parsed.data.tags ?? [],
       };
 
+      const targetValidation = await validateClipProjectTargets({
+        userId: req.user!.userId,
+        projectId: payload.projectId,
+        projectDocumentId: payload.projectDocumentId,
+      });
+      if (!targetValidation.ok) {
+        return res.status(targetValidation.status).json({ error: targetValidation.error });
+      }
+
       const citationData = buildCitationData(payload);
       const footnote = generateChicagoFootnote(citationData);
       const bibliography = generateChicagoBibliography(citationData);
@@ -236,6 +294,7 @@ export function registerWebClipRoutes(app: Express): void {
         .insert(webClips)
         .values({
           ...payload,
+          projectId: targetValidation.projectId,
           userId: req.user!.userId,
           citationData,
           footnote,
@@ -335,7 +394,7 @@ export function registerWebClipRoutes(app: Express): void {
 
   app.get("/api/web-clips/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const clip = await getWebClip(req.params.id);
+      const clip = await getWebClipForUser(req.params.id, req.user!.userId);
       if (!clip) {
         return res.status(404).json({ error: "Web clip not found" });
       }
@@ -354,9 +413,20 @@ export function registerWebClipRoutes(app: Express): void {
         return res.status(400).json({ error: "Invalid update payload", details: parsed.error.flatten() });
       }
 
-      const existing = await getWebClip(req.params.id);
+      const existing = await getWebClipForUser(req.params.id, req.user!.userId);
       if (!existing) {
         return res.status(404).json({ error: "Web clip not found" });
+      }
+
+      const hasProjectId = Object.prototype.hasOwnProperty.call(parsed.data, "projectId");
+      const hasProjectDocumentId = Object.prototype.hasOwnProperty.call(parsed.data, "projectDocumentId");
+      const targetValidation = await validateClipProjectTargets({
+        userId: req.user!.userId,
+        projectId: hasProjectId ? parsed.data.projectId : existing.projectId,
+        projectDocumentId: hasProjectDocumentId ? parsed.data.projectDocumentId : existing.projectDocumentId,
+      });
+      if (!targetValidation.ok) {
+        return res.status(targetValidation.status).json({ error: targetValidation.error });
       }
 
       const updates: Partial<WebClip> = {};
@@ -373,11 +443,11 @@ export function registerWebClipRoutes(app: Express): void {
         updates.tags = parsed.data.tags ?? [];
       }
 
-      if (Object.prototype.hasOwnProperty.call(parsed.data, "projectId")) {
-        updates.projectId = parsed.data.projectId || null;
+      if (hasProjectId || (hasProjectDocumentId && parsed.data.projectDocumentId)) {
+        updates.projectId = targetValidation.projectId;
       }
 
-      if (Object.prototype.hasOwnProperty.call(parsed.data, "projectDocumentId")) {
+      if (hasProjectDocumentId) {
         updates.projectDocumentId = parsed.data.projectDocumentId || null;
       }
 
@@ -388,7 +458,7 @@ export function registerWebClipRoutes(app: Express): void {
       const [updated] = await db
         .update(webClips)
         .set(updates)
-        .where(eq(webClips.id, req.params.id))
+        .where(and(eq(webClips.id, req.params.id), eq(webClips.userId, req.user!.userId)))
         .returning();
 
       return res.json(updated);
@@ -400,12 +470,12 @@ export function registerWebClipRoutes(app: Express): void {
 
   app.delete("/api/web-clips/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const clip = await getWebClip(req.params.id);
+      const clip = await getWebClipForUser(req.params.id, req.user!.userId);
       if (!clip) {
         return res.status(404).json({ error: "Web clip not found" });
       }
 
-      await db.delete(webClips).where(eq(webClips.id, req.params.id));
+      await db.delete(webClips).where(and(eq(webClips.id, req.params.id), eq(webClips.userId, req.user!.userId)));
       return res.json({ success: true });
     } catch (error) {
       console.error("Error deleting web clip:", error);
@@ -415,7 +485,7 @@ export function registerWebClipRoutes(app: Express): void {
 
   app.post("/api/web-clips/:id/promote", requireAuth, async (req: Request, res: Response) => {
     try {
-      const clip = await getWebClip(req.params.id);
+      const clip = await getWebClipForUser(req.params.id, req.user!.userId);
       if (!clip) {
         return res.status(404).json({ error: "Web clip not found" });
       }
@@ -425,21 +495,29 @@ export function registerWebClipRoutes(app: Express): void {
         return res.status(400).json({ error: "Invalid promote payload", details: parsed.error.flatten() });
       }
 
-      const resolvedProjectId = parsed.data.projectId || clip.projectId;
+      let resolvedProjectId = parsed.data.projectId || clip.projectId || null;
+      const initialProjectDocumentId = parsed.data.projectDocumentId || clip.projectDocumentId || null;
+      if (!resolvedProjectId && initialProjectDocumentId) {
+        const targetProjectDoc = await getOwnedProjectDocument(initialProjectDocumentId, req.user!.userId);
+        if (!targetProjectDoc) {
+          return res.status(404).json({ error: "Target project document not found" });
+        }
+        resolvedProjectId = targetProjectDoc.projectId;
+      }
       if (!resolvedProjectId) {
         return res.status(400).json({ error: "projectId is required to promote a web clip" });
       }
 
-      const project = await projectStorage.getProject(resolvedProjectId);
+      const project = await getOwnedProject(resolvedProjectId, req.user!.userId);
       if (!project) {
         return res.status(404).json({ error: "Project not found" });
       }
 
-      let targetProjectDocumentId = parsed.data.projectDocumentId || clip.projectDocumentId || null;
+      let targetProjectDocumentId = initialProjectDocumentId;
       let targetDocumentText = "";
 
       if (targetProjectDocumentId) {
-        const targetProjectDoc = await projectStorage.getProjectDocument(targetProjectDocumentId);
+        const targetProjectDoc = await getOwnedProjectDocument(targetProjectDocumentId, req.user!.userId);
         if (!targetProjectDoc) {
           return res.status(404).json({ error: "Target project document not found" });
         }
@@ -456,6 +534,7 @@ export function registerWebClipRoutes(app: Express): void {
         const doc = await storage.createDocument({
           filename: buildClipDocumentFilename(clip.pageTitle),
           fullText,
+          userId: req.user!.userId,
           summary: null,
           mainArguments: [],
           keyConcepts: [],
@@ -502,7 +581,7 @@ export function registerWebClipRoutes(app: Express): void {
             category: normalizeWebClipCategory(parsed.data.category || clip.category),
             note: parsed.data.note ?? clip.note,
           })
-          .where(eq(webClips.id, clip.id));
+          .where(and(eq(webClips.id, clip.id), eq(webClips.userId, req.user!.userId)));
 
         return res.status(201).json({ annotation, projectDocumentId: targetProjectDocumentId });
       }
@@ -527,7 +606,7 @@ export function registerWebClipRoutes(app: Express): void {
           category: normalizeWebClipCategory(parsed.data.category || clip.category),
           note: parsed.data.note ?? clip.note,
         })
-        .where(eq(webClips.id, clip.id));
+        .where(and(eq(webClips.id, clip.id), eq(webClips.userId, req.user!.userId)));
 
       return res.status(201).json({ annotation, projectDocumentId: targetProjectDocumentId });
     } catch (error) {

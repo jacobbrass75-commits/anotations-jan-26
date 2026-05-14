@@ -161,12 +161,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
     return;
   }
 
-  if (user.tier !== "max") {
-    res.status(403).json({ message: "Admin access required" });
-    return;
-  }
-
-  next();
+  res.status(403).json({ message: "Admin access requires ADMIN_USER_IDS to be configured" });
 }
 
 function parseEpochMs(value: unknown, fallback: number): number {

@@ -2,12 +2,13 @@ import Database from "better-sqlite3";
 import { execFile } from "child_process";
 import { lstat, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join, resolve } from "path";
+import { fileURLToPath } from "url";
 import { promisify } from "util";
 import { afterEach, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
-const repoRoot = "/Users/brass/Documents/New project/anotations-jan-26";
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const backupScript = join(repoRoot, "deploy", "backup-data.sh");
 
 describe("backup-data.sh", () => {

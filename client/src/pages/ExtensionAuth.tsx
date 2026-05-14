@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 type AuthState = "connecting" | "waiting" | "connected" | "error";
 
 interface ApiKeyCreateResponse {
+  id: string;
   key: string;
 }
 
@@ -27,7 +28,7 @@ export default function ExtensionAuth() {
     if (!isLoaded) return;
 
     if (!isSignedIn) {
-      setLocation("/sign-in?redirect=%2Fextension-auth");
+      setLocation("/sign-in?redirect_url=%2Fextension-auth");
       return;
     }
 
@@ -70,12 +71,13 @@ export default function ExtensionAuth() {
           {
             type: "SM_EXTENSION_AUTH",
             apiKey: keyData.key,
+            apiKeyId: keyData.id,
             email: me.email ?? "",
             userId: me.id ?? me.userId ?? "",
             tier: me.tier ?? "free",
             serverUrl: window.location.origin,
           },
-          "*"
+          window.location.origin
         );
 
         window.setTimeout(() => {

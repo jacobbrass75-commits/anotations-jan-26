@@ -4,7 +4,7 @@ const DEFAULT_SETTINGS = {
   defaultCategory: "key_quote",
 };
 
-const AUTH_STORAGE_KEYS = ["sm_api_key", "sm_user", "sm_token", "sm_project"];
+const AUTH_STORAGE_KEYS = ["sm_api_key", "sm_api_key_id", "sm_user", "sm_token", "sm_project"];
 const CONTEXT_MENU_ID = "save-to-scholarmark";
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -30,6 +30,22 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     });
   } catch (error) {
     console.error("ScholarMark context-menu save failed:", error);
+  }
+});
+
+chrome.commands.onCommand.addListener(async (command, tab) => {
+  if (command !== "save-selection" || !tab?.id) {
+    return;
+  }
+
+  try {
+    await saveSelectionForTab(tab.id, {
+      fallbackSelection: "",
+      fallbackUrl: tab.url || "",
+      fallbackTitle: tab.title || "Untitled",
+    });
+  } catch (error) {
+    console.error("ScholarMark shortcut save failed:", error);
   }
 });
 
@@ -67,7 +83,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "LOGOUT") {
-    chrome.storage.local.remove(AUTH_STORAGE_KEYS).then(() => {
+    revokeStoredApiKey().finally(() => chrome.storage.local.remove(AUTH_STORAGE_KEYS)).then(() => {
       sendResponse({ success: true });
     });
     return true;
@@ -113,6 +129,7 @@ async function storeExtensionAuth(message) {
 
   await chrome.storage.local.set({
     sm_api_key: message.apiKey,
+    sm_api_key_id: message.apiKeyId || "",
     sm_user: {
       userId: message.userId || "",
       email: message.email || "",
@@ -251,6 +268,27 @@ async function saveSelectionForTab(tabId, fallback) {
 async function getApiKey() {
   const stored = await chrome.storage.local.get(["sm_api_key", "sm_token"]);
   return stored.sm_api_key || stored.sm_token || null;
+}
+
+async function revokeStoredApiKey() {
+  const stored = await chrome.storage.local.get(["sm_api_key", "sm_api_key_id"]);
+  if (!stored.sm_api_key || !stored.sm_api_key_id) {
+    return;
+  }
+
+  const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+  const serverUrl = trimSlash(settings.serverUrl || DEFAULT_SETTINGS.serverUrl);
+
+  try {
+    await fetch(`${serverUrl}/api/auth/api-keys/${encodeURIComponent(stored.sm_api_key_id)}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${stored.sm_api_key}`,
+      },
+    });
+  } catch {
+    // Local logout should still clear extension state if the backend cannot be reached.
+  }
 }
 
 async function clearAuthState() {

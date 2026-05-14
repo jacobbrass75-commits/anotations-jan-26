@@ -42,10 +42,13 @@ function Router() {
   return (
     <Switch>
       <Route path="/sign-in" component={Login} />
+      <Route path="/sign-in/*" component={Login} />
       <Route path="/sign-up" component={Register} />
+      <Route path="/sign-up/*" component={Register} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/account">{() => <ProtectedRoute><Account /></ProtectedRoute>}</Route>
       <Route path="/extension-auth">{() => <ProtectedRoute><ExtensionAuth /></ProtectedRoute>}</Route>
+      <Route path="/dashboard">{() => <ProtectedRoute><Home /></ProtectedRoute>}</Route>
       <Route path="/">{() => <ProtectedRoute><Home /></ProtectedRoute>}</Route>
       <Route path="/projects">{() => <ProtectedRoute><Projects /></ProtectedRoute>}</Route>
       <Route path="/web-clips">{() => <ProtectedRoute><WebClips /></ProtectedRoute>}</Route>
