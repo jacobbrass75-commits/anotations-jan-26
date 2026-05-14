@@ -2,6 +2,10 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/app}"
+APP_REF_FILE="${APP_REF_FILE:-/tmp/scholarmark-app-ref}"
+if [[ -z "${APP_REF:-}" && -f "$APP_REF_FILE" ]]; then
+  APP_REF="$(head -n 1 "$APP_REF_FILE" | tr -d '\r')"
+fi
 APP_REF="${APP_REF:-origin/master}"
 MCP_DIR="${MCP_DIR:-/opt/app/mcp-server}"
 APP_HEALTHCHECK_URL="${APP_HEALTHCHECK_URL:-http://127.0.0.1:5001/readyz}"
