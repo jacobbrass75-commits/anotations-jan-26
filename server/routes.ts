@@ -54,8 +54,8 @@ import {
   isImageFile,
   upload,
 } from "./uploadMiddleware";
-import { annotations, documents, projectAnnotations, projects } from "@shared/schema";
-import { sql } from "drizzle-orm";
+import { annotations, documents, projectAnnotations, projectDocuments, projects } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
 import { checkTokenBudget, requireAuth } from "./auth";
 import { decrementStorageUsage, reserveStorageUsage } from "./authStorage";
 import { createTokenUsageAccumulator } from "./aiUsage";
@@ -238,22 +238,52 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/system/status", requireAuth, async (_req: Request, res: Response) => {
+  app.get("/api/system/status", requireAuth, async (req: Request, res: Response) => {
     try {
+      const userId = req.user!.userId;
+      const accountDocumentPredicate = () => sql`
+        ${documents.userId} = ${userId}
+        OR EXISTS (
+          SELECT 1
+          FROM ${projectDocuments}
+          INNER JOIN ${projects} ON ${projects.id} = ${projectDocuments.projectId}
+          WHERE ${projectDocuments.documentId} = ${documents.id}
+            AND ${projects.userId} = ${userId}
+        )
+      `;
+
       const [projectCountRow] = await db
         .select({ count: sql<number>`count(*)` })
-        .from(projects);
+        .from(projects)
+        .where(eq(projects.userId, userId));
       const [documentCountRow] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(documents);
+        .select({ count: sql<number>`count(DISTINCT ${documents.id})` })
+        .from(documents)
+        .where(accountDocumentPredicate());
       const [annotationCountRow] = await db
         .select({ count: sql<number>`count(*)` })
-        .from(annotations);
+        .from(annotations)
+        .innerJoin(documents, eq(annotations.documentId, documents.id))
+        .where(accountDocumentPredicate());
       const [projectAnnotationCountRow] = await db
         .select({ count: sql<number>`count(*)` })
-        .from(projectAnnotations);
+        .from(projectAnnotations)
+        .innerJoin(projectDocuments, eq(projectAnnotations.projectDocumentId, projectDocuments.id))
+        .innerJoin(projects, eq(projectDocuments.projectId, projects.id))
+        .where(eq(projects.userId, userId));
 
-      const documentMeta = await storage.getAllDocumentMeta();
+      const documentMeta = await db
+        .select({
+          id: documents.id,
+          filename: documents.filename,
+          uploadDate: documents.uploadDate,
+          summary: documents.summary,
+          chunkCount: documents.chunkCount,
+          status: documents.status,
+          processingError: documents.processingError,
+        })
+        .from(documents)
+        .where(accountDocumentPredicate());
       const statusBreakdown = {
         ready: 0,
         processing: 0,
