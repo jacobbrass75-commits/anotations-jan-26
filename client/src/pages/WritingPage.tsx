@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, FolderOpen, MessageSquare, PenTool, UserRound } from "lucide-react";
 import WritingChat from "@/components/WritingChat";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function WritingPage() {
   const initialProjectId =
@@ -47,6 +48,7 @@ export default function WritingPage() {
                 Account
               </Button>
             </Link>
+            <ThemeToggle />
           </div>
         </div>
       </header>
