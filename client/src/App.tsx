@@ -19,6 +19,7 @@ const Privacy = lazy(() => import("@/pages/Privacy"));
 const Account = lazy(() => import("@/pages/Account"));
 const Chat = lazy(() => import("@/pages/Chat"));
 const WritingPage = lazy(() => import("@/pages/WritingPage"));
+const WritingStyles = lazy(() => import("@/pages/WritingStyles"));
 const WebClips = lazy(() => import("@/pages/WebClips"));
 const ExtensionAuth = lazy(() => import("@/pages/ExtensionAuth"));
 const AdminAnalytics = lazy(() => import("@/pages/AdminAnalytics"));
@@ -60,6 +61,7 @@ function Router() {
       <Route path="/chat/:conversationId">{() => <ProtectedRoute><Chat /></ProtectedRoute>}</Route>
       <Route path="/write">{() => <ProtectedRoute><WritingPage /></ProtectedRoute>}</Route>
       <Route path="/writing">{() => <ProtectedRoute><WritingPage /></ProtectedRoute>}</Route>
+      <Route path="/writing-styles">{() => <ProtectedRoute><WritingStyles /></ProtectedRoute>}</Route>
       <Route path="/admin/analytics">{() => <ProtectedRoute><AdminAnalytics /></ProtectedRoute>}</Route>
       <Route component={NotFound} />
     </Switch>

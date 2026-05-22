@@ -8,6 +8,7 @@ import {
 } from "./chatStorage";
 import { db } from "./db";
 import { projectStorage } from "./projectStorage";
+import { writingStyleStorage } from "./writingStyleStorage";
 import { storage } from "./storage";
 import { checkTokenBudget, requireAuth, requireTier } from "./auth";
 import { incrementTokenUsage } from "./authStorage";
@@ -59,6 +60,7 @@ import {
   type Conversation,
   type Message,
   type Project,
+  type WritingStyle,
 } from "@shared/schema";
 
 const MAX_SOURCE_EXCERPT_CHARS = 2000;
@@ -105,6 +107,7 @@ const STREAM_TAG_PREFIXES = [
 ];
 
 type WritingProjectContext = Pick<Project, "name" | "thesis" | "scope" | "contextSummary" | "voiceProfile">;
+type WritingStyleContext = Pick<WritingStyle, "name" | "description" | "voiceProfile">;
 type PromptSource = WritingSource | TieredSource;
 type WritingMode = "precision" | "extended";
 type ToolRequestType = "chunk_request" | "context_request";
@@ -203,6 +206,39 @@ function prettyToneLabel(tone?: string): string {
   if (!tone) return "academic";
   if (tone === "ap_style") return "AP style";
   return tone;
+}
+
+async function getOwnedWritingStyleOrNull(
+  writingStyleId: string | null | undefined,
+  userId: string,
+): Promise<WritingStyleContext | null> {
+  if (!writingStyleId) return null;
+  const style = await writingStyleStorage.getWritingStyleForUser(writingStyleId, userId);
+  if (!style) return null;
+  return {
+    name: style.name,
+    description: style.description,
+    voiceProfile: style.voiceProfile,
+  };
+}
+
+async function assertOwnedWritingStyle(
+  writingStyleId: unknown,
+  userId: string,
+  res: Response,
+): Promise<string | null | undefined> {
+  if (writingStyleId === undefined) return undefined;
+  if (writingStyleId === null || writingStyleId === "") return null;
+  if (typeof writingStyleId !== "string") {
+    res.status(400).json({ message: "writingStyleId must be a string or null" });
+    return undefined;
+  }
+  const style = await writingStyleStorage.getWritingStyleForUser(writingStyleId, userId);
+  if (!style) {
+    res.status(404).json({ message: "Writing style not found" });
+    return undefined;
+  }
+  return style.id;
 }
 
 function getWritingMode(conv: Pick<Conversation, "writingModel">): WritingMode {
@@ -770,18 +806,21 @@ async function loadStandaloneWebClipSources(
 }
 
 async function loadConversationContext(
-  conv: Pick<Conversation, "projectId" | "selectedSourceIds">,
+  conv: Pick<Conversation, "projectId" | "selectedSourceIds" | "writingStyleId">,
   userId: string
-): Promise<{ project: WritingProjectContext | null; sources: PromptSource[] }> {
+): Promise<{ project: WritingProjectContext | null; sources: PromptSource[]; writingStyle: WritingStyleContext | null }> {
+  const writingStylePromise = getOwnedWritingStyleOrNull(conv.writingStyleId, userId);
+
   if (conv.projectId) {
     const ownedProject = await getOwnedProjectOr404(conv.projectId, userId);
     if (!ownedProject) {
-      return { project: null, sources: [] };
+      return { project: null, sources: [], writingStyle: await writingStylePromise };
     }
 
-    const [project, sources] = await Promise.all([
+    const [project, sources, writingStyle] = await Promise.all([
       Promise.resolve(ownedProject),
       loadProjectSourcesTiered(conv.projectId, conv.selectedSourceIds),
+      writingStylePromise,
     ]);
 
     return {
@@ -795,18 +834,36 @@ async function loadConversationContext(
         }
         : null,
       sources,
+      writingStyle,
     };
   }
 
   return {
     project: null,
     sources: await loadStandaloneWebClipSources(userId, conv.selectedSourceIds),
+    writingStyle: await writingStylePromise,
   };
+}
+
+function buildSelectedWritingStyleBlock(writingStyle: WritingStyleContext | null): string {
+  if (!writingStyle) return "";
+  const profileBlock = buildVoiceProfileBlock(writingStyle.voiceProfile);
+  if (!profileBlock) return "";
+  const description = writingStyle.description?.trim()
+    ? `\nUse case: ${writingStyle.description.trim()}`
+    : "";
+
+  return `
+
+[SELECTED WRITING STYLE]
+Name: ${writingStyle.name}${description}
+This user explicitly selected this reusable writing style for the current draft.${profileBlock}`;
 }
 
 function buildWritingSystemPrompt(
   sources: PromptSource[],
   project: WritingProjectContext | null,
+  writingStyle: WritingStyleContext | null,
   citationStyle?: string,
   tone?: string,
   humanize?: boolean,
@@ -823,7 +880,9 @@ function buildWritingSystemPrompt(
         styleAnalysis: parseStyleAnalysisValue(source.styleAnalysis),
       })),
   );
-  const voiceProfileBlock = buildVoiceProfileBlock(project?.voiceProfile);
+  const voiceProfileBlock = writingStyle
+    ? buildSelectedWritingStyleBlock(writingStyle)
+    : buildVoiceProfileBlock(project?.voiceProfile);
   const styleLabel = (citationStyle || "chicago").toUpperCase();
   const noEnDashesRule = noEnDashes
     ? "\n9. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
@@ -1034,6 +1093,7 @@ export function registerChatRoutes(app: Express) {
         humanize,
         noEnDashes,
         writingModel,
+        writingStyleId,
       } = req.body || {};
 
       const normalizedWritingModel = writingModel === "extended" ? "extended" : "precision";
@@ -1043,6 +1103,9 @@ export function registerChatRoutes(app: Express) {
           return res.status(404).json({ message: "Project not found" });
         }
       }
+      const normalizedWritingStyleId = await assertOwnedWritingStyle(writingStyleId, req.user!.userId, res);
+      if (writingStyleId !== undefined && normalizedWritingStyleId === undefined) return;
+
       const conv = await chatStorage.createConversation({
         title: title || "New Chat",
         model: model || MODELS.precision.chat,
@@ -1050,6 +1113,7 @@ export function registerChatRoutes(app: Express) {
         userId: req.user!.userId,
         projectId: projectId || null,
         selectedSourceIds: selectedSourceIds || null,
+        writingStyleId: normalizedWritingStyleId ?? null,
         citationStyle: citationStyle || "chicago",
         tone: tone || "academic",
         humanize: humanize ?? true,
@@ -1096,6 +1160,7 @@ export function registerChatRoutes(app: Express) {
         tone,
         humanize,
         noEnDashes,
+        writingStyleId,
       } = req.body;
 
       const updates: Record<string, unknown> = {};
@@ -1109,6 +1174,13 @@ export function registerChatRoutes(app: Express) {
 
       const existing = await getOwnedConversationOr404(req, res);
       if (!existing) return;
+
+      if (writingStyleId !== undefined) {
+        const normalizedWritingStyleId = await assertOwnedWritingStyle(writingStyleId, req.user!.userId, res);
+        if (normalizedWritingStyleId === undefined) return;
+        updates.writingStyleId = normalizedWritingStyleId;
+      }
+
       const conv = await chatStorage.updateConversation(req.params.id, updates);
       res.json(conv);
     } catch (error) {
@@ -1154,13 +1226,14 @@ export function registerChatRoutes(app: Express) {
       const mode = getWritingMode(conv);
       const models = getModelsForConversation(conv);
 
-      const { project, sources } = await loadConversationContext(conv, req.user!.userId);
-      const isWritingConversation = Boolean(conv.projectId || conv.selectedSourceIds !== null);
+      const { project, sources, writingStyle } = await loadConversationContext(conv, req.user!.userId);
+      const isWritingConversation = Boolean(conv.projectId || conv.selectedSourceIds !== null || conv.writingStyleId);
       let systemPrompt = BASE_SYSTEM_PROMPT;
       if (isWritingConversation) {
         systemPrompt = buildWritingSystemPrompt(
           sources,
           project,
+          writingStyle,
           conv.citationStyle || undefined,
           conv.tone || undefined,
           conv.humanize ?? true,
@@ -1581,8 +1654,9 @@ ${chunkContext}`;
         .map((message) => `[${message.role.toUpperCase()}]: ${message.content}`)
         .join("\n\n---\n\n");
 
-      const { project, sources } = await loadConversationContext(conv, req.user!.userId);
+      const { project, sources, writingStyle } = await loadConversationContext(conv, req.user!.userId);
       const projectContextBlock = buildProjectContextBlock(project);
+      const writingStyleBlock = buildSelectedWritingStyleBlock(writingStyle) || buildVoiceProfileBlock(project?.voiceProfile);
       const sourcesBlock = sources.length > 0
         ? `\n\nSOURCE MATERIALS:\n${buildSourceBlock(sources)}`
         : "";
@@ -1596,7 +1670,7 @@ The student and AI have been collaboratively drafting sections.
 
 ${projectContextBlock}
 Target citation style: ${style.toUpperCase()}
-Target tone: ${prettyToneLabel(writingTone)}
+Target tone: ${prettyToneLabel(writingTone)}${writingStyleBlock}
 
 RULES:
 1. Include every piece of substantive writing the assistant produced.

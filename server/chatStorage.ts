@@ -54,7 +54,7 @@ export const chatStorage = {
     data: Partial<
       Pick<
         Conversation,
-        "title" | "model" | "writingModel" | "selectedSourceIds" | "citationStyle" | "tone" | "humanize" | "noEnDashes"
+        "title" | "model" | "writingModel" | "selectedSourceIds" | "writingStyleId" | "citationStyle" | "tone" | "humanize" | "noEnDashes"
       >
     >
   ): Promise<Conversation> {

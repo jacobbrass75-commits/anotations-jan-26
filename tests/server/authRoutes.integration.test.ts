@@ -795,7 +795,7 @@ describe("auth route integration", () => {
 
       expect(createKeyResponse.status).toBe(403);
       expect(createKeyResponse.body).toEqual({
-        message: "OAuth tokens cannot manage API keys",
+        message: "API keys and OAuth tokens cannot manage API keys",
       });
     } finally {
       await server.close();

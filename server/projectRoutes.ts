@@ -18,9 +18,12 @@ import {
 } from "./openai";
 import {
   createTokenUsageAccumulator,
-  reportProviderUsage,
   type TokenUsageReporter,
 } from "./aiUsage";
+import {
+  analyzeVoiceProfileSamples,
+  validateWritingSamples,
+} from "./voiceProfileAnalysis";
 // V2 Pipeline - improved annotation system
 import { processChunksWithPipelineV2, processChunksWithMultiplePrompts } from "./pipelineV2";
 import { randomUUID } from "crypto";
@@ -1568,67 +1571,13 @@ export function registerProjectRoutes(app: Express): void {
       const project = await verifyProjectOwnership(req, res, req.params.id);
       if (!project) return;
 
-      const { samples } = req.body;
-      if (!Array.isArray(samples) || samples.length < 2 || samples.length > 10) {
-        return res.status(400).json({ error: "Provide 2-10 writing samples" });
+      const validation = validateWritingSamples(req.body?.samples);
+      if (!validation.ok || !validation.samples) {
+        return res.status(400).json({ error: validation.error || "Provide 2-10 writing samples" });
       }
 
-      const totalLength = samples.reduce((sum: number, s: string) => sum + (s?.length || 0), 0);
-      if (totalLength < 500) {
-        return res.status(400).json({ error: "Writing samples are too short. Provide at least 500 characters total." });
-      }
-      if (totalLength > 200_000) {
-        return res.status(400).json({ error: "Writing samples are too long. Keep total under 200,000 characters." });
-      }
-
-      const Anthropic = (await import("@anthropic-ai/sdk")).default;
-      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-      const samplesBlock = samples
-        .map((s: string, i: number) => `--- SAMPLE ${i + 1} ---\n${s.trim()}\n`)
-        .join("\n");
-
-      const response = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        system: `You are a writing style analyst. You produce precise, actionable voice profiles that allow an AI to replicate a specific author's writing style. Focus on what makes this writer DISTINCTIVE — skip universal or obvious traits. For every observation, ground it in specific patterns from the text. Bad: "Uses varied sentence length." Good: "Alternates 8-12 word declarative sentences with 25-35 word complex sentences when building arguments."`,
-        messages: [{
-          role: "user",
-          content: `Analyze these writing samples from the same author. Extract a voice profile.
-
-${samplesBlock}
-
-Return ONLY valid JSON matching this exact schema:
-{
-  "avgSentenceLength": "specific description of sentence length patterns with word count ranges",
-  "vocabularyLevel": "academic" | "conversational" | "mixed",
-  "paragraphStructure": "how they build paragraphs — length, opening moves, internal logic",
-  "toneMarkers": ["3-5 specific tone descriptors with examples"],
-  "commonTransitions": ["5-8 transition phrases they actually use, quoted from text"],
-  "evidenceIntroduction": "exactly how they set up quotes, citations, or evidence — with example patterns",
-  "argumentStructure": "how they sequence and build claims — do they lead with thesis or build to it",
-  "hedgingStyle": "certainty level — do they hedge, assert, qualify? with example phrases",
-  "openingPattern": "how they typically start paragraphs or sections",
-  "closingPattern": "how they conclude paragraphs or sections",
-  "distinctivePhrases": ["3-6 verbal tics, signature expressions, or recurring word choices"],
-  "avoidedPatterns": ["3-5 things this writer conspicuously never does"],
-  "voiceSummary": "2-3 sentence overall description capturing the gestalt of this writer's voice"
-}`
-        }],
-      });
-      reportProviderUsage(response, tokenUsage.add);
-
-      const text = response.content
-        .flatMap((block) => (block.type === "text" ? [block.text] : []))
-        .join("");
-
-      // Extract JSON from response (handle markdown code blocks)
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        return res.status(500).json({ error: "Failed to parse voice profile from AI response" });
-      }
-
-      const voiceProfile = JSON.parse(jsonMatch[0]);
+      const samples = validation.samples;
+      const voiceProfile = await analyzeVoiceProfileSamples(samples, tokenUsage.add);
 
       // Store both the profile and the original samples (for re-analysis later)
       await projectStorage.updateProject(req.params.id, {

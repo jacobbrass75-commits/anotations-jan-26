@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, FileText, FolderOpen, Link2, MessageSquare, PenTool, Plus, Search, UserRound } from "lucide-react";
+import { BookOpen, FileText, FolderOpen, Link2, MessageSquare, PenLine, PenTool, Plus, Search, UserRound } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,6 +110,12 @@ export default function Home() {
               <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-write">
                 <PenTool className="h-4 w-4 mr-2" />
                 Write
+              </Button>
+            </Link>
+            <Link href="/writing-styles">
+              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-writing-styles">
+                <PenLine className="h-4 w-4 mr-2" />
+                Styles
               </Button>
             </Link>
             <Link href="/web-clips">

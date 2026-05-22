@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { checkTokenBudget, requireAuth, requireTier } from "./auth";
 import { incrementTokenUsage } from "./authStorage";
 import { projectStorage } from "./projectStorage";
+import { writingStyleStorage } from "./writingStyleStorage";
 import { storage } from "./storage";
 import {
   runWritingPipeline,
@@ -81,6 +82,7 @@ export function registerWritingRoutes(app: Express): void {
     try {
       const body = req.body as Partial<WritingRequest> & {
         sourceDocumentIds?: unknown;
+        writingStyleId?: unknown;
       };
 
       // Validate required fields
@@ -93,14 +95,25 @@ export function registerWritingRoutes(app: Express): void {
         ? (body.sourceDocumentIds as unknown[]).filter((id): id is string => typeof id === "string")
         : undefined;
 
-      // Load project voice profile if available
+      // Load selected reusable writing style first, then fall back to project voice profile.
       let voiceProfile: string | null = null;
+      if (body.writingStyleId !== undefined && body.writingStyleId !== null && body.writingStyleId !== "") {
+        if (typeof body.writingStyleId !== "string") {
+          return res.status(400).json({ error: "writingStyleId must be a string" });
+        }
+        const writingStyle = await writingStyleStorage.getWritingStyleForUser(body.writingStyleId, req.user!.userId);
+        if (!writingStyle) {
+          return res.status(404).json({ error: "Writing style not found" });
+        }
+        voiceProfile = writingStyle.voiceProfile;
+      }
+
       if (body.projectId) {
         const project = await projectStorage.getProject(body.projectId as string);
         if (!project || project.userId !== req.user!.userId) {
           return res.status(404).json({ error: "Project not found" });
         }
-        if (project?.voiceProfile) {
+        if (!voiceProfile && project?.voiceProfile) {
           voiceProfile = project.voiceProfile;
         }
       }

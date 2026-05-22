@@ -70,6 +70,7 @@ export function useCreateWritingConversation() {
     mutationFn: async (data: {
       projectId?: string | null;
       selectedSourceIds?: string[];
+      writingStyleId?: string | null;
       writingModel?: "precision" | "extended";
       citationStyle?: string;
       tone?: string;
@@ -79,6 +80,7 @@ export function useCreateWritingConversation() {
       const res = await apiRequest("POST", "/api/chat/conversations", {
         projectId: data.projectId ?? null,
         selectedSourceIds: data.selectedSourceIds || [],
+        writingStyleId: data.writingStyleId ?? null,
         writingModel: data.writingModel ?? "precision",
         citationStyle: data.citationStyle ?? "chicago",
         tone: data.tone ?? "academic",

@@ -139,4 +139,108 @@ describe("writing route integration", () => {
       await server.close();
     }
   });
+
+  it("uses the selected reusable writing style over the project voice profile", async () => {
+    const { db, server, token } = await createApp();
+    const { projects, writingStyles } = await import("../../shared/schema");
+    const now = new Date("2026-05-05T00:00:00.000Z");
+    const selectedProfile = {
+      avgSentenceLength: "Selected style uses compact, clipped sentences.",
+      vocabularyLevel: "academic",
+      paragraphStructure: "Selected paragraphs move from claim to consequence.",
+      toneMarkers: ["measured urgency"],
+      commonTransitions: ["still"],
+      evidenceIntroduction: "Introduces evidence directly.",
+      argumentStructure: "Builds from problem to implication.",
+      hedgingStyle: "Minimal hedging.",
+      openingPattern: "Opens with a concrete claim.",
+      closingPattern: "Closes with a consequence.",
+      distinctivePhrases: ["selected signature phrase"],
+      avoidedPatterns: ["generic filler"],
+      voiceSummary: "Selected reusable style voice.",
+    };
+    const projectProfile = {
+      ...selectedProfile,
+      distinctivePhrases: ["project signature phrase"],
+      voiceSummary: "Project-only style voice.",
+    };
+
+    await db.insert(projects).values({
+      id: "project-with-voice",
+      userId: "writing-user",
+      name: "Project Voice",
+      voiceProfile: JSON.stringify(projectProfile),
+      createdAt: now,
+      updatedAt: now,
+    } as any);
+    await db.insert(writingStyles).values({
+      id: "selected-style",
+      userId: "writing-user",
+      name: "Selected Style",
+      description: "Reusable selected style",
+      voiceProfile: JSON.stringify(selectedProfile),
+      samples: ["sample one ".repeat(50), "sample two ".repeat(50)],
+      createdAt: now,
+      updatedAt: now,
+    } as any);
+
+    anthropicCreate
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              thesis: "Reusable style should be selected.",
+              bibliography: [],
+              sections: [
+                {
+                  title: "Introduction",
+                  description: "Set up the argument.",
+                  sourceIds: [],
+                  targetWords: 100,
+                },
+              ],
+            }),
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "## Introduction\nA selected-style draft." }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "# Complete Paper\nA selected-style draft." }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/write`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          topic: "Reusable style",
+          projectId: "project-with-voice",
+          writingStyleId: "selected-style",
+          citationStyle: "chicago",
+          tone: "academic",
+          targetLength: "short",
+        }),
+      });
+      const text = await response.text();
+      const firstCall = anthropicCreate.mock.calls[0]?.[0] as { system?: string };
+
+      expect(response.status).toBe(200);
+      expect(text).toContain('"type":"complete"');
+      expect(firstCall.system).toContain("Selected reusable style voice.");
+      expect(firstCall.system).toContain("selected signature phrase");
+      expect(firstCall.system).not.toContain("Project-only style voice.");
+      expect(firstCall.system).not.toContain("project signature phrase");
+    } finally {
+      await server.close();
+    }
+  });
 });

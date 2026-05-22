@@ -23,6 +23,7 @@ import {
   PIPELINE_V2_CONFIG,
 } from "./pipelineV2";
 import { registerProjectRoutes } from "./projectRoutes";
+import { registerWritingStyleRoutes } from "./writingStyleRoutes";
 import { registerChatRoutes } from "./chatRoutes";
 import { registerWritingRoutes } from "./writingRoutes";
 import { registerHumanizerRoutes } from "./humanizerRoutes";
@@ -987,6 +988,7 @@ export async function registerRoutes(
 
   // Register project routes
   registerProjectRoutes(app);
+  registerWritingStyleRoutes(app);
   registerWebClipRoutes(app);
   registerPayPalBillingRoutes(app);
 

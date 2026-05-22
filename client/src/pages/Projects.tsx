@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, FolderOpen, FileText, Trash2, ArrowLeft, Search, PenTool, UserRound } from "lucide-react";
+import { Plus, FolderOpen, FileText, Trash2, ArrowLeft, Search, PenLine, PenTool, UserRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Projects() {
@@ -93,6 +93,12 @@ export default function Projects() {
               <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-open-write">
                 <PenTool className="h-4 w-4 mr-2" />
                 Write
+              </Button>
+            </Link>
+            <Link href="/writing-styles">
+              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-open-writing-styles">
+                <PenLine className="h-4 w-4 mr-2" />
+                Styles
               </Button>
             </Link>
             <Link href="/web-clips">

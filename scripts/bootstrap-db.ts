@@ -2,11 +2,33 @@ import { mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { spawnSync } from "child_process";
 import { createRequire } from "module";
+import Database from "better-sqlite3";
 
 const require = createRequire(import.meta.url);
 const drizzleKitEntrypoint = join(dirname(require.resolve("drizzle-kit")), "bin.cjs");
+const databasePath = join(process.cwd(), "data", "sourceannotator.db");
 
 mkdirSync(join(process.cwd(), "data"), { recursive: true });
+
+const bootstrapSqlite = new Database(databasePath);
+bootstrapSqlite.exec(`
+CREATE TABLE IF NOT EXISTS writing_styles (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  voice_profile TEXT NOT NULL,
+  samples TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+  updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS writing_styles_user_name_idx
+ON writing_styles(user_id, name);
+CREATE INDEX IF NOT EXISTS idx_writing_styles_user_updated
+ON writing_styles(user_id, updated_at DESC);
+`);
+bootstrapSqlite.close();
 
 const drizzleResult = spawnSync(
   process.execPath,
@@ -28,6 +50,7 @@ const requiredTables = [
   "documents",
   "users",
   "projects",
+  "writing_styles",
   "project_documents",
   "web_clips",
   "conversations",

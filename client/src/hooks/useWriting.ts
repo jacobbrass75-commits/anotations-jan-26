@@ -8,6 +8,7 @@ export interface WritingRequest {
   annotationIds: string[];
   sourceDocumentIds?: string[];
   projectId?: string;
+  writingStyleId?: string | null;
   citationStyle: "mla" | "apa" | "chicago";
   tone: "academic" | "casual" | "ap_style";
   targetLength: "short" | "medium" | "long";

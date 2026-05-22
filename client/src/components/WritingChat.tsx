@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useProjects, useProjectDocuments } from "@/hooks/useProjects";
 import { useWebClips } from "@/hooks/useWebClips";
+import { useWritingStyles } from "@/hooks/useWritingStyles";
 import { markdownComponents, remarkPlugins } from "@/lib/markdownConfig";
 import {
   useProjectConversations,
@@ -81,6 +83,7 @@ interface WritingChatProps {
 }
 
 const NO_PROJECT_VALUE = "__no_project__";
+const NO_STYLE_VALUE = "__no_style__";
 const DEFAULT_SOURCE_ROLE: SourceRole = "evidence";
 
 function normalizeSourceRole(value: string | null | undefined): SourceRole {
@@ -133,6 +136,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     () => (hasSelectedProject ? projects.find((p) => p.id === selectedProjectId) : undefined),
     [hasSelectedProject, projects, selectedProjectId]
   );
+  const { data: writingStyles = [], isLoading: writingStylesLoading } = useWritingStyles();
 
   // Conversation management
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -199,6 +203,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   );
   const [humanize, setHumanize] = useState(conversationData?.humanize ?? true);
   const [noEnDashes, setNoEnDashes] = useState(conversationData?.noEnDashes || false);
+  const [selectedWritingStyleId, setSelectedWritingStyleId] = useState<string>(NO_STYLE_VALUE);
 
   // Document history / panel
   const [documents, setDocuments] = useState<Array<{ title: string; content: string }>>([]);
@@ -217,8 +222,16 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       if (conversationData.noEnDashes !== undefined && conversationData.noEnDashes !== null) {
         setNoEnDashes(conversationData.noEnDashes);
       }
+      setSelectedWritingStyleId(conversationData.writingStyleId || NO_STYLE_VALUE);
     }
   }, [conversationData]);
+
+  useEffect(() => {
+    if (selectedWritingStyleId === NO_STYLE_VALUE) return;
+    if (!writingStyles.some((style) => style.id === selectedWritingStyleId)) {
+      setSelectedWritingStyleId(NO_STYLE_VALUE);
+    }
+  }, [selectedWritingStyleId, writingStyles]);
 
   useEffect(() => {
     if (!contextWarning) return;
@@ -301,6 +314,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       const conv = await createConversation.mutateAsync({
         projectId: conversationProjectId,
         selectedSourceIds: localSelectedSourceIds,
+        writingStyleId: selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
         writingModel,
         citationStyle,
         tone,
@@ -309,14 +323,21 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       });
       await updateConversation.mutateAsync({
         id: conv.id,
-        data: { citationStyle, tone, writingModel, humanize, noEnDashes },
+        data: {
+          citationStyle,
+          tone,
+          writingModel,
+          humanize,
+          noEnDashes,
+          writingStyleId: selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
+        },
       });
       setActiveConversationId(conv.id);
       clearCompiled();
     } catch {
       toast({ title: "Error", description: "Failed to create conversation", variant: "destructive" });
     }
-  }, [conversationProjectId, localSelectedSourceIds, citationStyle, tone, writingModel, humanize, noEnDashes, createConversation, updateConversation, clearCompiled, toast]);
+  }, [conversationProjectId, localSelectedSourceIds, selectedWritingStyleId, citationStyle, tone, writingModel, humanize, noEnDashes, createConversation, updateConversation, clearCompiled, toast]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversationId(id);
@@ -350,6 +371,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         const conv = await createConversation.mutateAsync({
           projectId: conversationProjectId,
           selectedSourceIds: localSelectedSourceIds,
+          writingStyleId: selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
           writingModel,
           citationStyle,
           tone,
@@ -361,7 +383,14 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         // Save settings
         await updateConversation.mutateAsync({
           id: conv.id,
-          data: { citationStyle, tone, writingModel, humanize, noEnDashes },
+          data: {
+            citationStyle,
+            tone,
+            writingModel,
+            humanize,
+            noEnDashes,
+            writingStyleId: selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
+          },
         });
 
         // Send first message directly
@@ -384,7 +413,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
 
     await send(content);
-  }, [activeConversationId, conversationProjectId, localSelectedSourceIds, citationStyle, tone, writingModel, humanize, noEnDashes, send, createConversation, updateConversation, toast]);
+  }, [activeConversationId, conversationProjectId, localSelectedSourceIds, selectedWritingStyleId, citationStyle, tone, writingModel, humanize, noEnDashes, send, createConversation, updateConversation, toast]);
 
   const toggleSource = useCallback((id: string) => {
     setLocalSelectedSourceIds((prev) => {
@@ -430,9 +459,13 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (key === "writingModel") setWritingModel(value);
     if (key === "humanize") setHumanize(value);
     if (key === "noEnDashes") setNoEnDashes(value);
+    if (key === "writingStyleId") setSelectedWritingStyleId(value || NO_STYLE_VALUE);
 
     if (activeConversationId) {
-      updateConversation.mutate({ id: activeConversationId, data: { [key]: value } });
+      updateConversation.mutate({
+        id: activeConversationId,
+        data: { [key]: key === "writingStyleId" && value === NO_STYLE_VALUE ? null : value },
+      });
     }
   }, [activeConversationId, updateConversation]);
 
@@ -534,6 +567,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       annotationIds: [],
       sourceDocumentIds: localSelectedSourceIds,
       projectId: selectedProjectId,
+      writingStyleId: selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
       citationStyle: citationStyle as "mla" | "apa" | "chicago",
       tone: tone as "academic" | "casual" | "ap_style",
       targetLength: quickTargetLength,
@@ -542,7 +576,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     };
     quickGenerate.generate(request);
     setQuickGenerateOpen(false);
-  }, [hasSelectedProject, selectedProjectId, quickTopic, localSelectedSourceIds, citationStyle, tone, quickTargetLength, noEnDashes, quickDeepWrite, quickGenerate, toast]);
+  }, [hasSelectedProject, selectedProjectId, selectedWritingStyleId, quickTopic, localSelectedSourceIds, citationStyle, tone, quickTargetLength, noEnDashes, quickDeepWrite, quickGenerate, toast]);
 
   // Custom suggested prompts for writing context
   const handleSuggestedPrompt = useCallback((prompt: string) => {
@@ -753,6 +787,28 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                   <SelectItem value="extended">Extended (Sonnet)</SelectItem>
                 </SelectContent>
               </Select>
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <Select
+                  value={selectedWritingStyleId}
+                  onValueChange={(v) => handleSettingChange("writingStyleId", v)}
+                  disabled={writingStylesLoading}
+                >
+                  <SelectTrigger className="text-xs h-8">
+                    <SelectValue placeholder="Writing style" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_STYLE_VALUE}>No saved style</SelectItem>
+                    {writingStyles.map((style) => (
+                      <SelectItem key={style.id} value={style.id}>{style.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Link href="/writing-styles">
+                  <Button variant="outline" size="icon" className="h-8 w-8" title="Manage writing styles">
+                    <PenLine className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <Select value={tone} onValueChange={(v) => handleSettingChange("tone", v)}>
                   <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>

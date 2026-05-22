@@ -309,6 +309,23 @@ export const citationDataSchema = z.object({
   })).optional(),
 });
 
+export const voiceProfileSchema = z.object({
+  avgSentenceLength: z.string(),
+  vocabularyLevel: z.enum(["academic", "conversational", "mixed"]),
+  paragraphStructure: z.string(),
+  toneMarkers: z.array(z.string()),
+  commonTransitions: z.array(z.string()),
+  evidenceIntroduction: z.string(),
+  argumentStructure: z.string(),
+  hedgingStyle: z.string(),
+  openingPattern: z.string(),
+  closingPattern: z.string(),
+  distinctivePhrases: z.array(z.string()),
+  avoidedPatterns: z.array(z.string()),
+  voiceSummary: z.string(),
+});
+export type VoiceProfile = z.infer<typeof voiceProfileSchema>;
+
 // Projects table
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey().$defaultFn(genId),
@@ -321,6 +338,18 @@ export const projects = sqliteTable("projects", {
   contextEmbedding: text("context_embedding", { mode: "json" }).$type<number[]>(),
   voiceProfile: text("voice_profile"),
   voiceProfileSamples: text("voice_profile_samples"),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+});
+
+// User-owned reusable writing style profiles
+export const writingStyles = sqliteTable("writing_styles", {
+  id: text("id").primaryKey().$defaultFn(genId),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  voiceProfile: text("voice_profile").notNull(),
+  samples: text("samples", { mode: "json" }).$type<string[]>().notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
 });
@@ -483,6 +512,14 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
 
+export const insertWritingStyleSchema = createInsertSchema(writingStyles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertWritingStyle = z.infer<typeof insertWritingStyleSchema>;
+export type WritingStyle = typeof writingStyles.$inferSelect;
+
 export const insertPromptTemplateSchema = createInsertSchema(promptTemplates).omit({
   id: true,
   createdAt: true,
@@ -621,6 +658,7 @@ export const conversations = sqliteTable("conversations", {
   model: text("model").notNull().default("claude-opus-4-6"),
   writingModel: text("writing_model").default("precision"),
   selectedSourceIds: text("selected_source_ids", { mode: "json" }).$type<string[]>(),
+  writingStyleId: text("writing_style_id").references(() => writingStyles.id, { onDelete: "set null" }),
   citationStyle: text("citation_style").default("chicago"),
   tone: text("tone").default("academic"),
   humanize: integer("humanize", { mode: "boolean" }).default(true),

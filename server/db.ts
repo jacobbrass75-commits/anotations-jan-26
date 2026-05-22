@@ -158,6 +158,22 @@ CREATE INDEX IF NOT EXISTS idx_web_clips_created_at ON web_clips(created_at DESC
 CREATE INDEX IF NOT EXISTS idx_web_clips_project_id ON web_clips(project_id);
 CREATE INDEX IF NOT EXISTS idx_web_clips_source_url ON web_clips(source_url);
 
+CREATE TABLE IF NOT EXISTS writing_styles (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  voice_profile TEXT NOT NULL,
+  samples TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+  updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS writing_styles_user_name_idx
+ON writing_styles(user_id, name);
+CREATE INDEX IF NOT EXISTS idx_writing_styles_user_updated
+ON writing_styles(user_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS ocr_jobs (
   id TEXT PRIMARY KEY,
   document_id TEXT NOT NULL,
@@ -220,6 +236,7 @@ ensureColumn("project_documents", "style_analysis", "style_analysis TEXT");
 ensureColumn("conversations", "evidence_clipboard", "evidence_clipboard TEXT");
 ensureColumn("conversations", "compaction_summary", "compaction_summary TEXT");
 ensureColumn("conversations", "compacted_at_turn", "compacted_at_turn INTEGER DEFAULT 0");
+ensureColumn("conversations", "writing_style_id", "writing_style_id TEXT");
 ensureColumn("api_keys", "label", "label TEXT");
 ensureColumn("api_keys", "scope", "scope TEXT");
 ensureColumn("projects", "voice_profile", "voice_profile TEXT");
