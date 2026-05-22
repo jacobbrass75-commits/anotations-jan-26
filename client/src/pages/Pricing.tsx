@@ -4,7 +4,8 @@ import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-const VENMO_HANDLE = import.meta.env.VITE_VENMO_HANDLE || "@your-venmo-handle";
+const VENMO_HANDLE = normalizeVenmoHandle(import.meta.env.VITE_VENMO_HANDLE);
+const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
 
 interface TierFeature {
   label: string;
@@ -29,12 +30,61 @@ const features: TierFeature[] = [
   { label: "En-dash Toggle", free: "---", pro: "Yes", max: "Yes" },
 ];
 
-function VenmoButton({ amount, label }: { amount: string; label: string }) {
-  const venmoUrl = `https://venmo.com/${VENMO_HANDLE.replace("@", "")}?txn=pay&amount=${amount}&note=ScholarMark%20${label}`;
+function normalizeVenmoHandle(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value
+    .trim()
+    .replace(/^@/, "")
+    .replace(/^https?:\/\/(?:www\.)?venmo\.com\/(?:u\/)?/i, "")
+    .split(/[/?#]/)[0]
+    .trim();
+}
+
+function buildVenmoUrl(amount: string, label: string, accountRef: string): string {
+  const params = new URLSearchParams({
+    txn: "pay",
+    amount,
+    note: `ScholarMark ${label} - ${accountRef}`,
+  });
+  return `https://venmo.com/u/${VENMO_HANDLE}?${params.toString()}`;
+}
+
+function VenmoButton({
+  amount,
+  label,
+  accountRef,
+  isSignedIn,
+  onSignIn,
+}: {
+  amount: string;
+  label: string;
+  accountRef: string | null;
+  isSignedIn: boolean;
+  onSignIn: () => void;
+}) {
+  if (!isSignedIn) {
+    return (
+      <Button className="w-full" onClick={onSignIn}>
+        Sign in to upgrade
+      </Button>
+    );
+  }
+
+  if (!VENMO_HANDLE) {
+    return (
+      <Button asChild className="w-full" variant="outline">
+        <a href={`mailto:${SUPPORT_EMAIL}?subject=ScholarMark%20${label}%20Upgrade`}>
+          Contact support to upgrade
+        </a>
+      </Button>
+    );
+  }
+
+  const venmoUrl = buildVenmoUrl(amount, label, accountRef || "account email missing");
   return (
     <Button asChild className="w-full">
       <a href={venmoUrl} target="_blank" rel="noopener noreferrer">
-        Pay with Venmo
+        Pay ${amount} with Venmo
       </a>
     </Button>
   );
@@ -45,6 +95,7 @@ export default function Pricing() {
   const { user, isSignedIn } = useAuth();
   const [, setLocation] = useLocation();
   const currentTier = user?.tier ?? "free";
+  const accountRef = user?.email || user?.id || null;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -126,7 +177,13 @@ export default function Pricing() {
               {currentTier === "pro" ? (
                 <Button className="w-full" disabled>Current Plan</Button>
               ) : (
-                <VenmoButton amount="14" label="Pro" />
+                <VenmoButton
+                  amount="14"
+                  label="Pro"
+                  accountRef={accountRef}
+                  isSignedIn={isSignedIn}
+                  onSignIn={() => setLocation("/sign-in")}
+                />
               )}
             </CardFooter>
           </Card>
@@ -154,7 +211,13 @@ export default function Pricing() {
               {currentTier === "max" ? (
                 <Button className="w-full" disabled>Current Plan</Button>
               ) : (
-                <VenmoButton amount="50" label="Max" />
+                <VenmoButton
+                  amount="50"
+                  label="Max"
+                  accountRef={accountRef}
+                  isSignedIn={isSignedIn}
+                  onSignIn={() => setLocation("/sign-in")}
+                />
               )}
             </CardFooter>
           </Card>

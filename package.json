@@ -15,6 +15,7 @@
     "smoke:mcp": "cross-env SKIP_APP_SMOKE=1 node scripts/smoke-prod.mjs",
     "restore:drill": "node scripts/restore-drill.mjs",
     "extension:package": "node scripts/package-extension.mjs",
+    "user:set-tier": "node scripts/set-user-tier.mjs",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "setup": "npm install && npm run db:push"
