@@ -96,6 +96,10 @@ function getTierLimits(tier: string): { tokenLimit: number; storageLimit: number
   return TIER_LIMITS[tier] ?? TIER_LIMITS.free;
 }
 
+export function isValidUserTier(tier: string): boolean {
+  return tier in TIER_LIMITS;
+}
+
 async function syncUserFromClerk(user: User, tier: string | null, emailVerified: boolean): Promise<User> {
   const updates: Partial<User> = {};
   const resolvedTier = tier ?? user.tier;
@@ -149,6 +153,21 @@ export async function updateUser(id: string, data: Partial<User>): Promise<User>
     .where(eq(users.id, id))
     .returning();
   return updated;
+}
+
+export async function setUserTier(id: string, tier: string): Promise<User> {
+  if (!isValidUserTier(tier)) {
+    throw new Error(`Invalid user tier: ${tier}`);
+  }
+
+  const tierLimits = getTierLimits(tier);
+  return updateUser(id, {
+    tier,
+    tokenLimit: tierLimits.tokenLimit,
+    storageLimit: tierLimits.storageLimit,
+    tokensUsed: 0,
+    billingCycleStart: new Date(),
+  } as Partial<User>);
 }
 
 export async function incrementTokenUsage(id: string, tokens: number): Promise<void> {

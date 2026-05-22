@@ -192,6 +192,27 @@ CREATE TABLE IF NOT EXISTS ocr_page_results (
 );
 CREATE INDEX IF NOT EXISTS idx_ocr_page_results_job_page
 ON ocr_page_results(job_id, page_number);
+
+CREATE TABLE IF NOT EXISTS billing_payments (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  provider_order_id TEXT NOT NULL UNIQUE,
+  provider_capture_id TEXT,
+  user_id TEXT NOT NULL,
+  tier TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  status TEXT NOT NULL,
+  raw_response TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  completed_at INTEGER,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_billing_payments_user_created
+ON billing_payments(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_billing_payments_status
+ON billing_payments(status);
 `);
 
 ensureColumn("project_documents", "source_role", "source_role TEXT DEFAULT 'evidence'");

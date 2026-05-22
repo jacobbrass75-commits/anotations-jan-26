@@ -29,6 +29,7 @@ import { registerHumanizerRoutes } from "./humanizerRoutes";
 import { registerExtensionRoutes } from "./extensionRoutes";
 import { registerWebClipRoutes } from "./webClipRoutes";
 import { registerAnalyticsRoutes } from "./analyticsRoutes";
+import { registerPayPalBillingRoutes } from "./paypalBillingRoutes";
 import type { AnnotationCategory, Document, InsertAnnotation } from "@shared/schema";
 import {
   createZipFromImageUploads,
@@ -987,6 +988,7 @@ export async function registerRoutes(
   // Register project routes
   registerProjectRoutes(app);
   registerWebClipRoutes(app);
+  registerPayPalBillingRoutes(app);
 
   // Register chat routes
   registerChatRoutes(app);

@@ -1,8 +1,10 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isLocalDevAuthEnabled, useAuth } from "@/lib/auth";
 import { UserButton } from "@clerk/clerk-react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 const VENMO_HANDLE = normalizeVenmoHandle(import.meta.env.VITE_VENMO_HANDLE);
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
@@ -12,6 +14,32 @@ interface TierFeature {
   free: string;
   pro: string;
   max: string;
+}
+
+interface PayPalBillingConfig {
+  enabled: boolean;
+  clientId: string | null;
+  environment: "sandbox" | "live";
+  currency: string;
+}
+
+interface PayPalButtonsInstance {
+  render: (element: HTMLElement) => Promise<void>;
+  close?: () => void;
+  isEligible?: () => boolean;
+}
+
+interface PayPalNamespace {
+  FUNDING: {
+    VENMO: string;
+  };
+  Buttons: (options: Record<string, unknown>) => PayPalButtonsInstance;
+}
+
+declare global {
+  interface Window {
+    paypal?: PayPalNamespace;
+  }
 }
 
 const features: TierFeature[] = [
@@ -29,6 +57,8 @@ const features: TierFeature[] = [
   { label: "Bibliography Gen", free: "---", pro: "Yes", max: "Yes" },
   { label: "En-dash Toggle", free: "---", pro: "Yes", max: "Yes" },
 ];
+
+let paypalSdkPromise: Promise<void> | null = null;
 
 function normalizeVenmoHandle(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -90,12 +120,258 @@ function VenmoButton({
   );
 }
 
+function loadPayPalSdk(config: PayPalBillingConfig): Promise<void> {
+  if (window.paypal) {
+    return Promise.resolve();
+  }
+  if (paypalSdkPromise) {
+    return paypalSdkPromise;
+  }
+
+  paypalSdkPromise = new Promise((resolve, reject) => {
+    if (!config.clientId) {
+      reject(new Error("PayPal client ID is missing"));
+      return;
+    }
+
+    const params = new URLSearchParams({
+      "client-id": config.clientId,
+      currency: config.currency || "USD",
+      intent: "capture",
+      components: "buttons",
+      "enable-funding": "venmo",
+    });
+    if (config.environment === "sandbox") {
+      params.set("buyer-country", "US");
+    }
+
+    const script = document.createElement("script");
+    script.src = `https://www.paypal.com/sdk/js?${params.toString()}`;
+    script.async = true;
+    script.dataset.scholarPayPalSdk = "true";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load PayPal checkout"));
+    document.head.appendChild(script);
+  });
+
+  return paypalSdkPromise;
+}
+
+function AutomatedVenmoButton({
+  tier,
+  config,
+  isSignedIn,
+  onSignIn,
+  onComplete,
+}: {
+  tier: "pro" | "max";
+  config: PayPalBillingConfig;
+  isSignedIn: boolean;
+  onSignIn: () => void;
+  onComplete: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "processing" | "error">("loading");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isSignedIn || !config.enabled || !containerRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    let buttons: PayPalButtonsInstance | null = null;
+    setStatus("loading");
+    setError(null);
+
+    loadPayPalSdk(config)
+      .then(() => {
+        if (cancelled || !containerRef.current || !window.paypal) return;
+
+        buttons = window.paypal.Buttons({
+          fundingSource: window.paypal.FUNDING.VENMO,
+          style: {
+            layout: "vertical",
+            height: 45,
+            shape: "rect",
+          },
+          createOrder: async () => {
+            const response = await apiRequest("POST", "/api/billing/paypal/orders", { tier });
+            const body = (await response.json()) as { orderId?: string };
+            if (!body.orderId) {
+              throw new Error("PayPal order was not created");
+            }
+            return body.orderId;
+          },
+          onApprove: async (data: { orderID?: string }) => {
+            if (!data.orderID) {
+              throw new Error("PayPal approval did not include an order ID");
+            }
+            setStatus("processing");
+            const response = await apiRequest(
+              "POST",
+              `/api/billing/paypal/orders/${encodeURIComponent(data.orderID)}/capture`,
+            );
+            const body = (await response.json()) as { completed?: boolean; status?: string };
+            if (!body.completed) {
+              throw new Error(`Payment was not completed (${body.status ?? "unknown"})`);
+            }
+            await queryClient.invalidateQueries();
+            onComplete();
+          },
+          onError: (err: unknown) => {
+            console.error("[billing] PayPal checkout error", err);
+            setError("Venmo checkout failed. Try again or use manual Venmo.");
+            setStatus("error");
+          },
+        });
+
+        if (buttons.isEligible && !buttons.isEligible()) {
+          setError("Venmo checkout is not available on this device/browser. Use manual Venmo instead.");
+          setStatus("error");
+          return;
+        }
+
+        containerRef.current.innerHTML = "";
+        buttons
+          .render(containerRef.current)
+          .then(() => {
+            if (!cancelled) setStatus("ready");
+          })
+          .catch((err) => {
+            console.error("[billing] PayPal button render error", err);
+            if (!cancelled) {
+              setError("Could not show Venmo checkout. Use manual Venmo instead.");
+              setStatus("error");
+            }
+          });
+      })
+      .catch((err) => {
+        console.error("[billing] PayPal SDK load error", err);
+        if (!cancelled) {
+          setError("Could not load Venmo checkout. Use manual Venmo instead.");
+          setStatus("error");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      buttons?.close?.();
+      if (containerRef.current) {
+        containerRef.current.innerHTML = "";
+      }
+    };
+  }, [config, isSignedIn, onComplete, tier]);
+
+  if (!isSignedIn) {
+    return (
+      <Button className="w-full" onClick={onSignIn}>
+        Sign in to upgrade
+      </Button>
+    );
+  }
+
+  return (
+    <div className="w-full space-y-2">
+      <div ref={containerRef} className="min-h-[45px] w-full" />
+      {status === "loading" && (
+        <Button className="w-full" disabled>
+          Loading Venmo checkout...
+        </Button>
+      )}
+      {status === "processing" && (
+        <Button className="w-full" disabled>
+          Upgrading account...
+        </Button>
+      )}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+function PlanCheckoutButton({
+  tier,
+  amount,
+  label,
+  accountRef,
+  isSignedIn,
+  paypalConfig,
+  onSignIn,
+  onComplete,
+}: {
+  tier: "pro" | "max";
+  amount: string;
+  label: string;
+  accountRef: string | null;
+  isSignedIn: boolean;
+  paypalConfig: PayPalBillingConfig | null;
+  onSignIn: () => void;
+  onComplete: () => void;
+}) {
+  if (paypalConfig === null) {
+    return (
+      <Button className="w-full" disabled>
+        Loading checkout...
+      </Button>
+    );
+  }
+
+  if (paypalConfig.enabled) {
+    return (
+      <AutomatedVenmoButton
+        tier={tier}
+        config={paypalConfig}
+        isSignedIn={isSignedIn}
+        onSignIn={onSignIn}
+        onComplete={onComplete}
+      />
+    );
+  }
+
+  return (
+    <VenmoButton
+      amount={amount}
+      label={label}
+      accountRef={accountRef}
+      isSignedIn={isSignedIn}
+      onSignIn={onSignIn}
+    />
+  );
+}
+
 export default function Pricing() {
   const localDevAuth = isLocalDevAuthEnabled();
   const { user, isSignedIn } = useAuth();
   const [, setLocation] = useLocation();
   const currentTier = user?.tier ?? "free";
   const accountRef = user?.email || user?.id || null;
+  const [paypalConfig, setPayPalConfig] = useState<PayPalBillingConfig | null>(null);
+  const handleSignIn = useCallback(() => setLocation("/sign-in"), [setLocation]);
+  const handleCheckoutComplete = useCallback(() => setLocation("/account"), [setLocation]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/billing/paypal/config", { credentials: "include" })
+      .then((response) => response.json())
+      .then((config: PayPalBillingConfig) => {
+        if (!cancelled) setPayPalConfig(config);
+      })
+      .catch((error) => {
+        console.error("[billing] failed to load PayPal config", error);
+        if (!cancelled) {
+          setPayPalConfig({
+            enabled: false,
+            clientId: null,
+            environment: "live",
+            currency: "USD",
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -177,12 +453,15 @@ export default function Pricing() {
               {currentTier === "pro" ? (
                 <Button className="w-full" disabled>Current Plan</Button>
               ) : (
-                <VenmoButton
+                <PlanCheckoutButton
+                  tier="pro"
                   amount="14"
                   label="Pro"
                   accountRef={accountRef}
                   isSignedIn={isSignedIn}
-                  onSignIn={() => setLocation("/sign-in")}
+                  paypalConfig={paypalConfig}
+                  onSignIn={handleSignIn}
+                  onComplete={handleCheckoutComplete}
                 />
               )}
             </CardFooter>
@@ -211,12 +490,15 @@ export default function Pricing() {
               {currentTier === "max" ? (
                 <Button className="w-full" disabled>Current Plan</Button>
               ) : (
-                <VenmoButton
+                <PlanCheckoutButton
+                  tier="max"
                   amount="50"
                   label="Max"
                   accountRef={accountRef}
                   isSignedIn={isSignedIn}
-                  onSignIn={() => setLocation("/sign-in")}
+                  paypalConfig={paypalConfig}
+                  onSignIn={handleSignIn}
+                  onComplete={handleCheckoutComplete}
                 />
               )}
             </CardFooter>
