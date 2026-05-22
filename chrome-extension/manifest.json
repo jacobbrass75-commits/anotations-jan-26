@@ -5,13 +5,13 @@
   "description": "Highlight and annotate any webpage. Save to your ScholarMark research projects.",
   "permissions": [
     "activeTab",
+    "scripting",
     "storage",
     "contextMenus"
   ],
   "host_permissions": [
     "http://localhost:5001/*",
-    "https://app.scholarmark.ai/*",
-    "https://scholarmark.ai/*"
+    "https://app.scholarmark.ai/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
@@ -26,7 +26,10 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "http://localhost:5001/*",
+        "https://app.scholarmark.ai/*"
+      ],
       "js": ["content/content.js"],
       "css": []
     }

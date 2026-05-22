@@ -204,12 +204,7 @@ async function saveSelectionForTab(tabId, fallback) {
   const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
   const serverUrl = trimSlash(settings.serverUrl || DEFAULT_SETTINGS.serverUrl);
 
-  let selectionData = null;
-  try {
-    selectionData = await chrome.tabs.sendMessage(tabId, { action: "getSelectionData" });
-  } catch {
-    selectionData = null;
-  }
+  const selectionData = await getSelectionDataForTab(tabId);
 
   const highlightedText = (
     selectionData?.selectedText || fallback.fallbackSelection || ""
@@ -254,15 +249,27 @@ async function saveSelectionForTab(tabId, fallback) {
   const clip = await response.json();
 
   try {
-    await chrome.tabs.sendMessage(tabId, {
-      action: "clipSaved",
-      clip,
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: showSaveIndicatorOnPage,
     });
   } catch {
-    // No-op for pages where the content script is unavailable.
+    // No-op for pages where script injection is unavailable.
   }
 
   return clip;
+}
+
+async function getSelectionDataForTab(tabId) {
+  try {
+    const [injectionResult] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: collectSelectionDataFromPage,
+    });
+    return injectionResult?.result || null;
+  } catch {
+    return null;
+  }
 }
 
 async function getApiKey() {
@@ -297,4 +304,64 @@ async function clearAuthState() {
 
 function trimSlash(url) {
   return String(url || "").replace(/\/+$/, "");
+}
+
+function collectSelectionDataFromPage() {
+  function readMetaValue(name) {
+    const byProperty = document.querySelector(`meta[property="${name}"]`);
+    const byName = document.querySelector(`meta[name="${name}"]`);
+    return byProperty?.getAttribute("content") || byName?.getAttribute("content") || null;
+  }
+
+  const selection = window.getSelection();
+  const selectedText = selection?.toString().trim() || "";
+
+  let surroundingContext = "";
+  if (selection && selection.rangeCount > 0 && selectedText) {
+    const range = selection.getRangeAt(0);
+    const parentText = range.commonAncestorContainer.textContent || "";
+    const startIdx = parentText.indexOf(selectedText);
+    const contextStart = Math.max(0, startIdx - 100);
+    const contextEnd = Math.min(parentText.length, startIdx + selectedText.length + 100);
+    surroundingContext = parentText.substring(contextStart, contextEnd);
+  }
+
+  return {
+    selectedText,
+    sourceUrl: window.location.href,
+    pageTitle: document.title || "Untitled",
+    siteName: readMetaValue("og:site_name"),
+    authorName: readMetaValue("author"),
+    publishDate:
+      readMetaValue("article:published_time") ||
+      readMetaValue("publication_date") ||
+      readMetaValue("date"),
+    surroundingContext,
+  };
+}
+
+function showSaveIndicatorOnPage() {
+  const indicator = document.createElement("div");
+  indicator.textContent = "Saved to ScholarMark";
+  indicator.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #D4556B;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-family: Inter, system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 2147483647;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: opacity 0.3s ease;
+  `;
+  document.body.appendChild(indicator);
+
+  setTimeout(() => {
+    indicator.style.opacity = "0";
+    setTimeout(() => indicator.remove(), 300);
+  }, 2000);
 }

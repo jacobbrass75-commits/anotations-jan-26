@@ -6,6 +6,8 @@ import { requireAuth } from "./auth";
 import { getUserById, sanitizeUser } from "./authStorage";
 import { db } from "./db";
 
+const EXTENSION_API_KEY_SCOPE = "projects:read web_clips:write api_keys:self_revoke";
+
 function hashApiKey(rawKey: string): string {
   return createHash("sha256").update(rawKey).digest("hex");
 }
@@ -28,12 +30,29 @@ function normalizeApiKeyLabel(label: unknown): string | null {
 }
 
 function requireFirstPartyAccountAuth(req: Request, res: Response, next: NextFunction): void {
-  if (req.user?.authType === "mcp") {
-    res.status(403).json({ message: "OAuth tokens cannot manage API keys" });
+  if (req.user?.authType === "mcp" || req.user?.authType === "api_key") {
+    res.status(403).json({ message: "API keys and OAuth tokens cannot manage API keys" });
     return;
   }
 
   next();
+}
+
+function canSelfRevokeApiKey(req: Request): boolean {
+  return (
+    req.user?.authType === "api_key" &&
+    req.user.apiKeyId === req.params.id &&
+    Boolean(req.user.scopes?.includes("api_keys:self_revoke"))
+  );
+}
+
+function isExtensionApiKeyRequest(body: unknown): boolean {
+  return Boolean(
+    body &&
+    typeof body === "object" &&
+    "purpose" in body &&
+    (body as { purpose?: unknown }).purpose === "chrome_extension"
+  );
 }
 
 export function registerAuthRoutes(app: Express): void {
@@ -91,6 +110,7 @@ export function registerAuthRoutes(app: Express): void {
           id: apiKeys.id,
           label: apiKeys.label,
           keyPrefix: apiKeys.keyPrefix,
+          scope: apiKeys.scope,
           lastUsedAt: apiKeys.lastUsedAt,
           createdAt: apiKeys.createdAt,
         })
@@ -110,6 +130,7 @@ export function registerAuthRoutes(app: Express): void {
       const rawKey = generateApiKey();
       const now = Math.floor(Date.now() / 1000);
       const label = normalizeApiKeyLabel(req.body?.label) ?? "API Key";
+      const scope = isExtensionApiKeyRequest(req.body) ? EXTENSION_API_KEY_SCOPE : null;
 
       const [createdKey] = await db
         .insert(apiKeys)
@@ -119,12 +140,14 @@ export function registerAuthRoutes(app: Express): void {
           label,
           keyHash: hashApiKey(rawKey),
           keyPrefix: rawKey.slice(0, 12),
+          scope,
           createdAt: now,
         })
         .returning({
           id: apiKeys.id,
           label: apiKeys.label,
           keyPrefix: apiKeys.keyPrefix,
+          scope: apiKeys.scope,
           createdAt: apiKeys.createdAt,
         });
 
@@ -138,8 +161,15 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/auth/api-keys/:id", requireAuth, requireFirstPartyAccountAuth, async (req: Request, res: Response) => {
+  app.delete("/api/auth/api-keys/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      if (req.user?.authType === "mcp") {
+        return res.status(403).json({ message: "OAuth tokens cannot manage API keys" });
+      }
+      if (req.user?.authType === "api_key" && !canSelfRevokeApiKey(req)) {
+        return res.status(403).json({ message: "API key can only revoke itself" });
+      }
+
       const [existingKey] = await db
         .select({
           id: apiKeys.id,

@@ -676,6 +676,7 @@ export const apiKeys = sqliteTable("api_keys", {
   label: text("label"),
   keyHash: text("key_hash").notNull().unique(),
   keyPrefix: text("key_prefix").notNull(),
+  scope: text("scope"),
   lastUsedAt: integer("last_used_at"),
   revokedAt: integer("revoked_at"),
   createdAt: integer("created_at").notNull(),
@@ -774,4 +775,3 @@ export const ocrPageResults = sqliteTable("ocr_page_results", {
 }, (table) => [
   uniqueIndex("idx_ocr_page_results_job_page").on(table.jobId, table.pageNumber),
 ]);
-

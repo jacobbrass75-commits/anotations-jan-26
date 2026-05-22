@@ -58,7 +58,10 @@ export default function ExtensionAuth() {
 
     const connect = async () => {
       try {
-        const keyRes = await apiRequest("POST", "/api/auth/api-keys", { label: "Chrome Extension" });
+        const keyRes = await apiRequest("POST", "/api/auth/api-keys", {
+          label: "Chrome Extension",
+          purpose: "chrome_extension",
+        });
         const keyData = (await keyRes.json()) as ApiKeyCreateResponse;
 
         const meRes = await apiRequest("GET", "/api/auth/me");

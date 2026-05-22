@@ -14,6 +14,7 @@ declare global {
       email: string;
       tier: string;
       authType?: "clerk" | "jwt" | "api_key" | "mcp" | "local_dev";
+      apiKeyId?: string;
       scopes?: string[];
     }
   }
@@ -50,6 +51,7 @@ const ALLOW_TEST_CLERK_KEYS_IN_PRODUCTION =
 interface ApiKeyRow {
   id: string;
   user_id: string;
+  scope: string | null;
 }
 
 interface McpTokenRow {
@@ -97,7 +99,7 @@ type ApiKeyAuthResult =
   | { status: "success"; user: Express.User };
 
 const selectApiKeyByHash = sqlite.prepare(
-  `SELECT id, user_id
+  `SELECT id, user_id, scope
    FROM api_keys
    WHERE key_hash = ?
      AND revoked_at IS NULL
@@ -225,8 +227,35 @@ function finishAuth(req: Request, res: Response, next: NextFunction, user: Expre
     }
   }
 
+  if (user.authType === "api_key" && user.scopes?.length && !isScopedApiKeyRequestAllowed(req, user)) {
+    res.status(403).json({
+      message: "API key lacks permission for this endpoint",
+    });
+    return;
+  }
+
   req.user = user;
   next();
+}
+
+function userHasScope(user: Express.User, scope: string): boolean {
+  return Boolean(user.scopes?.includes(scope));
+}
+
+function isScopedApiKeyRequestAllowed(req: Request, user: Express.User): boolean {
+  if (req.method === "GET" && req.path === "/api/projects") {
+    return userHasScope(user, "projects:read");
+  }
+
+  if (req.method === "POST" && req.path === "/api/web-clips") {
+    return userHasScope(user, "web_clips:write");
+  }
+
+  if (req.method === "DELETE" && /^\/api\/auth\/api-keys\/[^/]+$/.test(req.path)) {
+    return userHasScope(user, "api_keys:self_revoke");
+  }
+
+  return false;
 }
 
 function hashApiKey(rawKey: string): string {
@@ -343,6 +372,8 @@ async function resolveApiKeyUser(req: Request): Promise<ApiKeyAuthResult> {
         email: dbUser.email,
         tier: dbUser.tier,
         authType: "api_key",
+        apiKeyId: keyRow.id,
+        scopes: parseScopes(keyRow.scope),
       },
     };
   }

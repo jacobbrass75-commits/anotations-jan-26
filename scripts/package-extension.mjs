@@ -9,6 +9,14 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const extensionDir = join(repoRoot, "chrome-extension");
 const outputDir = join(repoRoot, "dist", "chrome-extension");
 const production = process.env.EXTENSION_PACKAGE_MODE !== "development";
+const excludedPackageFiles = new Set([
+  "README.md",
+  "STORE_LISTING.md",
+  "STORE_RELEASE.md",
+  "icons/icon16.png",
+  "icons/icon48.png",
+  "icons/icon128.png",
+]);
 
 function fail(message) {
   throw new Error(message);
@@ -70,6 +78,16 @@ async function validateManifest(manifest) {
     manifest.host_permissions = manifest.host_permissions.filter((value) => !value.startsWith("http://localhost"));
   }
 
+  if (production) {
+    manifest.content_scripts = (manifest.content_scripts || [])
+      .map((contentScript) => ({
+        ...contentScript,
+        matches: (contentScript.matches || []).filter((value) => !value.startsWith("http://localhost")),
+      }))
+      .filter((contentScript) => (contentScript.matches || []).length > 0);
+    delete manifest.options_page;
+  }
+
   if (production && !manifest.host_permissions.includes("https://app.scholarmark.ai/*")) {
     fail("Production manifest must include https://app.scholarmark.ai/* host permission");
   }
@@ -85,8 +103,19 @@ async function packageExtension() {
 
   for (const file of files) {
     const relativePath = relative(extensionDir, file).replace(/\\/g, "/");
+    if (excludedPackageFiles.has(relativePath)) {
+      continue;
+    }
+    if (production && relativePath.startsWith("options/")) {
+      continue;
+    }
     if (relativePath === "manifest.json") {
       zip.file(relativePath, JSON.stringify(manifest, null, 2) + "\n");
+      continue;
+    }
+    if (production && relativePath === "content/content.js") {
+      const content = await readFile(file, "utf8");
+      zip.file(relativePath, content.replace(/\n\s*"http:\/\/localhost:5001",/, ""));
       continue;
     }
     zip.file(relativePath, await readFile(file));

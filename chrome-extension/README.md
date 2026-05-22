@@ -21,7 +21,7 @@ Run from the repo root:
 npm run extension:package
 ```
 
-The package script validates the manifest, verifies icon dimensions, removes localhost host permissions from the packaged production manifest, and writes a zip to `dist/chrome-extension/`.
+The package script validates the manifest, verifies icon dimensions, removes localhost access from the packaged production manifest, and writes a zip to `dist/chrome-extension/`.
 
 Before uploading to Chrome Web Store, complete `chrome-extension/STORE_RELEASE.md`.
 

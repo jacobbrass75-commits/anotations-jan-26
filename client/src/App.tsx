@@ -15,6 +15,7 @@ const ProjectDocument = lazy(() => import("@/pages/ProjectDocument"));
 const Login = lazy(() => import("@/pages/Login"));
 const Register = lazy(() => import("@/pages/Register"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
+const Privacy = lazy(() => import("@/pages/Privacy"));
 const Account = lazy(() => import("@/pages/Account"));
 const Chat = lazy(() => import("@/pages/Chat"));
 const WritingPage = lazy(() => import("@/pages/WritingPage"));
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/sign-up" component={Register} />
       <Route path="/sign-up/*" component={Register} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/privacy" component={Privacy} />
       <Route path="/account">{() => <ProtectedRoute><Account /></ProtectedRoute>}</Route>
       <Route path="/extension-auth">{() => <ProtectedRoute><ExtensionAuth /></ProtectedRoute>}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute><Home /></ProtectedRoute>}</Route>

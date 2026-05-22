@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   label TEXT,
   key_hash TEXT NOT NULL,
   key_prefix TEXT NOT NULL,
+  scope TEXT,
   last_used_at INTEGER,
   revoked_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -199,6 +200,7 @@ ensureColumn("conversations", "evidence_clipboard", "evidence_clipboard TEXT");
 ensureColumn("conversations", "compaction_summary", "compaction_summary TEXT");
 ensureColumn("conversations", "compacted_at_turn", "compacted_at_turn INTEGER DEFAULT 0");
 ensureColumn("api_keys", "label", "label TEXT");
+ensureColumn("api_keys", "scope", "scope TEXT");
 ensureColumn("projects", "voice_profile", "voice_profile TEXT");
 ensureColumn("projects", "voice_profile_samples", "voice_profile_samples TEXT");
 
