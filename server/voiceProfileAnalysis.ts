@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
 import { voiceProfileSchema, type VoiceProfile } from "@shared/schema";
+import { ANTHROPIC_MODELS } from "./aiModels";
 
 export interface SampleValidationResult {
   ok: boolean;
@@ -94,7 +95,7 @@ export async function analyzeVoiceProfileSamples(
     .join("\n");
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: ANTHROPIC_MODELS.sonnet,
     max_tokens: 4096,
     system: "You are a writing style analyst. You produce precise, actionable voice profiles that allow an AI to replicate a specific author's writing style. Focus on what makes this writer DISTINCTIVE; skip universal or obvious traits. For every observation, ground it in specific patterns from the text. Bad: \"Uses varied sentence length.\" Good: \"Alternates 8-12 word declarative sentences with 25-35 word complex sentences when building arguments.\"",
     messages: [{

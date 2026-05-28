@@ -5,6 +5,7 @@ import {
   type SourceRole,
   type StyleAnalysis,
 } from "./sourceRoles";
+import { ANTHROPIC_MODELS } from "./aiModels";
 
 // --- Interfaces ---
 
@@ -110,8 +111,8 @@ const TARGET_WORDS: Record<string, number> = {
   long: 4000,
 };
 
-const DEFAULT_MODEL = "claude-sonnet-4-6";
-const DEEP_WRITE_MODEL = "claude-sonnet-4-6";
+const DEFAULT_MODEL = ANTHROPIC_MODELS.sonnet;
+const DEEP_WRITE_MODEL = ANTHROPIC_MODELS.sonnet;
 
 // --- Helpers ---
 

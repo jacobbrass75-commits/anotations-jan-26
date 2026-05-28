@@ -1024,7 +1024,7 @@ export default function ProjectWorkspace() {
           setPastedSourceText("");
         }
       }}>
-        <DialogContent>
+        <DialogContent className="w-[min(92vw,58rem)] max-w-none max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Document to Project</DialogTitle>
             <DialogDescription>
@@ -1032,7 +1032,7 @@ export default function ProjectWorkspace() {
             </DialogDescription>
           </DialogHeader>
           <Tabs value={addDocTab} onValueChange={(v) => setAddDocTab(v as "library" | "upload" | "paste")} className="py-2">
-            <TabsList className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="library" className="flex-1" data-testid="tab-library">
                 <BookOpen className="h-4 w-4 mr-2" />
                 From Library
@@ -1098,20 +1098,20 @@ export default function ProjectWorkspace() {
                 )}
               </div>
               {uploadFiles.length > 0 && (
-                <ScrollArea className="h-28 border rounded-md p-2">
+                <ScrollArea className="h-28 border rounded-md p-2 overflow-x-hidden">
                   <div className="space-y-2">
                     {uploadFiles.map((file, index) => (
                       <div
                         key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
-                        className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5"
+                        className="flex min-w-0 items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5"
                         data-testid={`selected-upload-file-${index}`}
                       >
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm flex-1 truncate">{file.name}</span>
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate text-sm">{file.name}</span>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6"
+                          className="h-6 w-6 shrink-0"
                           onClick={() => removeUploadFile(index)}
                           data-testid={`button-remove-upload-file-${index}`}
                         >

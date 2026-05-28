@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { readFile } from "fs/promises";
 import { join } from "path";
+import { ANTHROPIC_MODELS } from "./aiModels";
 
 export interface HumanizeOptions {
   model?: string;
@@ -28,7 +29,7 @@ interface GeminiGenerateResponse {
 }
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite";
-const DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-6";
+const DEFAULT_ANTHROPIC_MODEL = ANTHROPIC_MODELS.opus;
 const DEFAULT_TEMPERATURE = 0.7;
 const MAX_ANTHROPIC_TOKENS = 4096;
 const PROMPT_FILE_PATH = join(process.cwd(), "prompts", "humanizer.txt");

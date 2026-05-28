@@ -5,7 +5,7 @@
  * 1. Reference/metadata filtering before chunking
  * 2. Larger chunk sizes (1000 chars) for better context
  * 3. Enhanced prompts that explicitly filter noise
- * 4. Better model (gpt-4o-mini for balance of quality/speed)
+ * 4. Configurable current model for balancing quality and speed
  * 5. Keeps Generator → Verifier → Refiner architecture
  */
 
@@ -38,7 +38,7 @@ function getOpenAI(): OpenAI {
 
 // V2 Configuration - improved settings
 export const PIPELINE_V2_CONFIG = {
-  MODEL: "gpt-4o-mini", // Better model for quality
+  MODEL: process.env.OPENAI_ANALYSIS_MODEL || "gpt-4.1-mini",
   CHUNK_SIZE: 1000, // Larger chunks for better context
   CHUNK_OVERLAP: 100, // More overlap
   CANDIDATES_PER_CHUNK: 3,

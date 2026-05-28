@@ -1,3 +1,5 @@
+import { ANTHROPIC_MODELS } from "./aiModels";
+
 export const SOURCE_ROLES = ["evidence", "style_reference", "background"] as const;
 
 export type SourceRole = typeof SOURCE_ROLES[number];
@@ -104,7 +106,7 @@ export async function analyzeWritingStyle(
   title: string,
 ): Promise<StyleAnalysis> {
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: ANTHROPIC_MODELS.haiku,
     max_tokens: 1024,
     system: `You are a writing style analyst. Analyze the provided text and return a JSON object with these fields:
 - avgSentenceLength: string description (for example "Short, punchy (12-15 words avg)")

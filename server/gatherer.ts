@@ -29,6 +29,8 @@ export interface EvidenceBrief {
   tokenEstimate: number;
 }
 
+import { ANTHROPIC_MODELS } from "./aiModels";
+
 interface AnthropicContentBlock {
   type: string;
   text?: string;
@@ -231,7 +233,7 @@ Call the minimum number of tools needed. Be selective.`;
   ];
 
   let response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: ANTHROPIC_MODELS.haiku,
     max_tokens: 4096,
     system: gathererPrompt,
     messages,
@@ -259,7 +261,7 @@ Call the minimum number of tools needed. Be selective.`;
     messages.push({ role: "user", content: toolResults });
 
     response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: ANTHROPIC_MODELS.haiku,
       max_tokens: 4096,
       system: gathererPrompt,
       messages,

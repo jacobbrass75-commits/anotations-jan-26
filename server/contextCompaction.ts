@@ -1,3 +1,5 @@
+import { ANTHROPIC_MODELS } from "./aiModels";
+
 export interface CompactedMessage {
   role: "user" | "assistant" | "system";
   content: string;
@@ -77,7 +79,7 @@ export async function compactConversation(
     : "";
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: ANTHROPIC_MODELS.haiku,
     max_tokens: 2048,
     system: `Summarize this conversation history for an academic writing assistant. Preserve:
 - The thesis and argument structure being developed

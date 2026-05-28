@@ -28,12 +28,12 @@ function getOpenAI(): OpenAI {
   return _openai;
 }
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const ANALYSIS_MODEL = "gpt-4o-mini";
+const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+const ANALYSIS_MODEL = process.env.OPENAI_ANALYSIS_MODEL || "gpt-4.1-mini";
 
 // Pipeline configuration
 export const PIPELINE_CONFIG = {
-  MODEL: "gpt-4o-mini",
+  MODEL: process.env.OPENAI_ANALYSIS_MODEL || "gpt-4.1-mini",
   CANDIDATES_PER_CHUNK: parseInt(process.env.CANDIDATES_PER_CHUNK || "3", 10),
   VERIFIER_THRESHOLD: parseFloat(process.env.VERIFIER_THRESHOLD || "0.7"),
   LLM_CONCURRENCY: parseInt(process.env.LLM_CONCURRENCY || "5", 10),

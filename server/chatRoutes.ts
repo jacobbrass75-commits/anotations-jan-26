@@ -62,6 +62,7 @@ import {
   type Project,
   type WritingStyle,
 } from "@shared/schema";
+import { ANTHROPIC_MODELS } from "./aiModels";
 
 const MAX_SOURCE_EXCERPT_CHARS = 2000;
 const MAX_SOURCE_FULLTEXT_CHARS = 30000;
@@ -73,16 +74,16 @@ const MAX_CONTEXT_ESCALATIONS = 2;
 
 const MODELS = {
   precision: {
-    chat: "claude-opus-4-6",
-    compile: "claude-opus-4-6",
-    verify: "claude-opus-4-6",
+    chat: ANTHROPIC_MODELS.opus,
+    compile: ANTHROPIC_MODELS.opus,
+    verify: ANTHROPIC_MODELS.opus,
   },
   extended: {
-    chat: "claude-sonnet-4-6",
-    compile: "claude-sonnet-4-6",
-    verify: "claude-sonnet-4-6",
+    chat: ANTHROPIC_MODELS.sonnet,
+    compile: ANTHROPIC_MODELS.sonnet,
+    verify: ANTHROPIC_MODELS.sonnet,
   },
-  research: "claude-sonnet-4-6",
+  research: ANTHROPIC_MODELS.sonnet,
 } as const;
 
 const TOKEN_LIMITS = {

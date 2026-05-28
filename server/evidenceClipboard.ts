@@ -1,3 +1,5 @@
+import { ANTHROPIC_MODELS } from "./aiModels";
+
 export interface EvidenceItem {
   type: "direct_quote" | "paraphrase" | "data_point" | "finding";
   text: string;
@@ -332,7 +334,7 @@ export async function extractUsedEvidence(
   turnNumber: number,
 ): Promise<EvidenceClipboard> {
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: ANTHROPIC_MODELS.haiku,
     max_tokens: 2048,
     system: `Extract evidence that was actually used in the assistant's response. Return JSON with:
 {

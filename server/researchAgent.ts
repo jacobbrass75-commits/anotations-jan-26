@@ -1,8 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Message } from "@shared/schema";
 import { storage } from "./storage";
+import { ANTHROPIC_MODELS } from "./aiModels";
 
-const RESEARCH_MODEL = "claude-sonnet-4-6";
+const RESEARCH_MODEL = ANTHROPIC_MODELS.sonnet;
 const RESEARCH_MAX_TOKENS = 8192;
 const MAX_RESEARCH_CHARS_PER_CALL = 220_000;
 const CHUNK_OVERLAP_CHARS = 1_000;
