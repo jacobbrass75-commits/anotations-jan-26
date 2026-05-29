@@ -48,6 +48,7 @@ import {
   type SourceRole,
 } from "./sourceRoles";
 import { clipText, buildAuthorLabel } from "./writingRoutes";
+import { applyJumpLinksToMarkdown, type QuoteJumpTarget } from "./quoteJumpLinks";
 import {
   extractRecentWritingTopic,
   runResearchAgent,
@@ -62,6 +63,7 @@ import {
   type Project,
   type WritingStyle,
 } from "@shared/schema";
+import { buildProjectAnnotationJumpPath, buildTextFingerprint } from "@shared/annotationLinks";
 import { ANTHROPIC_MODELS } from "./aiModels";
 
 const MAX_SOURCE_EXCERPT_CHARS = 2000;
@@ -978,6 +980,27 @@ function toAnthropicMessages(history: Message[]): AnthropicHistoryMessage[] {
     }));
 }
 
+function buildQuoteJumpTargets(projectId: string | null, sources: PromptSource[]): QuoteJumpTarget[] {
+  if (!projectId) return [];
+
+  return sources
+    .filter((source): source is TieredSource => isTieredSource(source))
+    .flatMap((source) =>
+      source.annotations
+        .filter((annotation) => annotation.highlightedText?.trim())
+        .map((annotation) => ({
+          quote: annotation.highlightedText,
+          jumpPath: buildProjectAnnotationJumpPath({
+            projectId,
+            projectDocumentId: source.id,
+            annotationId: annotation.id,
+            startPosition: annotation.startPosition,
+            anchorFingerprint: buildTextFingerprint(annotation.highlightedText),
+          }),
+        }))
+    );
+}
+
 function findNearestChunkIndex(
   chunks: Array<{ startPosition: number; endPosition: number }>,
   targetStart: number
@@ -1446,10 +1469,15 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         totalInputTokens += inputTokens;
         totalOutputTokens += outputTokens;
 
+        const assistantContent = applyJumpLinksToMarkdown(
+          turn.fullText,
+          buildQuoteJumpTargets(conv.projectId, sources),
+        );
+
         await chatStorage.createMessage({
           conversationId: conv.id,
           role: "assistant",
-          content: turn.fullText,
+          content: assistantContent,
           tokensUsed: inputTokens + outputTokens,
         });
         await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_message");
