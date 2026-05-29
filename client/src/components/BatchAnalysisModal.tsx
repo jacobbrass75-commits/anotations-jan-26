@@ -19,7 +19,7 @@ interface BatchAnalysisModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
-  documents: (ProjectDocument & { document: { id: string; filename: string; summary: string | null } })[];
+  documents: (ProjectDocument & { document: { id: string; filename: string; summary: string | null; chunkCount?: number; status?: string; processingError?: string | null } })[];
   projectThesis?: string | null;
 }
 

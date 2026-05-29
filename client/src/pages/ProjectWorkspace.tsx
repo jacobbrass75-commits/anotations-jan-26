@@ -27,6 +27,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Folder as FolderType, GlobalSearchResult, Document } from "@shared/schema";
 
 type DocumentLibraryItem = Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">;
+type AutoAnalyzeSourceState = Pick<DocumentLibraryItem, "status" | "chunkCount" | "processingError">;
 
 function FolderTree({ 
   folders, 
@@ -446,6 +447,11 @@ export default function ProjectWorkspace() {
     }
   };
 
+  const canAutoAnalyzeSource = (source?: Partial<AutoAnalyzeSourceState> | null) => {
+    if (!source) return true;
+    return source.status === "ready" && (source.chunkCount ?? 0) > 0;
+  };
+
   const runAutoAnalyze = async (projectDocumentId: string, options?: { quiet?: boolean }) => {
     setAutoAnalyzingIds((prev) => new Set(prev).add(projectDocumentId));
     try {
@@ -457,11 +463,13 @@ export default function ProjectWorkspace() {
         });
       }
     } catch (error) {
-      toast({
-        title: "Auto analysis failed",
-        description: error instanceof Error ? error.message : "The source may still be processing. Try again in a minute.",
-        variant: "destructive",
-      });
+      if (!options?.quiet) {
+        toast({
+          title: "Auto analysis failed",
+          description: error instanceof Error ? error.message : "The source may still be processing. Try again in a minute.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setAutoAnalyzingIds((prev) => {
         const next = new Set(prev);
@@ -471,8 +479,9 @@ export default function ProjectWorkspace() {
     }
   };
 
-  const maybeRunAutoAnalyze = (projectDocumentId?: string) => {
+  const maybeRunAutoAnalyze = (projectDocumentId?: string, source?: Partial<AutoAnalyzeSourceState> | null) => {
     if (!projectDocumentId || !autoAnalyzeNewSources) return;
+    if (!canAutoAnalyzeSource(source)) return;
     void runAutoAnalyze(projectDocumentId, { quiet: true });
   };
 
@@ -487,7 +496,8 @@ export default function ProjectWorkspace() {
           folderId: selectedFolderId,
         },
       });
-      maybeRunAutoAnalyze(projectDoc.id);
+      const selectedDoc = availableDocuments.find((doc) => doc.id === selectedDocId);
+      maybeRunAutoAnalyze(projectDoc.id, selectedDoc);
       setIsAddDocOpen(false);
       setSelectedDocId("");
       toast({ title: "Success", description: "Document added to project" });
@@ -562,7 +572,7 @@ export default function ProjectWorkspace() {
                 folderId: selectedFolderId || undefined,
               },
             });
-            maybeRunAutoAnalyze(projectDoc.id);
+            maybeRunAutoAnalyze(projectDoc.id, doc);
             docsCreated += 1;
             setUploadProgress({
               current: index + 1,
@@ -625,7 +635,7 @@ export default function ProjectWorkspace() {
               folderId: selectedFolderId || undefined,
             },
           });
-          maybeRunAutoAnalyze(projectDoc.id);
+          maybeRunAutoAnalyze(projectDoc.id, doc);
 
           addedCount += 1;
           setUploadProgress({
@@ -686,7 +696,7 @@ export default function ProjectWorkspace() {
         },
       });
       setUploadProgress({ current: 2, total: 2, label: "Source added to project" });
-      maybeRunAutoAnalyze(projectDoc.id);
+      maybeRunAutoAnalyze(projectDoc.id, doc);
 
       toast({
         title: "Source added",
@@ -1051,8 +1061,12 @@ export default function ProjectWorkspace() {
                                 size="icon"
                                 className="h-7 w-7"
                                 onClick={() => runAutoAnalyze(pd.id)}
-                                disabled={autoAnalyzingIds.has(pd.id)}
-                                title="Auto-generate project-aware annotations for this source"
+                                disabled={autoAnalyzingIds.has(pd.id) || !canAutoAnalyzeSource(pd.document)}
+                                title={
+                                  canAutoAnalyzeSource(pd.document)
+                                    ? "Auto-generate project-aware annotations for this source"
+                                    : pd.document.processingError || "This source is still processing and is not ready for auto-analysis"
+                                }
                                 data-testid={`button-auto-analyze-doc-${pd.id}`}
                               >
                                 {autoAnalyzingIds.has(pd.id) ? (

@@ -40,7 +40,7 @@ export interface IProjectStorage {
   // Project Documents
   addDocumentToProject(data: InsertProjectDocument): Promise<ProjectDocument>;
   getProjectDocument(id: string): Promise<ProjectDocument | undefined>;
-  getProjectDocumentsByProject(projectId: string): Promise<(ProjectDocument & { document: { id: string; filename: string; summary: string | null } })[]>;
+  getProjectDocumentsByProject(projectId: string): Promise<(ProjectDocument & { document: { id: string; filename: string; summary: string | null; chunkCount: number; status: string; processingError: string | null } })[]>;
   getProjectDocumentsByFolder(folderId: string): Promise<ProjectDocument[]>;
   updateProjectDocument(id: string, data: Partial<{
     projectContext: string;
@@ -156,7 +156,7 @@ export const projectStorage: IProjectStorage = {
     return projectDoc;
   },
 
-  async getProjectDocumentsByProject(projectId: string): Promise<(ProjectDocument & { document: { id: string; filename: string; summary: string | null } })[]> {
+  async getProjectDocumentsByProject(projectId: string): Promise<(ProjectDocument & { document: { id: string; filename: string; summary: string | null; chunkCount: number; status: string; processingError: string | null } })[]> {
     const results = await db
       .select({
         projectDocument: projectDocuments,
@@ -164,6 +164,9 @@ export const projectStorage: IProjectStorage = {
           id: documents.id,
           filename: documents.filename,
           summary: documents.summary,
+          chunkCount: documents.chunkCount,
+          status: documents.status,
+          processingError: documents.processingError,
         },
       })
       .from(projectDocuments)

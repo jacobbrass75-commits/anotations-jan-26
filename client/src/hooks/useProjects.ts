@@ -92,7 +92,7 @@ export function useDeleteFolder() {
 }
 
 export function useProjectDocuments(projectId: string) {
-  return useQuery<(ProjectDocument & { document: { id: string; filename: string; summary: string | null } })[]>({
+  return useQuery<(ProjectDocument & { document: { id: string; filename: string; summary: string | null; chunkCount: number; status: string; processingError: string | null } })[]>({
     queryKey: ["/api/projects", projectId, "documents"],
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/documents`, {

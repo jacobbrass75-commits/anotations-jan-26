@@ -48,6 +48,19 @@ import {
   type BatchAddDocumentsResponse,
 } from "@shared/schema";
 
+const updateProjectSchema = insertProjectSchema
+  .omit({ userId: true })
+  .pick({
+    name: true,
+    description: true,
+    thesis: true,
+    scope: true,
+    voiceProfile: true,
+    voiceProfileSamples: true,
+  })
+  .partial()
+  .strict();
+
 interface AnalysisConstraints {
   categories?: AnnotationCategory[];
   maxAnnotationsPerDoc?: number;
@@ -368,8 +381,12 @@ export function registerProjectRoutes(app: Express): void {
     try {
       const project = await verifyProjectOwnership(req, res, req.params.id);
       if (!project) return;
-      const { userId: _ignoredUserId, id: _ignoredId, ...safeProjectUpdates } = req.body ?? {};
-      const shouldGenerateContext = Boolean(req.body?.thesis || req.body?.scope);
+      const parsedProjectUpdates = updateProjectSchema.safeParse(req.body ?? {});
+      if (!parsedProjectUpdates.success) {
+        return res.status(400).json({ error: "Invalid project update" });
+      }
+      const safeProjectUpdates = parsedProjectUpdates.data;
+      const shouldGenerateContext = Boolean(safeProjectUpdates.thesis || safeProjectUpdates.scope);
       const canGenerateContext = shouldGenerateContext && await hasTokenBudgetAvailable(req);
 
       const updated = await projectStorage.updateProject(req.params.id, safeProjectUpdates);
