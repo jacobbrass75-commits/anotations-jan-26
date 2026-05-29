@@ -193,8 +193,8 @@ export function useWritingSendMessage(conversationId: string | null) {
   const [contextWarning, setContextWarning] = useState<{ id: number; message: string; available?: number } | null>(null);
 
   const send = useCallback(
-    async (content: string) => {
-      if (!conversationId) return;
+    async (content: string, targetConversationId = conversationId) => {
+      if (!targetConversationId) return;
 
       setIsStreaming(true);
       setStreamingText("");
@@ -207,7 +207,7 @@ export function useWritingSendMessage(conversationId: string | null) {
 
       try {
         const response = await fetch(
-          `/api/chat/conversations/${conversationId}/messages`,
+          `/api/chat/conversations/${targetConversationId}/messages`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json", ...getAuthHeaders() },
@@ -224,13 +224,15 @@ export function useWritingSendMessage(conversationId: string | null) {
         const decoder = new TextDecoder();
         let accumulatedChat = "";
         let accumulatedDocument = "";
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
           for (const line of lines) {
             if (line.startsWith("data: ")) {
               try {
@@ -265,7 +267,7 @@ export function useWritingSendMessage(conversationId: string | null) {
                 } else if (data.type === "done") {
                   setContextLoading(null);
                   queryClient.invalidateQueries({
-                    queryKey: ["/api/chat/conversations", conversationId],
+                    queryKey: ["/api/chat/conversations", targetConversationId],
                   });
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations"],
@@ -339,13 +341,15 @@ export function useCompilePaper(conversationId: string | null) {
         const reader = response.body!.getReader();
         const decoder = new TextDecoder();
         let accumulated = "";
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
           for (const line of lines) {
             if (line.startsWith("data: ")) {
               try {
@@ -415,13 +419,15 @@ export function useVerifyPaper(conversationId: string | null) {
         const reader = response.body!.getReader();
         const decoder = new TextDecoder();
         let accumulated = "";
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
           for (const line of lines) {
             if (line.startsWith("data: ")) {
               try {

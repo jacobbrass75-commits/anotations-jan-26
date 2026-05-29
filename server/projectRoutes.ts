@@ -13,6 +13,7 @@ import {
   cosineSimilarity,
   extractCitationMetadata,
   PIPELINE_CONFIG,
+  generateAutoAnnotationPrompts,
   getMaxChunksForLevel,
   type ThoroughnessLevel,
 } from "./openai";
@@ -1025,6 +1026,69 @@ export function registerProjectRoutes(app: Express): void {
     } catch (error) {
       console.error("Error analyzing project document:", error);
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to analyze document" });
+    }
+  });
+
+  app.post("/api/project-documents/:id/auto-analyze", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+    const tokenUsage = createTokenUsageAccumulator();
+    try {
+      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+      if (!projectDoc) return;
+
+      const doc = await storage.getDocument(projectDoc.documentId);
+      if (!doc) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const chunks = await storage.getChunksForDocument(doc.id);
+      if (chunks.length === 0) {
+        return res.status(400).json({ error: "No text chunks found for analysis yet" });
+      }
+
+      const project = await projectStorage.getProject(projectDoc.projectId);
+      const prompts = await generateAutoAnnotationPrompts(
+        {
+          projectName: project?.name,
+          projectThesis: project?.thesis,
+          projectScope: project?.scope,
+          projectDomain: project?.description,
+          sourceTitle: doc.filename,
+          sourceSummary: doc.summary,
+          sourceSample: chunks.slice(0, 6).map((chunk) => chunk.text).join("\n\n"),
+        },
+        tokenUsage.add,
+      );
+
+      const intent = [
+        "Auto-generate project-aware annotations for this source.",
+        "Use the following six annotation prompts as priorities:",
+        ...prompts.map((prompt, index) => `${index + 1}. ${prompt}`),
+      ].join("\n");
+
+      const startTime = Date.now();
+      const result = await analyzeProjectDocument(
+        req.params.id,
+        intent,
+        { thoroughness: "quick", maxAnnotationsPerDoc: 18 },
+        tokenUsage.add,
+      );
+      const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
+
+      await tokenUsage.flush(req.user!.userId, "project_document_auto_analysis");
+      res.json({
+        prompts,
+        annotations: finalAnnotations,
+        stats: {
+          chunksAnalyzed: result.chunksAnalyzed,
+          totalChunks: result.totalChunks,
+          annotationsCreated: result.annotationsCreated,
+          coverage: Math.round((result.chunksAnalyzed / result.totalChunks) * 100),
+          durationMs: Date.now() - startTime,
+        },
+      });
+    } catch (error) {
+      console.error("Error auto-analyzing project document:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to auto-analyze document" });
     }
   });
 

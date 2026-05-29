@@ -207,6 +207,19 @@ export function useAnalyzeProjectDocument() {
   });
 }
 
+export function useAutoAnalyzeProjectDocument() {
+  return useMutation({
+    mutationFn: async ({ projectDocumentId }: { projectDocumentId: string }) => {
+      const res = await apiRequest("POST", `/api/project-documents/${projectDocumentId}/auto-analyze`, {});
+      const data = await res.json();
+      return { ...data, projectDocumentId };
+    },
+    onSuccess: ({ projectDocumentId }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/project-documents", projectDocumentId, "annotations"] });
+    },
+  });
+}
+
 export function useSearchProjectDocument() {
   return useMutation({
     mutationFn: async ({

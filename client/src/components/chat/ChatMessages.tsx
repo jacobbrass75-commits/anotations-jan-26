@@ -14,6 +14,7 @@ interface ChatMessagesProps {
   streamingDocumentTitle?: string;
   streamingDocumentText?: string;
   isDocumentStreaming?: boolean;
+  pendingUserMessage?: string | null;
   onDocumentSelect?: (document: { title: string; content: string }) => void;
   onSuggestedPrompt?: (prompt: string) => void;
 }
@@ -146,6 +147,7 @@ export function ChatMessages({
   streamingDocumentTitle,
   streamingDocumentText,
   isDocumentStreaming = false,
+  pendingUserMessage,
   onDocumentSelect,
   onSuggestedPrompt,
 }: ChatMessagesProps) {
@@ -154,9 +156,9 @@ export function ChatMessages({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeStreamingChat, streamingDocumentText, isDocumentStreaming]);
+  }, [messages, activeStreamingChat, streamingDocumentText, isDocumentStreaming, pendingUserMessage]);
 
-  if (messages.length === 0 && !isStreaming) {
+  if (messages.length === 0 && !isStreaming && !pendingUserMessage) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8">
         <div className="max-w-md text-center space-y-6">
@@ -193,6 +195,8 @@ export function ChatMessages({
             <AssistantMessage key={msg.id} message={msg} onDocumentSelect={onDocumentSelect} />
           )
         )}
+
+        {pendingUserMessage && <UserBubble content={pendingUserMessage} />}
 
         {isStreaming && activeStreamingChat && (
           <AssistantMarkdownBubble content={activeStreamingChat} isStreaming />

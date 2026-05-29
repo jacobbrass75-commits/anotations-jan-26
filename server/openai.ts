@@ -30,10 +30,12 @@ function getOpenAI(): OpenAI {
 
 const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
 const ANALYSIS_MODEL = process.env.OPENAI_ANALYSIS_MODEL || "gpt-4.1-mini";
+export const ANNOTATION_MODEL =
+  process.env.OPENAI_ANNOTATION_MODEL || process.env.OPENAI_ANALYSIS_MODEL || "gpt-4.1-nano";
 
 // Pipeline configuration
 export const PIPELINE_CONFIG = {
-  MODEL: process.env.OPENAI_ANALYSIS_MODEL || "gpt-4.1-mini",
+  MODEL: ANNOTATION_MODEL,
   CANDIDATES_PER_CHUNK: parseInt(process.env.CANDIDATES_PER_CHUNK || "3", 10),
   VERIFIER_THRESHOLD: parseFloat(process.env.VERIFIER_THRESHOLD || "0.7"),
   LLM_CONCURRENCY: parseInt(process.env.LLM_CONCURRENCY || "5", 10),
@@ -198,6 +200,71 @@ Respond with JSON:
       mainArguments: [],
       keyConcepts: [],
     };
+  }
+}
+
+export async function generateAutoAnnotationPrompts(
+  input: {
+    projectName?: string | null;
+    projectThesis?: string | null;
+    projectScope?: string | null;
+    projectDomain?: string | null;
+    sourceTitle: string;
+    sourceSummary?: string | null;
+    sourceSample?: string | null;
+  },
+  onTokenUsage?: TokenUsageReporter,
+): Promise<string[]> {
+  const fallback = [
+    "Identify the strongest thesis-relevant quotes and explain how they support the project.",
+    "Find evidence, data, or examples that could be used in body paragraphs.",
+    "Find the source's main claims, assumptions, and argumentative structure.",
+    "Find limitations, counterarguments, caveats, or points of tension with the project thesis.",
+    "Find definitions, concepts, or domain-specific terms the writer should understand.",
+    "Find citation-worthy passages that connect this source to the broader project scope.",
+  ];
+
+  try {
+    const response = await getOpenAI().chat.completions.create({
+      model: ANNOTATION_MODEL,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You create concise research annotation prompts. Return JSON only with a prompts array of exactly six strings.",
+        },
+        {
+          role: "user",
+          content: `Create six distinct annotation prompts for this source. The prompts should help an academic writing assistant understand the source for the user's project without requiring exhaustive full-document analysis.
+
+Project name: ${input.projectName || "Untitled project"}
+Project thesis: ${input.projectThesis || "Not specified"}
+Project scope: ${input.projectScope || "Not specified"}
+Project domain: ${input.projectDomain || "Not specified"}
+
+Source title: ${input.sourceTitle}
+Source summary: ${input.sourceSummary || "No summary available"}
+Source sample:
+${(input.sourceSample || "").slice(0, 6000)}
+
+Return:
+{"prompts":["...", "...", "...", "...", "...", "..."]}`,
+        },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 700,
+    });
+    reportProviderUsage(response, onTokenUsage);
+
+    const parsed = JSON.parse(response.choices[0]?.message.content || "{}") as { prompts?: unknown };
+    const prompts = Array.isArray(parsed.prompts)
+      ? parsed.prompts.filter((prompt): prompt is string => typeof prompt === "string" && prompt.trim().length > 0)
+      : [];
+
+    return prompts.slice(0, 6).length === 6 ? prompts.slice(0, 6) : fallback;
+  } catch (error) {
+    console.warn("Auto annotation prompt generation failed, using defaults:", error);
+    return fallback;
   }
 }
 

@@ -70,7 +70,7 @@ describe("humanizer", () => {
     expect(result).toEqual({
       humanizedText: "Humanized output",
       provider: "anthropic",
-      model: "claude-opus-4-6",
+      model: "claude-opus-4-1-20250805",
       tokensUsed: 20,
     });
     expect(fetch).toHaveBeenCalledTimes(1);

@@ -25,7 +25,7 @@ import {
   refinerResponseSchema,
   documentContextSchema,
 } from "@shared/schema";
-import { PIPELINE_CONFIG, cosineSimilarity, getEmbedding } from "./openai";
+import { ANNOTATION_MODEL, PIPELINE_CONFIG, cosineSimilarity, getEmbedding } from "./openai";
 import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
 
 let _openai: OpenAI | null = null;
@@ -38,7 +38,7 @@ function getOpenAI(): OpenAI {
 
 // V2 Configuration - improved settings
 export const PIPELINE_V2_CONFIG = {
-  MODEL: process.env.OPENAI_ANALYSIS_MODEL || "gpt-4.1-mini",
+  MODEL: ANNOTATION_MODEL,
   CHUNK_SIZE: 1000, // Larger chunks for better context
   CHUNK_OVERLAP: 100, // More overlap
   CANDIDATES_PER_CHUNK: 3,

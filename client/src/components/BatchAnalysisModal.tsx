@@ -47,12 +47,29 @@ export function BatchAnalysisModal({
   const [maxAnnotations, setMaxAnnotations] = useState(30);
   const [minConfidence, setMinConfidence] = useState(0.7);
   const [response, setResponse] = useState<BatchAnalysisResponse | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [selectionInitialized, setSelectionInitialized] = useState(false);
 
   useEffect(() => {
     if (open && projectThesis && !intent) {
       setIntent(projectThesis);
     }
-  }, [open, projectThesis]);
+    if (open && documents.length > 0 && !selectionInitialized) {
+      setSelectedIds(new Set(documents.map((doc) => doc.id)));
+      setSelectionInitialized(true);
+    }
+  }, [documents, intent, open, projectThesis, selectionInitialized]);
+
+  useEffect(() => {
+    if (!batchAnalyze.isPending) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setElapsedSeconds((value) => value + 1);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [batchAnalyze.isPending]);
 
   useEffect(() => {
     if (!open) {
@@ -63,6 +80,7 @@ export function BatchAnalysisModal({
       setMaxAnnotations(30);
       setMinConfidence(0.7);
       setAdvancedOpen(false);
+      setSelectionInitialized(false);
     }
   }, [open]);
 
@@ -150,6 +168,14 @@ export function BatchAnalysisModal({
 
   const isComplete = response !== null;
   const isAnalyzing = batchAnalyze.isPending;
+  const estimatedSeconds = Math.max(12, selectedIds.size * 10);
+  const progressValue = isComplete
+    ? 100
+    : isAnalyzing
+      ? Math.min(92, Math.max(8, Math.round((elapsedSeconds / estimatedSeconds) * 100)))
+      : selectedIds.size > 0
+        ? Math.round((selectedIds.size / Math.max(1, documents.length)) * 100)
+        : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -170,7 +196,7 @@ export function BatchAnalysisModal({
               <div className="flex items-center justify-between">
                 <Label>Select Documents ({selectedIds.size}/{documents.length})</Label>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={handleSelectAll} data-testid="button-select-all">
+                  <Button variant={selectedIds.size === documents.length ? "secondary" : "outline"} size="sm" onClick={handleSelectAll} data-testid="button-select-all">
                     Select All
                   </Button>
                   <Button variant="ghost" size="sm" onClick={handleDeselectAll} data-testid="button-deselect-all">
@@ -264,6 +290,20 @@ export function BatchAnalysisModal({
                 </div>
               </CollapsibleContent>
             </Collapsible>
+
+            {(isAnalyzing || selectedIds.size > 0) && (
+              <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <span>
+                    {isAnalyzing
+                      ? `Analyzing ${selectedIds.size} document${selectedIds.size === 1 ? "" : "s"}...`
+                      : `${selectedIds.size} document${selectedIds.size === 1 ? "" : "s"} selected`}
+                  </span>
+                  <span>{isAnalyzing ? `${elapsedSeconds}s elapsed` : `${progressValue}% ready`}</span>
+                </div>
+                <Progress value={progressValue} className="h-2" />
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -303,9 +343,9 @@ export function BatchAnalysisModal({
 
         {isAnalyzing && (
           <div className="space-y-2">
-            <Progress value={50} className="animate-pulse" />
+            <Progress value={progressValue} />
             <p className="text-sm text-center text-muted-foreground font-mono">
-              Analyzing documents... This may take a few minutes.
+              Analyzing documents... {elapsedSeconds}s elapsed.
             </p>
           </div>
         )}

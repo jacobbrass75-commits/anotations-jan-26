@@ -1,6 +1,6 @@
-import { useState, useMemo, useRef } from "react";
-import { Link, useRoute, useLocation } from "wouter";
-import { useProject, useFolders, useProjectDocuments, useCreateFolder, useDeleteFolder, useAddDocumentToProject, useRemoveDocumentFromProject } from "@/hooks/useProjects";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { Link, useRoute } from "wouter";
+import { useProject, useFolders, useProjectDocuments, useCreateFolder, useDeleteFolder, useUpdateProject, useAddDocumentToProject, useRemoveDocumentFromProject, useAutoAnalyzeProjectDocument } from "@/hooks/useProjects";
 import { useGlobalSearch, useGenerateCitation } from "@/hooks/useProjectSearch";
 import { useUploadDocument, useUploadDocumentGroup, useUploadTextDocument } from "@/hooks/useDocument";
 import { useQuery } from "@tanstack/react-query";
@@ -16,9 +16,9 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, FolderUp, Upload, Quote, PenTool, Mic } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, Settings, Upload, Quote, PenTool, Mic } from "lucide-react";
 import { BatchAnalysisModal } from "@/components/BatchAnalysisModal";
-import { BatchUploadModal } from "@/components/BatchUploadModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import WritingChat from "@/components/WritingChat";
 import VoiceProfileEditor from "@/components/VoiceProfileEditor";
@@ -291,7 +291,6 @@ function chunkFiles<T>(items: T[], chunkSize: number): T[][] {
 
 export default function ProjectWorkspace() {
   const [, params] = useRoute("/projects/:id");
-  const [, setLocation] = useLocation();
   const projectId = params?.id || "";
   const { toast } = useToast();
   
@@ -304,8 +303,10 @@ export default function ProjectWorkspace() {
   
   const createFolder = useCreateFolder();
   const deleteFolder = useDeleteFolder();
+  const updateProject = useUpdateProject();
   const addDocument = useAddDocumentToProject();
   const removeDocument = useRemoveDocumentFromProject();
+  const autoAnalyzeProjectDocument = useAutoAnalyzeProjectDocument();
   const globalSearch = useGlobalSearch();
   const generateCitation = useGenerateCitation();
   
@@ -316,25 +317,39 @@ export default function ProjectWorkspace() {
   const [isSearching, setIsSearching] = useState(false);
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
   const [isAddDocOpen, setIsAddDocOpen] = useState(false);
+  const [isEditProjectOpen, setIsEditProjectOpen] = useState(false);
+  const [editProjectForm, setEditProjectForm] = useState({ name: "", description: "", thesis: "", scope: "" });
   const [newFolderName, setNewFolderName] = useState("");
   const [selectedDocId, setSelectedDocId] = useState("");
   const [citationModal, setCitationModal] = useState<{ footnote: string; bibliography: string } | null>(null);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
-  const [isBatchUploadOpen, setIsBatchUploadOpen] = useState(false);
   const [generatingCitationFor, setGeneratingCitationFor] = useState<string | null>(null);
   const [generatingFootnoteFor, setGeneratingFootnoteFor] = useState<string | null>(null);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; label: string } | null>(null);
   const [uploadOcrMode, setUploadOcrMode] = useState<string>("standard");
   const [uploadOcrModel, setUploadOcrModel] = useState<string>("gpt-4o");
   const [pastedSourceTitle, setPastedSourceTitle] = useState("");
   const [pastedSourceText, setPastedSourceText] = useState("");
   const [isUploadingAndAdding, setIsUploadingAndAdding] = useState(false);
+  const [autoAnalyzeNewSources, setAutoAnalyzeNewSources] = useState(true);
+  const [autoAnalyzingIds, setAutoAnalyzingIds] = useState<Set<string>>(new Set());
   const [combineImageUploads, setCombineImageUploads] = useState(true);
   const [addDocTab, setAddDocTab] = useState<"library" | "upload" | "paste">("library");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadDocument = useUploadDocument();
   const uploadDocumentGroup = useUploadDocumentGroup();
   const uploadTextDocument = useUploadTextDocument();
+
+  useEffect(() => {
+    if (!project) return;
+    setEditProjectForm({
+      name: project.name || "",
+      description: project.description || "",
+      thesis: project.thesis || "",
+      scope: project.scope || "",
+    });
+  }, [project]);
   
   const filteredDocuments = useMemo(() => {
     if (selectedFolderId === null) return projectDocuments;
@@ -411,17 +426,68 @@ export default function ProjectWorkspace() {
     }
   };
 
+  const handleUpdateProject = async () => {
+    if (!project || !editProjectForm.name.trim()) return;
+
+    try {
+      await updateProject.mutateAsync({
+        id: project.id,
+        data: {
+          name: editProjectForm.name.trim(),
+          description: editProjectForm.description.trim() || undefined,
+          thesis: editProjectForm.thesis.trim() || undefined,
+          scope: editProjectForm.scope.trim() || undefined,
+        },
+      });
+      setIsEditProjectOpen(false);
+      toast({ title: "Project updated", description: "Project details were saved." });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to update project", variant: "destructive" });
+    }
+  };
+
+  const runAutoAnalyze = async (projectDocumentId: string, options?: { quiet?: boolean }) => {
+    setAutoAnalyzingIds((prev) => new Set(prev).add(projectDocumentId));
+    try {
+      const result = await autoAnalyzeProjectDocument.mutateAsync({ projectDocumentId });
+      if (!options?.quiet) {
+        toast({
+          title: "Auto analysis complete",
+          description: `Generated ${result.stats?.annotationsCreated ?? 0} annotations from six project-aware prompts.`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Auto analysis failed",
+        description: error instanceof Error ? error.message : "The source may still be processing. Try again in a minute.",
+        variant: "destructive",
+      });
+    } finally {
+      setAutoAnalyzingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(projectDocumentId);
+        return next;
+      });
+    }
+  };
+
+  const maybeRunAutoAnalyze = (projectDocumentId?: string) => {
+    if (!projectDocumentId || !autoAnalyzeNewSources) return;
+    void runAutoAnalyze(projectDocumentId, { quiet: true });
+  };
+
   const handleAddDocument = async () => {
     if (!selectedDocId) return;
     
     try {
-      await addDocument.mutateAsync({
+      const projectDoc = await addDocument.mutateAsync({
         projectId,
         data: {
           documentId: selectedDocId,
           folderId: selectedFolderId,
         },
       });
+      maybeRunAutoAnalyze(projectDoc.id);
       setIsAddDocOpen(false);
       setSelectedDocId("");
       toast({ title: "Success", description: "Document added to project" });
@@ -462,6 +528,8 @@ export default function ProjectWorkspace() {
   const handleUploadAndAddDocuments = async () => {
     if (uploadFiles.length === 0) return;
     setIsUploadingAndAdding(true);
+    const uploadUnits = canCombineSelectedImages && combineImageUploads ? combinedUploadChunks.length : uploadFiles.length;
+    setUploadProgress({ current: 0, total: uploadUnits, label: "Starting upload..." });
 
     let addedCount = 0;
     let failedCount = 0;
@@ -472,8 +540,14 @@ export default function ProjectWorkspace() {
         let docsCreated = 0;
         let chunkFailures = 0;
 
-        for (const chunk of combinedUploadChunks) {
+        for (let index = 0; index < combinedUploadChunks.length; index += 1) {
+          const chunk = combinedUploadChunks[index];
           try {
+            setUploadProgress({
+              current: index,
+              total: combinedUploadChunks.length,
+              label: `Uploading image batch ${index + 1} of ${combinedUploadChunks.length}`,
+            });
             const doc = await uploadDocumentGroup.mutateAsync({
               files: chunk,
               // Combined image documents always use Vision OCR; batch mode is recommended for speed.
@@ -481,14 +555,20 @@ export default function ProjectWorkspace() {
               ocrModel: uploadOcrModel,
             });
 
-            await addDocument.mutateAsync({
+            const projectDoc = await addDocument.mutateAsync({
               projectId,
               data: {
                 documentId: doc.id,
                 folderId: selectedFolderId || undefined,
               },
             });
+            maybeRunAutoAnalyze(projectDoc.id);
             docsCreated += 1;
+            setUploadProgress({
+              current: index + 1,
+              total: combinedUploadChunks.length,
+              label: `Added image batch ${index + 1} of ${combinedUploadChunks.length}`,
+            });
           } catch (error) {
             chunkFailures += 1;
             if (!firstErrorMessage) {
@@ -524,23 +604,35 @@ export default function ProjectWorkspace() {
         return;
       }
 
-      for (const file of uploadFiles) {
+      for (let index = 0; index < uploadFiles.length; index += 1) {
+        const file = uploadFiles[index];
         try {
+          setUploadProgress({
+            current: index,
+            total: uploadFiles.length,
+            label: `Uploading ${file.name}`,
+          });
           const doc = await uploadDocument.mutateAsync({
             file,
             ocrMode: uploadOcrMode,
             ocrModel: uploadOcrModel,
           });
 
-          await addDocument.mutateAsync({
+          const projectDoc = await addDocument.mutateAsync({
             projectId,
             data: {
               documentId: doc.id,
               folderId: selectedFolderId || undefined,
             },
           });
+          maybeRunAutoAnalyze(projectDoc.id);
 
           addedCount += 1;
+          setUploadProgress({
+            current: index + 1,
+            total: uploadFiles.length,
+            label: `Added ${file.name}`,
+          });
         } catch (error) {
           failedCount += 1;
           if (!firstErrorMessage) {
@@ -571,6 +663,7 @@ export default function ProjectWorkspace() {
       }
     } finally {
       setIsUploadingAndAdding(false);
+      setUploadProgress(null);
     }
   };
 
@@ -584,13 +677,16 @@ export default function ProjectWorkspace() {
         text: pastedSourceText,
       });
 
-      await addDocument.mutateAsync({
+      setUploadProgress({ current: 1, total: 2, label: "Saving pasted source..." });
+      const projectDoc = await addDocument.mutateAsync({
         projectId,
         data: {
           documentId: doc.id,
           folderId: selectedFolderId || undefined,
         },
       });
+      setUploadProgress({ current: 2, total: 2, label: "Source added to project" });
+      maybeRunAutoAnalyze(projectDoc.id);
 
       toast({
         title: "Source added",
@@ -607,6 +703,7 @@ export default function ProjectWorkspace() {
       });
     } finally {
       setIsUploadingAndAdding(false);
+      setUploadProgress(null);
     }
   };
 
@@ -666,7 +763,7 @@ export default function ProjectWorkspace() {
         params.set("start", String(result.startPosition));
       }
       const query = params.toString();
-      setLocation(`/projects/${projectId}/documents/${projectDoc.id}${query ? `?${query}` : ""}`);
+      window.open(`/projects/${projectId}/documents/${projectDoc.id}${query ? `?${query}` : ""}`, "_blank", "noopener,noreferrer");
     } else {
       toast({ title: "Document Not Found", description: "The document may have been removed from this project", variant: "destructive" });
     }
@@ -767,7 +864,19 @@ export default function ProjectWorkspace() {
               Back
             </Button>
           </Link>
-          <h2 className="font-semibold text-lg truncate font-mono uppercase tracking-wider">{project.name}</h2>
+          <div className="flex items-start gap-2">
+            <h2 className="min-w-0 flex-1 font-semibold text-lg truncate font-mono uppercase tracking-wider">{project.name}</h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              onClick={() => setIsEditProjectOpen(true)}
+              title="Edit project name, domain, thesis, and scope"
+              data-testid="button-edit-project"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
           {project.thesis && (
             <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{project.thesis}</p>
           )}
@@ -839,16 +948,6 @@ export default function ProjectWorkspace() {
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
                   Batch Analyze
-                </Button>
-                <Button
-                  variant="outline"
-                  className="uppercase tracking-wider text-xs"
-                  onClick={() => setIsBatchUploadOpen(true)}
-                  disabled={availableDocuments.length === 0}
-                  data-testid="button-batch-upload"
-                >
-                  <FolderUp className="h-4 w-4 mr-2" />
-                  Batch Add
                 </Button>
                 <Button className="uppercase tracking-wider text-xs" onClick={() => setIsAddDocOpen(true)} data-testid="button-add-document">
                   <Plus className="h-4 w-4 mr-2" />
@@ -947,6 +1046,21 @@ export default function ProjectWorkspace() {
                                   <ExternalLink className="h-3 w-3" />
                                 </Button>
                               </Link>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => runAutoAnalyze(pd.id)}
+                                disabled={autoAnalyzingIds.has(pd.id)}
+                                title="Auto-generate project-aware annotations for this source"
+                                data-testid={`button-auto-analyze-doc-${pd.id}`}
+                              >
+                                {autoAnalyzingIds.has(pd.id) ? (
+                                  <div className="eva-hex-spinner" style={{ width: "0.85rem", height: "0.85rem" }} />
+                                ) : (
+                                  <Sparkles className="h-3 w-3" />
+                                )}
+                              </Button>
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
@@ -1005,6 +1119,65 @@ export default function ProjectWorkspace() {
             <Button variant="outline" onClick={() => setIsAddFolderOpen(false)}>Cancel</Button>
             <Button onClick={handleCreateFolder} disabled={createFolder.isPending} data-testid="button-confirm-folder">
               Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditProjectOpen} onOpenChange={setIsEditProjectOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>
+              Update the project details used by search, annotation generation, and writing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-project-name">Name</Label>
+              <Input
+                id="edit-project-name"
+                value={editProjectForm.name}
+                onChange={(e) => setEditProjectForm((prev) => ({ ...prev, name: e.target.value }))}
+                data-testid="input-edit-project-name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-project-domain">Domain</Label>
+              <Input
+                id="edit-project-domain"
+                value={editProjectForm.description}
+                onChange={(e) => setEditProjectForm((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="e.g., developmental psychology, public health, legal research"
+                data-testid="input-edit-project-domain"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-project-thesis">Thesis / Research Question</Label>
+              <Textarea
+                id="edit-project-thesis"
+                value={editProjectForm.thesis}
+                onChange={(e) => setEditProjectForm((prev) => ({ ...prev, thesis: e.target.value }))}
+                className="min-h-24"
+                data-testid="textarea-edit-project-thesis"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-project-scope">Scope</Label>
+              <Textarea
+                id="edit-project-scope"
+                value={editProjectForm.scope}
+                onChange={(e) => setEditProjectForm((prev) => ({ ...prev, scope: e.target.value }))}
+                className="min-h-24"
+                data-testid="textarea-edit-project-scope"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditProjectOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateProject} disabled={updateProject.isPending || !editProjectForm.name.trim()}>
+              {updateProject.isPending && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
+              Save Project
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1209,6 +1382,32 @@ export default function ProjectWorkspace() {
               </div>
             </TabsContent>
           </Tabs>
+          <div className="rounded-md border bg-muted/30 p-3">
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                checked={autoAnalyzeNewSources}
+                onCheckedChange={(checked) => setAutoAnalyzeNewSources(Boolean(checked))}
+                data-testid="checkbox-auto-analyze-new-sources"
+              />
+              <span className="leading-5">
+                Auto-analyze after adding so writing has source annotations ready in the background.
+              </span>
+            </label>
+          </div>
+          {isUploadingAndAdding && uploadProgress && (
+            <div className="rounded-md border bg-background p-3 space-y-2" data-testid="upload-progress">
+              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span className="truncate">{uploadProgress.label}</span>
+                <span className="shrink-0">
+                  {uploadProgress.current}/{uploadProgress.total}
+                </span>
+              </div>
+              <Progress
+                value={Math.round((uploadProgress.current / Math.max(1, uploadProgress.total)) * 100)}
+                className="h-2"
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDocOpen(false)}>Cancel</Button>
             {addDocTab === "library" ? (
@@ -1326,15 +1525,6 @@ export default function ProjectWorkspace() {
         projectId={projectId}
         documents={projectDocuments}
         projectThesis={project?.thesis}
-      />
-
-      <BatchUploadModal
-        open={isBatchUploadOpen}
-        onOpenChange={setIsBatchUploadOpen}
-        projectId={projectId}
-        availableDocuments={availableDocuments}
-        folders={folders}
-        currentFolderId={selectedFolderId}
       />
     </div>
   );

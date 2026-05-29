@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Link } from "wouter";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useProjects, useProjectDocuments } from "@/hooks/useProjects";
 import { useWebClips } from "@/hooks/useWebClips";
 import { useWritingStyles } from "@/hooks/useWritingStyles";
@@ -140,6 +139,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
 
   // Conversation management
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
   const { data: projectConversations = [] } = useProjectConversations(
     hasSelectedProject ? selectedProjectId : undefined
   );
@@ -283,6 +283,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   // Quick Generate dialog
   const [quickGenerateOpen, setQuickGenerateOpen] = useState(false);
   const [quickTopic, setQuickTopic] = useState("");
+  const [quickAssignmentInstructions, setQuickAssignmentInstructions] = useState("");
   const [quickTargetLength, setQuickTargetLength] = useState<"short" | "medium" | "long">("medium");
   const [quickDeepWrite, setQuickDeepWrite] = useState(false);
   const quickGenerate = useWritingPipeline();
@@ -365,6 +366,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [updateConversation, toast]);
 
   const handleSend = useCallback(async (content: string) => {
+    setPendingUserMessage(content);
     if (!activeConversationId) {
       // Create a new conversation first
       try {
@@ -393,26 +395,20 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
           },
         });
 
-        // Send first message directly
-        setTimeout(async () => {
-          const response = await apiRequest("POST", `/api/chat/conversations/${conv.id}/messages`, { content });
-          if (response.body) {
-            const reader = response.body.getReader();
-            while (true) {
-              const { done } = await reader.read();
-              if (done) break;
-            }
-          }
-          queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations", conv.id] });
-          queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations"] });
-        }, 100);
+        await send(content, conv.id);
       } catch {
         toast({ title: "Error", description: "Failed to start conversation", variant: "destructive" });
+      } finally {
+        setPendingUserMessage(null);
       }
       return;
     }
 
-    await send(content);
+    try {
+      await send(content);
+    } finally {
+      setPendingUserMessage(null);
+    }
   }, [activeConversationId, conversationProjectId, localSelectedSourceIds, selectedWritingStyleId, citationStyle, tone, writingModel, humanize, noEnDashes, send, createConversation, updateConversation, toast]);
 
   const toggleSource = useCallback((id: string) => {
@@ -562,8 +558,15 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       toast({ title: "Fill in all fields", variant: "destructive" });
       return;
     }
+    const topicWithInstructions = [
+      quickTopic.trim(),
+      quickAssignmentInstructions.trim()
+        ? `\n\nAssignment instructions and grading constraints:\n${quickAssignmentInstructions.trim()}`
+        : "",
+    ].join("");
+
     const request: WritingRequest = {
-      topic: quickTopic.trim(),
+      topic: topicWithInstructions,
       annotationIds: [],
       sourceDocumentIds: localSelectedSourceIds,
       projectId: selectedProjectId,
@@ -575,8 +578,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       deepWrite: quickDeepWrite,
     };
     quickGenerate.generate(request);
-    setQuickGenerateOpen(false);
-  }, [hasSelectedProject, selectedProjectId, selectedWritingStyleId, quickTopic, localSelectedSourceIds, citationStyle, tone, quickTargetLength, noEnDashes, quickDeepWrite, quickGenerate, toast]);
+  }, [hasSelectedProject, selectedProjectId, selectedWritingStyleId, quickTopic, quickAssignmentInstructions, localSelectedSourceIds, citationStyle, tone, quickTargetLength, noEnDashes, quickDeepWrite, quickGenerate, toast]);
 
   // Custom suggested prompts for writing context
   const handleSuggestedPrompt = useCallback((prompt: string) => {
@@ -729,6 +731,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
           streamingDocumentText={streamingDocumentText}
           isDocumentStreaming={isDocumentStreaming}
           isStreaming={isStreaming}
+          pendingUserMessage={pendingUserMessage}
           onDocumentSelect={handleSelectDocument}
           onSuggestedPrompt={handleSuggestedPrompt}
         />
@@ -923,15 +926,29 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
             <CardContent className="space-y-2">
               {/* Compile */}
               {!isCompiling ? (
-                <Button onClick={handleCompile} className="w-full" disabled={messages.length === 0}>
+                <Button
+                  onClick={handleCompile}
+                  className="w-full"
+                  disabled={messages.length === 0}
+                  title="Formats the drafted chat sections into a clean paper with citations and bibliography."
+                >
                   <Sparkles className="h-4 w-4 mr-2" />
-                  Compile Paper
+                  Format Your Paper
                 </Button>
               ) : (
                 <Button variant="destructive" onClick={cancelCompile} className="w-full">
                   <StopCircle className="h-4 w-4 mr-2" />
-                  Stop Compiling
+                  Stop Formatting
                 </Button>
+              )}
+              {isCompiling && (
+                <div className="space-y-1 rounded-md border bg-muted/30 p-2">
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Formatting paper...</span>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  </div>
+                  <Progress value={effectiveCompiledContent ? 75 : 25} className="h-1.5" />
+                </div>
               )}
 
               {/* Verify */}
@@ -987,6 +1004,15 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                         className="min-h-[80px]"
                       />
                     </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Assignment Instructions</Label>
+                      <Textarea
+                        value={quickAssignmentInstructions}
+                        onChange={(e) => setQuickAssignmentInstructions(e.target.value)}
+                        placeholder="Paste the full assignment prompt, rubric, citation requirements, professor notes, or structure constraints..."
+                        className="min-h-[140px]"
+                      />
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <Select value={quickTargetLength} onValueChange={(v) => setQuickTargetLength(v as any)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -1024,7 +1050,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
                     {isCompiling ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                    Compiled Paper
+                    Formatted Paper
                   </CardTitle>
                   {effectiveCompiledContent && (
                     <div className="flex items-center gap-1">
