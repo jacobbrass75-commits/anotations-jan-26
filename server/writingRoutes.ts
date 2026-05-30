@@ -44,7 +44,8 @@ function toSafeFilename(topic: string): string {
 export async function savePaperToProject(
   projectId: string,
   topic: string,
-  fullText: string
+  fullText: string,
+  userId: string
 ): Promise<{
   documentId: string;
   projectDocumentId: string;
@@ -59,6 +60,7 @@ export async function savePaperToProject(
     fullText,
     summary: summary || "AI-generated paper",
     userIntent: `AI-generated paper for topic: ${topic}`,
+    userId,
   });
 
   const projectDocument = await projectStorage.addDocumentToProject({
@@ -265,6 +267,29 @@ export function registerWritingRoutes(app: Express): void {
 
       if (tokensUsed > 0) {
         await incrementTokenUsage(req.user!.userId, tokensUsed);
+      }
+
+      if (!aborted && completedFullText && request.projectId) {
+        try {
+          const savedPaper = await savePaperToProject(
+            request.projectId,
+            request.topic,
+            completedFullText,
+            req.user!.userId
+          );
+          sendEvent({
+            type: "saved",
+            message: `Saved to project as ${savedPaper.filename}`,
+            savedPaper,
+          });
+        } catch (saveError) {
+          console.error("Failed to save generated paper:", saveError);
+          sendEvent({
+            type: "status",
+            phase: "complete",
+            message: "Paper generated, but it could not be saved to the project.",
+          });
+        }
       }
 
       // End the stream

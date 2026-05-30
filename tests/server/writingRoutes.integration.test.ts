@@ -141,7 +141,7 @@ describe("writing route integration", () => {
   });
 
   it("uses the selected reusable writing style over the project voice profile", async () => {
-    const { db, server, token } = await createApp();
+    const { db, server, sqlite, token } = await createApp();
     const { projects, writingStyles } = await import("../../shared/schema");
     const now = new Date("2026-05-05T00:00:00.000Z");
     const selectedProfile = {
@@ -232,9 +232,23 @@ describe("writing route integration", () => {
       });
       const text = await response.text();
       const firstCall = anthropicCreate.mock.calls[0]?.[0] as { system?: string };
+      const savedDraft = sqlite
+        .prepare(`
+          SELECT d.user_id, d.filename, pd.role_in_project
+          FROM documents d
+          INNER JOIN project_documents pd ON pd.document_id = d.id
+          WHERE pd.project_id = ? AND pd.role_in_project = ?
+        `)
+        .get("project-with-voice", "AI-generated draft") as
+        | { user_id: string | null; filename: string; role_in_project: string | null }
+        | undefined;
 
       expect(response.status).toBe(200);
       expect(text).toContain('"type":"complete"');
+      expect(text).toContain('"type":"saved"');
+      expect(savedDraft?.user_id).toBe("writing-user");
+      expect(savedDraft?.filename).toContain("Reusable style");
+      expect(savedDraft?.role_in_project).toBe("AI-generated draft");
       expect(firstCall.system).toContain("Selected reusable style voice.");
       expect(firstCall.system).toContain("selected signature phrase");
       expect(firstCall.system).not.toContain("Project-only style voice.");

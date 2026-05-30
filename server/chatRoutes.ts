@@ -592,7 +592,9 @@ function createDocumentStreamParser(
     }
   };
 
-  const finish = () => {
+  const finish = (options: { finalizeDocument?: boolean } = {}) => {
+    const finalizeDocument = options.finalizeDocument ?? true;
+
     if (tagMode && tagBuffer) {
       appendVisible(tagBuffer);
       tagBuffer = "";
@@ -603,7 +605,9 @@ function createDocumentStreamParser(
     flushDocument();
 
     if (inDocument) {
-      emit({ type: "document_end", title: activeDocumentTitle || "Draft" });
+      if (finalizeDocument) {
+        emit({ type: "document_end", title: activeDocumentTitle || "Draft" });
+      }
       inDocument = false;
       activeDocumentTitle = "";
     }
@@ -1396,10 +1400,6 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           const detectedRequests: ToolRequest[] = [];
           const parser = createDocumentStreamParser((event) => {
             if (closed || res.writableEnded) return;
-            if (event.type === "chat_text") {
-              const text = String(event.text ?? "");
-              sendEvent({ type: "text", text });
-            }
             sendEvent(event as Record<string, unknown>);
           });
           const toolParser = createToolRequestParser((request) => {
@@ -1434,7 +1434,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           });
 
           stream.on("error", (error) => {
-            parser.finish();
+            parser.finish({ finalizeDocument: false });
             toolParser.finish();
             activeStream = null;
 

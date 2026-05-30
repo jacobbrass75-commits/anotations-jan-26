@@ -20,6 +20,7 @@ import {
 } from "@/hooks/useWritingChat";
 import { useHumanizeText } from "@/hooks/useHumanizer";
 import { useWritingPipeline, type WritingRequest } from "@/hooks/useWriting";
+import { queryClient } from "@/lib/queryClient";
 import {
   stripMarkdown,
   buildDocxBlob,
@@ -84,6 +85,15 @@ interface WritingChatProps {
 const NO_PROJECT_VALUE = "__no_project__";
 const NO_STYLE_VALUE = "__no_style__";
 const DEFAULT_SOURCE_ROLE: SourceRole = "evidence";
+
+function getGeneratedPaperTitle(prompt: string, fallback?: string): string {
+  const firstLine = prompt
+    .split("\n")
+    .map((line) => line.replace(/^#+\s*/, "").trim())
+    .find(Boolean);
+  const title = firstLine || fallback || "Generated Paper";
+  return title.replace(/^["']|["']$/g, "").slice(0, 90);
+}
 
 function normalizeSourceRole(value: string | null | undefined): SourceRole {
   return value === "style_reference" || value === "background" || value === "evidence"
@@ -160,9 +170,11 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     documentTitle,
     streamingDocumentText,
     isDocumentStreaming,
+    isDocumentComplete,
     isStreaming,
     contextLoading,
     contextWarning,
+    streamError,
   } = useWritingSendMessage(activeConversationId);
 
   // Source management
@@ -243,14 +255,24 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [contextWarning, toast]);
 
   useEffect(() => {
+    if (!streamError) return;
+    toast({
+      title: "Writing failed",
+      description: streamError.message,
+      variant: "destructive",
+    });
+  }, [streamError, toast]);
+
+  useEffect(() => {
     // Reset document panel state when switching conversations.
     setDocuments([]);
     setSelectedDocIndex(null);
     lastCompletedDocumentKeyRef.current = "";
+    lastQuickGenerateDocumentKeyRef.current = "";
   }, [activeConversationId]);
 
   useEffect(() => {
-    if (isDocumentStreaming || !streamingDocumentText.trim()) {
+    if (isDocumentStreaming || !isDocumentComplete || !streamingDocumentText.trim()) {
       return;
     }
 
@@ -265,7 +287,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       setSelectedDocIndex(next.length - 1);
       return next;
     });
-  }, [documentTitle, isDocumentStreaming, streamingDocumentText]);
+  }, [documentTitle, isDocumentComplete, isDocumentStreaming, streamingDocumentText]);
 
   // Compile & Verify
   const { compile, cancelCompile, clearCompiled, compiledContent, isCompiling } = useCompilePaper(activeConversationId);
@@ -287,6 +309,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const [quickTargetLength, setQuickTargetLength] = useState<"short" | "medium" | "long">("medium");
   const [quickDeepWrite, setQuickDeepWrite] = useState(false);
   const quickGenerate = useWritingPipeline();
+  const lastQuickGenerateDocumentKeyRef = useRef("");
 
   // Computed
   const effectiveCompiledContent = humanizedCompiledContent ?? compiledContent;
@@ -297,10 +320,36 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const wordCount = useMemo(() => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0), [plainText]);
   const pageEstimate = useMemo(() => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0), [wordCount]);
   const conversationProjectId = hasSelectedProject ? selectedProjectId : null;
+  const quickGenerateProgress = useMemo(() => {
+    if (quickGenerate.fullText || quickGenerate.phase === "complete") return 100;
+    if (quickGenerate.phase === "stitching") return 90;
+    if (quickGenerate.plan) {
+      return Math.min(
+        95,
+        Math.round((quickGenerate.sections.length / Math.max(1, quickGenerate.plan.sections.length)) * 80) + 10
+      );
+    }
+    return quickGenerate.isGenerating ? 5 : 0;
+  }, [
+    quickGenerate.fullText,
+    quickGenerate.isGenerating,
+    quickGenerate.phase,
+    quickGenerate.plan,
+    quickGenerate.sections.length,
+  ]);
 
   useEffect(() => {
     setHumanizedCompiledContent(null);
   }, [compiledContent]);
+
+  useEffect(() => {
+    if (!quickGenerate.error) return;
+    toast({
+      title: "Quick Generate failed",
+      description: quickGenerate.error,
+      variant: "destructive",
+    });
+  }, [quickGenerate.error, toast]);
 
   useEffect(() => {
     return () => {
@@ -601,6 +650,36 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     });
   }, []);
 
+  useEffect(() => {
+    const content = quickGenerate.fullText.trim();
+    if (!content) return;
+
+    const title = getGeneratedPaperTitle(quickTopic, quickGenerate.savedPaper?.filename);
+    const key = `${title}\n${content}`;
+    if (key === lastQuickGenerateDocumentKeyRef.current) {
+      return;
+    }
+
+    lastQuickGenerateDocumentKeyRef.current = key;
+    handleSelectDocument({ title, content });
+    setQuickGenerateOpen(false);
+    toast({
+      title: "Paper generated",
+      description: "The draft is open in the document panel.",
+    });
+  }, [handleSelectDocument, quickGenerate.fullText, quickGenerate.savedPaper?.filename, quickTopic, toast]);
+
+  useEffect(() => {
+    if (!quickGenerate.savedPaper) return;
+    if (selectedProjectId) {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", selectedProjectId, "documents"] });
+    }
+    toast({
+      title: "Saved to Project",
+      description: quickGenerate.savedPaper.filename,
+    });
+  }, [quickGenerate.savedPaper, selectedProjectId, toast]);
+
   const activeDocument = useMemo(() => {
     if (isDocumentStreaming) {
       return {
@@ -730,6 +809,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
           streamingDocumentTitle={documentTitle}
           streamingDocumentText={streamingDocumentText}
           isDocumentStreaming={isDocumentStreaming}
+          isDocumentComplete={isDocumentComplete}
           isStreaming={isStreaming}
           pendingUserMessage={pendingUserMessage}
           onDocumentSelect={handleSelectDocument}
@@ -1029,12 +1109,34 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                     </div>
                     <Button onClick={handleQuickGenerate} className="w-full" disabled={quickGenerate.isGenerating}>
                       {quickGenerate.isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                      Generate
+                      {quickGenerate.isGenerating ? "Generating..." : quickGenerate.fullText ? "Generate Again" : "Generate Paper"}
                     </Button>
-                    {quickGenerate.isGenerating && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">{quickGenerate.status}</p>
-                        <Progress value={quickGenerate.plan ? Math.round((quickGenerate.sections.length / Math.max(1, quickGenerate.plan.sections.length)) * 80) + 10 : 5} className="h-1.5" />
+                    {(quickGenerate.isGenerating || quickGenerate.fullText || quickGenerate.error) && (
+                      <div className="space-y-2 rounded-md border bg-muted/30 p-2">
+                        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                          <span>
+                            {quickGenerate.error
+                              ? quickGenerate.error
+                              : quickGenerate.fullText
+                                ? "Paper ready in the document panel."
+                                : quickGenerate.status || "Generating paper..."}
+                          </span>
+                          {quickGenerate.isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+                        </div>
+                        {!quickGenerate.error && (
+                          <Progress value={quickGenerateProgress} className="h-1.5" />
+                        )}
+                        {quickGenerate.fullText && !quickGenerate.isGenerating && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full text-xs"
+                            onClick={() => setQuickGenerateOpen(false)}
+                          >
+                            View Paper
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>

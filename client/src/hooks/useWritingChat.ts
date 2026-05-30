@@ -188,9 +188,11 @@ export function useWritingSendMessage(conversationId: string | null) {
   const [documentTitle, setDocumentTitle] = useState("");
   const [streamingDocumentText, setStreamingDocumentText] = useState("");
   const [isDocumentStreaming, setIsDocumentStreaming] = useState(false);
+  const [isDocumentComplete, setIsDocumentComplete] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [contextLoading, setContextLoading] = useState<{ level: number; documentId?: string } | null>(null);
   const [contextWarning, setContextWarning] = useState<{ id: number; message: string; available?: number } | null>(null);
+  const [streamError, setStreamError] = useState<{ id: number; message: string } | null>(null);
 
   const send = useCallback(
     async (content: string, targetConversationId = conversationId) => {
@@ -202,8 +204,10 @@ export function useWritingSendMessage(conversationId: string | null) {
       setDocumentTitle("");
       setStreamingDocumentText("");
       setIsDocumentStreaming(false);
+      setIsDocumentComplete(false);
       setContextLoading(null);
       setContextWarning(null);
+      setStreamError(null);
 
       try {
         const response = await fetch(
@@ -217,10 +221,23 @@ export function useWritingSendMessage(conversationId: string | null) {
         );
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+          const errorText = await response.text().catch(() => "");
+          let message = `HTTP ${response.status}`;
+          if (errorText) {
+            try {
+              const parsed = JSON.parse(errorText);
+              message = String(parsed.message || parsed.error || message);
+            } catch {
+              message = errorText;
+            }
+          }
+          throw new Error(message);
         }
 
-        const reader = response.body!.getReader();
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("No response body");
+        }
         const decoder = new TextDecoder();
         let accumulatedChat = "";
         let accumulatedDocument = "";
@@ -234,9 +251,10 @@ export function useWritingSendMessage(conversationId: string | null) {
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("data: ")) {
               try {
-                const data = JSON.parse(line.slice(6));
+                const data = JSON.parse(trimmed.slice(6));
                 if (data.type === "text" || data.type === "chat_text") {
                   accumulatedChat += String(data.text || "");
                   setStreamingText(accumulatedChat);
@@ -246,11 +264,13 @@ export function useWritingSendMessage(conversationId: string | null) {
                   setDocumentTitle(String(data.title || "Draft"));
                   setStreamingDocumentText("");
                   setIsDocumentStreaming(true);
+                  setIsDocumentComplete(false);
                 } else if (data.type === "document_text") {
                   accumulatedDocument += String(data.text || "");
                   setStreamingDocumentText(accumulatedDocument);
                 } else if (data.type === "document_end") {
                   setIsDocumentStreaming(false);
+                  setIsDocumentComplete(true);
                 } else if (data.type === "context_loading") {
                   setContextLoading({
                     level: Number(data.level) || 2,
@@ -273,7 +293,16 @@ export function useWritingSendMessage(conversationId: string | null) {
                     queryKey: ["/api/chat/conversations"],
                   });
                 } else if (data.type === "error") {
-                  console.error("Stream error:", data.error);
+                  const message = String(data.error || "Writing failed");
+                  setStreamError({ id: Date.now(), message });
+                  setIsDocumentComplete(false);
+                  queryClient.invalidateQueries({
+                    queryKey: ["/api/chat/conversations", targetConversationId],
+                  });
+                  queryClient.invalidateQueries({
+                    queryKey: ["/api/chat/conversations"],
+                  });
+                  console.error("Stream error:", message);
                 }
               } catch {
                 // Ignore malformed SSE
@@ -283,6 +312,17 @@ export function useWritingSendMessage(conversationId: string | null) {
         }
       } catch (error) {
         console.error("Send message error:", error);
+        setIsDocumentComplete(false);
+        queryClient.invalidateQueries({
+          queryKey: ["/api/chat/conversations", targetConversationId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["/api/chat/conversations"],
+        });
+        setStreamError({
+          id: Date.now(),
+          message: error instanceof Error ? error.message : "Failed to send message",
+        });
       } finally {
         setIsStreaming(false);
         setStreamingText("");
@@ -301,9 +341,11 @@ export function useWritingSendMessage(conversationId: string | null) {
     documentTitle,
     streamingDocumentText,
     isDocumentStreaming,
+    isDocumentComplete,
     isStreaming,
     contextLoading,
     contextWarning,
+    streamError,
   };
 }
 

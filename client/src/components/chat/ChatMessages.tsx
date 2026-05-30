@@ -14,6 +14,7 @@ interface ChatMessagesProps {
   streamingDocumentTitle?: string;
   streamingDocumentText?: string;
   isDocumentStreaming?: boolean;
+  isDocumentComplete?: boolean;
   pendingUserMessage?: string | null;
   onDocumentSelect?: (document: { title: string; content: string }) => void;
   onSuggestedPrompt?: (prompt: string) => void;
@@ -147,16 +148,27 @@ export function ChatMessages({
   streamingDocumentTitle,
   streamingDocumentText,
   isDocumentStreaming = false,
+  isDocumentComplete = false,
   pendingUserMessage,
   onDocumentSelect,
   onSuggestedPrompt,
 }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeStreamingChat = streamingChatText ?? streamingText;
+  const persistedStreamingDocument =
+    streamingDocumentText && !isDocumentStreaming
+      ? messages.some(
+          (message) =>
+            message.role === "assistant" &&
+            message.content.includes(streamingDocumentText.slice(0, Math.min(500, streamingDocumentText.length)))
+        )
+      : false;
+  const showStreamingDocument =
+    isDocumentStreaming || Boolean(isDocumentComplete && streamingDocumentText && !persistedStreamingDocument);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeStreamingChat, streamingDocumentText, isDocumentStreaming, pendingUserMessage]);
+  }, [messages, activeStreamingChat, streamingDocumentText, showStreamingDocument, pendingUserMessage]);
 
   if (messages.length === 0 && !isStreaming && !pendingUserMessage) {
     return (
@@ -202,13 +214,13 @@ export function ChatMessages({
           <AssistantMarkdownBubble content={activeStreamingChat} isStreaming />
         )}
 
-        {isDocumentStreaming && (
+        {showStreamingDocument && (
           <div className="flex justify-start mb-4">
             <div className="max-w-[80%] w-full">
               <DocumentStatusCard
                 title={streamingDocumentTitle || "Draft"}
                 content={streamingDocumentText || ""}
-                isStreaming
+                isStreaming={isDocumentStreaming}
                 onView={
                   onDocumentSelect && streamingDocumentText
                     ? () =>
@@ -223,7 +235,7 @@ export function ChatMessages({
           </div>
         )}
 
-        {isStreaming && !activeStreamingChat && !isDocumentStreaming && (
+        {isStreaming && !activeStreamingChat && !showStreamingDocument && (
           <div className="flex justify-start mb-4">
             <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-card border shadow-sm">
               <div className="flex gap-1.5">
