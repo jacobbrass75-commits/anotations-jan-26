@@ -289,7 +289,7 @@ export async function markdownToDocx(markdownContent: string, options: MarkdownT
     ],
   });
 
-  const buffer = await Packer.toBuffer(document);
+  const buffer = await Packer.toArrayBuffer(document);
   return new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   });

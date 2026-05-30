@@ -3,6 +3,7 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { markdownToDocx } from "./markdownToDocx";
+import { toPdfSafeText } from "./documentExportUtils";
 
 type MdNode = {
   type: string;
@@ -187,18 +188,20 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
     ensureLineSpace();
     let x = margin;
     for (const token of tokens) {
+      const safeText = toPdfSafeText(token.text);
+      if (!safeText) continue;
       const fontKey = getFontKey(token.style);
       const font = fonts[fontKey];
       const tokenSize = token.style.superscript ? Math.max(8, size - 3) : size;
       const tokenY = token.style.superscript ? y + 4 : y;
-      page.drawText(token.text, {
+      page.drawText(safeText, {
         x,
         y: tokenY,
         size: tokenSize,
         font,
         color: rgb(0.08, 0.08, 0.08),
       });
-      x += font.widthOfTextAtSize(token.text, tokenSize);
+      x += font.widthOfTextAtSize(safeText, tokenSize);
     }
     y -= lineHeight;
   };
@@ -209,15 +212,17 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
     let currentWidth = 0;
 
     for (const token of tokens) {
+      const safeText = toPdfSafeText(token.text);
+      if (!safeText) continue;
       const font = fonts[getFontKey(token.style)];
       const tokenSize = token.style.superscript ? Math.max(8, size - 3) : size;
-      const tokenWidth = font.widthOfTextAtSize(token.text, tokenSize);
+      const tokenWidth = font.widthOfTextAtSize(safeText, tokenSize);
       if (current.length > 0 && currentWidth + tokenWidth > contentWidth) {
         drawLine(current, size);
         current = [];
         currentWidth = 0;
       }
-      current.push(token);
+      current.push({ ...token, text: safeText });
       currentWidth += tokenWidth;
     }
 
