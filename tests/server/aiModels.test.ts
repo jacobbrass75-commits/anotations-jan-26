@@ -10,6 +10,23 @@ describe("Anthropic model configuration", () => {
     vi.unstubAllEnvs();
   });
 
+  it("uses Opus 4.6 and Sonnet 4.6 by default", async () => {
+    const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
+
+    expect(ANTHROPIC_MODELS.opus).toBe("claude-opus-4-6");
+    expect(ANTHROPIC_MODELS.sonnet).toBe("claude-sonnet-4-6");
+  });
+
+  it("maps older Opus and Sonnet env values to 4.6", async () => {
+    vi.stubEnv("ANTHROPIC_OPUS_MODEL", "claude-opus-4-1-20250805");
+    vi.stubEnv("ANTHROPIC_SONNET_MODEL", "claude-sonnet-4-20250514");
+
+    const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
+
+    expect(ANTHROPIC_MODELS.opus).toBe("claude-opus-4-6");
+    expect(ANTHROPIC_MODELS.sonnet).toBe("claude-sonnet-4-6");
+  });
+
   it("uses the current Haiku model by default", async () => {
     const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
 
