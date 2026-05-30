@@ -140,6 +140,77 @@ describe("writing route integration", () => {
     }
   });
 
+  it("retries with a compact planner when the first writing plan JSON is truncated", async () => {
+    const { server, sqlite, token } = await createApp();
+    anthropicCreate
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "text",
+            text: "{\"thesis\":\"Long prompts need resilient planning.\",\"sections\":[{\"title\":\"Introduction\",\"description\":\"This string never closes",
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 6 },
+      })
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              thesis: "Long prompts need resilient planning.",
+              bibliography: ["Test Source."],
+              sections: [
+                {
+                  title: "Introduction",
+                  description: "Set up the argument.",
+                  sourceIds: [],
+                  targetWords: 100,
+                },
+              ],
+            }),
+          },
+        ],
+        usage: { input_tokens: 7, output_tokens: 8 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "## Introduction\nA recovered draft section." }],
+        usage: { input_tokens: 9, output_tokens: 10 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "# Complete Paper\nA recovered draft section." }],
+        usage: { input_tokens: 11, output_tokens: 12 },
+      });
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/write`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          topic: "A long assignment prompt that previously broke planner JSON",
+          citationStyle: "chicago",
+          tone: "academic",
+          targetLength: "short",
+        }),
+      });
+      const text = await response.text();
+      const userAfterWrite = sqlite
+        .prepare("SELECT tokens_used FROM users WHERE id = ?")
+        .get("writing-user") as { tokens_used: number };
+
+      expect(response.status).toBe(200);
+      expect(anthropicCreate).toHaveBeenCalledTimes(4);
+      expect(text).toContain('"type":"complete"');
+      expect(text).toContain("# Complete Paper");
+      expect(text).not.toContain("Failed to parse writing plan");
+      expect(userAfterWrite.tokens_used).toBe(158);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("uses the selected reusable writing style over the project voice profile", async () => {
     const { db, server, sqlite, token } = await createApp();
     const { projects, writingStyles } = await import("../../shared/schema");

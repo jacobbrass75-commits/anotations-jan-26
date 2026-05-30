@@ -268,6 +268,11 @@ export function registerWritingRoutes(app: Express): void {
 
       if (!aborted && completedFullText && request.projectId) {
         try {
+          sendEvent({
+            type: "status",
+            phase: "saving",
+            message: "Saving generated paper to the project...",
+          });
           const savedPaper = await savePaperToProject(
             request.projectId,
             request.topic,

@@ -114,6 +114,9 @@ const TARGET_WORDS: Record<string, number> = {
 
 const DEFAULT_MODEL = ANTHROPIC_MODELS.sonnet;
 const DEEP_WRITE_MODEL = ANTHROPIC_MODELS.sonnet;
+const PLANNER_MAX_TOKENS = 4096;
+const COMPACT_PLANNER_MAX_TOKENS = 3072;
+const MAX_COMPACT_PLANNER_SOURCES = 80;
 
 // --- Helpers ---
 
@@ -137,6 +140,88 @@ function getUsage(response: { usage?: { input_tokens?: number | null; output_tok
 function addUsage(total: TokenUsage, usage: TokenUsage): void {
   total.inputTokens += usage.inputTokens;
   total.outputTokens += usage.outputTokens;
+}
+
+function clipPromptText(text: string | null | undefined, maxChars: number): string {
+  if (!text) return "";
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars).trimEnd()}...`;
+}
+
+function extractJsonObjectText(text: string): string {
+  const unfenced = text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+  if (unfenced.startsWith("{")) return unfenced;
+
+  const start = unfenced.indexOf("{");
+  const end = unfenced.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return unfenced.slice(start, end + 1).trim();
+  }
+
+  return unfenced;
+}
+
+function parseWritingPlanText(text: string, totalWords: number): WritingPlan {
+  type RawPlanSection = {
+    title?: unknown;
+    description?: unknown;
+    targetWords?: unknown;
+    sourceIds?: unknown;
+    annotationIds?: unknown;
+  };
+
+  const parsed = JSON.parse(extractJsonObjectText(text)) as {
+    thesis?: unknown;
+    bibliography?: unknown;
+    sections?: unknown;
+  };
+
+  if (typeof parsed.thesis !== "string" || !parsed.thesis.trim() || !Array.isArray(parsed.sections)) {
+    throw new Error("Invalid plan structure");
+  }
+
+  const rawSections = parsed.sections as RawPlanSection[];
+  if (rawSections.length === 0) {
+    throw new Error("Invalid plan structure");
+  }
+
+  const sectionCount = Math.max(1, rawSections.length);
+  const fallbackWords = Math.max(250, Math.round(totalWords / sectionCount));
+
+  const sections: WritingPlanSection[] = rawSections.map((section, index) => {
+    const sourceIds = Array.isArray(section.sourceIds)
+      ? section.sourceIds
+      : Array.isArray(section.annotationIds)
+        ? section.annotationIds
+        : [];
+    const title =
+      typeof section.title === "string" && section.title.trim()
+        ? section.title.trim()
+        : `Section ${index + 1}`;
+    const description =
+      typeof section.description === "string" && section.description.trim()
+        ? section.description.trim()
+        : `Develop ${title}.`;
+
+    return {
+      title,
+      description,
+      sourceIds: sourceIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0),
+      targetWords:
+        typeof section.targetWords === "number" && Number.isFinite(section.targetWords) && section.targetWords > 0
+          ? section.targetWords
+          : fallbackWords,
+    };
+  });
+
+  return {
+    thesis: parsed.thesis.trim(),
+    sections,
+    bibliography: Array.isArray(parsed.bibliography)
+      ? parsed.bibliography.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      : [],
+  };
 }
 
 export function formatSourceForPrompt(source: WritingSource): string {
@@ -315,6 +400,7 @@ async function runPlanner(
   voiceBlock: string
 ): Promise<PlannedWriting> {
   const totalWords = TARGET_WORDS[request.targetLength] || 2500;
+  const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
 
   const sourceBlock = sources
     .map((source, i) => `--- Source ${i + 1} ---\n${formatSourceForPrompt(source)}`)
@@ -329,8 +415,8 @@ Output ONLY a JSON object (no markdown fences, no extra text) with:
   - title: Section heading
   - description: What this section should cover
   - sourceIds: Array of source IDs to use in this section
-  - targetWords: Target word count for this section
-- bibliography: Array of formatted ${request.citationStyle.toUpperCase()} bibliography entries based on available citation data
+- targetWords: Target word count for this section
+- bibliography: Array of concise ${request.citationStyle.toUpperCase()} bibliography entries based on available citation data
 
 The total word count across sections should be approximately ${totalWords} words.
 
@@ -340,6 +426,12 @@ Target lengths:
 - long: ~4000 words (8 pages)
 
 Always include an Introduction and Conclusion section. Distribute sources logically across sections.
+Keep the JSON compact:
+- Do not include quotes or source excerpts in the JSON
+- Keep each description under 240 characters
+- Keep bibliography entries under 220 characters each
+- Include no more than 12 bibliography entries
+
 Do not invent fake source metadata. If source metadata is missing, use conservative placeholders in bibliography entries.${voiceBlock}`;
 
   const userPrompt = `Topic: ${request.topic}
@@ -352,67 +444,106 @@ ${sourceBlock || "(No sources provided - write based on topic alone)"}`;
 
   const response = await client.messages.create({
     model,
-    max_tokens: 4096,
+    max_tokens: PLANNER_MAX_TOKENS,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
   });
+  addUsage(totalUsage, getUsage(response));
 
   const text =
     response.content[0].type === "text" ? response.content[0].text : "";
 
-  // Parse JSON from response (strip markdown fences if present)
-  const jsonStr = text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
   try {
-    type RawPlanSection = {
-      title: string;
-      description: string;
-      targetWords: number;
-      sourceIds?: string[];
-      annotationIds?: string[];
-    };
-    const parsed = JSON.parse(jsonStr) as {
-      thesis: string;
-      bibliography?: string[];
-      sections?: RawPlanSection[];
-    };
-
-    if (!parsed.thesis || !Array.isArray(parsed.sections)) {
-      throw new Error("Invalid plan structure");
-    }
-
-    const sectionCount = Math.max(1, parsed.sections.length);
-    const fallbackWords = Math.max(250, Math.round(totalWords / sectionCount));
-
-    const sections: WritingPlanSection[] = parsed.sections.map((section) => {
-      const sourceIds = Array.isArray(section.sourceIds)
-        ? section.sourceIds
-        : Array.isArray(section.annotationIds)
-          ? section.annotationIds
-          : [];
-      return {
-        title: section.title,
-        description: section.description,
-        sourceIds,
-        targetWords:
-          Number.isFinite(section.targetWords) && section.targetWords > 0
-            ? section.targetWords
-            : fallbackWords,
-      };
-    });
-
     return {
-      plan: {
-        thesis: parsed.thesis,
-        sections,
-        bibliography: Array.isArray(parsed.bibliography) ? parsed.bibliography : [],
-      },
-      usage: getUsage(response),
+      plan: parseWritingPlanText(text, totalWords),
+      usage: totalUsage,
     };
   } catch (e) {
-    throw new Error(
-      `Failed to parse writing plan from AI response: ${e instanceof Error ? e.message : String(e)}`
-    );
+    const firstParseError = e instanceof Error ? e.message : String(e);
+    const compactResponse = await runCompactPlanner(client, request, sources, model, voiceBlock, totalWords);
+    addUsage(totalUsage, compactResponse.usage);
+
+    try {
+      return {
+        plan: parseWritingPlanText(compactResponse.text, totalWords),
+        usage: totalUsage,
+      };
+    } catch (compactError) {
+      throw new Error(
+        `Failed to parse writing plan from AI response: ${compactError instanceof Error ? compactError.message : String(compactError)} (initial planner parse failed with: ${firstParseError})`
+      );
+    }
   }
+}
+
+async function runCompactPlanner(
+  client: Anthropic,
+  request: WritingRequest,
+  sources: WritingSource[],
+  model: string,
+  voiceBlock: string,
+  totalWords: number,
+): Promise<GeneratedText> {
+  const sourceBrief = sources
+    .slice(0, MAX_COMPACT_PLANNER_SOURCES)
+    .map((source, i) => {
+      const citationTitle = source.citationData?.title || source.title || source.documentFilename;
+      return [
+        `Source ${i + 1}`,
+        `id: ${source.id}`,
+        `title: ${clipPromptText(citationTitle, 120)}`,
+        `author: ${clipPromptText(source.author, 90)}`,
+        `summary: ${clipPromptText(source.excerpt || source.note || source.fullText, 280)}`,
+      ].join(" | ");
+    })
+    .join("\n");
+
+  const systemPrompt = `You are repairing an academic paper outline request.
+Return ONLY one valid compact JSON object. No markdown fences.
+
+Schema:
+{
+  "thesis": "one sentence",
+  "sections": [
+    {
+      "title": "section heading",
+      "description": "under 180 characters",
+      "sourceIds": ["exact source ids from the source list"],
+      "targetWords": 500
+    }
+  ],
+  "bibliography": ["short citation or source label, under 160 characters"]
+}
+
+Rules:
+- Total target words should be about ${totalWords}
+- Use 4 to 7 sections, including Introduction and Conclusion
+- Keep bibliography to 8 entries or fewer
+- Do not include source excerpts, quotes, or long strings inside JSON
+- Do not invent source IDs${voiceBlock}`;
+
+  const userPrompt = `Topic: ${clipPromptText(request.topic, 1800)}
+Tone: ${request.tone}
+Target length: ${request.targetLength} (~${totalWords} words)
+Citation style: ${request.citationStyle}
+
+Source list:
+${sourceBrief || "(No sources provided)"}`;
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: COMPACT_PLANNER_MAX_TOKENS,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+
+  const textBlocks = response.content.filter(
+    (block): block is Anthropic.TextBlock => block.type === "text"
+  );
+  return {
+    text: textBlocks.map((block) => block.text).join("\n\n"),
+    usage: getUsage(response),
+  };
 }
 
 // --- Phase 2: WRITER (per section) ---

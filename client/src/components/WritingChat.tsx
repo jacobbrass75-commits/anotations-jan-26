@@ -21,6 +21,7 @@ import {
 import { useHumanizeText } from "@/hooks/useHumanizer";
 import { useWritingPipeline, type WritingRequest } from "@/hooks/useWriting";
 import { queryClient } from "@/lib/queryClient";
+import { getAuthHeaders } from "@/lib/auth";
 import {
   stripMarkdown,
   buildDocxBlob,
@@ -175,6 +176,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     contextLoading,
     contextWarning,
     streamError,
+    streamStatus,
   } = useWritingSendMessage(activeConversationId);
 
   // Source management
@@ -321,7 +323,15 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const wordCount = useMemo(() => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0), [plainText]);
   const pageEstimate = useMemo(() => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0), [wordCount]);
   const conversationProjectId = hasSelectedProject ? selectedProjectId : null;
+  const generatedProjectDrafts = useMemo(
+    () => projectSources.filter((source) => source.roleInProject === "AI-generated draft"),
+    [projectSources]
+  );
   const quickGenerateIsPartial = quickGenerate.phase === "partial";
+  const quickGenerateTitle = useMemo(
+    () => getGeneratedPaperTitle(quickTopic, quickGenerate.savedPaper?.filename),
+    [quickGenerate.savedPaper?.filename, quickTopic]
+  );
   const quickGenerateProgress = useMemo(() => {
     if (quickGenerate.fullText || quickGenerate.phase === "complete") return 100;
     if (quickGenerate.phase === "stitching") return 90;
@@ -547,19 +557,6 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
   }, [effectiveCompiledContent, conversationData, toast]);
 
-  const handleDownloadPdf = useCallback(async () => {
-    if (!effectiveCompiledContent) return;
-    setIsPreparingPdf(true);
-    try {
-      const blob = await buildPdfBlob(conversationData?.title || "Paper", effectiveCompiledContent);
-      downloadBlob(blob, `${toSafeFilename(conversationData?.title || "Paper")}.pdf`);
-    } catch (e) {
-      toast({ title: "Export failed", description: e instanceof Error ? e.message : "PDF export failed", variant: "destructive" });
-    } finally {
-      setIsPreparingPdf(false);
-    }
-  }, [effectiveCompiledContent, conversationData, toast]);
-
   const handleTogglePdfPreview = useCallback(async () => {
     if (!effectiveCompiledContent) return;
     if (showPdfPreview) {
@@ -602,7 +599,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const handleRevertHumanized = useCallback(() => {
     setHumanizedCompiledContent(null);
     toast({ title: "Reverted", description: "Showing original compiled paper" });
-  }, [toast]);
+  }, []);
 
   const handleQuickGenerate = useCallback(() => {
     if (!hasSelectedProject || !quickTopic.trim() || localSelectedSourceIds.length === 0) {
@@ -655,20 +652,19 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       documentPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
       documentPanelRef.current?.focus({ preventScroll: true });
     });
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     const content = quickGenerate.fullText.trim();
     if (!content) return;
 
-    const title = getGeneratedPaperTitle(quickTopic, quickGenerate.savedPaper?.filename);
-    const key = `${title}\n${content}`;
+    const key = `${quickGenerateTitle}\n${content}`;
     if (key === lastQuickGenerateDocumentKeyRef.current) {
       return;
     }
 
     lastQuickGenerateDocumentKeyRef.current = key;
-    handleSelectDocument({ title, content });
+    handleSelectDocument({ title: quickGenerateTitle, content });
     setQuickGenerateOpen(false);
     toast({
       title: quickGenerateIsPartial ? "Partial draft recovered" : "Paper generated",
@@ -679,9 +675,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [
     handleSelectDocument,
     quickGenerate.fullText,
-    quickGenerate.savedPaper?.filename,
     quickGenerateIsPartial,
-    quickTopic,
+    quickGenerateTitle,
     toast,
   ]);
 
@@ -743,22 +738,54 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
   }, [activeDocument, toast]);
 
-  const handleDownloadActiveDocumentPdf = useCallback(async () => {
-    if (!activeDocument?.content) return;
-    setIsPreparingPdf(true);
+  const handleDownloadGeneratedDocx = useCallback(async (
+    title: string,
+    content: string,
+  ) => {
+    if (!content.trim()) return;
+    setIsPreparingDocx(true);
+
     try {
-      const blob = await buildPdfBlob(activeDocument.title || "Document", activeDocument.content);
-      downloadBlob(blob, `${toSafeFilename(activeDocument.title || "Document")}.pdf`);
+      const blob = await buildDocxBlob(title || "Generated Paper", content);
+      downloadBlob(blob, `${toSafeFilename(title || "Generated Paper")}.docx`);
     } catch (e) {
       toast({
         title: "Export failed",
-        description: e instanceof Error ? e.message : "PDF export failed",
+        description: e instanceof Error ? e.message : "DOCX export failed",
         variant: "destructive",
       });
     } finally {
-      setIsPreparingPdf(false);
+      setIsPreparingDocx(false);
     }
-  }, [activeDocument, toast]);
+  }, [toast]);
+
+  const handleDownloadSavedGeneratedDraftDocx = useCallback(async (
+    draft: (typeof projectSources)[number],
+  ) => {
+    setIsPreparingDocx(true);
+
+    try {
+      const res = await fetch(`/api/documents/${draft.documentId}`, {
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Could not load saved paper.");
+      const document = await res.json() as { filename?: string; fullText?: string };
+      const title = document.filename || draft.document.filename || "Generated Paper";
+      const content = document.fullText || "";
+      if (!content.trim()) throw new Error("Saved paper has no text to export.");
+      const blob = await buildDocxBlob(title, content);
+      downloadBlob(blob, `${toSafeFilename(title)}.docx`);
+    } catch (e) {
+      toast({
+        title: "Export failed",
+        description: e instanceof Error ? e.message : "DOCX export failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPreparingDocx(false);
+    }
+  }, [toast]);
 
   return (
     <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-[250px_1fr_380px] border border-border rounded-xl overflow-auto lg:overflow-hidden bg-[#F5F0E8] dark:bg-background">
@@ -827,6 +854,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
           isDocumentStreaming={isDocumentStreaming}
           isDocumentComplete={isDocumentComplete}
           isStreaming={isStreaming}
+          streamStatus={streamStatus}
           pendingUserMessage={pendingUserMessage}
           onDocumentSelect={handleSelectDocument}
           onSuggestedPrompt={handleSuggestedPrompt}
@@ -835,7 +863,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
         {/* Input */}
         {contextLoading && (
           <div className="border-t border-border px-5 py-2 text-xs text-muted-foreground bg-background/60">
-            Loading source context (Level {contextLoading.level})...
+            {streamStatus?.message || `Loading source context (Level ${contextLoading.level})...`}
           </div>
         )}
         <ChatInput onSend={handleSend} disabled={isStreaming} />
@@ -855,10 +883,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                 content={activeDocument.content}
                 isStreaming={activeDocument.isStreaming}
                 isPreparingDocx={isPreparingDocx}
-                isPreparingPdf={isPreparingPdf}
                 onCopy={handleCopyActiveDocument}
                 onDownloadDocx={handleDownloadActiveDocumentDocx}
-                onDownloadPdf={handleDownloadActiveDocumentPdf}
                 onClose={() => setSelectedDocIndex(null)}
               />
             </div>
@@ -1149,15 +1175,30 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                           <Progress value={quickGenerateProgress} className="h-1.5" />
                         )}
                         {quickGenerate.fullText && !quickGenerate.isGenerating && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="w-full text-xs"
-                            onClick={() => setQuickGenerateOpen(false)}
-                          >
-                            View Paper
-                          </Button>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                              onClick={() => setQuickGenerateOpen(false)}
+                            >
+                              View
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                              disabled={isPreparingDocx}
+                              onClick={() => handleDownloadGeneratedDocx(
+                                quickGenerateTitle,
+                                quickGenerate.fullText,
+                              )}
+                            >
+                              DOCX
+                            </Button>
+                          </div>
                         )}
                       </div>
                     )}
@@ -1181,9 +1222,6 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                       <Button variant="ghost" size="sm" onClick={handleCopy}><Copy className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="sm" onClick={handleDownloadDocx} disabled={isPreparingDocx}>
                         {isPreparingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={handleDownloadPdf} disabled={isPreparingPdf}>
-                        {isPreparingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                       </Button>
                       <Button variant="ghost" size="sm" onClick={handleTogglePdfPreview} disabled={isPreparingPdf}>
                         {showPdfPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1247,14 +1285,24 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">Quick Generate Result</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(quickGenerate.fullText);
-                      toast({ title: "Copied" });
-                    } catch { /* ignore */ }
-                  }}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(quickGenerate.fullText);
+                        toast({ title: "Copied" });
+                      } catch { /* ignore */ }
+                    }}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={isPreparingDocx}
+                      onClick={() => handleDownloadGeneratedDocx(quickGenerateTitle, quickGenerate.fullText)}
+                    >
+                      {isPreparingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1265,6 +1313,38 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                     </ReactMarkdown>
                   </div>
                 </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+
+          {generatedProjectDrafts.length > 0 && (
+            <Card className="border-border bg-background/80">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Saved Generated Papers</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {generatedProjectDrafts.slice(0, 5).map((draft) => (
+                  <div
+                    key={draft.id}
+                    className="flex items-center justify-between gap-2 rounded-md border bg-background px-2 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-medium">{draft.document.filename}</div>
+                      <div className="text-[11px] text-muted-foreground">Saved in this project</div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={isPreparingDocx}
+                        onClick={() => handleDownloadSavedGeneratedDraftDocx(draft)}
+                        title="Download DOCX"
+                      >
+                        {isPreparingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}

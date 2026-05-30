@@ -130,6 +130,8 @@ describe("chat route integration", () => {
         .get("conversation-1", "assistant") as { tokens_used: number };
 
       expect(response.status).toBe(200);
+      expect(body).toContain("\"type\":\"writing_status\"");
+      expect(body).toContain("Preparing selected project sources");
       expect(body).toContain("\"type\":\"done\"");
       expect(userUsage.tokens_used).toBe(19);
       expect(assistantMessage.tokens_used).toBe(19);

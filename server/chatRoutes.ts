@@ -123,6 +123,7 @@ type WritingStreamEventType =
   | "document_start"
   | "document_text"
   | "document_end"
+  | "writing_status"
   | "done"
   | "error";
 
@@ -1301,6 +1302,15 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         res.write(`data: ${JSON.stringify(payload)}\n\n`);
       };
 
+      const sendWritingStatus = (message: string, phase: string, progress?: number) => {
+        sendEvent({
+          type: "writing_status",
+          phase,
+          message,
+          ...(typeof progress === "number" ? { progress } : {}),
+        });
+      };
+
       const anthropic = getAnthropicClient();
       const tieredSources = sources.filter((source): source is TieredSource => isTieredSource(source));
       const allowedSourceDocumentIds = new Set(tieredSources.map((source) => source.documentId));
@@ -1316,7 +1326,9 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
 
       let effectiveCompactionSummary = conv.compactionSummary || null;
       let effectiveCompactedAtTurn = conv.compactedAtTurn || 0;
+      sendWritingStatus("Preparing selected project sources...", "preparing", 5);
       if (mode === "precision") {
+        sendWritingStatus("Condensing earlier chat context...", "preparing", 12);
         const compactionResult = await compactConversation(
           anthropic,
           history.map((message) => ({ role: message.role, content: message.content })),
@@ -1346,6 +1358,13 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           chunkCount: source.chunkCount || 0,
         }));
 
+        sendWritingStatus(
+          sourceStubs.length > 0
+            ? "Finding the strongest evidence in the selected sources..."
+            : "Preparing the draft request...",
+          "evidence",
+          25,
+        );
         evidenceBrief = await gatherEvidence(
           anthropic,
           content,
@@ -1380,6 +1399,8 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
             ]
           : compactedHistory;
       }
+
+      sendWritingStatus("Building the draft with project context...", "drafting", 40);
 
       let sentWarningLevel: ContextWarningLevel = "ok";
 
@@ -1472,12 +1493,20 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
       let escalationCount = 0;
 
       while (!closed) {
+        sendWritingStatus(
+          escalationCount === 0
+            ? "Writing the draft..."
+            : "Continuing the draft with additional source context...",
+          "drafting",
+          escalationCount === 0 ? 50 : 70,
+        );
         const turn = await runTurn(messagesForTurn);
         const inputTokens = turn.usage.input_tokens || 0;
         const outputTokens = turn.usage.output_tokens || 0;
         totalInputTokens += inputTokens;
         totalOutputTokens += outputTokens;
 
+        sendWritingStatus("Saving the generated draft...", "saving", 88);
         const assistantContent = wrapGeneratedDocumentIfNeeded(
           applyJumpLinksToMarkdown(
             turn.fullText,
@@ -1500,6 +1529,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         }
 
         if (mode === "precision") {
+          sendWritingStatus("Remembering which evidence was used...", "saving", 92);
           const updatedClipboard = await extractUsedEvidence(
             anthropic,
             turn.fullText,
@@ -1519,6 +1549,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         let contextMessage = "";
 
         if (request.type === "chunk_request") {
+          sendWritingStatus("Loading nearby source text...", "retrieving", 62);
           sendEvent({ type: "context_loading", level: 2, documentId: request.documentId });
 
           if (!request.annotationId) {
@@ -1569,6 +1600,7 @@ ${chunkContext}`;
             break;
           }
 
+          sendWritingStatus("Running a deeper source check...", "retrieving", 62);
           sendEvent({ type: "context_loading", level: 3, documentId: request.documentId });
 
           try {
@@ -1653,6 +1685,7 @@ ${chunkContext}`;
       }
 
       if (!closed && !res.writableEnded) {
+        sendWritingStatus("Writing complete.", "complete", 100);
         sendEvent({
           type: "done",
           usage: {

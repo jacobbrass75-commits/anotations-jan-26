@@ -5,6 +5,7 @@ import { BookOpen, Lightbulb, FileText, PenLine } from "lucide-react";
 import { markdownComponents, remarkPlugins } from "@/lib/markdownConfig";
 import { DocumentStatusCard } from "@/components/chat/DocumentStatusCard";
 import type { Message } from "@shared/schema";
+import type { WritingStreamStatus } from "@/hooks/useWritingChat";
 
 interface ChatMessagesProps {
   messages: Message[];
@@ -15,6 +16,7 @@ interface ChatMessagesProps {
   streamingDocumentText?: string;
   isDocumentStreaming?: boolean;
   isDocumentComplete?: boolean;
+  streamStatus?: WritingStreamStatus | null;
   pendingUserMessage?: string | null;
   onDocumentSelect?: (document: { title: string; content: string }) => void;
   onSuggestedPrompt?: (prompt: string) => void;
@@ -149,6 +151,7 @@ export function ChatMessages({
   streamingDocumentText,
   isDocumentStreaming = false,
   isDocumentComplete = false,
+  streamStatus,
   pendingUserMessage,
   onDocumentSelect,
   onSuggestedPrompt,
@@ -168,7 +171,7 @@ export function ChatMessages({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeStreamingChat, streamingDocumentText, showStreamingDocument, pendingUserMessage]);
+  }, [messages, activeStreamingChat, streamingDocumentText, showStreamingDocument, pendingUserMessage, streamStatus]);
 
   if (messages.length === 0 && !isStreaming && !pendingUserMessage) {
     return (
@@ -221,6 +224,8 @@ export function ChatMessages({
                 title={streamingDocumentTitle || "Draft"}
                 content={streamingDocumentText || ""}
                 isStreaming={isDocumentStreaming}
+                statusMessage={streamStatus?.message}
+                progress={streamStatus?.progress}
                 onView={
                   onDocumentSelect && streamingDocumentText
                     ? () =>
@@ -235,7 +240,21 @@ export function ChatMessages({
           </div>
         )}
 
-        {isStreaming && !activeStreamingChat && !showStreamingDocument && (
+        {isStreaming && !activeStreamingChat && !showStreamingDocument && streamStatus && (
+          <div className="flex justify-start mb-4">
+            <div className="max-w-[80%] w-full">
+              <DocumentStatusCard
+                title="Writing"
+                content=""
+                isStreaming
+                statusMessage={streamStatus.message}
+                progress={streamStatus.progress}
+              />
+            </div>
+          </div>
+        )}
+
+        {isStreaming && !activeStreamingChat && !showStreamingDocument && !streamStatus && (
           <div className="flex justify-start mb-4">
             <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-card border shadow-sm">
               <div className="flex gap-1.5">

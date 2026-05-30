@@ -1,11 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { FileText, Loader2 } from "lucide-react";
 
 interface DocumentStatusCardProps {
   title: string;
   content: string;
   isStreaming?: boolean;
+  statusMessage?: string;
+  progress?: number;
   onView?: () => void;
   className?: string;
 }
@@ -18,6 +21,8 @@ export function DocumentStatusCard({
   title,
   content,
   isStreaming = false,
+  statusMessage,
+  progress,
   onView,
   className,
 }: DocumentStatusCardProps) {
@@ -38,6 +43,16 @@ export function DocumentStatusCard({
           {words} words
         </Badge>
       </div>
+      {(statusMessage || typeof progress === "number") && (
+        <div className="mt-2 space-y-1">
+          {statusMessage && (
+            <div className="text-xs text-muted-foreground">{statusMessage}</div>
+          )}
+          {typeof progress === "number" && (
+            <Progress value={Math.max(0, Math.min(100, progress))} className="h-1.5" />
+          )}
+        </div>
+      )}
       {onView && (
         <div className="mt-2">
           <Button variant="ghost" size="sm" className="h-auto p-0 text-xs underline underline-offset-2" onClick={onView}>

@@ -18,6 +18,12 @@ export interface ToolStep {
 
 export type SourceRole = "evidence" | "style_reference" | "background";
 
+export interface WritingStreamStatus {
+  phase: string;
+  message: string;
+  progress?: number;
+}
+
 function sanitizeWritingChatError(value: unknown, fallback = "Writing request failed"): string {
   const raw = String(value || "").trim();
   const text = raw
@@ -209,6 +215,7 @@ export function useWritingSendMessage(conversationId: string | null) {
   const [contextLoading, setContextLoading] = useState<{ level: number; documentId?: string } | null>(null);
   const [contextWarning, setContextWarning] = useState<{ id: number; message: string; available?: number } | null>(null);
   const [streamError, setStreamError] = useState<{ id: number; message: string } | null>(null);
+  const [streamStatus, setStreamStatus] = useState<WritingStreamStatus | null>(null);
 
   const send = useCallback(
     async (content: string, targetConversationId = conversationId) => {
@@ -224,6 +231,7 @@ export function useWritingSendMessage(conversationId: string | null) {
       setContextLoading(null);
       setContextWarning(null);
       setStreamError(null);
+      setStreamStatus({ phase: "starting", message: "Starting writing request...", progress: 2 });
 
       try {
         const response = await fetch(
@@ -281,19 +289,37 @@ export function useWritingSendMessage(conversationId: string | null) {
                   setStreamingDocumentText("");
                   setIsDocumentStreaming(true);
                   setIsDocumentComplete(false);
+                  setStreamStatus({ phase: "drafting", message: "Writing the draft...", progress: 55 });
                 } else if (data.type === "document_text") {
                   accumulatedDocument += String(data.text || "");
                   setStreamingDocumentText(accumulatedDocument);
                 } else if (data.type === "document_end") {
                   setIsDocumentStreaming(false);
                   setIsDocumentComplete(true);
+                  setStreamStatus({ phase: "saving", message: "Saving the generated draft...", progress: 88 });
+                } else if (data.type === "writing_status") {
+                  setStreamStatus({
+                    phase: String(data.phase || "working"),
+                    message: String(data.message || "Working..."),
+                    progress: typeof data.progress === "number" ? data.progress : undefined,
+                  });
                 } else if (data.type === "context_loading") {
                   setContextLoading({
                     level: Number(data.level) || 2,
                     documentId: typeof data.documentId === "string" ? data.documentId : undefined,
                   });
+                  setStreamStatus({
+                    phase: "retrieving",
+                    message: `Loading source context (Level ${Number(data.level) || 2})...`,
+                    progress: 62,
+                  });
                 } else if (data.type === "context_loaded") {
                   setContextLoading(null);
+                  setStreamStatus({
+                    phase: "drafting",
+                    message: "Continuing the draft with source context...",
+                    progress: 72,
+                  });
                 } else if (data.type === "context_warning") {
                   setContextWarning({
                     id: Date.now(),
@@ -302,6 +328,7 @@ export function useWritingSendMessage(conversationId: string | null) {
                   });
                 } else if (data.type === "done") {
                   setContextLoading(null);
+                  setStreamStatus({ phase: "complete", message: "Writing complete.", progress: 100 });
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations", targetConversationId],
                   });
@@ -312,6 +339,7 @@ export function useWritingSendMessage(conversationId: string | null) {
                   const message = sanitizeWritingChatError(data.error || "Writing failed");
                   setStreamError({ id: Date.now(), message });
                   setIsDocumentComplete(false);
+                  setStreamStatus({ phase: "error", message, progress: undefined });
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations", targetConversationId],
                   });
@@ -342,6 +370,13 @@ export function useWritingSendMessage(conversationId: string | null) {
             "Failed to send message",
           ),
         });
+        setStreamStatus({
+          phase: "error",
+          message: sanitizeWritingChatError(
+            error instanceof Error ? error.message : error,
+            "Failed to send message",
+          ),
+        });
       } finally {
         setIsStreaming(false);
         setStreamingText("");
@@ -365,6 +400,7 @@ export function useWritingSendMessage(conversationId: string | null) {
     contextLoading,
     contextWarning,
     streamError,
+    streamStatus,
   };
 }
 
