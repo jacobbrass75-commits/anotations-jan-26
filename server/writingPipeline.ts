@@ -6,6 +6,7 @@ import {
   type StyleAnalysis,
 } from "./sourceRoles";
 import { ANTHROPIC_MODELS } from "./aiModels";
+import { sanitizeSseError } from "./sseUtils";
 
 // --- Interfaces ---
 
@@ -631,8 +632,6 @@ export async function runWritingPipeline(
       usage: totalUsage,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error occurred";
-    onEvent({ type: "error", error: message });
+    onEvent({ type: "error", error: sanitizeSseError(error, "Writing pipeline failed") });
   }
 }

@@ -56,6 +56,22 @@ interface SSEEvent {
   savedPaper?: SavedPaper;
 }
 
+function sanitizeWritingError(value: unknown, fallback = "Writing generation failed"): string {
+  const raw = String(value || "").trim();
+  const text = raw
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return fallback;
+  if (/cloudflare|gateway timeout|error code: 52[024]|504|524/i.test(text)) {
+    return "The writing request timed out before the final response arrived. Any completed sections were kept when available.";
+  }
+  return text.slice(0, 500);
+}
+
 export function useWritingPipeline() {
   const [status, setStatus] = useState<string>("");
   const [phase, setPhase] = useState<string>("");
@@ -100,6 +116,23 @@ export function useWritingPipeline() {
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    let completeReceived = false;
+    let receivedSections: WritingSection[] = [];
+
+    const recoverPartial = () => {
+      if (completeReceived || receivedSections.length === 0) return false;
+      const partial = [...receivedSections]
+        .sort((a, b) => a.index - b.index)
+        .map((section) => section.content.trim())
+        .filter(Boolean)
+        .join("\n\n");
+
+      if (!partial) return false;
+      setFullText(partial);
+      setPhase("partial");
+      setStatus("Partial draft recovered. Final polish did not complete.");
+      return true;
+    };
 
     try {
       const response = await fetch("/api/write", {
@@ -111,8 +144,15 @@ export function useWritingPipeline() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: response.statusText }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        const errorText = await response.text().catch(() => response.statusText);
+        let message = errorText || response.statusText || `HTTP ${response.status}`;
+        try {
+          const parsed = JSON.parse(errorText);
+          message = String(parsed.error || parsed.message || message);
+        } catch {
+          // Non-JSON errors, including proxy HTML pages, are sanitized below.
+        }
+        throw new Error(sanitizeWritingError(message, `HTTP ${response.status}`));
       }
 
       // Read SSE stream
@@ -140,6 +180,7 @@ export function useWritingPipeline() {
 
           const data = trimmed.slice(6); // Remove "data: " prefix
           if (data === "[DONE]") {
+            recoverPartial();
             setIsGenerating(false);
             return;
           }
@@ -157,24 +198,36 @@ export function useWritingPipeline() {
                 break;
               case "section":
                 if (event.index !== undefined && event.title && event.content) {
+                  const nextSection = {
+                    index: event.index!,
+                    title: event.title!,
+                    content: event.content!,
+                  };
+                  receivedSections = [
+                    ...receivedSections.filter((section) => section.index !== nextSection.index),
+                    nextSection,
+                  ];
                   setSections((prev) => [
-                    ...prev,
-                    {
-                      index: event.index!,
-                      title: event.title!,
-                      content: event.content!,
-                    },
+                    ...prev.filter((section) => section.index !== nextSection.index),
+                    nextSection,
                   ]);
                 }
                 break;
               case "complete":
-                if (event.fullText) setFullText(event.fullText);
+                if (event.fullText) {
+                  completeReceived = true;
+                  setFullText(event.fullText);
+                }
                 setStatus("Complete");
                 setPhase("complete");
                 setIsGenerating(false);
                 break;
               case "error":
-                setError(event.error || "Unknown error");
+                if (recoverPartial()) {
+                  setError(null);
+                } else {
+                  setError(sanitizeWritingError(event.error || "Unknown error"));
+                }
                 setIsGenerating(false);
                 break;
               case "saved":
@@ -192,6 +245,7 @@ export function useWritingPipeline() {
         }
       }
 
+      recoverPartial();
       setIsGenerating(false);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -199,7 +253,11 @@ export function useWritingPipeline() {
         return;
       }
       const message = err instanceof Error ? err.message : "Unknown error";
-      setError(message);
+      if (recoverPartial()) {
+        setError(null);
+      } else {
+        setError(sanitizeWritingError(message));
+      }
       setIsGenerating(false);
     } finally {
       abortControllerRef.current = null;

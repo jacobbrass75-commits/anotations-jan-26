@@ -320,6 +320,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const wordCount = useMemo(() => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0), [plainText]);
   const pageEstimate = useMemo(() => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0), [wordCount]);
   const conversationProjectId = hasSelectedProject ? selectedProjectId : null;
+  const quickGenerateIsPartial = quickGenerate.phase === "partial";
   const quickGenerateProgress = useMemo(() => {
     if (quickGenerate.fullText || quickGenerate.phase === "complete") return 100;
     if (quickGenerate.phase === "stitching") return 90;
@@ -664,10 +665,19 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     handleSelectDocument({ title, content });
     setQuickGenerateOpen(false);
     toast({
-      title: "Paper generated",
-      description: "The draft is open in the document panel.",
+      title: quickGenerateIsPartial ? "Partial draft recovered" : "Paper generated",
+      description: quickGenerateIsPartial
+        ? "The recovered draft is open in the document panel."
+        : "The draft is open in the document panel.",
     });
-  }, [handleSelectDocument, quickGenerate.fullText, quickGenerate.savedPaper?.filename, quickTopic, toast]);
+  }, [
+    handleSelectDocument,
+    quickGenerate.fullText,
+    quickGenerate.savedPaper?.filename,
+    quickGenerateIsPartial,
+    quickTopic,
+    toast,
+  ]);
 
   useEffect(() => {
     if (!quickGenerate.savedPaper) return;
@@ -1117,6 +1127,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                           <span>
                             {quickGenerate.error
                               ? quickGenerate.error
+                              : quickGenerateIsPartial
+                                ? "Partial draft recovered in the document panel."
                               : quickGenerate.fullText
                                 ? "Paper ready in the document panel."
                                 : quickGenerate.status || "Generating paper..."}

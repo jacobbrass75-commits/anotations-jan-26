@@ -18,6 +18,22 @@ export interface ToolStep {
 
 export type SourceRole = "evidence" | "style_reference" | "background";
 
+function sanitizeWritingChatError(value: unknown, fallback = "Writing request failed"): string {
+  const raw = String(value || "").trim();
+  const text = raw
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return fallback;
+  if (/cloudflare|gateway timeout|error code: 52[024]|504|524/i.test(text)) {
+    return "The writing request timed out before the final response arrived. Please try again.";
+  }
+  return text.slice(0, 500);
+}
+
 // --- Conversation queries (project-scoped) ---
 
 export function useProjectConversations(projectId?: string | null) {
@@ -231,7 +247,7 @@ export function useWritingSendMessage(conversationId: string | null) {
               message = errorText;
             }
           }
-          throw new Error(message);
+          throw new Error(sanitizeWritingChatError(message, `HTTP ${response.status}`));
         }
 
         const reader = response.body?.getReader();
@@ -293,7 +309,7 @@ export function useWritingSendMessage(conversationId: string | null) {
                     queryKey: ["/api/chat/conversations"],
                   });
                 } else if (data.type === "error") {
-                  const message = String(data.error || "Writing failed");
+                  const message = sanitizeWritingChatError(data.error || "Writing failed");
                   setStreamError({ id: Date.now(), message });
                   setIsDocumentComplete(false);
                   queryClient.invalidateQueries({
@@ -321,7 +337,10 @@ export function useWritingSendMessage(conversationId: string | null) {
         });
         setStreamError({
           id: Date.now(),
-          message: error instanceof Error ? error.message : "Failed to send message",
+          message: sanitizeWritingChatError(
+            error instanceof Error ? error.message : error,
+            "Failed to send message",
+          ),
         });
       } finally {
         setIsStreaming(false);

@@ -49,6 +49,7 @@ import {
 } from "./sourceRoles";
 import { clipText, buildAuthorLabel } from "./writingRoutes";
 import { applyJumpLinksToMarkdown, type QuoteJumpTarget } from "./quoteJumpLinks";
+import { sanitizeSseError, startSseHeartbeat } from "./sseUtils";
 import {
   extractRecentWritingTopic,
   runResearchAgent,
@@ -1234,6 +1235,8 @@ export function registerChatRoutes(app: Express) {
   });
 
   app.post("/api/chat/conversations/:id/messages", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+    let stopHeartbeat: (() => void) | null = null;
+
     try {
       const { content } = req.body;
       if (!content || typeof content !== "string") {
@@ -1279,6 +1282,23 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
       res.setHeader("X-Accel-Buffering", "no");
+
+      let closed = false;
+      let activeStream: { abort: () => void } | null = null;
+
+      req.on("close", () => {
+        closed = true;
+        stopHeartbeat?.();
+        stopHeartbeat = null;
+        activeStream?.abort();
+      });
+
+      stopHeartbeat = startSseHeartbeat(res, { isClosed: () => closed });
+
+      const sendEvent = (payload: Record<string, unknown>) => {
+        if (closed || res.writableEnded) return;
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      };
 
       const anthropic = getAnthropicClient();
       const tieredSources = sources.filter((source): source is TieredSource => isTieredSource(source));
@@ -1360,14 +1380,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           : compactedHistory;
       }
 
-      let closed = false;
-      let activeStream: { abort: () => void } | null = null;
       let sentWarningLevel: ContextWarningLevel = "ok";
-
-      const sendEvent = (payload: Record<string, unknown>) => {
-        if (closed || res.writableEnded) return;
-        res.write(`data: ${JSON.stringify(payload)}\n\n`);
-      };
 
       const sendContextWarningIfNeeded = (usage: ContextUsageEstimate) => {
         if (usage.warningLevel === "ok") return;
@@ -1450,11 +1463,6 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           });
         });
       };
-
-      req.on("close", () => {
-        closed = true;
-        activeStream?.abort();
-      });
 
       const isFirstExchange = history.filter((message) => message.role === "user").length === 1;
       let hasAutoTitled = false;
@@ -1649,20 +1657,26 @@ ${chunkContext}`;
             output_tokens: totalOutputTokens,
           },
         });
+        stopHeartbeat?.();
+        stopHeartbeat = null;
         res.end();
       }
     } catch (error) {
       console.error("Error sending message:", error);
+      stopHeartbeat?.();
+      stopHeartbeat = null;
       if (!res.headersSent) {
-        res.status(500).json({ message: "Failed to send message" });
+        res.status(500).json({ message: sanitizeSseError(error, "Failed to send message") });
       } else {
-        res.write(`data: ${JSON.stringify({ type: "error", error: "Internal server error" })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Failed to send message") })}\n\n`);
         res.end();
       }
     }
   });
 
   app.post("/api/chat/conversations/:id/compile", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+    let stopHeartbeat: (() => void) | null = null;
+
     try {
       const conv = await getOwnedConversationOr404(req, res);
       if (!conv) return;
@@ -1728,7 +1742,11 @@ ${transcript}${sourcesBlock}`;
 
       req.on("close", () => {
         aborted = true;
+        stopHeartbeat?.();
+        stopHeartbeat = null;
       });
+
+      stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
 
       const stream = anthropic.messages.stream({
         model: models.compile,
@@ -1745,6 +1763,8 @@ ${transcript}${sourcesBlock}`;
       stream.on("message", async (message) => {
         await recordUserTokenUsage(req.user!.userId, getUsageTokenTotal(message?.usage), "chat_compile");
         if (aborted) return;
+        stopHeartbeat?.();
+        stopHeartbeat = null;
         res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
         res.end();
       });
@@ -1752,24 +1772,30 @@ ${transcript}${sourcesBlock}`;
       stream.on("error", (error) => {
         console.error("Compile stream error:", error);
         if (!aborted) {
+          stopHeartbeat?.();
+          stopHeartbeat = null;
           res.write(
-            `data: ${JSON.stringify({ type: "error", error: error instanceof Error ? error.message : "Compile failed" })}\n\n`
+            `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Compile failed") })}\n\n`
           );
           res.end();
         }
       });
     } catch (error) {
       console.error("Compile error:", error);
+      stopHeartbeat?.();
+      stopHeartbeat = null;
       if (!res.headersSent) {
-        res.status(500).json({ message: "Failed to compile paper" });
+        res.status(500).json({ message: sanitizeSseError(error, "Failed to compile paper") });
       } else {
-        res.write(`data: ${JSON.stringify({ type: "error", error: "Compile failed" })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Compile failed") })}\n\n`);
         res.end();
       }
     }
   });
 
   app.post("/api/chat/conversations/:id/verify", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+    let stopHeartbeat: (() => void) | null = null;
+
     try {
       const conv = await getOwnedConversationOr404(req, res);
       if (!conv) return;
@@ -1821,7 +1847,11 @@ ${compiledContent}${sourcesBlock}`;
 
       req.on("close", () => {
         aborted = true;
+        stopHeartbeat?.();
+        stopHeartbeat = null;
       });
+
+      stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
 
       const stream = anthropic.messages.stream({
         model: models.verify,
@@ -1838,6 +1868,8 @@ ${compiledContent}${sourcesBlock}`;
       stream.on("message", async (message) => {
         await recordUserTokenUsage(req.user!.userId, getUsageTokenTotal(message?.usage), "chat_verify");
         if (!aborted) {
+          stopHeartbeat?.();
+          stopHeartbeat = null;
           res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
           res.end();
         }
@@ -1846,18 +1878,22 @@ ${compiledContent}${sourcesBlock}`;
       stream.on("error", (error) => {
         console.error("Verify stream error:", error);
         if (!aborted) {
+          stopHeartbeat?.();
+          stopHeartbeat = null;
           res.write(
-            `data: ${JSON.stringify({ type: "error", error: error instanceof Error ? error.message : "Verify failed" })}\n\n`
+            `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Verify failed") })}\n\n`
           );
           res.end();
         }
       });
     } catch (error) {
       console.error("Verify error:", error);
+      stopHeartbeat?.();
+      stopHeartbeat = null;
       if (!res.headersSent) {
-        res.status(500).json({ message: "Failed to verify paper" });
+        res.status(500).json({ message: sanitizeSseError(error, "Failed to verify paper") });
       } else {
-        res.write(`data: ${JSON.stringify({ type: "error", error: "Verify failed" })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Verify failed") })}\n\n`);
         res.end();
       }
     }

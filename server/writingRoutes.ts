@@ -10,6 +10,7 @@ import {
   type WritingSource,
   type WritingSSEEvent,
 } from "./writingPipeline";
+import { sanitizeSseError, startSseHeartbeat } from "./sseUtils";
 import type { CitationData } from "@shared/schema";
 
 const MAX_SOURCE_EXCERPT_CHARS = 700;
@@ -81,6 +82,8 @@ export async function savePaperToProject(
 export function registerWritingRoutes(app: Express): void {
   // POST /api/write - Start writing pipeline, stream results via SSE
   app.post("/api/write", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+    let stopHeartbeat: (() => void) | null = null;
+
     try {
       const body = req.body as Partial<WritingRequest> & {
         sourceDocumentIds?: unknown;
@@ -232,20 +235,6 @@ export function registerWritingRoutes(app: Express): void {
         }
       }
 
-      // Set up SSE response
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-        "X-Accel-Buffering": "no",
-      });
-
-      // Helper to send SSE events
-      const sendEvent = (event: WritingSSEEvent) => {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      };
-
-      // Handle client disconnect
       let aborted = false;
       let completedFullText = "";
       let tokensUsed = 0;
@@ -253,6 +242,14 @@ export function registerWritingRoutes(app: Express): void {
       req.on("close", () => {
         aborted = true;
       });
+
+      stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
+
+      // Helper to send SSE events
+      const sendEvent = (event: WritingSSEEvent) => {
+        if (aborted || res.writableEnded) return;
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      };
 
       // Run the pipeline
       await runWritingPipeline(request, sources, (event) => {
@@ -293,22 +290,26 @@ export function registerWritingRoutes(app: Express): void {
       }
 
       // End the stream
+      stopHeartbeat?.();
+      stopHeartbeat = null;
       if (!aborted) {
         res.write("data: [DONE]\n\n");
         res.end();
       }
     } catch (error) {
       console.error("Writing pipeline error:", error);
+      stopHeartbeat?.();
+      stopHeartbeat = null;
       // If headers haven't been sent yet, send a JSON error
       if (!res.headersSent) {
         res.status(500).json({
-          error: error instanceof Error ? error.message : "Writing pipeline failed",
+          error: sanitizeSseError(error, "Writing pipeline failed"),
         });
       } else {
         // Headers already sent (SSE mode), send error event
         const errorEvent: WritingSSEEvent = {
           type: "error",
-          error: error instanceof Error ? error.message : "Writing pipeline failed",
+          error: sanitizeSseError(error, "Writing pipeline failed"),
         };
         res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
         res.end();
