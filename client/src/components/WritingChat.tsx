@@ -220,6 +220,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   // Document history / panel
   const [documents, setDocuments] = useState<Array<{ title: string; content: string }>>([]);
   const [selectedDocIndex, setSelectedDocIndex] = useState<number | null>(null);
+  const documentPanelRef = useRef<HTMLElement | null>(null);
   const lastCompletedDocumentKeyRef = useRef("");
 
   // Sync settings from conversation
@@ -636,6 +637,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [handleSend]);
 
   const handleSelectDocument = useCallback((document: { title: string; content: string }) => {
+    setShowControlsWhenDocument(false);
     setDocuments((prev) => {
       const existingIndex = prev.findIndex(
         (item) => item.title === document.title && item.content === document.content
@@ -648,6 +650,10 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       const next = [...prev, document];
       setSelectedDocIndex(next.length - 1);
       return next;
+    });
+    requestAnimationFrame(() => {
+      documentPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+      documentPanelRef.current?.focus({ preventScroll: true });
     });
   }, []);
 
@@ -755,7 +761,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [activeDocument, toast]);
 
   return (
-    <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-[250px_1fr_380px] border border-border rounded-xl overflow-hidden bg-[#F5F0E8] dark:bg-background">
+    <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-[250px_1fr_380px] border border-border rounded-xl overflow-auto lg:overflow-hidden bg-[#F5F0E8] dark:bg-background">
       {/* Left Sidebar - Conversations */}
       <ChatSidebar
         conversations={conversations}
@@ -836,7 +842,11 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       </section>
 
       {/* Right Panel */}
-      <aside className="min-h-0 bg-[#F1ECE2] dark:bg-muted/10">
+      <aside
+        ref={documentPanelRef}
+        tabIndex={-1}
+        className="min-h-[320px] lg:min-h-0 bg-[#F1ECE2] dark:bg-muted/10 focus:outline-none"
+      >
         <div className="h-full min-h-0 flex flex-col p-4 gap-4">
           {activeDocument && (
             <div className="min-h-0 flex-[1_1_55%]">

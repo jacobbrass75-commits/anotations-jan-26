@@ -13,6 +13,8 @@ export const testFiles = [
   "tests/server/backupScript.test.ts",
   "tests/server/restoreDrill.test.ts",
   "tests/server/db.test.ts",
+  "tests/server/aiModels.test.ts",
+  "tests/server/sseUtils.test.ts",
   "tests/server/humanizer.test.ts",
   "tests/server/analyticsRoutes.integration.test.ts",
   "tests/server/authRoutes.integration.test.ts",

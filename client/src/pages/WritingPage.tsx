@@ -60,7 +60,7 @@ export default function WritingPage() {
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-6 pb-8 w-full eva-grid-bg" style={{ height: "calc(100vh - 56px)" }}>
-        <WritingChat initialProjectId={initialProjectId} />
+        <WritingChat key={initialProjectId ?? "standalone"} initialProjectId={initialProjectId} />
       </main>
     </div>
   );
