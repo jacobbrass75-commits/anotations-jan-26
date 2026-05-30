@@ -49,6 +49,7 @@ import {
 } from "./sourceRoles";
 import { clipText, buildAuthorLabel } from "./writingRoutes";
 import { applyJumpLinksToMarkdown, type QuoteJumpTarget } from "./quoteJumpLinks";
+import { wrapGeneratedDocumentIfNeeded } from "./chatDocumentFormatting";
 import { sanitizeSseError, startSseHeartbeat } from "./sseUtils";
 import {
   extractRecentWritingTopic,
@@ -1477,9 +1478,11 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         totalInputTokens += inputTokens;
         totalOutputTokens += outputTokens;
 
-        const assistantContent = applyJumpLinksToMarkdown(
-          turn.fullText,
-          buildQuoteJumpTargets(conv.projectId, sources),
+        const assistantContent = wrapGeneratedDocumentIfNeeded(
+          applyJumpLinksToMarkdown(
+            turn.fullText,
+            buildQuoteJumpTargets(conv.projectId, sources),
+          ),
         );
 
         await chatStorage.createMessage({
