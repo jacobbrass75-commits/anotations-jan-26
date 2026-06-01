@@ -117,6 +117,11 @@ export default function Account() {
   const tokenPercent = usage?.tokenPercent ?? formatUsagePercent(tokensUsed, tokenLimit);
   const storagePercent = usage?.storagePercent ?? formatUsagePercent(storageUsed, storageLimit);
   const billingCycleStart = usage?.billingCycleStart ?? user?.billingCycleStart ?? null;
+  const hasUnlimitedTokens = tokenLimit <= 0;
+  const tokenLimitLabel = hasUnlimitedTokens ? "Unlimited" : tokenLimit.toLocaleString();
+  const remainingTokensLabel = hasUnlimitedTokens
+    ? "Unlimited"
+    : Math.max(tokenLimit - tokensUsed, 0).toLocaleString();
 
   if (isLoading || usageLoading || !user) {
     return (
@@ -268,14 +273,14 @@ export default function Account() {
                 Token Budget
               </CardTitle>
               <CardDescription>
-                {tokensUsed.toLocaleString()} of {tokenLimit.toLocaleString()} output tokens used this cycle.
+                {tokensUsed.toLocaleString()} of {tokenLimitLabel} output tokens used this cycle.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Progress value={tokenPercent} className="h-3" />
               <div className="flex items-center justify-between text-xs font-mono uppercase tracking-[0.18em] text-muted-foreground">
                 <span>{tokenPercent}% Consumed</span>
-                <span>{Math.max(tokenLimit - tokensUsed, 0).toLocaleString()} Remaining</span>
+                <span>{remainingTokensLabel} Remaining</span>
               </div>
             </CardContent>
           </Card>

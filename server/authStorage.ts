@@ -109,7 +109,8 @@ async function syncUserFromClerk(user: User, tier: string | null, emailVerified:
     updates.tier = tier;
   }
 
-  if (user.tokenLimit !== tierLimits.tokenLimit) {
+  // tokenLimit <= 0 is an explicit unlimited-token override.
+  if (user.tokenLimit > 0 && user.tokenLimit !== tierLimits.tokenLimit) {
     updates.tokenLimit = tierLimits.tokenLimit;
   }
 

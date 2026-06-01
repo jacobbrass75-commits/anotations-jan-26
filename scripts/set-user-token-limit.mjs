@@ -3,19 +3,26 @@ import Database from "better-sqlite3";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-const TIER_LIMITS = {
-  free: { tokenLimit: 50_000, storageLimit: 52_428_800 },
-  pro: { tokenLimit: 500_000, storageLimit: 524_288_000 },
-  max: { tokenLimit: 2_000_000, storageLimit: 5_368_709_120 },
-};
-
 function usage() {
-  console.error("Usage: npm run user:set-tier -- <email-or-user-id> <free|pro|max>");
+  console.error("Usage: npm run user:set-token-limit -- <email-or-user-id> <unlimited|positive-token-limit>");
   process.exit(1);
 }
 
-const [, , userRef, tier] = process.argv;
-if (!userRef || !tier || !(tier in TIER_LIMITS)) {
+function parseTokenLimit(value) {
+  const normalized = value.trim().toLowerCase();
+  if (["unlimited", "none", "0"].includes(normalized)) {
+    return 0;
+  }
+
+  const tokenLimit = Number.parseInt(normalized.replaceAll("_", ""), 10);
+  if (!Number.isSafeInteger(tokenLimit) || tokenLimit <= 0) {
+    usage();
+  }
+  return tokenLimit;
+}
+
+const [, , userRef, limitArg] = process.argv;
+if (!userRef || !limitArg) {
   usage();
 }
 
@@ -25,8 +32,8 @@ if (!existsSync(dbPath)) {
   process.exit(1);
 }
 
+const tokenLimit = parseTokenLimit(limitArg);
 const nowSeconds = Math.floor(Date.now() / 1000);
-const { tokenLimit, storageLimit } = TIER_LIMITS[tier];
 const sqlite = new Database(dbPath);
 
 const user = sqlite
@@ -41,18 +48,16 @@ if (!user) {
 sqlite
   .prepare(`
     UPDATE users
-    SET tier = ?,
-        token_limit = ?,
-        storage_limit = ?,
+    SET token_limit = ?,
         tokens_used = 0,
         billing_cycle_start = ?,
         updated_at = ?
     WHERE id = ?
   `)
-  .run(tier, tokenLimit, storageLimit, nowSeconds, nowSeconds, user.id);
+  .run(tokenLimit, nowSeconds, nowSeconds, user.id);
 
 const updated = sqlite
-  .prepare("SELECT id, email, tier, token_limit, storage_limit, billing_cycle_start FROM users WHERE id = ?")
+  .prepare("SELECT id, email, tier, tokens_used, token_limit, billing_cycle_start FROM users WHERE id = ?")
   .get(user.id);
 
 console.log(JSON.stringify(updated, null, 2));
