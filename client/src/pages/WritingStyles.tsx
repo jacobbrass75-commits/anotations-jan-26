@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { AnalysisProgressPanel } from "@/components/AnalysisProgress";
 import { useToast } from "@/hooks/use-toast";
 import {
   useCreateWritingStyle,
@@ -71,6 +72,7 @@ export default function WritingStyles() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [draft, setDraft] = useState<DraftState>(emptyDraft);
+  const [analysisPhase, setAnalysisPhase] = useState<"create" | "reanalyze" | null>(null);
 
   const selectedStyle = useMemo(
     () => styles.find((style) => style.id === selectedId) || null,
@@ -125,6 +127,7 @@ export default function WritingStyles() {
   };
 
   const saveNewStyle = async () => {
+    setAnalysisPhase("create");
     try {
       const created = await createStyle.mutateAsync({
         name: draft.name,
@@ -140,6 +143,8 @@ export default function WritingStyles() {
         description: getMutationMessage(error, "Check the name and samples."),
         variant: "destructive",
       });
+    } finally {
+      setAnalysisPhase(null);
     }
   };
 
@@ -165,6 +170,7 @@ export default function WritingStyles() {
 
   const reanalyzeStyle = async () => {
     if (!selectedStyle) return;
+    setAnalysisPhase("reanalyze");
     try {
       await updateStyle.mutateAsync({
         id: selectedStyle.id,
@@ -182,6 +188,8 @@ export default function WritingStyles() {
         description: getMutationMessage(error, "Check the samples."),
         variant: "destructive",
       });
+    } finally {
+      setAnalysisPhase(null);
     }
   };
 
@@ -202,6 +210,8 @@ export default function WritingStyles() {
   const activeProfile = isCreating ? null : selectedStyle?.voiceProfile || null;
   const totalWords = draft.samples.reduce((sum, sample) => sum + sampleWordCount(sample), 0);
   const isBusy = createStyle.isPending || updateStyle.isPending || deleteStyle.isPending;
+  const isAnalyzingStyle = analysisPhase !== null;
+  const isSavingDetails = updateStyle.isPending && !isAnalyzingStyle;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -342,21 +352,25 @@ export default function WritingStyles() {
                             {isCreating ? (
                               <Button onClick={saveNewStyle} disabled={isBusy}>
                                 {createStyle.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                                Analyze and Save
+                                {createStyle.isPending ? "Analyzing..." : "Analyze and Save"}
                               </Button>
                             ) : (
                               <>
                                 <Button onClick={saveDetails} disabled={!selectedStyle || isBusy}>
-                                  {updateStyle.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                                  {isSavingDetails ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
                                   Save Details
                                 </Button>
                                 <Button variant="outline" onClick={reanalyzeStyle} disabled={!selectedStyle || isBusy}>
-                                  <RotateCcw className="h-4 w-4 mr-2" />
-                                  Re-analyze Samples
+                                  {isAnalyzingStyle ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                                  {isAnalyzingStyle ? "Analyzing..." : "Re-analyze Samples"}
                                 </Button>
                               </>
                             )}
                           </div>
+                          <AnalysisProgressPanel
+                            active={isAnalyzingStyle}
+                            title={analysisPhase === "reanalyze" ? "Re-analyzing samples" : "Analyzing samples"}
+                          />
                         </CardContent>
                       </Card>
 

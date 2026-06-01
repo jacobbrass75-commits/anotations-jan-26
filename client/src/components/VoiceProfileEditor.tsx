@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { AnalysisProgressPanel } from "@/components/AnalysisProgress";
 import { useToast } from "@/hooks/use-toast";
 import {
   useVoiceProfile,
@@ -184,7 +185,7 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Analyzing your writing style...</p>
+        <AnalysisProgressPanel active title="Analyzing writing voice" className="w-full max-w-md" />
       </div>
     );
   }
