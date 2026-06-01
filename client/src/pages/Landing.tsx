@@ -52,7 +52,7 @@ const workflow = [
 export default function Landing() {
   const { isLoaded, isSignedIn } = useAuth();
   const appHref = isLoaded && isSignedIn ? "/dashboard" : "/sign-in?redirect_url=%2Fdashboard";
-  const appLabel = isLoaded && isSignedIn ? "Open Dashboard" : "Sign In";
+  const appLabel = isLoaded && isSignedIn ? "Dashboard" : "Log In";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -70,7 +70,7 @@ export default function Landing() {
                 Pricing
               </Button>
             </Link>
-            <Link href={appHref} className="hidden md:block">
+            <Link href={appHref} className="hidden sm:block">
               <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono">
                 {appLabel}
               </Button>
