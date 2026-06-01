@@ -20,6 +20,8 @@ interface VoiceProfileEditorProps {
   projectId: string;
 }
 
+const MAX_VOICE_PROFILE_SAMPLES = 20;
+
 export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProps) {
   const { toast } = useToast();
   const { data, isLoading } = useVoiceProfile(projectId);
@@ -35,7 +37,7 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
   const isAnalyzing = analyzeMutation.isPending;
 
   const addSample = () => {
-    if (samples.length < 10) setSamples([...samples, ""]);
+    if (samples.length < MAX_VOICE_PROFILE_SAMPLES) setSamples([...samples, ""]);
   };
 
   const removeSample = (index: number) => {
@@ -123,7 +125,7 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
         <div>
           <h3 className="text-lg font-semibold">Writing Voice</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Paste 2-5 samples of your own writing. Scholar Mark will analyze your style and use it when generating text for this project.
+            Paste 2-20 samples of your own writing. Scholar Mark will analyze the strongest style signals and use them when generating text for this project.
           </p>
         </div>
 
@@ -153,7 +155,7 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
         </div>
 
         <div className="flex items-center gap-3">
-          {samples.length < 10 && (
+          {samples.length < MAX_VOICE_PROFILE_SAMPLES && (
             <Button variant="outline" size="sm" onClick={addSample}>
               + Add Sample
             </Button>
@@ -299,7 +301,7 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
           </div>
         ))}
         <div className="flex items-center gap-3">
-          {samples.length < 10 && (
+          {samples.length < MAX_VOICE_PROFILE_SAMPLES && (
             <Button variant="outline" size="sm" onClick={addSample}>+ Add Sample</Button>
           )}
           <div className="flex-1" />

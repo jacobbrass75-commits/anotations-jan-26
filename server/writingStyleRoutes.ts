@@ -87,7 +87,7 @@ export function registerWritingStyleRoutes(app: Express): void {
 
       const validation = validateWritingSamples(req.body?.samples);
       if (!validation.ok || !validation.samples) {
-        return res.status(400).json({ message: validation.error || "Provide 2-10 writing samples" });
+        return res.status(400).json({ message: validation.error || "Provide 2-20 writing samples" });
       }
 
       const voiceProfile = await analyzeVoiceProfileSamples(validation.samples, tokenUsage.add);
@@ -160,7 +160,7 @@ export function registerWritingStyleRoutes(app: Express): void {
       if (req.body?.reanalyze === true) {
         const validation = validateWritingSamples(req.body?.samples);
         if (!validation.ok || !validation.samples) {
-          return res.status(400).json({ message: validation.error || "Provide 2-10 writing samples" });
+          return res.status(400).json({ message: validation.error || "Provide 2-20 writing samples" });
         }
         const voiceProfile = await analyzeVoiceProfileSamples(validation.samples, tokenUsage.add);
         updates.voiceProfile = JSON.stringify(voiceProfile);

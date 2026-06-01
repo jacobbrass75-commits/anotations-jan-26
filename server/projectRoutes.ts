@@ -1654,7 +1654,7 @@ export function registerProjectRoutes(app: Express): void {
 
       const validation = validateWritingSamples(req.body?.samples);
       if (!validation.ok || !validation.samples) {
-        return res.status(400).json({ error: validation.error || "Provide 2-10 writing samples" });
+        return res.status(400).json({ error: validation.error || "Provide 2-20 writing samples" });
       }
 
       const samples = validation.samples;

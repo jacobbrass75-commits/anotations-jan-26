@@ -34,6 +34,8 @@ interface DraftState {
   samples: string[];
 }
 
+const MAX_WRITING_STYLE_SAMPLES = 20;
+
 const emptyDraft: DraftState = {
   name: "",
   description: "",
@@ -104,7 +106,7 @@ export default function WritingStyles() {
 
   const addSample = () => {
     setDraft((current) => {
-      if (current.samples.length >= 10) return current;
+      if (current.samples.length >= MAX_WRITING_STYLE_SAMPLES) return current;
       return { ...current, samples: [...current.samples, ""] };
     });
   };
@@ -366,7 +368,7 @@ export default function WritingStyles() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold uppercase tracking-wider">Samples</h3>
-                        <Button variant="outline" size="sm" onClick={addSample} disabled={draft.samples.length >= 10 || isBusy}>
+                        <Button variant="outline" size="sm" onClick={addSample} disabled={draft.samples.length >= MAX_WRITING_STYLE_SAMPLES || isBusy}>
                           <Plus className="h-4 w-4 mr-2" />
                           Sample
                         </Button>
