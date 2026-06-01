@@ -15,7 +15,6 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { useAuth } from "@/lib/auth";
 
 const capabilities = [
   {
@@ -50,10 +49,6 @@ const workflow = [
 ];
 
 export default function Landing() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const appHref = isLoaded && isSignedIn ? "/dashboard" : "/sign-in?redirect_url=%2Fdashboard";
-  const appLabel = isLoaded && isSignedIn ? "Dashboard" : "Log In";
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-40">
@@ -70,9 +65,9 @@ export default function Landing() {
                 Pricing
               </Button>
             </Link>
-            <Link href={appHref} className="hidden sm:block">
+            <Link href="/sign-in?redirect_url=%2Fdashboard" className="hidden sm:block">
               <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono">
-                {appLabel}
+                Log In
               </Button>
             </Link>
             <Link href="/sign-up?redirect_url=%2Fdashboard">
