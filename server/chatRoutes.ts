@@ -97,6 +97,8 @@ const TOKEN_LIMITS = {
 
 const RESERVED_TOKENS = 10_000;
 const OUTPUT_TOKENS = CHAT_MAX_TOKENS;
+const CONTEXT_COMPACTION_TRIGGER_RATIO = 0.65;
+const COMPACTED_RECENT_TURNS = 8;
 
 const BASE_SYSTEM_PROMPT =
   "You are ScholarMark AI, a helpful academic writing assistant. You help students with research, writing, citations, and understanding academic sources. Be concise, accurate, and helpful.";
@@ -153,6 +155,7 @@ interface ContextUsageEstimate {
   systemTokens: number;
   historyTokens: number;
   totalUsed: number;
+  usedRatio: number;
   available: number;
   limit: number;
   warningLevel: ContextWarningLevel;
@@ -270,12 +273,17 @@ function estimateContextUsage(
   const historyTokens = messages.reduce((sum, message) => sum + estimateTokens(message.content), 0);
   const totalUsed = systemTokens + historyTokens + OUTPUT_TOKENS + RESERVED_TOKENS;
   const available = limit - totalUsed;
+  const usedRatio = limit > 0 ? totalUsed / limit : 1;
 
   let warningLevel: ContextWarningLevel = "ok";
   if (available < 20_000) warningLevel = "caution";
   if (available < 5_000) warningLevel = "critical";
 
-  return { systemTokens, historyTokens, totalUsed, available, limit, warningLevel };
+  return { systemTokens, historyTokens, totalUsed, usedRatio, available, limit, warningLevel };
+}
+
+function shouldCompactContext(usage: ContextUsageEstimate): boolean {
+  return usage.usedRatio >= CONTEXT_COMPACTION_TRIGGER_RATIO;
 }
 
 function buildProjectContextBlock(project: WritingProjectContext | null): string {
@@ -1326,28 +1334,73 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
 
       let effectiveCompactionSummary = conv.compactionSummary || null;
       let effectiveCompactedAtTurn = conv.compactedAtTurn || 0;
-      sendWritingStatus("Preparing selected project sources...", "preparing", 5);
-      if (mode === "precision") {
-        sendWritingStatus("Condensing earlier chat context...", "preparing", 12);
-        const compactionResult = await compactConversation(
-          anthropic,
-          history.map((message) => ({ role: message.role, content: message.content })),
+      let useCompactedHistory = Boolean(effectiveCompactionSummary);
+
+      const buildPromptHistory = (
+        currentHistory: Message[],
+        currentAnthropicMessages: AnthropicHistoryMessage[],
+      ): AnthropicHistoryMessage[] => {
+        if (!useCompactedHistory) {
+          return currentAnthropicMessages;
+        }
+
+        const latestUserMessage = currentAnthropicMessages[currentAnthropicMessages.length - 1];
+        const compactedHistory = buildCompactedHistory(
+          currentHistory.slice(0, -1).map((message) => ({ role: message.role, content: message.content })),
+          formatClipboardForPrompt(clipboard),
           effectiveCompactionSummary,
           effectiveCompactedAtTurn,
-        );
-        if (compactionResult) {
-          effectiveCompactionSummary = compactionResult.summary;
-          effectiveCompactedAtTurn = compactionResult.compactedAtTurn;
-          await updateConversationCompaction(conv.id, {
-            compactionSummary: compactionResult.summary,
-            compactedAtTurn: compactionResult.compactedAtTurn,
-          });
+          COMPACTED_RECENT_TURNS,
+        ).map((message) => ({
+          role: message.role === "system" ? "assistant" : message.role,
+          content: message.content,
+        })) as AnthropicHistoryMessage[];
+
+        return latestUserMessage
+          ? [...compactedHistory, latestUserMessage]
+          : compactedHistory;
+      };
+
+      const refreshCompactionIfNeeded = async (
+        currentHistory: Message[],
+        currentMessagesForEstimate: AnthropicHistoryMessage[],
+        progress = 12,
+      ): Promise<ContextUsageEstimate> => {
+        const rawUsage = estimateContextUsage(systemPrompt, currentMessagesForEstimate, mode);
+        if (!shouldCompactContext(rawUsage) && !effectiveCompactionSummary) {
+          return rawUsage;
         }
-      }
+
+        if (shouldCompactContext(rawUsage)) {
+          sendWritingStatus("Condensing earlier chat context...", "preparing", progress);
+          const compactionResult = await compactConversation(
+            anthropic,
+            currentHistory.map((message) => ({ role: message.role, content: message.content })),
+            effectiveCompactionSummary,
+            effectiveCompactedAtTurn,
+            undefined,
+            { recentTurnCount: COMPACTED_RECENT_TURNS },
+          );
+          if (compactionResult) {
+            effectiveCompactionSummary = compactionResult.summary;
+            effectiveCompactedAtTurn = compactionResult.compactedAtTurn;
+            await updateConversationCompaction(conv.id, {
+              compactionSummary: compactionResult.summary,
+              compactedAtTurn: compactionResult.compactedAtTurn,
+            });
+          }
+        }
+
+        useCompactedHistory = Boolean(effectiveCompactionSummary);
+        return rawUsage;
+      };
+
+      sendWritingStatus("Preparing selected project sources...", "preparing", 5);
+      await refreshCompactionIfNeeded(history, anthropicMessages, 12);
 
       let evidenceBrief: EvidenceBrief | null = null;
       let evidenceBriefText = "[No new evidence gathered for this turn]";
-      let messagesForTurn = anthropicMessages;
+      let messagesForTurn = buildPromptHistory(history, anthropicMessages);
       if (mode === "precision") {
         const sourceStubs: SourceStub[] = tieredSources.map((source) => ({
           docId: source.documentId,
@@ -1376,20 +1429,13 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         );
         evidenceBriefText = formatEvidenceBrief(evidenceBrief);
 
-        const compactedHistory = buildCompactedHistory(
-          history.slice(0, -1).map((message) => ({ role: message.role, content: message.content })),
-          formatClipboardForPrompt(clipboard),
-          effectiveCompactionSummary,
-          effectiveCompactedAtTurn,
-        ).map((message) => ({
-          role: message.role === "system" ? "assistant" : message.role,
-          content: message.content,
-        })) as AnthropicHistoryMessage[];
-
         const latestUserMessage = anthropicMessages[anthropicMessages.length - 1];
+        const historyBeforeLatest = useCompactedHistory
+          ? buildPromptHistory(history, anthropicMessages).slice(0, -1)
+          : anthropicMessages.slice(0, -1);
         messagesForTurn = latestUserMessage
           ? [
-              ...compactedHistory,
+              ...historyBeforeLatest,
               { role: "user", content: `[EVIDENCE GATHERED THIS TURN]\n${evidenceBriefText}` },
               {
                 role: "assistant",
@@ -1397,7 +1443,29 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
               },
               latestUserMessage,
             ]
-          : compactedHistory;
+          : historyBeforeLatest;
+      }
+
+      if (!useCompactedHistory && shouldCompactContext(estimateContextUsage(systemPrompt, messagesForTurn, mode))) {
+        await refreshCompactionIfNeeded(history, messagesForTurn, 35);
+
+        if (mode === "precision") {
+          const latestUserMessage = anthropicMessages[anthropicMessages.length - 1];
+          const historyBeforeLatest = buildPromptHistory(history, anthropicMessages).slice(0, -1);
+          messagesForTurn = latestUserMessage
+            ? [
+                ...historyBeforeLatest,
+                { role: "user", content: `[EVIDENCE GATHERED THIS TURN]\n${evidenceBriefText}` },
+                {
+                  role: "assistant",
+                  content: "I have the evidence gathered for this turn and will use it selectively.",
+                },
+                latestUserMessage,
+              ]
+            : historyBeforeLatest;
+        } else {
+          messagesForTurn = buildPromptHistory(history, anthropicMessages);
+        }
       }
 
       sendWritingStatus("Building the draft with project context...", "drafting", 40);
@@ -1667,7 +1735,8 @@ ${chunkContext}`;
 
         history = await chatStorage.getMessagesForConversation(conv.id);
         anthropicMessages = toAnthropicMessages(history);
-        messagesForTurn = anthropicMessages;
+        await refreshCompactionIfNeeded(history, anthropicMessages, 68);
+        messagesForTurn = buildPromptHistory(history, anthropicMessages);
         usageEstimate = estimateContextUsage(systemPrompt, messagesForTurn, mode);
         void logContextSnapshot({
           conversationId: conv.id,

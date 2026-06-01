@@ -14,6 +14,12 @@ interface AnthropicLike {
 }
 
 const DEFAULT_COMPACTION_THRESHOLD = 6;
+const DEFAULT_RECENT_TURN_COUNT = 8;
+const LEGACY_SUMMARY_REFRESH_CHARS = 5000;
+
+interface CompactionOptions {
+  recentTurnCount?: number;
+}
 
 function extractText(response: { content?: Array<{ type: string; text?: string }> }): string {
   if (!Array.isArray(response.content)) return "";
@@ -55,27 +61,49 @@ function stripToolResults(content: unknown): string {
     .trim();
 }
 
+function compactableMessageContent(content: unknown): string {
+  const stripped = stripToolResults(content);
+  if (/^\[(?:CONTEXT RETRIEVAL|DEEP DIVE FINDINGS|EVIDENCE GATHERED THIS TURN)/i.test(stripped)) {
+    return "[source evidence was retrieved separately and omitted from chat memory]";
+  }
+  return stripped;
+}
+
 export async function compactConversation(
   anthropic: AnthropicLike,
   messages: Array<{ role: string; content: unknown }>,
   existingSummary: string | null,
   compactedAtTurn: number,
   threshold: number = DEFAULT_COMPACTION_THRESHOLD,
+  options: CompactionOptions = {},
 ): Promise<{ summary: string; compactedAtTurn: number } | null> {
+  const recentTurnCount = options.recentTurnCount ?? DEFAULT_RECENT_TURN_COUNT;
   const userTurnCount = messages.filter((message) => message.role === "user").length;
-  if (userTurnCount <= compactedAtTurn + threshold) {
+  const nextCompactedAtTurn = Math.max(0, userTurnCount - recentTurnCount);
+  const hasNewTurnsToCompact = nextCompactedAtTurn > compactedAtTurn;
+  const hasExistingSummary = Boolean(existingSummary);
+  const hasEnoughNewTurnsToRefresh = hasExistingSummary
+    ? nextCompactedAtTurn >= compactedAtTurn + Math.max(1, threshold)
+    : hasNewTurnsToCompact;
+  const shouldRefreshLegacySummary = Boolean(existingSummary && existingSummary.length > LEGACY_SUMMARY_REFRESH_CHARS);
+
+  if (userTurnCount <= recentTurnCount || (!hasEnoughNewTurnsToRefresh && !shouldRefreshLegacySummary)) {
     return null;
   }
 
-  const endIndex = Math.max(messages.length - threshold * 2, 0);
-  const startIndex = Math.min(compactedAtTurn * 2, endIndex);
-  const turnsToSummarize = messages.slice(startIndex, endIndex);
+  let userTurnsSeen = 0;
+  const turnsToSummarize = messages.filter((message) => {
+    if (message.role === "user") {
+      userTurnsSeen += 1;
+    }
+    return userTurnsSeen <= nextCompactedAtTurn;
+  });
   if (turnsToSummarize.length === 0) {
     return null;
   }
 
   const summaryInput = existingSummary
-    ? `Previous summary:\n${existingSummary}\n\nNew turns to incorporate:\n`
+    ? `Previous summary to refresh and consolidate:\n${existingSummary}\n\nConversation turns to summarize:\n`
     : "";
 
   const response = await anthropic.messages.create({
@@ -91,14 +119,14 @@ Discard:
 - Discovery questions already answered
 - Superseded drafts where only the latest version matters
 - Tool call details
-Be concise. Target 300-500 tokens. Write in past tense.`,
+Be concise. Target 300-500 tokens. Write in past tense. Return one refreshed summary only; do not append separate summary sections.`,
     messages: [
       {
         role: "user",
         content:
           summaryInput +
           turnsToSummarize
-            .map((message) => `[${message.role}]: ${normalizeContent(message.content).slice(0, 2000) || "[empty]"}`)
+            .map((message) => `[${message.role}]: ${compactableMessageContent(message.content).slice(0, 2000) || "[empty]"}`)
             .join("\n\n"),
       },
     ],
@@ -110,8 +138,8 @@ Be concise. Target 300-500 tokens. Write in past tense.`,
   }
 
   return {
-    summary: existingSummary ? `${existingSummary}\n\n---\n\n${summaryText}` : summaryText,
-    compactedAtTurn: userTurnCount - threshold,
+    summary: summaryText,
+    compactedAtTurn: nextCompactedAtTurn,
   };
 }
 
@@ -120,7 +148,7 @@ export function buildCompactedHistory(
   clipboardFormatted: string,
   compactionSummary: string | null,
   compactedAtTurn: number,
-  recentTurnCount: number = 6,
+  recentTurnCount: number = DEFAULT_RECENT_TURN_COUNT,
 ): CompactedMessage[] {
   const result: CompactedMessage[] = [];
 
