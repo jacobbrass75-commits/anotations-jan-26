@@ -218,6 +218,10 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const [humanize, setHumanize] = useState(conversationData?.humanize ?? true);
   const [noEnDashes, setNoEnDashes] = useState(conversationData?.noEnDashes || false);
   const [selectedWritingStyleId, setSelectedWritingStyleId] = useState<string>(NO_STYLE_VALUE);
+  const selectedWritingStyle = useMemo(
+    () => writingStyles.find((style) => style.id === selectedWritingStyleId) || null,
+    [selectedWritingStyleId, writingStyles],
+  );
 
   // Document history / panel
   const [documents, setDocuments] = useState<Array<{ title: string; content: string }>>([]);
@@ -247,6 +251,14 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       setSelectedWritingStyleId(NO_STYLE_VALUE);
     }
   }, [selectedWritingStyleId, writingStyles]);
+
+  useEffect(() => {
+    if (writingStylesLoading || selectedWritingStyleId !== NO_STYLE_VALUE) return;
+    if (conversationData?.writingStyleId) return;
+    if (writingStyles.length === 1) {
+      setSelectedWritingStyleId(writingStyles[0].id);
+    }
+  }, [conversationData?.writingStyleId, selectedWritingStyleId, writingStyles, writingStylesLoading]);
 
   useEffect(() => {
     if (!contextWarning) return;
@@ -938,6 +950,40 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                   </Button>
                 </Link>
               </div>
+              {writingStylesLoading ? (
+                <div className="rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground">
+                  Loading writing styles...
+                </div>
+              ) : writingStyles.length === 0 ? (
+                <div className="rounded-md border border-dashed border-primary/40 bg-primary/5 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <PenLine className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                    <div className="space-y-1">
+                      <div className="text-xs font-medium">No writing style saved yet</div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Add examples of your own writing, then select that style here for chat and full-paper generation.
+                      </p>
+                    </div>
+                  </div>
+                  <Link href="/writing-styles">
+                    <Button size="sm" className="h-8 w-full text-xs">
+                      <PenLine className="h-3.5 w-3.5 mr-2" />
+                      Create Writing Style
+                    </Button>
+                  </Link>
+                </div>
+              ) : selectedWritingStyle ? (
+                <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-xs">
+                  <div className="font-medium">Using style: {selectedWritingStyle.name}</div>
+                  {selectedWritingStyle.description && (
+                    <div className="text-muted-foreground line-clamp-2 mt-1">{selectedWritingStyle.description}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground">
+                  Select a saved writing style to apply your voice to generated writing.
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <Select value={tone} onValueChange={(v) => handleSettingChange("tone", v)}>
                   <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
