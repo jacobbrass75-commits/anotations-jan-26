@@ -9,6 +9,7 @@ import { DataTicker } from "@/components/DataTicker";
 import { BootSequence } from "@/components/BootSequence";
 
 const Home = lazy(() => import("@/pages/Home"));
+const Landing = lazy(() => import("@/pages/Landing"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const ProjectWorkspace = lazy(() => import("@/pages/ProjectWorkspace"));
 const ProjectDocument = lazy(() => import("@/pages/ProjectDocument"));
@@ -52,7 +53,7 @@ function Router() {
       <Route path="/account">{() => <ProtectedRoute><Account /></ProtectedRoute>}</Route>
       <Route path="/extension-auth">{() => <ProtectedRoute><ExtensionAuth /></ProtectedRoute>}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute><Home /></ProtectedRoute>}</Route>
-      <Route path="/">{() => <ProtectedRoute><Home /></ProtectedRoute>}</Route>
+      <Route path="/" component={Landing} />
       <Route path="/projects">{() => <ProtectedRoute><Projects /></ProtectedRoute>}</Route>
       <Route path="/web-clips">{() => <ProtectedRoute><WebClips /></ProtectedRoute>}</Route>
       <Route path="/projects/:id">{() => <ProtectedRoute><ProjectWorkspace /></ProtectedRoute>}</Route>

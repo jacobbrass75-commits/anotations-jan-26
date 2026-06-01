@@ -390,7 +390,7 @@ export default function Pricing() {
                 <Button variant="ghost" onClick={() => setLocation("/account")} data-testid="button-open-account">
                   Account
                 </Button>
-                <Button variant="ghost" onClick={() => setLocation("/")}>
+                <Button variant="ghost" onClick={() => setLocation("/dashboard")}>
                   Dashboard
                 </Button>
                 {!localDevAuth ? <UserButton /> : null}

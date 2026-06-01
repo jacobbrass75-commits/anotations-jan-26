@@ -37,7 +37,8 @@ This repo is not a thin frontend shell. Most business logic, AI orchestration, s
 
 | Route | Page | Purpose |
 | --- | --- | --- |
-| `/` | `Home.tsx` | Dashboard and system health |
+| `/` | `Landing.tsx` | Public customer landing page |
+| `/dashboard` | `Home.tsx` | Protected dashboard and system health |
 | `/projects` | `Projects.tsx` | Project list and creation |
 | `/projects/:id` | `ProjectWorkspace.tsx` | Project hub with folders, search, and writing |
 | `/projects/:projectId/documents/:docId` | `ProjectDocument.tsx` | Project-scoped document reading and analysis |
@@ -276,4 +277,3 @@ They are large, feature-dense, and tie together multiple subsystems.
 8. `client/src/pages/ProjectWorkspace.tsx`
 9. `client/src/pages/ProjectDocument.tsx`
 10. `TEST_STRATEGY.md`
-

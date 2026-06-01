@@ -41,7 +41,7 @@ export default function AdminAnalytics() {
       <header className="border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Link href="/">
+            <Link href="/dashboard">
               <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                 <ArrowLeft className="h-4 w-4" />
               </Button>

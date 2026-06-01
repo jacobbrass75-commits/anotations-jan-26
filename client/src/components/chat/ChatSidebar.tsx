@@ -176,7 +176,7 @@ export function ChatSidebar({
       </ScrollArea>
 
       <div className="border-t p-3 space-y-2">
-        <Link href="/">
+        <Link href="/dashboard">
           <Button variant="ghost" className="w-full justify-start gap-2 uppercase tracking-wider text-xs font-mono">
             <House className="h-4 w-4" />
             Dashboard
