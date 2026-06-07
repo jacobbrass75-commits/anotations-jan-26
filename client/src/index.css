@@ -71,9 +71,9 @@
   --chart-5: 25 50% 60%;                 /* Warm */
 
   /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-serif: 'Merriweather', Georgia, serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Libre Franklin', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Source Serif 4', Georgia, serif;
+  --font-mono: 'Libre Franklin', system-ui, -apple-system, sans-serif;
 
   /* Spacing & Radius */
   --radius: 0.5rem;
@@ -233,11 +233,13 @@
   }
 }
 
-/* Dark mode: Rajdhani for headings only, system font for body */
-.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
-  font-family: 'Rajdhani', var(--font-sans);
+/* Institutional heading style: Source Serif 4 for the Yale Law-inspired direction. */
+h1, h2, h3,
+h1.font-sans, h2.font-sans, h3.font-sans,
+.dark h1, .dark h2, .dark h3 {
+  font-family: var(--font-serif);
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 /**
