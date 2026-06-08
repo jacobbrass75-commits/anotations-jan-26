@@ -11,7 +11,7 @@
 
 1. Open extension **Options**.
 2. Leave `Server URL` as `https://app.scholarmark.ai` for production.
-3. Only switch to `http://localhost:5001` when testing a local app build.
+3. Only switch to `http://localhost:5178` or `http://localhost:5001` when testing a local app build.
 
 ## Package for Chrome Web Store
 
@@ -27,8 +27,8 @@ Before uploading to Chrome Web Store, complete `chrome-extension/STORE_RELEASE.m
 
 ## Use
 
-- Open the popup and click **Connect with ScholarMark**.
-- Sign in through the web app, which mints a ScholarMark API key for the extension.
+- Open the popup and click **Continue with Google**.
+- Sign in through ScholarMark, which mints a scoped API key for the extension.
 - Pick a default project in the popup if you want clips routed automatically.
 - Highlight text on any webpage, right-click, and choose **Save to ScholarMark**.
 - Or use `Ctrl+Shift+S`.

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -71,18 +71,25 @@ function Router() {
 
 function App() {
   const [booted, setBooted] = useState(false);
+  const [location] = useLocation();
+  const isPublicRoute =
+    location === "/" ||
+    location.startsWith("/pricing") ||
+    location.startsWith("/privacy") ||
+    location.startsWith("/sign-in") ||
+    location.startsWith("/sign-up");
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        {!booted && <BootSequence onComplete={() => setBooted(true)} />}
-        <div className="min-h-screen pb-6 eva-scanlines">
+        {!isPublicRoute && !booted && <BootSequence onComplete={() => setBooted(true)} />}
+        <div className={`min-h-screen ${isPublicRoute ? "" : "pb-6 eva-scanlines"}`}>
           <Suspense fallback={<RouteFallback />}>
             <Router />
           </Suspense>
         </div>
-        <DataTicker />
+        {!isPublicRoute && <DataTicker />}
       </TooltipProvider>
     </QueryClientProvider>
   );

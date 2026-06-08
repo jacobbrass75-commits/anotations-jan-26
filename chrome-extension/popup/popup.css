@@ -2,7 +2,7 @@
 
 body {
   width: 320px;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: "Libre Franklin", system-ui, -apple-system, sans-serif;
   font-size: 14px;
   color: #2D2A26;
   background: #FAFAF8;
@@ -14,8 +14,10 @@ body {
 }
 
 .header h1 {
+  font-family: "Libre Franklin", system-ui, -apple-system, sans-serif;
   font-size: 18px;
   font-weight: 600;
+  letter-spacing: 0;
   color: #D4556B;
 }
 
@@ -69,6 +71,33 @@ button[type="submit"], button.primary {
   color: white;
 }
 
+.google-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 40px;
+  background: #ffffff;
+  color: #2D2A26;
+  border: 1px solid #E8E4E0;
+}
+
+.google-button:hover {
+  background: #F5F3F0;
+}
+
+.google-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  color: #4285F4;
+  font-weight: 700;
+  font-size: 15px;
+}
+
 button.secondary {
   background: #5B7FA5;
   color: white;
@@ -104,7 +133,7 @@ kbd {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: "Libre Franklin", system-ui, -apple-system, sans-serif;
 }
 
 .error {

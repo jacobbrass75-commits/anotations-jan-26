@@ -185,9 +185,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   );
   const { data: standaloneWebClips = [], isLoading: webClipsLoading } = useWebClips({}, !hasSelectedProject);
   const sourcesLoading = hasSelectedProject ? projectSourcesLoading : webClipsLoading;
-  const sourceIds = hasSelectedProject
-    ? projectSources.map((source) => source.id)
-    : standaloneWebClips.map((clip) => clip.id);
+  const projectSourceIds = useMemo(() => projectSources.map((source) => source.id), [projectSources]);
+  const webClipSourceIds = useMemo(() => standaloneWebClips.map((clip) => clip.id), [standaloneWebClips]);
+  const sourceIds = hasSelectedProject ? projectSourceIds : webClipSourceIds;
   const [localSelectedSourceIds, setLocalSelectedSourceIds] = useState<string[]>([]);
   const [sourcesExpanded, setSourcesExpanded] = useState(true);
   const autoSelectedRef = useRef<Set<string>>(new Set());
@@ -196,18 +196,22 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   useEffect(() => {
     if (conversationData?.selectedSourceIds) {
       setLocalSelectedSourceIds(conversationData.selectedSourceIds);
-    } else if (
-      hasSelectedProject &&
-      projectSources.length > 0 &&
-      !autoSelectedRef.current.has(selectedProjectId)
-    ) {
-      autoSelectedRef.current.add(selectedProjectId);
-      const allIds = projectSources.map((s) => s.id);
-      setLocalSelectedSourceIds(allIds);
-    } else if (!hasSelectedProject) {
-      setLocalSelectedSourceIds([]);
     }
-  }, [conversationData, hasSelectedProject, projectSources, selectedProjectId]);
+  }, [conversationData?.selectedSourceIds]);
+
+  useEffect(() => {
+    if (
+      !hasSelectedProject ||
+      activeConversationId ||
+      projectSourceIds.length === 0 ||
+      autoSelectedRef.current.has(selectedProjectId)
+    ) {
+      return;
+    }
+
+    autoSelectedRef.current.add(selectedProjectId);
+    setLocalSelectedSourceIds(projectSourceIds);
+  }, [activeConversationId, hasSelectedProject, projectSourceIds, selectedProjectId]);
 
   // Writing settings
   const [citationStyle, setCitationStyle] = useState(conversationData?.citationStyle || "chicago");
@@ -497,7 +501,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
 
   const toggleAllSources = useCallback(() => {
     const allIds = sourceIds;
-    const next = localSelectedSourceIds.length === allIds.length ? [] : allIds;
+    const allVisibleSourcesSelected = allIds.length > 0 && allIds.every((id) => localSelectedSourceIds.includes(id));
+    const next = allVisibleSourcesSelected ? [] : allIds;
     setLocalSelectedSourceIds(next);
     if (activeConversationId) {
       updateSources.mutate({ conversationId: activeConversationId, selectedSourceIds: next });
@@ -1029,8 +1034,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
               {sourcesExpanded && (
                 <>
                   <div className="flex justify-end mb-2">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={toggleAllSources} disabled={sourceIds.length === 0}>
-                      {localSelectedSourceIds.length === sourceIds.length ? "Deselect all" : "Select all"}
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={toggleAllSources} disabled={sourceIds.length === 0}>
+                      {sourceIds.length > 0 && sourceIds.every((id) => localSelectedSourceIds.includes(id)) ? "Deselect all" : "Select all"}
                     </Button>
                   </div>
                   <ScrollArea className="h-48">
@@ -1069,9 +1074,13 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                             </div>
                           ))
                           : standaloneWebClips.map((clip) => (
-                            <label key={clip.id} className="flex gap-2 rounded-md p-2 hover:bg-muted/40 cursor-pointer">
+                            <div key={clip.id} className="flex items-start gap-2 rounded-md p-2 hover:bg-muted/40">
                               <Checkbox checked={localSelectedSourceIds.includes(clip.id)} onCheckedChange={() => toggleSource(clip.id)} className="mt-0.5" />
-                              <div className="min-w-0 flex-1">
+                              <button
+                                type="button"
+                                className="min-w-0 flex-1 text-left"
+                                onClick={() => toggleSource(clip.id)}
+                              >
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-medium truncate">{clip.pageTitle}</span>
                                   <Badge variant="outline" className="text-[10px]">WEB</Badge>
@@ -1079,8 +1088,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                                 <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
                                   {clip.note || clip.highlightedText || clip.sourceUrl}
                                 </p>
-                              </div>
-                            </label>
+                              </button>
+                            </div>
                           ))}
                       </div>
                     )}

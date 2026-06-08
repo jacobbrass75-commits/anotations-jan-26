@@ -115,7 +115,7 @@ async function packageExtension() {
     }
     if (production && relativePath === "content/content.js") {
       const content = await readFile(file, "utf8");
-      zip.file(relativePath, content.replace(/\n\s*"http:\/\/localhost:5001",/, ""));
+      zip.file(relativePath, content.replace(/\n\s*"http:\/\/localhost(?::\d+)?",/g, ""));
       continue;
     }
     zip.file(relativePath, await readFile(file));

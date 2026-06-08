@@ -3,6 +3,7 @@ const EXTENSION_AUTH_ACK = "SM_EXTENSION_AUTH_ACK";
 const ALLOWED_EXTENSION_AUTH_ORIGINS = new Set([
   "https://app.scholarmark.ai",
   "http://localhost:5001",
+  "http://localhost:5178",
 ]);
 
 window.addEventListener("message", (event) => {

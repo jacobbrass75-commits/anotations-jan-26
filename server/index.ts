@@ -122,7 +122,7 @@ function summarizeApiResponse(path: string, body: unknown): string | null {
   }
 
   try {
-    const serialized = JSON.stringify(body);
+    const serialized = JSON.stringify(redactApiResponseForLogs(path, body));
     if (!serialized) return null;
     const maxLength = 2000;
     if (serialized.length <= maxLength) {
@@ -132,6 +132,21 @@ function summarizeApiResponse(path: string, body: unknown): string | null {
   } catch {
     return "[unserializable]";
   }
+}
+
+function redactApiResponseForLogs(path: string, body: unknown): unknown {
+  if (path !== "/api/auth/api-keys" || !body || typeof body !== "object") {
+    return body;
+  }
+
+  if (!("key" in body)) {
+    return body;
+  }
+
+  return {
+    ...(body as Record<string, unknown>),
+    key: "[redacted]",
+  };
 }
 
 app.use((req, res, next) => {

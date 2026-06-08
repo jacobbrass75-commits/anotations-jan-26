@@ -16,7 +16,7 @@
 npm run extension:package
 ```
 
-Upload the generated zip from `dist/chrome-extension/`. The package script rewrites the packaged production manifest to remove `http://localhost:5001/*`, validates referenced icon dimensions, and keeps `manifest.json` at the zip root.
+Upload the generated zip from `dist/chrome-extension/`. The package script rewrites the packaged production manifest to remove localhost host permissions, validates referenced icon dimensions, and keeps `manifest.json` at the zip root.
 
 For local QA with localhost host permissions, run:
 

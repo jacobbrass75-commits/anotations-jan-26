@@ -55,7 +55,7 @@ support@scholarmark.ai
 ## Reviewer Test Instructions
 
 1. Install the extension package.
-2. Open the popup and choose **Connect with ScholarMark**.
+2. Open the popup and choose **Continue with Google**.
 3. Sign in to the provided ScholarMark test account, or use the reviewer credentials supplied in the Chrome Web Store dashboard.
 4. Select text on any normal webpage.
 5. Right-click and choose **Save to ScholarMark**.

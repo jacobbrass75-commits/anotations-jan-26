@@ -351,7 +351,7 @@ function showSaveIndicatorOnPage() {
     color: white;
     padding: 12px 20px;
     border-radius: 8px;
-    font-family: Inter, system-ui, sans-serif;
+    font-family: "Libre Franklin", system-ui, -apple-system, sans-serif;
     font-size: 14px;
     font-weight: 500;
     z-index: 2147483647;

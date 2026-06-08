@@ -6,7 +6,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-family: "Libre Franklin", system-ui, -apple-system, sans-serif;
       font-size: 14px;
       color: #2D2A26;
       background: #FAFAF8;
@@ -14,8 +14,10 @@
       max-width: 480px;
     }
     h1 {
+      font-family: "Libre Franklin", system-ui, -apple-system, sans-serif;
       font-size: 20px;
       font-weight: 600;
+      letter-spacing: 0;
       color: #D4556B;
       margin-bottom: 16px;
     }
@@ -70,7 +72,7 @@
   <div class="setting">
     <label for="api-url">API Server URL</label>
     <input type="text" id="api-url" placeholder="https://app.scholarmark.ai">
-    <p class="hint">Default: https://app.scholarmark.ai. Keep localhost only for local extension development.</p>
+    <p class="hint">Default: https://app.scholarmark.ai. Use http://localhost:5178 for this local handoff.</p>
   </div>
 
   <button id="save-btn">Save Settings</button>

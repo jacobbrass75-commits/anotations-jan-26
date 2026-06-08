@@ -72,7 +72,7 @@
 
   /* Typography */
   --font-sans: 'Libre Franklin', system-ui, -apple-system, sans-serif;
-  --font-serif: 'Source Serif 4', Georgia, serif;
+  --font-serif: 'Libre Franklin', system-ui, -apple-system, sans-serif;
   --font-mono: 'Libre Franklin', system-ui, -apple-system, sans-serif;
 
   /* Spacing & Radius */
@@ -231,13 +231,25 @@
     font-size: 15px;
     line-height: 1.6;
   }
+
+  button,
+  input,
+  optgroup,
+  select,
+  textarea {
+    font-family: var(--font-sans);
+  }
 }
 
-/* Institutional heading style: Source Serif 4 for the Yale Law-inspired direction. */
-h1, h2, h3,
+/* Keep app typography on one family, even when older components request serif/mono utilities. */
+h1, h2, h3, h4, h5, h6,
 h1.font-sans, h2.font-sans, h3.font-sans,
-.dark h1, .dark h2, .dark h3 {
-  font-family: var(--font-serif);
+h4.font-sans, h5.font-sans, h6.font-sans,
+.dark h1, .dark h2, .dark h3,
+.dark h4, .dark h5, .dark h6,
+.prose h1, .prose h2, .prose h3,
+.prose h4, .prose h5, .prose h6 {
+  font-family: var(--font-sans);
   font-weight: 600;
   letter-spacing: 0;
 }

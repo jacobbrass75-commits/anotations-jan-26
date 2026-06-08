@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Authorize MCP Client</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       color-scheme: dark;
@@ -30,7 +33,7 @@
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: "Segoe UI", Arial, sans-serif;
+      font-family: "Libre Franklin", system-ui, -apple-system, sans-serif;
       background:
         radial-gradient(circle at top, rgba(75, 212, 255, 0.12), transparent 32%),
         linear-gradient(180deg, #0a0f14 0%, #0d131c 100%);
@@ -67,9 +70,11 @@
 
     h1 {
       margin: 0;
+      font-family: "Libre Franklin", system-ui, -apple-system, sans-serif;
       font-size: clamp(26px, 4vw, 34px);
       line-height: 1.1;
-      font-weight: 700;
+      font-weight: 600;
+      letter-spacing: 0;
     }
 
     .subtitle {
@@ -94,8 +99,10 @@
 
     .card h2 {
       margin: 0 0 12px;
+      font-family: "Libre Franklin", system-ui, -apple-system, sans-serif;
       font-size: 16px;
       letter-spacing: 0.02em;
+      font-weight: 600;
     }
 
     .meta-grid {

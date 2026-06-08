@@ -13,7 +13,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function showLoginView(serverUrl) {
     loginView.style.display = "block";
     mainView.style.display = "none";
-    loginHint.textContent = `Open ${serverUrl} to sign in with Clerk and connect this extension.`;
+    loginHint.textContent = `Continue with Google through ${serverUrl}, then this extension will connect automatically.`;
   }
 
   function showMainView(user) {
