@@ -72,7 +72,7 @@
 
   /* Typography */
   --font-sans: 'Libre Franklin', system-ui, -apple-system, sans-serif;
-  --font-serif: 'Libre Franklin', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Source Serif 4', Georgia, serif;
   --font-mono: 'Libre Franklin', system-ui, -apple-system, sans-serif;
 
   /* Spacing & Radius */
@@ -241,7 +241,7 @@
   }
 }
 
-/* Keep app typography on one family, even when older components request serif/mono utilities. */
+/* Institutional typography pairing: Source Serif 4 headings, Libre Franklin UI/body. */
 h1, h2, h3, h4, h5, h6,
 h1.font-sans, h2.font-sans, h3.font-sans,
 h4.font-sans, h5.font-sans, h6.font-sans,
@@ -249,7 +249,7 @@ h4.font-sans, h5.font-sans, h6.font-sans,
 .dark h4, .dark h5, .dark h6,
 .prose h1, .prose h2, .prose h3,
 .prose h4, .prose h5, .prose h6 {
-  font-family: var(--font-sans);
+  font-family: var(--font-serif);
   font-weight: 600;
   letter-spacing: 0;
 }
