@@ -27,7 +27,7 @@ SourceAnnotator is a research workflow app for:
 - `server/` Express API, AI pipeline, OCR processors.
 - `shared/` Drizzle schema + shared TS/Zod types.
 - `.claude-docs/` internal architecture docs.
-- `CODEBASE_INVENTORY.md` and `ARCHITECTURE.md` broad docs.
+- `ARCHITECTURE.md` broad docs.
 
 ## Frontend Architecture (High-Signal)
 

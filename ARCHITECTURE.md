@@ -1,6 +1,6 @@
 # ScholarMark Architecture
 
-Last verified against the local codebase on 2026-05-05.
+Last verified against the local codebase on 2026-06-10.
 
 This document is the future-reference map for the app: what exists, where it lives, how the major flows work, and what still needs to happen before production launch.
 
@@ -120,7 +120,7 @@ Frontend state is primarily server state. The client uses local storage for them
 - parses JSON and URL-encoded request bodies
 - rejects malformed URI sequences before route matching
 - installs Clerk/auth middleware
-- logs API responses with summarized payloads
+- logs API response metadata without response bodies
 - registers OAuth routes, auth routes, product routes, analytics initialization, and final error handling
 - attaches Vite middleware in development or static serving in production
 - listens on `PORT` or `5001`
@@ -137,8 +137,15 @@ Route modules:
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `server/routes.ts`                           | Health check, uploads, pasted text, upload groups, OCR status, documents, legacy annotations, single-document analysis, document search and summaries |
 | `server/authRoutes.ts`                       | Current user, usage, API-key creation/list/revocation                                                                                                 |
-| `server/projectRoutes.ts`                    | Projects, folders, prompt templates, project documents, project annotations, project search, citation tools, view state, voice profile                |
-| `server/chatRoutes.ts`                       | Conversation CRUD, source selection, streaming messages, compile, verify                                                                              |
+| `server/projectRoutes.ts`                    | Public project-route entrypoint; implementation lives in `server/projects/*`                                                                          |
+| `server/projects/handlers.ts`                | Projects, folders, prompt templates, and sub-route registration                                                                                       |
+| `server/projects/documentHandlers.ts`        | Project documents, project annotations, citation data updates, and document view state                                                                |
+| `server/projects/analysisHandlers.ts`        | Single-prompt, auto, multi-prompt, and batch project analysis                                                                                         |
+| `server/projects/searchHandlers.ts`          | Project and project-document search                                                                                                                   |
+| `server/projects/citationHandlers.ts`        | Citation generation and annotation footnotes                                                                                                          |
+| `server/projects/voiceProfileHandlers.ts`    | Voice profile analysis and CRUD                                                                                                                       |
+| `server/chatRoutes.ts`                       | Public chat-route entrypoint; implementation lives in `server/chat/*`                                                                                 |
+| `server/chat/handlers.ts`                    | Conversation CRUD, source selection, streaming messages, compile, verify                                                                              |
 | `server/writingRoutes.ts`                    | One-shot writing pipeline and generated-paper history                                                                                                 |
 | `server/webClipRoutes.ts`                    | Clip CRUD, URL lookup, citation metadata, promotion to project evidence                                                                               |
 | `server/extensionRoutes.ts`                  | Legacy extension save endpoint                                                                                                                        |
@@ -165,6 +172,30 @@ Support modules:
 | Writing and research                        | `server/writingPipeline.ts`, `server/researchAgent.ts`                      |
 | Analytics logging                           | `server/analyticsLogger.ts`                                                 |
 | Quote jump links                            | `server/quoteJumpLinks.ts`, `shared/annotationLinks.ts`                     |
+
+## API Endpoint Catalogue
+
+This is a route ownership map, not a request/response contract. Access control lives in each route module through `requireAuth`, tier checks, admin checks, and rate-limit middleware.
+
+| Area                         | Endpoints                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health and ops               | `GET /healthz`, `GET /readyz`, `GET /api/system/status`                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Auth and API keys            | `GET /api/auth/me`, `GET /api/auth/usage`, `GET /api/auth/api-keys`, `POST /api/auth/api-keys`, `DELETE /api/auth/api-keys/:id`                                                                                                                                                                                                                                                                                                                                                                         |
+| Documents and uploads        | `POST /api/upload`, `POST /api/upload-text`, `POST /api/upload-group`, `GET /api/documents`, `GET /api/documents/meta`, `GET /api/documents/:id`, `GET /api/documents/:id/status`, `GET /api/documents/:id/source-meta`, `GET /api/documents/:id/source`, `GET /api/documents/:id/summary`, `POST /api/documents/:id/set-intent`, `POST /api/documents/:id/annotate`, `GET /api/documents/:id/annotations`, `PUT /api/annotations/:id`, `DELETE /api/annotations/:id`, `POST /api/documents/:id/search` |
+| Projects                     | `POST /api/projects`, `GET /api/projects`, `GET /api/projects/:id`, `PUT /api/projects/:id`, `DELETE /api/projects/:id`                                                                                                                                                                                                                                                                                                                                                                                 |
+| Folders and prompt templates | `POST /api/projects/:projectId/folders`, `GET /api/projects/:projectId/folders`, `PUT /api/folders/:id`, `DELETE /api/folders/:id`, `PUT /api/folders/:id/move`, `POST /api/projects/:projectId/prompt-templates`, `GET /api/projects/:projectId/prompt-templates`, `PUT /api/prompt-templates/:id`, `DELETE /api/prompt-templates/:id`                                                                                                                                                                 |
+| Project documents            | `POST /api/projects/:projectId/documents`, `GET /api/projects/:projectId/documents`, `POST /api/projects/:projectId/documents/batch`, `GET /api/project-documents/:id`, `PUT /api/project-documents/:id`, `DELETE /api/project-documents/:id`, `PUT /api/project-documents/:id/move`, `PUT /api/project-documents/:id/citation`, `PUT /api/project-documents/:id/view-state`                                                                                                                            |
+| Project annotations          | `POST /api/project-documents/:id/annotations`, `GET /api/project-documents/:id/annotations`, `PUT /api/project-annotations/:id`, `DELETE /api/project-annotations/:id`                                                                                                                                                                                                                                                                                                                                  |
+| Project analysis and search  | `POST /api/project-documents/:id/analyze`, `POST /api/project-documents/:id/auto-analyze`, `POST /api/project-documents/:id/analyze-multi`, `POST /api/projects/:projectId/batch-analyze`, `POST /api/projects/:projectId/search`, `POST /api/project-documents/:id/search`                                                                                                                                                                                                                             |
+| Citations                    | `POST /api/citations/generate`, `POST /api/citations/ai`, `POST /api/citations/footnote-with-quote`, `POST /api/project-annotations/:id/footnote`                                                                                                                                                                                                                                                                                                                                                       |
+| Voice profiles               | `POST /api/projects/:id/voice-profile/analyze`, `GET /api/projects/:id/voice-profile`, `PUT /api/projects/:id/voice-profile`, `DELETE /api/projects/:id/voice-profile`                                                                                                                                                                                                                                                                                                                                  |
+| Chat                         | `GET /api/chat/conversations`, `POST /api/chat/conversations`, `GET /api/chat/conversations/:id`, `PUT /api/chat/conversations/:id`, `DELETE /api/chat/conversations/:id`, `PUT /api/chat/conversations/:id/sources`, `POST /api/chat/conversations/:id/messages`, `POST /api/chat/conversations/:id/compile`, `POST /api/chat/conversations/:id/verify`                                                                                                                                                |
+| Web clips and extension      | `POST /api/web-clips`, `GET /api/web-clips`, `GET /api/web-clips/by-url`, `GET /api/web-clips/:id`, `PUT /api/web-clips/:id`, `DELETE /api/web-clips/:id`, `POST /api/web-clips/:id/promote`, `POST /api/extension/save`                                                                                                                                                                                                                                                                                |
+| Writing                      | `POST /api/write`, `GET /api/write/history`, `GET /api/writing-styles`, `POST /api/writing-styles`, `GET /api/writing-styles/:id`, `PUT /api/writing-styles/:id`, `DELETE /api/writing-styles/:id`, `POST /api/humanize`                                                                                                                                                                                                                                                                                |
+| Billing                      | `GET /api/billing/paypal/config`, `POST /api/billing/paypal/orders`, `POST /api/billing/paypal/orders/:orderId/capture`, `POST /api/billing/paypal/webhook`                                                                                                                                                                                                                                                                                                                                             |
+| Admin analytics              | `GET /api/admin/analytics/export`, `GET /api/admin/analytics/conversation/:id`, `GET /api/admin/analytics/conversations`                                                                                                                                                                                                                                                                                                                                                                                |
+| OAuth                        | `GET /.well-known/oauth-authorization-server`, `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/authorize`, `POST /oauth/token`, `POST /oauth/revoke`                                                                                                                                                                                                                                                                                                                                       |
+| Integrations                 | `POST /api/generate-image`                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ## Data Architecture
 
@@ -496,7 +527,7 @@ Known production host references in docs/scripts:
 ## Architecture Risks
 
 - SQLite backs product data, OAuth, analytics, and OCR queue state. This is simple and deployable, but concurrency, lock behavior, backup cadence, and restore drills matter.
-- `server/chatRoutes.ts` and `server/projectRoutes.ts` are high-responsibility modules and should be split when making large future changes.
+- Chat and project route families remain high-responsibility areas even after the entrypoints were split into submodules.
 - Several core workflows depend on third-party model providers and need stronger failure-mode tests.
 - Production billing appears to be mostly manual/Venmo-facing today; paid-tier enforcement depends on local `users.tier` values and operator updates.
 - Chrome extension release requires store review and privacy/compliance work outside the repo.
@@ -572,7 +603,17 @@ Start with these files when changing architecture-critical behavior:
 - `shared/schema.ts`
 - `server/routes.ts`
 - `server/projectRoutes.ts`
+- `server/projects/handlers.ts`
+- `server/projects/documentHandlers.ts`
+- `server/projects/analysisHandlers.ts`
+- `server/projects/searchHandlers.ts`
+- `server/projects/citationHandlers.ts`
+- `server/projects/voiceProfileHandlers.ts`
 - `server/chatRoutes.ts`
+- `server/chat/handlers.ts`
+- `server/chat/promptBuilder.ts`
+- `server/chat/streamProtocol.ts`
+- `server/chat/toolRequests.ts`
 - `server/writingRoutes.ts`
 - `server/webClipRoutes.ts`
 - `server/oauthRoutes.ts`
