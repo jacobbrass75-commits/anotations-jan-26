@@ -1,7 +1,18 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, FileText, FolderOpen, Link2, MessageSquare, PenLine, PenTool, Plus, Search, UserRound } from "lucide-react";
+import {
+  BookOpen,
+  FileText,
+  FolderOpen,
+  Link2,
+  MessageSquare,
+  PenLine,
+  PenTool,
+  Plus,
+  Search,
+  UserRound,
+} from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,42 +101,74 @@ export default function Home() {
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <BookOpen className="h-6 w-6 text-primary" />
-            <h1 className="font-sans uppercase tracking-[0.2em] font-bold text-primary">SCHOLARMARK</h1>
+            <h1 className="font-sans uppercase tracking-[0.2em] font-bold text-primary">
+              SCHOLARMARK
+            </h1>
             <div className="eva-status-active" />
           </div>
           <div className="flex items-center gap-2">
             <Link href="/projects">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-projects">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-projects"
+              >
                 <FolderOpen className="h-4 w-4 mr-2" />
                 Projects
               </Button>
             </Link>
             <Link href="/chat">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-chat">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-chat"
+              >
                 <MessageSquare className="h-4 w-4 mr-2" />
                 Chat
               </Button>
             </Link>
             <Link href="/write">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-write">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-write"
+              >
                 <PenTool className="h-4 w-4 mr-2" />
                 Write
               </Button>
             </Link>
             <Link href="/writing-styles">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-writing-styles">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-writing-styles"
+              >
                 <PenLine className="h-4 w-4 mr-2" />
                 Styles
               </Button>
             </Link>
             <Link href="/web-clips">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-web-clips">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-web-clips"
+              >
                 <Link2 className="h-4 w-4 mr-2" />
                 Web Clips
               </Button>
             </Link>
             <Link href="/account">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-account">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-account"
+              >
                 <UserRound className="h-4 w-4 mr-2" />
                 Account
               </Button>
@@ -144,7 +187,8 @@ export default function Home() {
                 ScholarMark Command Center
               </h2>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                Organize your sources, review evidence, and move from reading to writing in one workspace.
+                Organize your sources, review evidence, and move from reading to writing in one
+                workspace.
               </p>
               <div className="flex items-center gap-3 text-sm font-mono text-chart-2">
                 <div className="flex items-center gap-1.5">
@@ -170,7 +214,8 @@ export default function Home() {
                 <DialogHeader>
                   <DialogTitle>Create New Project</DialogTitle>
                   <DialogDescription>
-                    Define your research project. Thesis and scope improve annotation quality and retrieval.
+                    Define your research project. Thesis and scope improve annotation quality and
+                    retrieval.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -189,7 +234,9 @@ export default function Home() {
                     <Textarea
                       id="description"
                       value={newProject.description}
-                      onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                      onChange={(e) =>
+                        setNewProject({ ...newProject, description: e.target.value })
+                      }
                       className="resize-none"
                       data-testid="input-project-description"
                     />
@@ -271,7 +318,11 @@ export default function Home() {
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="eva-section-title">Recent Projects</CardTitle>
               <Link href="/projects">
-                <Button variant="ghost" className="text-xs uppercase tracking-[0.12em] font-mono text-primary" data-testid="button-view-all-projects">
+                <Button
+                  variant="ghost"
+                  className="text-xs uppercase tracking-[0.12em] font-mono text-primary"
+                  data-testid="button-view-all-projects"
+                >
                   VIEW ALL PROJECTS
                 </Button>
               </Link>
@@ -280,16 +331,22 @@ export default function Home() {
               {projectsLoading ? (
                 <div className="text-sm text-muted-foreground font-mono">Loading projects...</div>
               ) : recentProjects.length === 0 ? (
-                <div className="text-sm text-muted-foreground font-mono">No projects yet. Create your first project to get started.</div>
+                <div className="text-sm text-muted-foreground font-mono">
+                  No projects yet. Create your first project to get started.
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {recentProjects.map((project) => (
                     <Link key={project.id} href={`/projects/${project.id}`}>
                       <Card className="cursor-pointer hover-elevate eva-corner-decor bg-background/40 border-border">
                         <CardContent className="pt-4 pb-4 space-y-2">
-                          <div className="font-sans uppercase tracking-[0.1em] text-sm line-clamp-2">{project.name}</div>
+                          <div className="font-sans uppercase tracking-[0.1em] text-sm line-clamp-2">
+                            {project.name}
+                          </div>
                           {project.description ? (
-                            <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {project.description}
+                            </p>
                           ) : (
                             <p className="text-xs text-muted-foreground">No description</p>
                           )}

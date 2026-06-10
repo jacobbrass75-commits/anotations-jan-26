@@ -59,27 +59,27 @@ The new full-process smoke test also surfaced two production-relevant environmen
 
 ## Feature Coverage Matrix
 
-| Area | Current automated status | Next requirement before production |
-| --- | --- | --- |
-| Auth and API-key lifecycle | Partially covered | Add Clerk-session and route-ownership coverage |
-| Database bootstrap and support tables | Baseline covered | Add migration/backward-compatibility tests against fixture DB snapshots |
-| Shared URL/jump-link helpers | Covered | Keep as unit coverage |
-| Markdown export and citation formatting utilities | Covered | Keep as unit coverage |
-| Humanizer validation and provider fallback | Covered at logic level | Add live provider contract smoke tests |
-| File source persistence | Covered | Add API-level upload/source retrieval tests |
-| Extension compatibility save endpoint | Partially covered | Add project-ownership and persistence error-path tests |
-| Document upload and OCR modes | Not yet covered end-to-end | Add route tests plus fixture PDFs, images, HEIC, and ZIP bundles |
-| Single-document annotation pipeline | Not yet covered end-to-end | Add deterministic pipeline tests with provider mocks and result fixtures |
-| Project CRUD, folders, templates, and project docs | Not yet covered | Add API integration suite with isolated SQLite fixtures |
-| Project search and citation endpoints | Not yet covered | Add ranking and formatting contract tests |
-| Chat conversations and SSE streaming | Not yet covered | Add mocked Anthropic stream integration tests |
-| Compile and verify workflows | Not yet covered | Add source-grounding and SSE contract tests |
-| Writing pipeline (`/api/write`) | Not yet covered | Add SSE integration tests and generated-paper persistence tests |
-| Web clips and extension compatibility | Partially covered | Add first-party web clip CRUD and promotion tests |
-| OAuth and MCP token lifecycle | Not yet covered | Add auth-code, token, revoke, and MCP transport smoke tests |
-| Admin analytics | Not yet covered | Add analytics fixture DB tests and authorization tests |
-| Full app bootstrap and public route shell | Smoke covered | Add browser E2E interactions and authenticated page coverage |
-| Frontend page workflows | Not yet covered beyond shell smoke | Add React Testing Library and Playwright happy-path coverage |
+| Area                                               | Current automated status           | Next requirement before production                                       |
+| -------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+| Auth and API-key lifecycle                         | Partially covered                  | Add Clerk-session and route-ownership coverage                           |
+| Database bootstrap and support tables              | Baseline covered                   | Add migration/backward-compatibility tests against fixture DB snapshots  |
+| Shared URL/jump-link helpers                       | Covered                            | Keep as unit coverage                                                    |
+| Markdown export and citation formatting utilities  | Covered                            | Keep as unit coverage                                                    |
+| Humanizer validation and provider fallback         | Covered at logic level             | Add live provider contract smoke tests                                   |
+| File source persistence                            | Covered                            | Add API-level upload/source retrieval tests                              |
+| Extension compatibility save endpoint              | Partially covered                  | Add project-ownership and persistence error-path tests                   |
+| Document upload and OCR modes                      | Not yet covered end-to-end         | Add route tests plus fixture PDFs, images, HEIC, and ZIP bundles         |
+| Single-document annotation pipeline                | Not yet covered end-to-end         | Add deterministic pipeline tests with provider mocks and result fixtures |
+| Project CRUD, folders, templates, and project docs | Not yet covered                    | Add API integration suite with isolated SQLite fixtures                  |
+| Project search and citation endpoints              | Not yet covered                    | Add ranking and formatting contract tests                                |
+| Chat conversations and SSE streaming               | Not yet covered                    | Add mocked Anthropic stream integration tests                            |
+| Compile and verify workflows                       | Not yet covered                    | Add source-grounding and SSE contract tests                              |
+| Writing pipeline (`/api/write`)                    | Not yet covered                    | Add SSE integration tests and generated-paper persistence tests          |
+| Web clips and extension compatibility              | Partially covered                  | Add first-party web clip CRUD and promotion tests                        |
+| OAuth and MCP token lifecycle                      | Not yet covered                    | Add auth-code, token, revoke, and MCP transport smoke tests              |
+| Admin analytics                                    | Not yet covered                    | Add analytics fixture DB tests and authorization tests                   |
+| Full app bootstrap and public route shell          | Smoke covered                      | Add browser E2E interactions and authenticated page coverage             |
+| Frontend page workflows                            | Not yet covered beyond shell smoke | Add React Testing Library and Playwright happy-path coverage             |
 
 ## Test Layers
 

@@ -59,29 +59,47 @@ function stringArray(value: unknown, maxItems: number): string[] {
 }
 
 function normalizeVoiceProfile(rawProfile: unknown): VoiceProfile {
-  const profile = rawProfile && typeof rawProfile === "object"
-    ? rawProfile as Record<string, unknown>
-    : {};
-  const vocabularyLevel = profile.vocabularyLevel === "academic" ||
+  const profile =
+    rawProfile && typeof rawProfile === "object" ? (rawProfile as Record<string, unknown>) : {};
+  const vocabularyLevel =
+    profile.vocabularyLevel === "academic" ||
     profile.vocabularyLevel === "conversational" ||
     profile.vocabularyLevel === "mixed"
-    ? profile.vocabularyLevel
-    : "mixed";
+      ? profile.vocabularyLevel
+      : "mixed";
 
   return voiceProfileSchema.parse({
-    avgSentenceLength: stringValue(profile.avgSentenceLength, "Not enough evidence to determine sentence rhythm."),
+    avgSentenceLength: stringValue(
+      profile.avgSentenceLength,
+      "Not enough evidence to determine sentence rhythm.",
+    ),
     vocabularyLevel,
-    paragraphStructure: stringValue(profile.paragraphStructure, "Not enough evidence to determine paragraph structure."),
+    paragraphStructure: stringValue(
+      profile.paragraphStructure,
+      "Not enough evidence to determine paragraph structure.",
+    ),
     toneMarkers: stringArray(profile.toneMarkers, 8),
     commonTransitions: stringArray(profile.commonTransitions, 12),
-    evidenceIntroduction: stringValue(profile.evidenceIntroduction, "No consistent evidence-introduction pattern detected."),
-    argumentStructure: stringValue(profile.argumentStructure, "Not enough evidence to determine argument structure."),
-    hedgingStyle: stringValue(profile.hedgingStyle, "Not enough evidence to determine hedging style."),
+    evidenceIntroduction: stringValue(
+      profile.evidenceIntroduction,
+      "No consistent evidence-introduction pattern detected.",
+    ),
+    argumentStructure: stringValue(
+      profile.argumentStructure,
+      "Not enough evidence to determine argument structure.",
+    ),
+    hedgingStyle: stringValue(
+      profile.hedgingStyle,
+      "Not enough evidence to determine hedging style.",
+    ),
     openingPattern: stringValue(profile.openingPattern, "No consistent opening pattern detected."),
     closingPattern: stringValue(profile.closingPattern, "No consistent closing pattern detected."),
     distinctivePhrases: stringArray(profile.distinctivePhrases, 10),
     avoidedPatterns: stringArray(profile.avoidedPatterns, 8),
-    voiceSummary: stringValue(profile.voiceSummary, "A reusable writing style profile generated from the provided samples."),
+    voiceSummary: stringValue(
+      profile.voiceSummary,
+      "A reusable writing style profile generated from the provided samples.",
+    ),
   });
 }
 
@@ -97,10 +115,12 @@ export async function analyzeVoiceProfileSamples(
   const response = await client.messages.create({
     model: ANTHROPIC_MODELS.sonnet,
     max_tokens: 4096,
-    system: "You are a writing style analyst. You produce precise, actionable voice profiles that allow an AI to replicate a specific author's writing style. Focus on what makes this writer DISTINCTIVE; skip universal or obvious traits. For every observation, ground it in specific patterns from the text. Bad: \"Uses varied sentence length.\" Good: \"Alternates 8-12 word declarative sentences with 25-35 word complex sentences when building arguments.\"",
-    messages: [{
-      role: "user",
-      content: `Analyze these writing samples from the same author. Extract a voice profile.
+    system:
+      'You are a writing style analyst. You produce precise, actionable voice profiles that allow an AI to replicate a specific author\'s writing style. Focus on what makes this writer DISTINCTIVE; skip universal or obvious traits. For every observation, ground it in specific patterns from the text. Bad: "Uses varied sentence length." Good: "Alternates 8-12 word declarative sentences with 25-35 word complex sentences when building arguments."',
+    messages: [
+      {
+        role: "user",
+        content: `Analyze these writing samples from the same author. Extract a voice profile.
 
 ${samplesBlock}
 
@@ -120,7 +140,8 @@ Return ONLY valid JSON matching this exact schema:
   "avoidedPatterns": ["3-5 things this writer conspicuously never does"],
   "voiceSummary": "2-3 sentence overall description capturing the gestalt of this writer's voice"
 }`,
-    }],
+      },
+    ],
   });
   reportProviderUsage(response, onTokenUsage);
 

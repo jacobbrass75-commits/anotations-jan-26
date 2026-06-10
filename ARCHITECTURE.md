@@ -50,18 +50,18 @@ MCP resource server (`mcp-server/server.mjs`) on port 5002 by default
 
 ## Repository Map
 
-| Path | Role |
-| --- | --- |
-| `client/` | React SPA, pages, components, hooks, export helpers, auth helpers |
-| `server/` | Express API, auth, storage, AI orchestration, OCR, analytics, OAuth |
-| `shared/` | Drizzle schema, shared Zod schemas, shared TypeScript types |
-| `chrome-extension/` | Extension manifest, popup, options, background and content scripts |
-| `mcp-server/` | Separate MCP HTTP/SSE server and MCP deployment config |
-| `scripts/` | Build, test orchestration, DB bootstrap, maintenance scripts |
-| `deploy/` | Production deploy, PM2 config, backup scripts, hardening docs |
-| `tests/` | Vitest unit, integration, and app bootstrap coverage |
-| `prompts/` | Prompt templates used by server-side AI features |
-| `data/` | Runtime database and user-uploaded source files; do not treat as source code |
+| Path                | Role                                                                         |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `client/`           | React SPA, pages, components, hooks, export helpers, auth helpers            |
+| `server/`           | Express API, auth, storage, AI orchestration, OCR, analytics, OAuth          |
+| `shared/`           | Drizzle schema, shared Zod schemas, shared TypeScript types                  |
+| `chrome-extension/` | Extension manifest, popup, options, background and content scripts           |
+| `mcp-server/`       | Separate MCP HTTP/SSE server and MCP deployment config                       |
+| `scripts/`          | Build, test orchestration, DB bootstrap, maintenance scripts                 |
+| `deploy/`           | Production deploy, PM2 config, backup scripts, hardening docs                |
+| `tests/`            | Vitest unit, integration, and app bootstrap coverage                         |
+| `prompts/`          | Prompt templates used by server-side AI features                             |
+| `data/`             | Runtime database and user-uploaded source files; do not treat as source code |
 
 ## Frontend Architecture
 
@@ -78,33 +78,33 @@ Core frontend libraries:
 
 Important client files:
 
-| File | Purpose |
-| --- | --- |
-| `client/src/App.tsx` | Route table, lazy page loading, app providers, boot sequence |
-| `client/src/lib/queryClient.ts` | Fetch wrapper and auth header behavior |
-| `client/src/lib/auth.ts` | Clerk/local-dev auth helpers |
-| `client/src/hooks/*` | Domain-specific React Query hooks and streaming clients |
-| `client/src/components/ui/*` | Shared UI primitives |
-| `client/src/components/chat/*` | Chat panels, messages, source/status cards |
-| `client/src/components/analytics/*` | Admin analytics charts and tables |
+| File                                | Purpose                                                      |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `client/src/App.tsx`                | Route table, lazy page loading, app providers, boot sequence |
+| `client/src/lib/queryClient.ts`     | Fetch wrapper and auth header behavior                       |
+| `client/src/lib/auth.ts`            | Clerk/local-dev auth helpers                                 |
+| `client/src/hooks/*`                | Domain-specific React Query hooks and streaming clients      |
+| `client/src/components/ui/*`        | Shared UI primitives                                         |
+| `client/src/components/chat/*`      | Chat panels, messages, source/status cards                   |
+| `client/src/components/analytics/*` | Admin analytics charts and tables                            |
 
 Routes:
 
-| Route | Page | Access | Purpose |
-| --- | --- | --- | --- |
-| `/sign-in` | `Login.tsx` | Public | Clerk sign-in |
-| `/sign-up` | `Register.tsx` | Public | Clerk registration |
-| `/pricing` | `Pricing.tsx` | Public | Tier comparison and payment links |
-| `/account` | `Account.tsx` | Auth | Usage, plan info, API keys, Clerk account actions |
-| `/extension-auth` | `ExtensionAuth.tsx` | Auth | Extension API-key handoff |
-| `/` | `Home.tsx` | Auth | Workspace dashboard |
-| `/projects` | `Projects.tsx` | Auth | Project list and creation |
-| `/projects/:id` | `ProjectWorkspace.tsx` | Auth | Project hub, folders, source ingest, search, writing |
-| `/projects/:projectId/documents/:docId` | `ProjectDocument.tsx` | Auth | Project document reader, annotations, prompts, citations |
-| `/chat`, `/chat/:conversationId` | `Chat.tsx` | Pro+ | Conversational research and writing |
-| `/write`, `/writing` | `WritingPage.tsx` | Pro+ | Writing workspace |
-| `/web-clips` | `WebClips.tsx` | Auth | Clip review, filtering, promotion, cleanup |
-| `/admin/analytics` | `AdminAnalytics.tsx` | Admin | Conversation/tool/context analytics |
+| Route                                   | Page                   | Access | Purpose                                                  |
+| --------------------------------------- | ---------------------- | ------ | -------------------------------------------------------- |
+| `/sign-in`                              | `Login.tsx`            | Public | Clerk sign-in                                            |
+| `/sign-up`                              | `Register.tsx`         | Public | Clerk registration                                       |
+| `/pricing`                              | `Pricing.tsx`          | Public | Tier comparison and payment links                        |
+| `/account`                              | `Account.tsx`          | Auth   | Usage, plan info, API keys, Clerk account actions        |
+| `/extension-auth`                       | `ExtensionAuth.tsx`    | Auth   | Extension API-key handoff                                |
+| `/`                                     | `Home.tsx`             | Auth   | Workspace dashboard                                      |
+| `/projects`                             | `Projects.tsx`         | Auth   | Project list and creation                                |
+| `/projects/:id`                         | `ProjectWorkspace.tsx` | Auth   | Project hub, folders, source ingest, search, writing     |
+| `/projects/:projectId/documents/:docId` | `ProjectDocument.tsx`  | Auth   | Project document reader, annotations, prompts, citations |
+| `/chat`, `/chat/:conversationId`        | `Chat.tsx`             | Pro+   | Conversational research and writing                      |
+| `/write`, `/writing`                    | `WritingPage.tsx`      | Pro+   | Writing workspace                                        |
+| `/web-clips`                            | `WebClips.tsx`         | Auth   | Clip review, filtering, promotion, cleanup               |
+| `/admin/analytics`                      | `AdminAnalytics.tsx`   | Admin  | Conversation/tool/context analytics                      |
 
 Frontend state is primarily server state. The client uses local storage for theme selection and local-dev auth helpers. Streaming features use `fetch()` plus readable streams/SSE-style parsing rather than WebSockets.
 
@@ -133,38 +133,38 @@ Public operational probes:
 
 Route modules:
 
-| File | Domain |
-| --- | --- |
-| `server/routes.ts` | Health check, uploads, pasted text, upload groups, OCR status, documents, legacy annotations, single-document analysis, document search and summaries |
-| `server/authRoutes.ts` | Current user, usage, API-key creation/list/revocation |
-| `server/projectRoutes.ts` | Projects, folders, prompt templates, project documents, project annotations, project search, citation tools, view state, voice profile |
-| `server/chatRoutes.ts` | Conversation CRUD, source selection, streaming messages, compile, verify |
-| `server/writingRoutes.ts` | One-shot writing pipeline and generated-paper history |
-| `server/webClipRoutes.ts` | Clip CRUD, URL lookup, citation metadata, promotion to project evidence |
-| `server/extensionRoutes.ts` | Legacy extension save endpoint |
-| `server/humanizerRoutes.ts` | Paid text humanization endpoint |
-| `server/analyticsRoutes.ts` | Admin-only analytics export and conversation inspection |
-| `server/oauthRoutes.ts` | OAuth discovery, dynamic client registration, authorization code flow, token issuance, revocation |
-| `server/replit_integrations/image/routes.ts` | Image generation endpoint |
+| File                                         | Domain                                                                                                                                                |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/routes.ts`                           | Health check, uploads, pasted text, upload groups, OCR status, documents, legacy annotations, single-document analysis, document search and summaries |
+| `server/authRoutes.ts`                       | Current user, usage, API-key creation/list/revocation                                                                                                 |
+| `server/projectRoutes.ts`                    | Projects, folders, prompt templates, project documents, project annotations, project search, citation tools, view state, voice profile                |
+| `server/chatRoutes.ts`                       | Conversation CRUD, source selection, streaming messages, compile, verify                                                                              |
+| `server/writingRoutes.ts`                    | One-shot writing pipeline and generated-paper history                                                                                                 |
+| `server/webClipRoutes.ts`                    | Clip CRUD, URL lookup, citation metadata, promotion to project evidence                                                                               |
+| `server/extensionRoutes.ts`                  | Legacy extension save endpoint                                                                                                                        |
+| `server/humanizerRoutes.ts`                  | Paid text humanization endpoint                                                                                                                       |
+| `server/analyticsRoutes.ts`                  | Admin-only analytics export and conversation inspection                                                                                               |
+| `server/oauthRoutes.ts`                      | OAuth discovery, dynamic client registration, authorization code flow, token issuance, revocation                                                     |
+| `server/replit_integrations/image/routes.ts` | Image generation endpoint                                                                                                                             |
 
 Support modules:
 
-| Concern | Files |
-| --- | --- |
-| Auth and plan enforcement | `server/auth.ts`, `server/authStorage.ts` |
-| DB connection and imperative support tables | `server/db.ts` |
-| Legacy document storage | `server/storage.ts` |
-| Project persistence | `server/projectStorage.ts` |
-| Chat persistence | `server/chatStorage.ts` |
-| Project search | `server/projectSearch.ts` |
-| Citation formatting | `server/citationGenerator.ts` |
-| Context assembly | `server/contextGenerator.ts`, `server/contextCompaction.ts` |
-| Annotation AI | `server/openai.ts`, `server/pipelineV2.ts` |
-| Document ingestion | `server/documentIngestion.ts`, `server/chunker.ts`, `server/sourceFiles.ts` |
-| OCR | `server/ocrProcessor.ts`, `server/ocrQueue.ts`, `server/python/*` |
-| Writing and research | `server/writingPipeline.ts`, `server/researchAgent.ts` |
-| Analytics logging | `server/analyticsLogger.ts` |
-| Quote jump links | `server/quoteJumpLinks.ts`, `shared/annotationLinks.ts` |
+| Concern                                     | Files                                                                       |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| Auth and plan enforcement                   | `server/auth.ts`, `server/authStorage.ts`                                   |
+| DB connection and imperative support tables | `server/db.ts`                                                              |
+| Legacy document storage                     | `server/storage.ts`                                                         |
+| Project persistence                         | `server/projectStorage.ts`                                                  |
+| Chat persistence                            | `server/chatStorage.ts`                                                     |
+| Project search                              | `server/projectSearch.ts`                                                   |
+| Citation formatting                         | `server/citationGenerator.ts`                                               |
+| Context assembly                            | `server/contextGenerator.ts`, `server/contextCompaction.ts`                 |
+| Annotation AI                               | `server/openai.ts`, `server/pipelineV2.ts`                                  |
+| Document ingestion                          | `server/documentIngestion.ts`, `server/chunker.ts`, `server/sourceFiles.ts` |
+| OCR                                         | `server/ocrProcessor.ts`, `server/ocrQueue.ts`, `server/python/*`           |
+| Writing and research                        | `server/writingPipeline.ts`, `server/researchAgent.ts`                      |
+| Analytics logging                           | `server/analyticsLogger.ts`                                                 |
+| Quote jump links                            | `server/quoteJumpLinks.ts`, `shared/annotationLinks.ts`                     |
 
 ## Data Architecture
 
@@ -407,20 +407,20 @@ Payments/pricing UI:
 
 Root scripts:
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Start Express in development with Vite middleware |
-| `npm run build` | Build client and bundled production server through `scripts/build.ts` |
-| `npm run start` | Run `dist/index.cjs` in production mode |
-| `npm run check` | TypeScript check |
-| `npm run test` | Sequential Vitest run |
-| `npm run test:coverage` | Sequential Vitest coverage run |
-| `npm run smoke:prod` | Reusable production smoke checks |
-| `npm run restore:drill` | Restore and verify a backup snapshot in a temporary workspace |
-| `npm run extension:package` | Validate and zip the Chrome extension |
-| `npm run db:push` | Push Drizzle schema |
-| `npm run db:generate` | Generate Drizzle migrations |
-| `npm run setup` | Install dependencies and push DB schema |
+| Command                     | Purpose                                                               |
+| --------------------------- | --------------------------------------------------------------------- |
+| `npm run dev`               | Start Express in development with Vite middleware                     |
+| `npm run build`             | Build client and bundled production server through `scripts/build.ts` |
+| `npm run start`             | Run `dist/index.cjs` in production mode                               |
+| `npm run check`             | TypeScript check                                                      |
+| `npm run test`              | Sequential Vitest run                                                 |
+| `npm run test:coverage`     | Sequential Vitest coverage run                                        |
+| `npm run smoke:prod`        | Reusable production smoke checks                                      |
+| `npm run restore:drill`     | Restore and verify a backup snapshot in a temporary workspace         |
+| `npm run extension:package` | Validate and zip the Chrome extension                                 |
+| `npm run db:push`           | Push Drizzle schema                                                   |
+| `npm run db:generate`       | Generate Drizzle migrations                                           |
+| `npm run setup`             | Install dependencies and push DB schema                               |
 
 Current test areas:
 

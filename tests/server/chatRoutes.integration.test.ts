@@ -32,10 +32,10 @@ const { anthropicCreate, anthropicStream } = vi.hoisted(() => ({
 vi.mock("@anthropic-ai/sdk", () => ({
   default: vi.fn().mockImplementation(function AnthropicMock() {
     return {
-    messages: {
-      create: anthropicCreate,
-      stream: anthropicStream,
-    },
+      messages: {
+        create: anthropicCreate,
+        stream: anthropicStream,
+      },
     };
   }),
 }));
@@ -113,14 +113,17 @@ describe("chat route integration", () => {
     const { server, sqlite, token } = await createApp();
 
     try {
-      const response = await fetch(`${server.baseUrl}/api/chat/conversations/conversation-1/messages`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
+      const response = await fetch(
+        `${server.baseUrl}/api/chat/conversations/conversation-1/messages`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ content: "Draft a sentence." }),
         },
-        body: JSON.stringify({ content: "Draft a sentence." }),
-      });
+      );
       const body = await response.text();
       const userUsage = sqlite
         .prepare("SELECT tokens_used FROM users WHERE id = ?")
@@ -130,9 +133,9 @@ describe("chat route integration", () => {
         .get("conversation-1", "assistant") as { tokens_used: number };
 
       expect(response.status).toBe(200);
-      expect(body).toContain("\"type\":\"writing_status\"");
+      expect(body).toContain('"type":"writing_status"');
       expect(body).toContain("Preparing selected project sources");
-      expect(body).toContain("\"type\":\"done\"");
+      expect(body).toContain('"type":"done"');
       expect(userUsage.tokens_used).toBe(19);
       expect(assistantMessage.tokens_used).toBe(19);
     } finally {

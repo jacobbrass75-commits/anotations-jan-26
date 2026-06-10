@@ -43,7 +43,9 @@ export function BootSequence({ onComplete }: { onComplete: () => void }) {
               {line.text || "\u00A0"}
             </div>
           ))}
-          {visibleLines < BOOT_LINES.length && <span className="eva-cursor text-muted-foreground" />}
+          {visibleLines < BOOT_LINES.length && (
+            <span className="eva-cursor text-muted-foreground" />
+          )}
         </div>
       </div>
     </div>

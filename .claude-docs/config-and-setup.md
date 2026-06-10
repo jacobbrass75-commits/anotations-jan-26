@@ -24,15 +24,15 @@ AI_INTEGRATIONS_OPENAI_BASE_URL=   # Custom base URL for Replit AI
 
 ## NPM Scripts
 
-| Script | Command | Purpose |
-|--------|---------|---------|
-| `dev` | `cross-env NODE_ENV=development tsx server/index.ts` | Start dev server with HMR |
-| `build` | `tsx script/build.ts` | Build for production |
-| `start` | `cross-env NODE_ENV=production node dist/index.cjs` | Run production build |
-| `check` | `tsc` | TypeScript type checking |
-| `db:push` | `drizzle-kit push` | Push schema changes to SQLite |
-| `db:generate` | `drizzle-kit generate` | Generate migration files |
-| `setup` | `npm install && npm run db:push` | Full initial setup |
+| Script        | Command                                              | Purpose                       |
+| ------------- | ---------------------------------------------------- | ----------------------------- |
+| `dev`         | `cross-env NODE_ENV=development tsx server/index.ts` | Start dev server with HMR     |
+| `build`       | `tsx script/build.ts`                                | Build for production          |
+| `start`       | `cross-env NODE_ENV=production node dist/index.cjs`  | Run production build          |
+| `check`       | `tsc`                                                | TypeScript type checking      |
+| `db:push`     | `drizzle-kit push`                                   | Push schema changes to SQLite |
+| `db:generate` | `drizzle-kit generate`                               | Generate migration files      |
+| `setup`       | `npm install && npm run db:push`                     | Full initial setup            |
 
 ---
 
@@ -61,6 +61,7 @@ AI_INTEGRATIONS_OPENAI_BASE_URL=   # Custom base URL for Replit AI
 ```
 
 **Path aliases**:
+
 - `@/` -> `client/src/`
 - `@shared/` -> `shared/`
 
@@ -102,7 +103,9 @@ AI_INTEGRATIONS_OPENAI_BASE_URL=   # Custom base URL for Replit AI
 - **Plugins**: `tailwindcss-animate`, `@tailwindcss/typography`
 
 ### Color System (CSS Variables)
+
 All colors defined as HSL in `client/src/index.css`:
+
 - Semantic: `--background`, `--foreground`, `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive`
 - Component: `--card`, `--popover`, `--sidebar`, `--border`, `--input`, `--ring`
 - Data viz: `--chart-1` through `--chart-5`
@@ -187,6 +190,7 @@ npm run start          # Runs production server
 ```
 
 Build output:
+
 - `dist/index.cjs` - Server bundle (CommonJS)
 - `dist/public/` - Static frontend assets
 

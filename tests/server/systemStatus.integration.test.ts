@@ -27,7 +27,8 @@ vi.mock("@clerk/express", () => ({
 }));
 
 vi.mock("../../server/ocrQueue", async () => {
-  const actual = await vi.importActual<typeof import("../../server/ocrQueue")>("../../server/ocrQueue");
+  const actual =
+    await vi.importActual<typeof import("../../server/ocrQueue")>("../../server/ocrQueue");
   return {
     ...actual,
     initializeOcrQueue,
@@ -72,14 +73,8 @@ describe("system status dashboard counts", () => {
 
   async function createSystemStatusApp() {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
-    const {
-      annotations,
-      documents,
-      projectAnnotations,
-      projectDocuments,
-      projects,
-      users,
-    } = await import("../../shared/schema");
+    const { annotations, documents, projectAnnotations, projectDocuments, projects, users } =
+      await import("../../shared/schema");
     const { registerRoutes } = await import("../../server/routes");
     const { generateToken } = await import("../../server/auth");
 
@@ -129,9 +124,27 @@ describe("system status dashboard counts", () => {
     ] as any);
 
     await db.insert(projects).values([
-      { id: "status-project", userId: "status-user", name: "Status Project", createdAt: now, updatedAt: now },
-      { id: "other-project", userId: "other-user", name: "Other Project", createdAt: now, updatedAt: now },
-      { id: "legacy-project", userId: null, name: "Legacy Orphan Project", createdAt: now, updatedAt: now },
+      {
+        id: "status-project",
+        userId: "status-user",
+        name: "Status Project",
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "other-project",
+        userId: "other-user",
+        name: "Other Project",
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "legacy-project",
+        userId: null,
+        name: "Legacy Orphan Project",
+        createdAt: now,
+        updatedAt: now,
+      },
     ] as any);
 
     await db.insert(documents).values([
@@ -174,9 +187,24 @@ describe("system status dashboard counts", () => {
     ] as any);
 
     await db.insert(projectDocuments).values([
-      { id: "status-project-document", projectId: "status-project", documentId: "status-document", addedAt: now },
-      { id: "status-legacy-project-document", projectId: "status-project", documentId: "legacy-linked-document", addedAt: now },
-      { id: "other-project-document", projectId: "other-project", documentId: "other-document", addedAt: now },
+      {
+        id: "status-project-document",
+        projectId: "status-project",
+        documentId: "status-document",
+        addedAt: now,
+      },
+      {
+        id: "status-legacy-project-document",
+        projectId: "status-project",
+        documentId: "legacy-linked-document",
+        addedAt: now,
+      },
+      {
+        id: "other-project-document",
+        projectId: "other-project",
+        documentId: "other-document",
+        addedAt: now,
+      },
     ] as any);
 
     await db.insert(annotations).values([
@@ -270,15 +298,27 @@ describe("system status dashboard counts", () => {
     const { server, statusToken, otherToken, emptyToken } = await createSystemStatusApp();
 
     try {
-      const statusUser = await requestJson<SystemStatusResponse>(server.baseUrl, "/api/system/status", {
-        headers: { authorization: `Bearer ${statusToken}` },
-      });
-      const otherUser = await requestJson<SystemStatusResponse>(server.baseUrl, "/api/system/status", {
-        headers: { authorization: `Bearer ${otherToken}` },
-      });
-      const emptyUser = await requestJson<SystemStatusResponse>(server.baseUrl, "/api/system/status", {
-        headers: { authorization: `Bearer ${emptyToken}` },
-      });
+      const statusUser = await requestJson<SystemStatusResponse>(
+        server.baseUrl,
+        "/api/system/status",
+        {
+          headers: { authorization: `Bearer ${statusToken}` },
+        },
+      );
+      const otherUser = await requestJson<SystemStatusResponse>(
+        server.baseUrl,
+        "/api/system/status",
+        {
+          headers: { authorization: `Bearer ${otherToken}` },
+        },
+      );
+      const emptyUser = await requestJson<SystemStatusResponse>(
+        server.baseUrl,
+        "/api/system/status",
+        {
+          headers: { authorization: `Bearer ${emptyToken}` },
+        },
+      );
 
       expect(statusUser.status).toBe(200);
       expect(statusUser.body?.counts).toEqual({

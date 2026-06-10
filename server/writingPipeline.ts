@@ -1,10 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { CitationData, ProjectAnnotation } from "@shared/schema";
-import {
-  formatSourceStubByRole,
-  type SourceRole,
-  type StyleAnalysis,
-} from "./sourceRoles";
+import { formatSourceStubByRole, type SourceRole, type StyleAnalysis } from "./sourceRoles";
 import { ANTHROPIC_MODELS } from "./aiModels";
 import { sanitizeSseError } from "./sseUtils";
 
@@ -123,14 +119,14 @@ const MAX_COMPACT_PLANNER_SOURCES = 80;
 function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error(
-      "ANTHROPIC_API_KEY is not set. Add it to your .env file."
-    );
+    throw new Error("ANTHROPIC_API_KEY is not set. Add it to your .env file.");
   }
   return new Anthropic({ apiKey });
 }
 
-function getUsage(response: { usage?: { input_tokens?: number | null; output_tokens?: number | null } }): TokenUsage {
+function getUsage(response: {
+  usage?: { input_tokens?: number | null; output_tokens?: number | null };
+}): TokenUsage {
   return {
     inputTokens: Math.max(0, response.usage?.input_tokens ?? 0),
     outputTokens: Math.max(0, response.usage?.output_tokens ?? 0),
@@ -150,7 +146,10 @@ function clipPromptText(text: string | null | undefined, maxChars: number): stri
 }
 
 function extractJsonObjectText(text: string): string {
-  const unfenced = text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+  const unfenced = text
+    .replace(/^```(?:json)?\s*/m, "")
+    .replace(/\s*```$/m, "")
+    .trim();
   if (unfenced.startsWith("{")) return unfenced;
 
   const start = unfenced.indexOf("{");
@@ -177,7 +176,11 @@ function parseWritingPlanText(text: string, totalWords: number): WritingPlan {
     sections?: unknown;
   };
 
-  if (typeof parsed.thesis !== "string" || !parsed.thesis.trim() || !Array.isArray(parsed.sections)) {
+  if (
+    typeof parsed.thesis !== "string" ||
+    !parsed.thesis.trim() ||
+    !Array.isArray(parsed.sections)
+  ) {
     throw new Error("Invalid plan structure");
   }
 
@@ -207,9 +210,13 @@ function parseWritingPlanText(text: string, totalWords: number): WritingPlan {
     return {
       title,
       description,
-      sourceIds: sourceIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0),
+      sourceIds: sourceIds.filter(
+        (id): id is string => typeof id === "string" && id.trim().length > 0,
+      ),
       targetWords:
-        typeof section.targetWords === "number" && Number.isFinite(section.targetWords) && section.targetWords > 0
+        typeof section.targetWords === "number" &&
+        Number.isFinite(section.targetWords) &&
+        section.targetWords > 0
           ? section.targetWords
           : fallbackWords,
     };
@@ -219,7 +226,9 @@ function parseWritingPlanText(text: string, totalWords: number): WritingPlan {
     thesis: parsed.thesis.trim(),
     sections,
     bibliography: Array.isArray(parsed.bibliography)
-      ? parsed.bibliography.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      ? parsed.bibliography.filter(
+          (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+        )
       : [],
   };
 }
@@ -245,9 +254,7 @@ export function formatSourceForPrompt(source: WritingSource): string {
     if (cd.publisher) parts.push(`Publisher: ${cd.publisher}`);
     if (cd.containerTitle) parts.push(`In: ${cd.containerTitle}`);
     if (cd.pageStart) {
-      parts.push(
-        `Pages: ${cd.pageStart}${cd.pageEnd ? "-" + cd.pageEnd : ""}`
-      );
+      parts.push(`Pages: ${cd.pageStart}${cd.pageEnd ? "-" + cd.pageEnd : ""}`);
     }
     if (cd.url) parts.push(`URL: ${cd.url}`);
   }
@@ -268,7 +275,7 @@ export function formatSourceForPromptTiered(source: TieredSource): string {
       summary: source.summary,
       annotationCount: source.annotations.length,
       chunkCount: source.chunkCount,
-    })
+    }),
   );
   parts.push(`Document: ${source.documentFilename}`);
   parts.push(`Title: ${source.title}`);
@@ -307,9 +314,10 @@ export function formatSourceForPromptTiered(source: TieredSource): string {
     parts.push("");
 
     for (const ann of source.annotations) {
-      const confidence = typeof ann.confidenceScore === "number"
-        ? ` | Confidence: ${ann.confidenceScore.toFixed(2)}`
-        : "";
+      const confidence =
+        typeof ann.confidenceScore === "number"
+          ? ` | Confidence: ${ann.confidenceScore.toFixed(2)}`
+          : "";
       const promptInfo = ann.promptText ? ` | Prompt: "${ann.promptText}"` : "";
 
       parts.push(`[ANNOTATION ${ann.id}] Category: ${ann.category}${confidence}${promptInfo}`);
@@ -397,7 +405,7 @@ async function runPlanner(
   request: WritingRequest,
   sources: WritingSource[],
   model: string,
-  voiceBlock: string
+  voiceBlock: string,
 ): Promise<PlannedWriting> {
   const totalWords = TARGET_WORDS[request.targetLength] || 2500;
   const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
@@ -450,8 +458,7 @@ ${sourceBlock || "(No sources provided - write based on topic alone)"}`;
   });
   addUsage(totalUsage, getUsage(response));
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
 
   try {
     return {
@@ -460,7 +467,14 @@ ${sourceBlock || "(No sources provided - write based on topic alone)"}`;
     };
   } catch (e) {
     const firstParseError = e instanceof Error ? e.message : String(e);
-    const compactResponse = await runCompactPlanner(client, request, sources, model, voiceBlock, totalWords);
+    const compactResponse = await runCompactPlanner(
+      client,
+      request,
+      sources,
+      model,
+      voiceBlock,
+      totalWords,
+    );
     addUsage(totalUsage, compactResponse.usage);
 
     try {
@@ -470,7 +484,8 @@ ${sourceBlock || "(No sources provided - write based on topic alone)"}`;
       };
     } catch (compactError) {
       throw new Error(
-        `Failed to parse writing plan from AI response: ${compactError instanceof Error ? compactError.message : String(compactError)} (initial planner parse failed with: ${firstParseError})`
+        `Failed to parse writing plan from AI response: ${compactError instanceof Error ? compactError.message : String(compactError)} (initial planner parse failed with: ${firstParseError})`,
+        { cause: compactError },
       );
     }
   }
@@ -538,7 +553,7 @@ ${sourceBrief || "(No sources provided)"}`;
   });
 
   const textBlocks = response.content.filter(
-    (block): block is Anthropic.TextBlock => block.type === "text"
+    (block): block is Anthropic.TextBlock => block.type === "text",
   );
   return {
     text: textBlocks.map((block) => block.text).join("\n\n"),
@@ -555,24 +570,22 @@ async function writeSection(
   request: WritingRequest,
   sources: WritingSource[],
   model: string,
-  voiceBlock: string
+  voiceBlock: string,
 ): Promise<GeneratedText> {
   const section = plan.sections[sectionIndex];
 
   // Get relevant sources for this section
-  const relevantSources = section.sourceIds.length > 0
-    ? sources.filter((source) => section.sourceIds.includes(source.id))
-    : sources;
+  const relevantSources =
+    section.sourceIds.length > 0
+      ? sources.filter((source) => section.sourceIds.includes(source.id))
+      : sources;
 
   const sourceBlock = relevantSources
     .map((source) => formatSourceForPrompt(source))
     .join("\n\n---\n\n");
 
   const planSummary = plan.sections
-    .map(
-      (s, i) =>
-        `${i + 1}. ${s.title} (~${s.targetWords} words): ${s.description}`
-    )
+    .map((s, i) => `${i + 1}. ${s.title} (~${s.targetWords} words): ${s.description}`)
     .join("\n");
 
   const noEnDashesLine = request.noEnDashes
@@ -627,7 +640,7 @@ Output the section text in markdown format. Start with the section heading as ##
 
   // Extract text content (skip thinking blocks)
   const textBlocks = response.content.filter(
-    (block): block is Anthropic.TextBlock => block.type === "text"
+    (block): block is Anthropic.TextBlock => block.type === "text",
   );
   return {
     text: textBlocks.map((b) => b.text).join("\n\n"),
@@ -643,7 +656,7 @@ async function stitch(
   sectionTexts: string[],
   request: WritingRequest,
   model: string,
-  voiceBlock: string
+  voiceBlock: string,
 ): Promise<GeneratedText> {
   const combinedSections = sectionTexts.join("\n\n---\n\n");
 
@@ -678,7 +691,7 @@ Output the complete paper in markdown format.${voiceBlock}`;
   });
 
   const textBlocks = response.content.filter(
-    (block): block is Anthropic.TextBlock => block.type === "text"
+    (block): block is Anthropic.TextBlock => block.type === "text",
   );
   return {
     text: textBlocks.map((b) => b.text).join("\n\n"),
@@ -691,7 +704,7 @@ Output the complete paper in markdown format.${voiceBlock}`;
 export async function runWritingPipeline(
   request: WritingRequest,
   sources: WritingSource[],
-  onEvent: (event: WritingSSEEvent) => void
+  onEvent: (event: WritingSSEEvent) => void,
 ): Promise<void> {
   const client = getClient();
   const model = request.deepWrite ? DEEP_WRITE_MODEL : DEFAULT_MODEL;
@@ -734,7 +747,7 @@ export async function runWritingPipeline(
         request,
         sources,
         model,
-        voiceBlock
+        voiceBlock,
       );
       sectionTexts.push(sectionResult.text);
       addUsage(totalUsage, sectionResult.usage);

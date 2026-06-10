@@ -4,8 +4,17 @@ import { checkTokenBudget, hasTokenBudgetAvailable, requireAuth, requireTier } f
 import { aiLimiter } from "./rateLimits";
 import { projectStorage } from "./projectStorage";
 import { globalSearch, searchProjectDocument } from "./projectSearch";
-import { generateChicagoFootnote, generateChicagoBibliography, generateFootnoteWithQuote, generateInlineCitation, generateFootnote, generateInTextCitation, generateBibliographyEntry } from "./citationGenerator";
-import { generateRetrievalContext, generateProjectContextSummary, generateFolderContextSummary, generateSearchableContent, embedText } from "./contextGenerator";
+import {
+  generateFootnoteWithQuote,
+  generateFootnote,
+  generateInTextCitation,
+  generateBibliographyEntry,
+} from "./citationGenerator";
+import {
+  generateRetrievalContext,
+  generateProjectContextSummary,
+  generateSearchableContent,
+} from "./contextGenerator";
 import { db } from "./db";
 import { storage } from "./storage";
 import { isSourceRole } from "./sourceRoles";
@@ -13,19 +22,12 @@ import {
   getEmbeddingWithUsage,
   cosineSimilarity,
   extractCitationMetadata,
-  PIPELINE_CONFIG,
   generateAutoAnnotationPrompts,
   getMaxChunksForLevel,
   type ThoroughnessLevel,
 } from "./openai";
-import {
-  createTokenUsageAccumulator,
-  type TokenUsageReporter,
-} from "./aiUsage";
-import {
-  analyzeVoiceProfileSamples,
-  validateWritingSamples,
-} from "./voiceProfileAnalysis";
+import { createTokenUsageAccumulator, type TokenUsageReporter } from "./aiUsage";
+import { analyzeVoiceProfileSamples, validateWritingSamples } from "./voiceProfileAnalysis";
 // V2 Pipeline - improved annotation system
 import { processChunksWithPipelineV2, processChunksWithMultiplePrompts } from "./pipelineV2";
 import { randomUUID } from "crypto";
@@ -71,14 +73,14 @@ interface AnalysisConstraints {
 
 // Default color palette for multi-prompt analysis
 const PROMPT_COLORS = [
-  '#ef4444', // red
-  '#3b82f6', // blue
-  '#22c55e', // green
-  '#f59e0b', // amber
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-  '#06b6d4', // cyan
-  '#f97316', // orange
+  "#ef4444", // red
+  "#3b82f6", // blue
+  "#22c55e", // green
+  "#f59e0b", // amber
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+  "#06b6d4", // cyan
+  "#f97316", // orange
 ];
 
 function getDefaultPromptColor(index: number): string {
@@ -90,7 +92,12 @@ async function analyzeProjectDocument(
   intent: string,
   constraints?: AnalysisConstraints,
   onTokenUsage?: TokenUsageReporter,
-): Promise<{ annotationsCreated: number; filename: string; chunksAnalyzed: number; totalChunks: number }> {
+): Promise<{
+  annotationsCreated: number;
+  filename: string;
+  chunksAnalyzed: number;
+  totalChunks: number;
+}> {
   const projectDoc = await projectStorage.getProjectDocument(projectDocId);
   if (!projectDoc) {
     throw new Error("Project document not found");
@@ -102,8 +109,8 @@ async function analyzeProjectDocument(
   }
 
   const project = await projectStorage.getProject(projectDoc.projectId);
-  
-  const fullIntent = project?.thesis 
+
+  const fullIntent = project?.thesis
     ? `Project thesis: ${project.thesis}\n\nResearch focus: ${intent}`
     : intent;
 
@@ -112,14 +119,14 @@ async function analyzeProjectDocument(
     throw new Error("No text chunks found for analysis");
   }
 
-  const thoroughness = constraints?.thoroughness || 'standard';
+  const thoroughness = constraints?.thoroughness || "standard";
   const maxChunks = getMaxChunksForLevel(thoroughness);
 
   let topChunks: { text: string; startPosition: number; id: string }[];
-  
+
   try {
     const intentEmbedding = await getEmbeddingWithUsage(fullIntent, onTokenUsage);
-    
+
     const chunksWithEmbeddings = await Promise.all(
       chunks.map(async (chunk) => {
         if (!chunk.embedding) {
@@ -132,18 +139,18 @@ async function analyzeProjectDocument(
           }
         }
         return chunk;
-      })
+      }),
     );
 
     const rankedChunks = chunksWithEmbeddings
-      .filter(c => c.embedding)
+      .filter((c) => c.embedding)
       .map((chunk) => ({
         chunk,
         similarity: cosineSimilarity(chunk.embedding!, intentEmbedding),
       }))
       .sort((a, b) => b.similarity - a.similarity);
 
-    const minSimilarity = thoroughness === 'exhaustive' ? 0.1 : 0.3;
+    const minSimilarity = thoroughness === "exhaustive" ? 0.1 : 0.3;
 
     topChunks = rankedChunks
       .filter(({ similarity }) => similarity >= minSimilarity)
@@ -153,38 +160,37 @@ async function analyzeProjectDocument(
         startPosition: chunk.startPosition,
         id: chunk.id,
       }));
-      
+
     if (topChunks.length === 0) {
-      topChunks = chunks.slice(0, maxChunks)
-        .map(chunk => ({
-          text: chunk.text,
-          startPosition: chunk.startPosition,
-          id: chunk.id,
-        }));
-    }
-  } catch (embeddingError) {
-    console.warn("Embedding-based ranking failed, using document order:", embeddingError);
-    topChunks = chunks.slice(0, maxChunks)
-      .map(chunk => ({
+      topChunks = chunks.slice(0, maxChunks).map((chunk) => ({
         text: chunk.text,
         startPosition: chunk.startPosition,
         id: chunk.id,
       }));
+    }
+  } catch (embeddingError) {
+    console.warn("Embedding-based ranking failed, using document order:", embeddingError);
+    topChunks = chunks.slice(0, maxChunks).map((chunk) => ({
+      text: chunk.text,
+      startPosition: chunk.startPosition,
+      id: chunk.id,
+    }));
   }
 
   console.log(`Analyzing ${topChunks.length} of ${chunks.length} chunks (${thoroughness} mode)`);
 
   const existingAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
-  const existingUserAnnotations = existingAnnotations.filter((annotation) => !annotation.isAiGenerated);
-  const existingAnnotationPositions = existingUserAnnotations
-    .map(a => ({
-      startPosition: a.startPosition,
-      endPosition: a.endPosition,
-      confidenceScore: a.confidenceScore,
-    }));
+  const existingUserAnnotations = existingAnnotations.filter(
+    (annotation) => !annotation.isAiGenerated,
+  );
+  const existingAnnotationPositions = existingUserAnnotations.map((a) => ({
+    startPosition: a.startPosition,
+    endPosition: a.endPosition,
+    confidenceScore: a.confidenceScore,
+  }));
 
   // Use V2 pipeline for improved annotation quality
-  let pipelineAnnotations: Awaited<ReturnType<typeof processChunksWithPipelineV2>> = [];
+  let pipelineAnnotations: Awaited<ReturnType<typeof processChunksWithPipelineV2>>;
   try {
     pipelineAnnotations = await processChunksWithPipelineV2(
       topChunks,
@@ -200,18 +206,20 @@ async function analyzeProjectDocument(
       documentId: doc.id,
       error: pipelineError instanceof Error ? pipelineError.message : String(pipelineError),
     });
-    throw new Error("AI pipeline failed while processing document chunks");
+    throw new Error("AI pipeline failed while processing document chunks", {
+      cause: pipelineError,
+    });
   }
 
   if (constraints?.categories && constraints.categories.length > 0) {
-    pipelineAnnotations = pipelineAnnotations.filter(
-      ann => constraints.categories!.includes(ann.category as AnnotationCategory)
+    pipelineAnnotations = pipelineAnnotations.filter((ann) =>
+      constraints.categories!.includes(ann.category as AnnotationCategory),
     );
   }
 
   if (constraints?.minConfidence) {
     pipelineAnnotations = pipelineAnnotations.filter(
-      ann => ann.confidence >= constraints.minConfidence!
+      (ann) => ann.confidence >= constraints.minConfidence!,
     );
   }
 
@@ -222,7 +230,9 @@ async function analyzeProjectDocument(
   // Replace prior AI annotations for single-prompt runs while preserving manual/user annotations.
   const priorAiAnnotations = existingAnnotations.filter((annotation) => annotation.isAiGenerated);
   if (pipelineAnnotations.length > 0 && priorAiAnnotations.length > 0) {
-    await Promise.all(priorAiAnnotations.map((annotation) => projectStorage.deleteProjectAnnotation(annotation.id)));
+    await Promise.all(
+      priorAiAnnotations.map((annotation) => projectStorage.deleteProjectAnnotation(annotation.id)),
+    );
   }
 
   for (const ann of pipelineAnnotations) {
@@ -236,15 +246,15 @@ async function analyzeProjectDocument(
       isAiGenerated: true,
       confidenceScore: ann.confidence,
     });
-    
+
     generateSearchableContent(ann.highlightText, ann.note, ann.category as AnnotationCategory)
-      .then(searchableContent => {
+      .then((searchableContent) => {
         projectStorage.updateProjectAnnotation(created.id, { searchableContent });
       })
-      .catch(err => console.warn("Search indexing failed (non-blocking):", err));
+      .catch((err) => console.warn("Search indexing failed (non-blocking):", err));
   }
 
-  return { 
+  return {
     annotationsCreated: pipelineAnnotations.length,
     filename: doc.filename,
     chunksAnalyzed: topChunks.length,
@@ -302,7 +312,11 @@ async function verifyDocumentOwnership(req: Request, res: Response, documentId: 
 }
 
 /** Verify a project_document exists and belongs to the requesting user. */
-async function verifyProjectDocumentOwnership(req: Request, res: Response, projectDocumentId: string) {
+async function verifyProjectDocumentOwnership(
+  req: Request,
+  res: Response,
+  projectDocumentId: string,
+) {
   const projectDoc = await projectStorage.getProjectDocument(projectDocumentId);
   if (!projectDoc) {
     res.status(404).json({ error: "Project document not found" });
@@ -332,15 +346,23 @@ export function registerProjectRoutes(app: Express): void {
       const thesis = typeof validated.thesis === "string" ? validated.thesis : "";
       const scope = typeof validated.scope === "string" ? validated.scope : "";
       const shouldGenerateContext = Boolean(thesis && scope);
-      const canGenerateContext = shouldGenerateContext && await hasTokenBudgetAvailable(req);
+      const canGenerateContext = shouldGenerateContext && (await hasTokenBudgetAvailable(req));
 
-      const project = await projectStorage.createProject({ ...validated, userId: req.user!.userId } as any);
-      
+      const project = await projectStorage.createProject({
+        ...validated,
+        userId: req.user!.userId,
+      } as any);
+
       // Context generation is optional - don't block project creation
       if (canGenerateContext) {
         const tokenUsage = createTokenUsageAccumulator();
         try {
-          const contextSummary = await generateProjectContextSummary(thesis, scope, [], tokenUsage.add);
+          const contextSummary = await generateProjectContextSummary(
+            thesis,
+            scope,
+            [],
+            tokenUsage.add,
+          );
           // Embeddings may not be available, store context summary without embedding
           await projectStorage.updateProject(project.id, { contextSummary });
         } catch (contextError) {
@@ -349,7 +371,7 @@ export function registerProjectRoutes(app: Express): void {
           await tokenUsage.flush(req.user!.userId, "project_context_create");
         }
       }
-      
+
       res.status(201).json(project);
     } catch (error) {
       console.error("Error creating project:", error);
@@ -388,22 +410,22 @@ export function registerProjectRoutes(app: Express): void {
       }
       const safeProjectUpdates = parsedProjectUpdates.data;
       const shouldGenerateContext = Boolean(safeProjectUpdates.thesis || safeProjectUpdates.scope);
-      const canGenerateContext = shouldGenerateContext && await hasTokenBudgetAvailable(req);
+      const canGenerateContext = shouldGenerateContext && (await hasTokenBudgetAvailable(req));
 
       const updated = await projectStorage.updateProject(req.params.id, safeProjectUpdates);
       if (!updated) {
         return res.status(404).json({ error: "Project not found" });
       }
-      
+
       // Context generation is optional - don't block project update
       if (canGenerateContext) {
         const tokenUsage = createTokenUsageAccumulator();
         try {
           const projectDocs = await projectStorage.getProjectDocumentsByProject(req.params.id);
           const docContexts = projectDocs
-            .map(pd => pd.retrievalContext)
+            .map((pd) => pd.retrievalContext)
             .filter((c): c is string => !!c);
-          
+
           const contextSummary = await generateProjectContextSummary(
             updated.thesis || "",
             updated.scope || "",
@@ -417,7 +439,7 @@ export function registerProjectRoutes(app: Express): void {
           await tokenUsage.flush(req.user!.userId, "project_context_update");
         }
       }
-      
+
       res.json(updated);
     } catch (error) {
       console.error("Error updating project:", error);
@@ -439,41 +461,49 @@ export function registerProjectRoutes(app: Express): void {
 
   // === PROMPT TEMPLATES ===
 
-  app.post("/api/projects/:projectId/prompt-templates", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const { name, prompts } = req.body;
-      if (!name || typeof name !== "string") {
-        return res.status(400).json({ error: "Template name is required" });
-      }
-      if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
-        return res.status(400).json({ error: "At least one prompt is required" });
-      }
-      const project = await verifyProjectOwnership(req, res, req.params.projectId);
-      if (!project) return;
+  app.post(
+    "/api/projects/:projectId/prompt-templates",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { name, prompts } = req.body;
+        if (!name || typeof name !== "string") {
+          return res.status(400).json({ error: "Template name is required" });
+        }
+        if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
+          return res.status(400).json({ error: "At least one prompt is required" });
+        }
+        const project = await verifyProjectOwnership(req, res, req.params.projectId);
+        if (!project) return;
 
-      const template = await projectStorage.createPromptTemplate({
-        projectId: req.params.projectId,
-        name,
-        prompts,
-      });
-      res.status(201).json(template);
-    } catch (error) {
-      console.error("Error creating prompt template:", error);
-      res.status(500).json({ error: "Failed to create prompt template" });
-    }
-  });
+        const template = await projectStorage.createPromptTemplate({
+          projectId: req.params.projectId,
+          name,
+          prompts,
+        });
+        res.status(201).json(template);
+      } catch (error) {
+        console.error("Error creating prompt template:", error);
+        res.status(500).json({ error: "Failed to create prompt template" });
+      }
+    },
+  );
 
-  app.get("/api/projects/:projectId/prompt-templates", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const project = await verifyProjectOwnership(req, res, req.params.projectId);
-      if (!project) return;
-      const templates = await projectStorage.getPromptTemplatesByProject(req.params.projectId);
-      res.json(templates);
-    } catch (error) {
-      console.error("Error fetching prompt templates:", error);
-      res.status(500).json({ error: "Failed to fetch prompt templates" });
-    }
-  });
+  app.get(
+    "/api/projects/:projectId/prompt-templates",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const project = await verifyProjectOwnership(req, res, req.params.projectId);
+        if (!project) return;
+        const templates = await projectStorage.getPromptTemplatesByProject(req.params.projectId);
+        res.json(templates);
+      } catch (error) {
+        console.error("Error fetching prompt templates:", error);
+        res.status(500).json({ error: "Failed to fetch prompt templates" });
+      }
+    },
+  );
 
   app.put("/api/prompt-templates/:id", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -540,7 +570,12 @@ export function registerProjectRoutes(app: Express): void {
     try {
       const folder = await verifyFolderOwnership(req, res, req.params.id);
       if (!folder) return;
-      const { id: _ignoredId, projectId: _ignoredProjectId, parentFolderId, ...safeFolderUpdates } = req.body ?? {};
+      const {
+        id: _ignoredId,
+        projectId: _ignoredProjectId,
+        parentFolderId,
+        ...safeFolderUpdates
+      } = req.body ?? {};
       if (parentFolderId) {
         const parentFolder = await verifyFolderOwnership(req, res, parentFolderId);
         if (!parentFolder) return;
@@ -599,192 +634,210 @@ export function registerProjectRoutes(app: Express): void {
 
   // === PROJECT DOCUMENTS ===
 
-  app.post("/api/projects/:projectId/documents", requireAuth, aiLimiter, async (req: Request, res: Response) => {
-    try {
-      const project = await verifyProjectOwnership(req, res, req.params.projectId);
-      if (!project) return;
-      const validated = insertProjectDocumentSchema.parse({
-        ...req.body,
-        projectId: req.params.projectId,
-      });
-      const doc = await verifyDocumentOwnership(req, res, validated.documentId);
-      if (!doc) return;
-      if (validated.folderId) {
-        const folder = await verifyFolderOwnership(req, res, validated.folderId);
-        if (!folder) return;
-        if (folder.projectId !== req.params.projectId) {
-          return res.status(400).json({ error: "Folder must belong to the selected project" });
-        }
-      }
-
-      const projectDoc = await projectStorage.addDocumentToProject(validated);
-
-      // Context and citation generation - don't block document addition
+  app.post(
+    "/api/projects/:projectId/documents",
+    requireAuth,
+    aiLimiter,
+    async (req: Request, res: Response) => {
       try {
-        if (doc && project && await hasTokenBudgetAvailable(req)) {
-          const tokenUsage = createTokenUsageAccumulator();
-          // Generate retrieval context
-          let retrievalContext = "";
-          try {
-            retrievalContext = await generateRetrievalContext(
-              doc.summary || "",
-              doc.mainArguments || [],
-              doc.keyConcepts || [],
-              project.thesis || "",
-              validated.roleInProject || "",
-              tokenUsage.add,
-            );
-
-            // Auto-extract citation metadata using AI
-            let citationData = null;
-            try {
-              citationData = await extractCitationMetadata(doc.fullText, undefined, tokenUsage.add);
-              console.log(`[Citation] Auto-extracted citation for ${doc.filename}`);
-            } catch (citationError) {
-              console.warn("Citation extraction failed (non-blocking):", citationError);
-            }
-
-            await projectStorage.updateProjectDocument(projectDoc.id, {
-              retrievalContext,
-              ...(citationData && { citationData }),
-            });
-          } finally {
-            await tokenUsage.flush(req.user!.userId, "project_document_context");
+        const project = await verifyProjectOwnership(req, res, req.params.projectId);
+        if (!project) return;
+        const validated = insertProjectDocumentSchema.parse({
+          ...req.body,
+          projectId: req.params.projectId,
+        });
+        const doc = await verifyDocumentOwnership(req, res, validated.documentId);
+        if (!doc) return;
+        if (validated.folderId) {
+          const folder = await verifyFolderOwnership(req, res, validated.folderId);
+          if (!folder) return;
+          if (folder.projectId !== req.params.projectId) {
+            return res.status(400).json({ error: "Folder must belong to the selected project" });
           }
         }
-      } catch (contextError) {
-        console.warn("Context generation failed (non-blocking):", contextError);
-      }
 
-      res.status(201).json(projectDoc);
-    } catch (error) {
-      console.error("Error adding document to project:", error);
-      res.status(400).json({ error: "Failed to add document to project" });
-    }
-  });
+        const projectDoc = await projectStorage.addDocumentToProject(validated);
 
-  app.get("/api/projects/:projectId/documents", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const project = await verifyProjectOwnership(req, res, req.params.projectId);
-      if (!project) return;
-      const documents = await projectStorage.getProjectDocumentsByProject(req.params.projectId);
-      res.json(documents);
-    } catch (error) {
-      console.error("Error fetching project documents:", error);
-      res.status(500).json({ error: "Failed to fetch project documents" });
-    }
-  });
-
-  app.post("/api/projects/:projectId/documents/batch", requireAuth, aiLimiter, async (req: Request, res: Response) => {
-    try {
-      const validated = batchAddDocumentsRequestSchema.parse(req.body);
-      const { documentIds, folderId } = validated;
-      const projectId = req.params.projectId;
-
-      const project = await verifyProjectOwnership(req, res, projectId);
-      if (!project) {
-        return;
-      }
-      if (folderId) {
-        const folder = await verifyFolderOwnership(req, res, folderId);
-        if (!folder) return;
-        if (folder.projectId !== projectId) {
-          return res.status(400).json({ error: "Folder must belong to the selected project" });
-        }
-      }
-
-      const existingDocs = await projectStorage.getProjectDocumentsByProject(projectId);
-      const existingDocIds = new Set(existingDocs.map(d => d.documentId));
-      const canGenerateContext = await hasTokenBudgetAvailable(req);
-
-      const results: BatchAddDocumentResult[] = [];
-      let added = 0;
-      let alreadyExists = 0;
-      let failed = 0;
-
-      for (const documentId of documentIds) {
+        // Context and citation generation - don't block document addition
         try {
-          const doc = await storage.getDocument(documentId);
-          if (!doc || doc.userId !== req.user!.userId) {
+          if (doc && project && (await hasTokenBudgetAvailable(req))) {
+            const tokenUsage = createTokenUsageAccumulator();
+            // Generate retrieval context
+            let retrievalContext = "";
+            try {
+              retrievalContext = await generateRetrievalContext(
+                doc.summary || "",
+                doc.mainArguments || [],
+                doc.keyConcepts || [],
+                project.thesis || "",
+                validated.roleInProject || "",
+                tokenUsage.add,
+              );
+
+              // Auto-extract citation metadata using AI
+              let citationData = null;
+              try {
+                citationData = await extractCitationMetadata(
+                  doc.fullText,
+                  undefined,
+                  tokenUsage.add,
+                );
+                console.log(`[Citation] Auto-extracted citation for ${doc.filename}`);
+              } catch (citationError) {
+                console.warn("Citation extraction failed (non-blocking):", citationError);
+              }
+
+              await projectStorage.updateProjectDocument(projectDoc.id, {
+                retrievalContext,
+                ...(citationData && { citationData }),
+              });
+            } finally {
+              await tokenUsage.flush(req.user!.userId, "project_document_context");
+            }
+          }
+        } catch (contextError) {
+          console.warn("Context generation failed (non-blocking):", contextError);
+        }
+
+        res.status(201).json(projectDoc);
+      } catch (error) {
+        console.error("Error adding document to project:", error);
+        res.status(400).json({ error: "Failed to add document to project" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/projects/:projectId/documents",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const project = await verifyProjectOwnership(req, res, req.params.projectId);
+        if (!project) return;
+        const documents = await projectStorage.getProjectDocumentsByProject(req.params.projectId);
+        res.json(documents);
+      } catch (error) {
+        console.error("Error fetching project documents:", error);
+        res.status(500).json({ error: "Failed to fetch project documents" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/projects/:projectId/documents/batch",
+    requireAuth,
+    aiLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const validated = batchAddDocumentsRequestSchema.parse(req.body);
+        const { documentIds, folderId } = validated;
+        const projectId = req.params.projectId;
+
+        const project = await verifyProjectOwnership(req, res, projectId);
+        if (!project) {
+          return;
+        }
+        if (folderId) {
+          const folder = await verifyFolderOwnership(req, res, folderId);
+          if (!folder) return;
+          if (folder.projectId !== projectId) {
+            return res.status(400).json({ error: "Folder must belong to the selected project" });
+          }
+        }
+
+        const existingDocs = await projectStorage.getProjectDocumentsByProject(projectId);
+        const existingDocIds = new Set(existingDocs.map((d) => d.documentId));
+        const canGenerateContext = await hasTokenBudgetAvailable(req);
+
+        const results: BatchAddDocumentResult[] = [];
+        let added = 0;
+        let alreadyExists = 0;
+        let failed = 0;
+
+        for (const documentId of documentIds) {
+          try {
+            const doc = await storage.getDocument(documentId);
+            if (!doc || doc.userId !== req.user!.userId) {
+              results.push({
+                documentId,
+                filename: "Unknown",
+                status: "failed",
+                error: "Document not found",
+              });
+              failed++;
+              continue;
+            }
+
+            if (existingDocIds.has(documentId)) {
+              results.push({
+                documentId,
+                filename: doc.filename,
+                status: "already_exists",
+              });
+              alreadyExists++;
+              continue;
+            }
+
+            const projectDoc = await projectStorage.addDocumentToProject({
+              projectId,
+              documentId,
+              folderId: folderId || null,
+            });
+
+            results.push({
+              documentId,
+              filename: doc.filename,
+              status: "added",
+              projectDocumentId: projectDoc.id,
+            });
+            added++;
+            existingDocIds.add(documentId);
+
+            if (canGenerateContext) {
+              const tokenUsage = createTokenUsageAccumulator();
+              generateRetrievalContext(
+                doc.summary || "",
+                doc.mainArguments || [],
+                doc.keyConcepts || [],
+                project.thesis || "",
+                "",
+                tokenUsage.add,
+              )
+                .then(async (retrievalContext) => {
+                  await projectStorage.updateProjectDocument(projectDoc.id, { retrievalContext });
+                  await tokenUsage.flush(req.user!.userId, "project_batch_document_context");
+                })
+                .catch(async (err) => {
+                  await tokenUsage.flush(req.user!.userId, "project_batch_document_context");
+                  console.warn("Context generation failed (non-blocking):", err);
+                });
+            }
+          } catch (error) {
             results.push({
               documentId,
               filename: "Unknown",
               status: "failed",
-              error: "Document not found",
+              error: error instanceof Error ? error.message : "Unknown error",
             });
             failed++;
-            continue;
           }
-
-          if (existingDocIds.has(documentId)) {
-            results.push({
-              documentId,
-              filename: doc.filename,
-              status: "already_exists",
-            });
-            alreadyExists++;
-            continue;
-          }
-
-          const projectDoc = await projectStorage.addDocumentToProject({
-            projectId,
-            documentId,
-            folderId: folderId || null,
-          });
-
-          results.push({
-            documentId,
-            filename: doc.filename,
-            status: "added",
-            projectDocumentId: projectDoc.id,
-          });
-          added++;
-          existingDocIds.add(documentId);
-
-          if (canGenerateContext) {
-            const tokenUsage = createTokenUsageAccumulator();
-            generateRetrievalContext(
-              doc.summary || "",
-              doc.mainArguments || [],
-              doc.keyConcepts || [],
-              project.thesis || "",
-              "",
-              tokenUsage.add,
-            )
-              .then(async (retrievalContext) => {
-                await projectStorage.updateProjectDocument(projectDoc.id, { retrievalContext });
-                await tokenUsage.flush(req.user!.userId, "project_batch_document_context");
-              })
-              .catch(async (err) => {
-                await tokenUsage.flush(req.user!.userId, "project_batch_document_context");
-                console.warn("Context generation failed (non-blocking):", err);
-              });
-          }
-        } catch (error) {
-          results.push({
-            documentId,
-            filename: "Unknown",
-            status: "failed",
-            error: error instanceof Error ? error.message : "Unknown error",
-          });
-          failed++;
         }
+
+        const response: BatchAddDocumentsResponse = {
+          totalRequested: documentIds.length,
+          added,
+          alreadyExists,
+          failed,
+          results,
+        };
+
+        res.status(201).json(response);
+      } catch (error) {
+        console.error("Error in batch add documents:", error);
+        res.status(400).json({ error: "Failed to add documents" });
       }
-
-      const response: BatchAddDocumentsResponse = {
-        totalRequested: documentIds.length,
-        added,
-        alreadyExists,
-        failed,
-        results,
-      };
-
-      res.status(201).json(response);
-    } catch (error) {
-      console.error("Error in batch add documents:", error);
-      res.status(400).json({ error: "Failed to add documents" });
-    }
-  });
+    },
+  );
 
   app.get("/api/project-documents/:id", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -822,12 +875,13 @@ export function registerProjectRoutes(app: Express): void {
         return res.status(400).json({ error: "Invalid sourceRole" });
       }
 
-      let updated = Object.keys(safeProjectDocumentUpdates).length > 0 || folderId !== undefined
-        ? await projectStorage.updateProjectDocument(req.params.id, {
-            ...safeProjectDocumentUpdates,
-            ...(folderId !== undefined ? { folderId: folderId || null } : {}),
-          })
-        : await projectStorage.getProjectDocument(req.params.id);
+      let updated =
+        Object.keys(safeProjectDocumentUpdates).length > 0 || folderId !== undefined
+          ? await projectStorage.updateProjectDocument(req.params.id, {
+              ...safeProjectDocumentUpdates,
+              ...(folderId !== undefined ? { folderId: folderId || null } : {}),
+            })
+          : await projectStorage.getProjectDocument(req.params.id);
 
       if (sourceRole && isSourceRole(sourceRole)) {
         const [sourceRoleUpdated] = await db
@@ -885,69 +939,81 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/project-documents/:id/citation", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
-      if (!projectDoc) return;
-      const citationData = citationDataSchema.parse(req.body);
-      const updated = await projectStorage.updateProjectDocument(req.params.id, {
-        citationData,
-      });
-      if (!updated) {
-        return res.status(404).json({ error: "Project document not found" });
+  app.put(
+    "/api/project-documents/:id/citation",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+        if (!projectDoc) return;
+        const citationData = citationDataSchema.parse(req.body);
+        const updated = await projectStorage.updateProjectDocument(req.params.id, {
+          citationData,
+        });
+        if (!updated) {
+          return res.status(404).json({ error: "Project document not found" });
+        }
+        res.json(updated);
+      } catch (error) {
+        console.error("Error updating citation data:", error);
+        res.status(400).json({ error: "Failed to update citation data" });
       }
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating citation data:", error);
-      res.status(400).json({ error: "Failed to update citation data" });
-    }
-  });
+    },
+  );
 
   // === PROJECT ANNOTATIONS ===
 
-  app.post("/api/project-documents/:id/annotations", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
-      if (!projectDoc) return;
-      const validated = insertProjectAnnotationSchema.parse({
-        ...req.body,
-        projectDocumentId: req.params.id,
-      });
-      
-      const annotation = await projectStorage.createProjectAnnotation(validated);
-      
-      // Search indexing is optional - don't block annotation creation
+  app.post(
+    "/api/project-documents/:id/annotations",
+    requireAuth,
+    async (req: Request, res: Response) => {
       try {
-        const searchableContent = await generateSearchableContent(
-          validated.highlightedText,
-          validated.note || null,
-          validated.category
-        );
-        await projectStorage.updateProjectAnnotation(annotation.id, {
-          searchableContent,
+        const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+        if (!projectDoc) return;
+        const validated = insertProjectAnnotationSchema.parse({
+          ...req.body,
+          projectDocumentId: req.params.id,
         });
-      } catch (indexError) {
-        console.warn("Search indexing failed (non-blocking):", indexError);
-      }
-      
-      res.status(201).json(annotation);
-    } catch (error) {
-      console.error("Error creating project annotation:", error);
-      res.status(400).json({ error: "Failed to create annotation" });
-    }
-  });
 
-  app.get("/api/project-documents/:id/annotations", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
-      if (!projectDoc) return;
-      const annotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
-      res.json(annotations);
-    } catch (error) {
-      console.error("Error fetching project annotations:", error);
-      res.status(500).json({ error: "Failed to fetch annotations" });
-    }
-  });
+        const annotation = await projectStorage.createProjectAnnotation(validated);
+
+        // Search indexing is optional - don't block annotation creation
+        try {
+          const searchableContent = await generateSearchableContent(
+            validated.highlightedText,
+            validated.note || null,
+            validated.category,
+          );
+          await projectStorage.updateProjectAnnotation(annotation.id, {
+            searchableContent,
+          });
+        } catch (indexError) {
+          console.warn("Search indexing failed (non-blocking):", indexError);
+        }
+
+        res.status(201).json(annotation);
+      } catch (error) {
+        console.error("Error creating project annotation:", error);
+        res.status(400).json({ error: "Failed to create annotation" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/project-documents/:id/annotations",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+        if (!projectDoc) return;
+        const annotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
+        res.json(annotations);
+      } catch (error) {
+        console.error("Error fetching project annotations:", error);
+        res.status(500).json({ error: "Failed to fetch annotations" });
+      }
+    },
+  );
 
   app.put("/api/project-annotations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -956,7 +1022,11 @@ export function registerProjectRoutes(app: Express): void {
         return res.status(404).json({ error: "Annotation not found" });
       }
 
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, annotation.projectDocumentId);
+      const projectDoc = await verifyProjectDocumentOwnership(
+        req,
+        res,
+        annotation.projectDocumentId,
+      );
       if (!projectDoc) return;
 
       const updated = await projectStorage.updateProjectAnnotation(req.params.id, req.body);
@@ -977,7 +1047,11 @@ export function registerProjectRoutes(app: Express): void {
         return res.status(404).json({ error: "Annotation not found" });
       }
 
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, annotation.projectDocumentId);
+      const projectDoc = await verifyProjectDocumentOwnership(
+        req,
+        res,
+        annotation.projectDocumentId,
+      );
       if (!projectDoc) return;
 
       await projectStorage.deleteProjectAnnotation(req.params.id);
@@ -990,419 +1064,477 @@ export function registerProjectRoutes(app: Express): void {
 
   // === AI ANALYSIS ===
 
-  app.post("/api/project-documents/:id/analyze", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const { intent, thoroughness } = req.body;
-      if (!intent || typeof intent !== "string") {
-        return res.status(400).json({ error: "Research intent is required" });
-      }
-
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
-      if (!projectDoc) return;
-
-      const validThoroughness = ['quick', 'standard', 'thorough', 'exhaustive'].includes(thoroughness) 
-        ? thoroughness as ThoroughnessLevel 
-        : 'standard';
-
-      const startTime = Date.now();
-      console.log("[ProjectAnalyze] Starting single-prompt analysis", {
-        projectDocumentId: req.params.id,
-        projectId: projectDoc.projectId,
-        documentId: projectDoc.documentId,
-        userId: req.user?.userId,
-        thoroughness: validThoroughness,
-      });
-
-      const result = await analyzeProjectDocument(
-        req.params.id,
-        intent,
-        { thoroughness: validThoroughness },
-        tokenUsage.add,
-      );
-      const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
-
-      console.log("[ProjectAnalyze] Completed single-prompt analysis", {
-        projectDocumentId: req.params.id,
-        chunksAnalyzed: result.chunksAnalyzed,
-        totalChunks: result.totalChunks,
-        annotationsCreated: result.annotationsCreated,
-        totalAnnotationsOnDocument: finalAnnotations.length,
-        durationMs: Date.now() - startTime,
-      });
-      
-      await tokenUsage.flush(req.user!.userId, "project_document_analysis");
-      res.json({
-        annotations: finalAnnotations,
-        stats: {
-          chunksAnalyzed: result.chunksAnalyzed,
-          totalChunks: result.totalChunks,
-          annotationsCreated: result.annotationsCreated,
-          coverage: Math.round((result.chunksAnalyzed / result.totalChunks) * 100),
-        }
-      });
-    } catch (error) {
-      console.error("Error analyzing project document:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to analyze document" });
-    }
-  });
-
-  app.post("/api/project-documents/:id/auto-analyze", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
-      if (!projectDoc) return;
-
-      const doc = await storage.getDocument(projectDoc.documentId);
-      if (!doc) {
-        return res.status(404).json({ error: "Document not found" });
-      }
-
-      const chunks = await storage.getChunksForDocument(doc.id);
-      if (chunks.length === 0) {
-        return res.status(400).json({ error: "No text chunks found for analysis yet" });
-      }
-
-      const project = await projectStorage.getProject(projectDoc.projectId);
-      const prompts = await generateAutoAnnotationPrompts(
-        {
-          projectName: project?.name,
-          projectThesis: project?.thesis,
-          projectScope: project?.scope,
-          projectDomain: project?.description,
-          sourceTitle: doc.filename,
-          sourceSummary: doc.summary,
-          sourceSample: chunks.slice(0, 6).map((chunk) => chunk.text).join("\n\n"),
-        },
-        tokenUsage.add,
-      );
-
-      const intent = [
-        "Auto-generate project-aware annotations for this source.",
-        "Use the following six annotation prompts as priorities:",
-        ...prompts.map((prompt, index) => `${index + 1}. ${prompt}`),
-      ].join("\n");
-
-      const startTime = Date.now();
-      const result = await analyzeProjectDocument(
-        req.params.id,
-        intent,
-        { thoroughness: "quick", maxAnnotationsPerDoc: 18 },
-        tokenUsage.add,
-      );
-      const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
-
-      await tokenUsage.flush(req.user!.userId, "project_document_auto_analysis");
-      res.json({
-        prompts,
-        annotations: finalAnnotations,
-        stats: {
-          chunksAnalyzed: result.chunksAnalyzed,
-          totalChunks: result.totalChunks,
-          annotationsCreated: result.annotationsCreated,
-          coverage: Math.round((result.chunksAnalyzed / result.totalChunks) * 100),
-          durationMs: Date.now() - startTime,
-        },
-      });
-    } catch (error) {
-      console.error("Error auto-analyzing project document:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to auto-analyze document" });
-    }
-  });
-
-  // Multi-prompt parallel analysis
-  app.post("/api/project-documents/:id/analyze-multi", requireAuth, aiLimiter, requireTier("max"), checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const { prompts, thoroughness } = req.body;
-
-      if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
-        return res.status(400).json({ error: "At least one prompt is required" });
-      }
-
-      // Validate prompts structure
-      for (const prompt of prompts) {
-        if (!prompt.text || typeof prompt.text !== "string") {
-          return res.status(400).json({ error: "Each prompt must have a text field" });
-        }
-      }
-
-      const validThoroughness = ['quick', 'standard', 'thorough', 'exhaustive'].includes(thoroughness)
-        ? thoroughness as ThoroughnessLevel
-        : 'standard';
-
-      const projectDocId = req.params.id;
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, projectDocId);
-      if (!projectDoc) return;
-
-      const doc = await storage.getDocument(projectDoc.documentId);
-      if (!doc) {
-        return res.status(404).json({ error: "Document not found" });
-      }
-
-      const project = await projectStorage.getProject(projectDoc.projectId);
-      const chunks = await storage.getChunksForDocument(doc.id);
-
-      if (chunks.length === 0) {
-        return res.status(400).json({ error: "No text chunks found for analysis" });
-      }
-
-      // Rank chunks by similarity (using first prompt for ranking, or document order)
-      const maxChunks = getMaxChunksForLevel(validThoroughness);
-      let topChunks: { text: string; startPosition: number; id: string }[];
-
+  app.post(
+    "/api/project-documents/:id/analyze",
+    requireAuth,
+    aiLimiter,
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
       try {
-        const firstPromptIntent = project?.thesis
-          ? `Project thesis: ${project.thesis}\n\nResearch focus: ${prompts[0].text}`
-          : prompts[0].text;
-        const intentEmbedding = await getEmbeddingWithUsage(firstPromptIntent, tokenUsage.add);
+        const { intent, thoroughness } = req.body;
+        if (!intent || typeof intent !== "string") {
+          return res.status(400).json({ error: "Research intent is required" });
+        }
 
-        const chunksWithEmbeddings = await Promise.all(
-          chunks.map(async (chunk) => {
-            if (!chunk.embedding) {
-              try {
-                const embedding = await getEmbeddingWithUsage(chunk.text, tokenUsage.add);
-                await storage.updateChunkEmbedding(chunk.id, embedding);
-                return { ...chunk, embedding };
-              } catch {
-                return chunk;
-              }
-            }
-            return chunk;
-          })
+        const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+        if (!projectDoc) return;
+
+        const validThoroughness = ["quick", "standard", "thorough", "exhaustive"].includes(
+          thoroughness,
+        )
+          ? (thoroughness as ThoroughnessLevel)
+          : "standard";
+
+        const startTime = Date.now();
+        console.log("[ProjectAnalyze] Starting single-prompt analysis", {
+          projectDocumentId: req.params.id,
+          projectId: projectDoc.projectId,
+          documentId: projectDoc.documentId,
+          userId: req.user?.userId,
+          thoroughness: validThoroughness,
+        });
+
+        const result = await analyzeProjectDocument(
+          req.params.id,
+          intent,
+          { thoroughness: validThoroughness },
+          tokenUsage.add,
+        );
+        const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(
+          req.params.id,
         );
 
-        const rankedChunks = chunksWithEmbeddings
-          .filter(c => c.embedding)
-          .map((chunk) => ({
-            chunk,
-            similarity: cosineSimilarity(chunk.embedding!, intentEmbedding),
-          }))
-          .sort((a, b) => b.similarity - a.similarity);
+        console.log("[ProjectAnalyze] Completed single-prompt analysis", {
+          projectDocumentId: req.params.id,
+          chunksAnalyzed: result.chunksAnalyzed,
+          totalChunks: result.totalChunks,
+          annotationsCreated: result.annotationsCreated,
+          totalAnnotationsOnDocument: finalAnnotations.length,
+          durationMs: Date.now() - startTime,
+        });
 
-        const minSimilarity = validThoroughness === 'exhaustive' ? 0.1 : 0.3;
-        topChunks = rankedChunks
-          .filter(({ similarity }) => similarity >= minSimilarity)
-          .slice(0, maxChunks)
-          .map(({ chunk }) => ({
-            text: chunk.text,
-            startPosition: chunk.startPosition,
-            id: chunk.id,
-          }));
+        await tokenUsage.flush(req.user!.userId, "project_document_analysis");
+        res.json({
+          annotations: finalAnnotations,
+          stats: {
+            chunksAnalyzed: result.chunksAnalyzed,
+            totalChunks: result.totalChunks,
+            annotationsCreated: result.annotationsCreated,
+            coverage: Math.round((result.chunksAnalyzed / result.totalChunks) * 100),
+          },
+        });
+      } catch (error) {
+        console.error("Error analyzing project document:", error);
+        res
+          .status(500)
+          .json({ error: error instanceof Error ? error.message : "Failed to analyze document" });
+      }
+    },
+  );
 
-        if (topChunks.length === 0) {
-          topChunks = chunks.slice(0, maxChunks).map(chunk => ({
+  app.post(
+    "/api/project-documents/:id/auto-analyze",
+    requireAuth,
+    aiLimiter,
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
+      try {
+        const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+        if (!projectDoc) return;
+
+        const doc = await storage.getDocument(projectDoc.documentId);
+        if (!doc) {
+          return res.status(404).json({ error: "Document not found" });
+        }
+
+        const chunks = await storage.getChunksForDocument(doc.id);
+        if (chunks.length === 0) {
+          return res.status(400).json({ error: "No text chunks found for analysis yet" });
+        }
+
+        const project = await projectStorage.getProject(projectDoc.projectId);
+        const prompts = await generateAutoAnnotationPrompts(
+          {
+            projectName: project?.name,
+            projectThesis: project?.thesis,
+            projectScope: project?.scope,
+            projectDomain: project?.description,
+            sourceTitle: doc.filename,
+            sourceSummary: doc.summary,
+            sourceSample: chunks
+              .slice(0, 6)
+              .map((chunk) => chunk.text)
+              .join("\n\n"),
+          },
+          tokenUsage.add,
+        );
+
+        const intent = [
+          "Auto-generate project-aware annotations for this source.",
+          "Use the following six annotation prompts as priorities:",
+          ...prompts.map((prompt, index) => `${index + 1}. ${prompt}`),
+        ].join("\n");
+
+        const startTime = Date.now();
+        const result = await analyzeProjectDocument(
+          req.params.id,
+          intent,
+          { thoroughness: "quick", maxAnnotationsPerDoc: 18 },
+          tokenUsage.add,
+        );
+        const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(
+          req.params.id,
+        );
+
+        await tokenUsage.flush(req.user!.userId, "project_document_auto_analysis");
+        res.json({
+          prompts,
+          annotations: finalAnnotations,
+          stats: {
+            chunksAnalyzed: result.chunksAnalyzed,
+            totalChunks: result.totalChunks,
+            annotationsCreated: result.annotationsCreated,
+            coverage: Math.round((result.chunksAnalyzed / result.totalChunks) * 100),
+            durationMs: Date.now() - startTime,
+          },
+        });
+      } catch (error) {
+        console.error("Error auto-analyzing project document:", error);
+        res
+          .status(500)
+          .json({
+            error: error instanceof Error ? error.message : "Failed to auto-analyze document",
+          });
+      }
+    },
+  );
+
+  // Multi-prompt parallel analysis
+  app.post(
+    "/api/project-documents/:id/analyze-multi",
+    requireAuth,
+    aiLimiter,
+    requireTier("max"),
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
+      try {
+        const { prompts, thoroughness } = req.body;
+
+        if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
+          return res.status(400).json({ error: "At least one prompt is required" });
+        }
+
+        // Validate prompts structure
+        for (const prompt of prompts) {
+          if (!prompt.text || typeof prompt.text !== "string") {
+            return res.status(400).json({ error: "Each prompt must have a text field" });
+          }
+        }
+
+        const validThoroughness = ["quick", "standard", "thorough", "exhaustive"].includes(
+          thoroughness,
+        )
+          ? (thoroughness as ThoroughnessLevel)
+          : "standard";
+
+        const projectDocId = req.params.id;
+        const projectDoc = await verifyProjectDocumentOwnership(req, res, projectDocId);
+        if (!projectDoc) return;
+
+        const doc = await storage.getDocument(projectDoc.documentId);
+        if (!doc) {
+          return res.status(404).json({ error: "Document not found" });
+        }
+
+        const project = await projectStorage.getProject(projectDoc.projectId);
+        const chunks = await storage.getChunksForDocument(doc.id);
+
+        if (chunks.length === 0) {
+          return res.status(400).json({ error: "No text chunks found for analysis" });
+        }
+
+        // Rank chunks by similarity (using first prompt for ranking, or document order)
+        const maxChunks = getMaxChunksForLevel(validThoroughness);
+        let topChunks: { text: string; startPosition: number; id: string }[];
+
+        try {
+          const firstPromptIntent = project?.thesis
+            ? `Project thesis: ${project.thesis}\n\nResearch focus: ${prompts[0].text}`
+            : prompts[0].text;
+          const intentEmbedding = await getEmbeddingWithUsage(firstPromptIntent, tokenUsage.add);
+
+          const chunksWithEmbeddings = await Promise.all(
+            chunks.map(async (chunk) => {
+              if (!chunk.embedding) {
+                try {
+                  const embedding = await getEmbeddingWithUsage(chunk.text, tokenUsage.add);
+                  await storage.updateChunkEmbedding(chunk.id, embedding);
+                  return { ...chunk, embedding };
+                } catch {
+                  return chunk;
+                }
+              }
+              return chunk;
+            }),
+          );
+
+          const rankedChunks = chunksWithEmbeddings
+            .filter((c) => c.embedding)
+            .map((chunk) => ({
+              chunk,
+              similarity: cosineSimilarity(chunk.embedding!, intentEmbedding),
+            }))
+            .sort((a, b) => b.similarity - a.similarity);
+
+          const minSimilarity = validThoroughness === "exhaustive" ? 0.1 : 0.3;
+          topChunks = rankedChunks
+            .filter(({ similarity }) => similarity >= minSimilarity)
+            .slice(0, maxChunks)
+            .map(({ chunk }) => ({
+              text: chunk.text,
+              startPosition: chunk.startPosition,
+              id: chunk.id,
+            }));
+
+          if (topChunks.length === 0) {
+            topChunks = chunks.slice(0, maxChunks).map((chunk) => ({
+              text: chunk.text,
+              startPosition: chunk.startPosition,
+              id: chunk.id,
+            }));
+          }
+        } catch {
+          topChunks = chunks.slice(0, maxChunks).map((chunk) => ({
             text: chunk.text,
             startPosition: chunk.startPosition,
             id: chunk.id,
           }));
         }
-      } catch {
-        topChunks = chunks.slice(0, maxChunks).map(chunk => ({
-          text: chunk.text,
-          startPosition: chunk.startPosition,
-          id: chunk.id,
-        }));
-      }
 
-      // Keep both user and prior AI annotations so analyses can accumulate over time.
-      const existingAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
-      const existingAnnotationPositions = existingAnnotations
-        .map(a => ({
+        // Keep both user and prior AI annotations so analyses can accumulate over time.
+        const existingAnnotations =
+          await projectStorage.getProjectAnnotationsByDocument(projectDocId);
+        const existingAnnotationPositions = existingAnnotations.map((a) => ({
           startPosition: a.startPosition,
           endPosition: a.endPosition,
           confidenceScore: a.confidenceScore,
         }));
 
-      // Ensure prompt indices continue across runs so prior prompt groups remain distinct.
-      const maxExistingPromptIndex = existingAnnotations.reduce((max, ann) => {
-        if (ann.promptIndex == null) return max;
-        return ann.promptIndex > max ? ann.promptIndex : max;
-      }, -1);
-      const promptIndexBase = maxExistingPromptIndex + 1;
+        // Ensure prompt indices continue across runs so prior prompt groups remain distinct.
+        const maxExistingPromptIndex = existingAnnotations.reduce((max, ann) => {
+          if (ann.promptIndex == null) return max;
+          return ann.promptIndex > max ? ann.promptIndex : max;
+        }, -1);
+        const promptIndexBase = maxExistingPromptIndex + 1;
 
-      // Prepare prompts with colors and indices
-      const promptsWithMeta = prompts.map((p: { text: string; color?: string }, localIndex: number) => ({
-        text: project?.thesis
-          ? `Project thesis: ${project.thesis}\n\nResearch focus: ${p.text}`
-          : p.text,
-        color: p.color || getDefaultPromptColor(promptIndexBase + localIndex),
-        index: promptIndexBase + localIndex,
-        localIndex,
-      }));
+        // Prepare prompts with colors and indices
+        const promptsWithMeta = prompts.map(
+          (p: { text: string; color?: string }, localIndex: number) => ({
+            text: project?.thesis
+              ? `Project thesis: ${project.thesis}\n\nResearch focus: ${p.text}`
+              : p.text,
+            color: p.color || getDefaultPromptColor(promptIndexBase + localIndex),
+            index: promptIndexBase + localIndex,
+            localIndex,
+          }),
+        );
 
-      // Generate analysis run ID
-      const analysisRunId = randomUUID();
+        // Generate analysis run ID
+        const analysisRunId = randomUUID();
 
-      const startTime = Date.now();
-      console.log(`Multi-prompt analysis: ${prompts.length} prompts on ${topChunks.length} chunks`);
-      console.log("[ProjectAnalyze] Starting multi-prompt analysis", {
-        analysisRunId,
-        projectDocumentId: projectDocId,
-        projectId: projectDoc.projectId,
-        documentId: projectDoc.documentId,
-        promptCount: prompts.length,
-        chunksAnalyzed: topChunks.length,
-        totalChunks: chunks.length,
-        userId: req.user?.userId,
-        thoroughness: validThoroughness,
-      });
-
-      // Run all prompts in parallel
-      const resultsMap = await processChunksWithMultiplePrompts(
-        topChunks,
-        promptsWithMeta,
-        doc.id,
-        doc.fullText,
-        existingAnnotationPositions,
-        { onTokenUsage: tokenUsage.add },
-      );
-
-      // Create annotations with prompt metadata
-      const results: Array<{ promptIndex: number; promptText: string; annotationsCreated: number }> = [];
-      let totalAnnotations = 0;
-
-      for (const [promptIndex, annotations] of Array.from(resultsMap.entries())) {
-        const promptMeta = promptsWithMeta.find((p) => p.index === promptIndex);
-        if (!promptMeta) continue;
-        const originalPrompt = prompts[promptMeta.localIndex];
-        let created = 0;
-
-        for (const ann of annotations) {
-          await projectStorage.createProjectAnnotation({
-            projectDocumentId: projectDocId,
-            startPosition: ann.absoluteStart,
-            endPosition: ann.absoluteEnd,
-            highlightedText: ann.highlightText,
-            category: ann.category as AnnotationCategory,
-            note: ann.note,
-            isAiGenerated: true,
-            confidenceScore: ann.confidence,
-            promptText: originalPrompt.text,
-            promptIndex,
-            promptColor: promptMeta.color,
-            analysisRunId,
-          });
-          created++;
-        }
-
-        results.push({
-          promptIndex,
-          promptText: originalPrompt.text,
-          annotationsCreated: created,
-        });
-        totalAnnotations += created;
-      }
-
-      const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
-      console.log("[ProjectAnalyze] Completed multi-prompt analysis", {
-        analysisRunId,
-        projectDocumentId: projectDocId,
-        promptCount: prompts.length,
-        totalAnnotationsCreated: totalAnnotations,
-        totalAnnotationsOnDocument: finalAnnotations.length,
-        durationMs: Date.now() - startTime,
-      });
-
-      await tokenUsage.flush(req.user!.userId, "project_document_multi_analysis");
-      res.json({
-        analysisRunId,
-        results,
-        totalAnnotations,
-        annotations: finalAnnotations,
-        stats: {
+        const startTime = Date.now();
+        console.log(
+          `Multi-prompt analysis: ${prompts.length} prompts on ${topChunks.length} chunks`,
+        );
+        console.log("[ProjectAnalyze] Starting multi-prompt analysis", {
+          analysisRunId,
+          projectDocumentId: projectDocId,
+          projectId: projectDoc.projectId,
+          documentId: projectDoc.documentId,
+          promptCount: prompts.length,
           chunksAnalyzed: topChunks.length,
           totalChunks: chunks.length,
-          coverage: Math.round((topChunks.length / chunks.length) * 100),
-        },
-      });
-    } catch (error) {
-      console.error("Error in multi-prompt analysis:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to analyze document" });
-    }
-  });
+          userId: req.user?.userId,
+          thoroughness: validThoroughness,
+        });
 
-  app.post("/api/projects/:projectId/batch-analyze", requireAuth, aiLimiter, requireTier("max"), checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const validated = batchAnalysisRequestSchema.parse(req.body);
-      const { projectDocumentIds, intent, thoroughness, constraints } = validated;
-      
-      const startTime = Date.now();
-      const jobId = crypto.randomUUID();
-      
-      const project = await verifyProjectOwnership(req, res, req.params.projectId);
-      if (!project) return;
+        // Run all prompts in parallel
+        const resultsMap = await processChunksWithMultiplePrompts(
+          topChunks,
+          promptsWithMeta,
+          doc.id,
+          doc.fullText,
+          existingAnnotationPositions,
+          { onTokenUsage: tokenUsage.add },
+        );
 
-      const allowedProjectDocumentIds = new Set<string>();
-      for (const projectDocumentId of projectDocumentIds) {
-        const projectDoc = await projectStorage.getProjectDocument(projectDocumentId);
-        const doc = projectDoc ? await storage.getDocument(projectDoc.documentId) : null;
-        if (projectDoc?.projectId === req.params.projectId && doc?.userId === req.user!.userId) {
-          allowedProjectDocumentIds.add(projectDocumentId);
-        }
-      }
+        // Create annotations with prompt metadata
+        const results: Array<{
+          promptIndex: number;
+          promptText: string;
+          annotationsCreated: number;
+        }> = [];
+        let totalAnnotations = 0;
 
-      const results: BatchDocumentResult[] = projectDocumentIds.map(id => ({
-        projectDocumentId: id,
-        filename: "",
-        status: "pending" as const,
-        annotationsCreated: 0,
-      }));
+        for (const [promptIndex, annotations] of Array.from(resultsMap.entries())) {
+          const promptMeta = promptsWithMeta.find((p) => p.index === promptIndex);
+          if (!promptMeta) continue;
+          const originalPrompt = prompts[promptMeta.localIndex];
+          let created = 0;
 
-      await batchProcess(
-        projectDocumentIds,
-        async (docId, index) => {
-          try {
-            if (!allowedProjectDocumentIds.has(docId)) {
-              throw new Error("Project document not found");
-            }
-            const result = await analyzeProjectDocument(docId, intent, { 
-              ...constraints, 
-              thoroughness: thoroughness as ThoroughnessLevel 
-            }, tokenUsage.add);
-            results[index] = {
-              projectDocumentId: docId,
-              filename: result.filename,
-              status: "completed",
-              annotationsCreated: result.annotationsCreated,
-            };
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : "Unknown error";
-            results[index] = {
-              projectDocumentId: docId,
-              filename: results[index].filename || "Unknown",
-              status: "failed",
-              annotationsCreated: 0,
-              error: errorMsg,
-            };
+          for (const ann of annotations) {
+            await projectStorage.createProjectAnnotation({
+              projectDocumentId: projectDocId,
+              startPosition: ann.absoluteStart,
+              endPosition: ann.absoluteEnd,
+              highlightedText: ann.highlightText,
+              category: ann.category as AnnotationCategory,
+              note: ann.note,
+              isAiGenerated: true,
+              confidenceScore: ann.confidence,
+              promptText: originalPrompt.text,
+              promptIndex,
+              promptColor: promptMeta.color,
+              analysisRunId,
+            });
+            created++;
           }
-        },
-        { concurrency: 2 }
-      );
 
-      const successfulDocs = results.filter(r => r.status === "completed").length;
-      const failedDocs = results.filter(r => r.status === "failed").length;
-      const totalAnnotations = results.reduce((sum, r) => sum + r.annotationsCreated, 0);
+          results.push({
+            promptIndex,
+            promptText: originalPrompt.text,
+            annotationsCreated: created,
+          });
+          totalAnnotations += created;
+        }
 
-      const response: BatchAnalysisResponse = {
-        jobId,
-        status: failedDocs === 0 ? "completed" : successfulDocs === 0 ? "failed" : "partial",
-        totalDocuments: projectDocumentIds.length,
-        successfulDocuments: successfulDocs,
-        failedDocuments: failedDocs,
-        totalAnnotationsCreated: totalAnnotations,
-        totalTimeMs: Date.now() - startTime,
-        results,
-      };
+        const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
+        console.log("[ProjectAnalyze] Completed multi-prompt analysis", {
+          analysisRunId,
+          projectDocumentId: projectDocId,
+          promptCount: prompts.length,
+          totalAnnotationsCreated: totalAnnotations,
+          totalAnnotationsOnDocument: finalAnnotations.length,
+          durationMs: Date.now() - startTime,
+        });
 
-      await tokenUsage.flush(req.user!.userId, "project_batch_analysis");
-      res.json(response);
-    } catch (error) {
-      console.error("Error in batch analysis:", error);
-      res.status(500).json({ error: "Failed to process batch analysis" });
-    }
-  });
+        await tokenUsage.flush(req.user!.userId, "project_document_multi_analysis");
+        res.json({
+          analysisRunId,
+          results,
+          totalAnnotations,
+          annotations: finalAnnotations,
+          stats: {
+            chunksAnalyzed: topChunks.length,
+            totalChunks: chunks.length,
+            coverage: Math.round((topChunks.length / chunks.length) * 100),
+          },
+        });
+      } catch (error) {
+        console.error("Error in multi-prompt analysis:", error);
+        res
+          .status(500)
+          .json({ error: error instanceof Error ? error.message : "Failed to analyze document" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/projects/:projectId/batch-analyze",
+    requireAuth,
+    aiLimiter,
+    requireTier("max"),
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
+      try {
+        const validated = batchAnalysisRequestSchema.parse(req.body);
+        const { projectDocumentIds, intent, thoroughness, constraints } = validated;
+
+        const startTime = Date.now();
+        const jobId = crypto.randomUUID();
+
+        const project = await verifyProjectOwnership(req, res, req.params.projectId);
+        if (!project) return;
+
+        const allowedProjectDocumentIds = new Set<string>();
+        for (const projectDocumentId of projectDocumentIds) {
+          const projectDoc = await projectStorage.getProjectDocument(projectDocumentId);
+          const doc = projectDoc ? await storage.getDocument(projectDoc.documentId) : null;
+          if (projectDoc?.projectId === req.params.projectId && doc?.userId === req.user!.userId) {
+            allowedProjectDocumentIds.add(projectDocumentId);
+          }
+        }
+
+        const results: BatchDocumentResult[] = projectDocumentIds.map((id) => ({
+          projectDocumentId: id,
+          filename: "",
+          status: "pending" as const,
+          annotationsCreated: 0,
+        }));
+
+        await batchProcess(
+          projectDocumentIds,
+          async (docId, index) => {
+            try {
+              if (!allowedProjectDocumentIds.has(docId)) {
+                throw new Error("Project document not found");
+              }
+              const result = await analyzeProjectDocument(
+                docId,
+                intent,
+                {
+                  ...constraints,
+                  thoroughness: thoroughness as ThoroughnessLevel,
+                },
+                tokenUsage.add,
+              );
+              results[index] = {
+                projectDocumentId: docId,
+                filename: result.filename,
+                status: "completed",
+                annotationsCreated: result.annotationsCreated,
+              };
+            } catch (error) {
+              const errorMsg = error instanceof Error ? error.message : "Unknown error";
+              results[index] = {
+                projectDocumentId: docId,
+                filename: results[index].filename || "Unknown",
+                status: "failed",
+                annotationsCreated: 0,
+                error: errorMsg,
+              };
+            }
+          },
+          { concurrency: 2 },
+        );
+
+        const successfulDocs = results.filter((r) => r.status === "completed").length;
+        const failedDocs = results.filter((r) => r.status === "failed").length;
+        const totalAnnotations = results.reduce((sum, r) => sum + r.annotationsCreated, 0);
+
+        const response: BatchAnalysisResponse = {
+          jobId,
+          status: failedDocs === 0 ? "completed" : successfulDocs === 0 ? "failed" : "partial",
+          totalDocuments: projectDocumentIds.length,
+          successfulDocuments: successfulDocs,
+          failedDocuments: failedDocs,
+          totalAnnotationsCreated: totalAnnotations,
+          totalTimeMs: Date.now() - startTime,
+          results,
+        };
+
+        await tokenUsage.flush(req.user!.userId, "project_batch_analysis");
+        res.json(response);
+      } catch (error) {
+        console.error("Error in batch analysis:", error);
+        res.status(500).json({ error: "Failed to process batch analysis" });
+      }
+    },
+  );
 
   // === SEARCH ===
 
@@ -1425,26 +1557,34 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Search within a single project document
-  app.post("/api/project-documents/:id/search", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const { query } = req.body;
+  app.post(
+    "/api/project-documents/:id/search",
+    requireAuth,
+    aiLimiter,
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
+      try {
+        const { query } = req.body;
 
-      if (!query || typeof query !== "string") {
-        return res.status(400).json({ error: "Query is required" });
+        if (!query || typeof query !== "string") {
+          return res.status(400).json({ error: "Query is required" });
+        }
+
+        const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+        if (!projectDoc) return;
+
+        const results = await searchProjectDocument(req.params.id, query, tokenUsage.add);
+        await tokenUsage.flush(req.user!.userId, "project_document_search");
+        res.json(results);
+      } catch (error) {
+        console.error("Error searching project document:", error);
+        res
+          .status(500)
+          .json({ error: error instanceof Error ? error.message : "Failed to search document" });
       }
-
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
-      if (!projectDoc) return;
-
-      const results = await searchProjectDocument(req.params.id, query, tokenUsage.add);
-      await tokenUsage.flush(req.user!.userId, "project_document_search");
-      res.json(results);
-    } catch (error) {
-      console.error("Error searching project document:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to search document" });
-    }
-  });
+    },
+  );
 
   // === CITATIONS ===
 
@@ -1452,7 +1592,9 @@ export function registerProjectRoutes(app: Express): void {
     try {
       const { citationData, style = "chicago", pageNumber, isSubsequent } = req.body;
       const validated = citationDataSchema.parse(citationData);
-      const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
+      const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style)
+        ? (style as CitationStyle)
+        : "chicago";
 
       const footnote = generateFootnote(validated, validStyle, pageNumber, isSubsequent);
       const bibliography = generateBibliographyEntry(validated, validStyle);
@@ -1465,215 +1607,278 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/citations/ai", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const { documentId, highlightedText, style = "chicago" } = req.body;
-      const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
+  app.post(
+    "/api/citations/ai",
+    requireAuth,
+    aiLimiter,
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
+      try {
+        const { documentId, highlightedText, style = "chicago" } = req.body;
+        const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style)
+          ? (style as CitationStyle)
+          : "chicago";
 
-      if (!documentId) {
-        return res.status(400).json({ error: "Document ID is required" });
-      }
-
-      const document = await verifyDocumentOwnership(req, res, documentId);
-      if (!document) return;
-
-      const citationData = await extractCitationMetadata(document.fullText, highlightedText, tokenUsage.add);
-
-      if (!citationData) {
-        await tokenUsage.flush(req.user!.userId, "citation_ai");
-        return res.status(422).json({
-          error: "Unable to extract citation metadata from document",
-          footnote: `"${highlightedText?.substring(0, 100) || 'Quote'}..." (Source: ${document.filename})`,
-          bibliography: `${document.filename}. [Citation metadata unavailable]`
-        });
-      }
-
-      const footnote = generateFootnote(citationData, validStyle);
-      const bibliography = generateBibliographyEntry(citationData, validStyle);
-
-      await tokenUsage.flush(req.user!.userId, "citation_ai");
-      res.json({ footnote, bibliography, citationData });
-    } catch (error) {
-      console.error("Error generating AI citation:", error);
-      res.status(500).json({ error: "Failed to generate citation" });
-    }
-  });
-
-  // Generate footnote with embedded quote for an annotation
-  app.post("/api/citations/footnote-with-quote", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const { citationData, quote, pageNumber, style = "chicago" } = req.body;
-      const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
-
-      if (!quote) {
-        return res.status(400).json({ error: "Quote text is required" });
-      }
-
-      if (!citationData) {
-        // Fallback if no citation data: return a generic quote format
-        const cleanQuote = quote.trim().replace(/\s+/g, ' ');
-        const displayQuote = cleanQuote.length > 150
-          ? cleanQuote.substring(0, 147) + '...'
-          : cleanQuote;
-        return res.json({
-          footnote: `"${displayQuote}."`,
-          footnoteWithQuote: `"${displayQuote}."`,
-          inlineCitation: "(Source unavailable)",
-          bibliography: "[Citation metadata unavailable]"
-        });
-      }
-
-      const validated = citationDataSchema.parse(citationData);
-
-      const footnote = generateFootnote(validated, validStyle, pageNumber);
-      const footnoteWithQuote = generateFootnoteWithQuote(validated, quote, pageNumber);
-      const inlineCitation = generateInTextCitation(validated, validStyle, pageNumber);
-      const bibliography = generateBibliographyEntry(validated, validStyle);
-
-      res.json({
-        footnote,
-        footnoteWithQuote,
-        inlineCitation,
-        bibliography
-      });
-    } catch (error) {
-      console.error("Error generating footnote with quote:", error);
-      res.status(400).json({ error: "Failed to generate footnote" });
-    }
-  });
-
-  // Generate footnote for a specific annotation by ID
-  app.post("/api/project-annotations/:id/footnote", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const annotation = await projectStorage.getProjectAnnotation(req.params.id);
-      if (!annotation) {
-        return res.status(404).json({ error: "Annotation not found" });
-      }
-
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, annotation.projectDocumentId);
-      if (!projectDoc) return;
-
-      const { pageNumber, style = "chicago" } = req.body;
-      const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style) ? style as CitationStyle : "chicago";
-
-      // Use citation data from the project document
-      const citationData = projectDoc.citationData;
-
-      if (!citationData) {
-        // Try to extract citation on-the-fly
-        const doc = await storage.getDocument(projectDoc.documentId);
-        if (doc) {
-          const extractedCitation = await extractCitationMetadata(doc.fullText, annotation.highlightedText, tokenUsage.add);
-          if (extractedCitation) {
-            // Save for future use
-            await projectStorage.updateProjectDocument(projectDoc.id, { citationData: extractedCitation });
-
-            const footnoteWithQuote = generateFootnoteWithQuote(extractedCitation, annotation.highlightedText, pageNumber);
-            const footnote = generateFootnote(extractedCitation, validStyle, pageNumber);
-            const inlineCitation = generateInTextCitation(extractedCitation, validStyle, pageNumber);
-            const bibliography = generateBibliographyEntry(extractedCitation, validStyle);
-
-            await tokenUsage.flush(req.user!.userId, "annotation_footnote_citation");
-            return res.json({
-              footnote,
-              footnoteWithQuote,
-              inlineCitation,
-              bibliography,
-              citationData: extractedCitation
-            });
-          }
+        if (!documentId) {
+          return res.status(400).json({ error: "Document ID is required" });
         }
 
-        // Fallback
-        const cleanQuote = annotation.highlightedText.trim().replace(/\s+/g, ' ');
-        const displayQuote = cleanQuote.length > 150
-          ? cleanQuote.substring(0, 147) + '...'
-          : cleanQuote;
-        const docName = doc?.filename || "Unknown Source";
+        const document = await verifyDocumentOwnership(req, res, documentId);
+        if (!document) return;
+
+        const citationData = await extractCitationMetadata(
+          document.fullText,
+          highlightedText,
+          tokenUsage.add,
+        );
+
+        if (!citationData) {
+          await tokenUsage.flush(req.user!.userId, "citation_ai");
+          return res.status(422).json({
+            error: "Unable to extract citation metadata from document",
+            footnote: `"${highlightedText?.substring(0, 100) || "Quote"}..." (Source: ${document.filename})`,
+            bibliography: `${document.filename}. [Citation metadata unavailable]`,
+          });
+        }
+
+        const footnote = generateFootnote(citationData, validStyle);
+        const bibliography = generateBibliographyEntry(citationData, validStyle);
+
+        await tokenUsage.flush(req.user!.userId, "citation_ai");
+        res.json({ footnote, bibliography, citationData });
+      } catch (error) {
+        console.error("Error generating AI citation:", error);
+        res.status(500).json({ error: "Failed to generate citation" });
+      }
+    },
+  );
+
+  // Generate footnote with embedded quote for an annotation
+  app.post(
+    "/api/citations/footnote-with-quote",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { citationData, quote, pageNumber, style = "chicago" } = req.body;
+        const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style)
+          ? (style as CitationStyle)
+          : "chicago";
+
+        if (!quote) {
+          return res.status(400).json({ error: "Quote text is required" });
+        }
+
+        if (!citationData) {
+          // Fallback if no citation data: return a generic quote format
+          const cleanQuote = quote.trim().replace(/\s+/g, " ");
+          const displayQuote =
+            cleanQuote.length > 150 ? cleanQuote.substring(0, 147) + "..." : cleanQuote;
+          return res.json({
+            footnote: `"${displayQuote}."`,
+            footnoteWithQuote: `"${displayQuote}."`,
+            inlineCitation: "(Source unavailable)",
+            bibliography: "[Citation metadata unavailable]",
+          });
+        }
+
+        const validated = citationDataSchema.parse(citationData);
+
+        const footnote = generateFootnote(validated, validStyle, pageNumber);
+        const footnoteWithQuote = generateFootnoteWithQuote(validated, quote, pageNumber);
+        const inlineCitation = generateInTextCitation(validated, validStyle, pageNumber);
+        const bibliography = generateBibliographyEntry(validated, validStyle);
+
+        res.json({
+          footnote,
+          footnoteWithQuote,
+          inlineCitation,
+          bibliography,
+        });
+      } catch (error) {
+        console.error("Error generating footnote with quote:", error);
+        res.status(400).json({ error: "Failed to generate footnote" });
+      }
+    },
+  );
+
+  // Generate footnote for a specific annotation by ID
+  app.post(
+    "/api/project-annotations/:id/footnote",
+    requireAuth,
+    aiLimiter,
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
+      try {
+        const annotation = await projectStorage.getProjectAnnotation(req.params.id);
+        if (!annotation) {
+          return res.status(404).json({ error: "Annotation not found" });
+        }
+
+        const projectDoc = await verifyProjectDocumentOwnership(
+          req,
+          res,
+          annotation.projectDocumentId,
+        );
+        if (!projectDoc) return;
+
+        const { pageNumber, style = "chicago" } = req.body;
+        const validStyle: CitationStyle = (citationStyles as readonly string[]).includes(style)
+          ? (style as CitationStyle)
+          : "chicago";
+
+        // Use citation data from the project document
+        const citationData = projectDoc.citationData;
+
+        if (!citationData) {
+          // Try to extract citation on-the-fly
+          const doc = await storage.getDocument(projectDoc.documentId);
+          if (doc) {
+            const extractedCitation = await extractCitationMetadata(
+              doc.fullText,
+              annotation.highlightedText,
+              tokenUsage.add,
+            );
+            if (extractedCitation) {
+              // Save for future use
+              await projectStorage.updateProjectDocument(projectDoc.id, {
+                citationData: extractedCitation,
+              });
+
+              const footnoteWithQuote = generateFootnoteWithQuote(
+                extractedCitation,
+                annotation.highlightedText,
+                pageNumber,
+              );
+              const footnote = generateFootnote(extractedCitation, validStyle, pageNumber);
+              const inlineCitation = generateInTextCitation(
+                extractedCitation,
+                validStyle,
+                pageNumber,
+              );
+              const bibliography = generateBibliographyEntry(extractedCitation, validStyle);
+
+              await tokenUsage.flush(req.user!.userId, "annotation_footnote_citation");
+              return res.json({
+                footnote,
+                footnoteWithQuote,
+                inlineCitation,
+                bibliography,
+                citationData: extractedCitation,
+              });
+            }
+          }
+
+          // Fallback
+          const cleanQuote = annotation.highlightedText.trim().replace(/\s+/g, " ");
+          const displayQuote =
+            cleanQuote.length > 150 ? cleanQuote.substring(0, 147) + "..." : cleanQuote;
+          const docName = doc?.filename || "Unknown Source";
+
+          await tokenUsage.flush(req.user!.userId, "annotation_footnote_citation");
+          return res.json({
+            footnote: `${docName}.`,
+            footnoteWithQuote: `${docName}: "${displayQuote}."`,
+            inlineCitation: `(${docName})`,
+            bibliography: `${docName}. [Citation metadata unavailable]`,
+            citationData: null,
+          });
+        }
+
+        const footnoteWithQuote = generateFootnoteWithQuote(
+          citationData as CitationData,
+          annotation.highlightedText,
+          pageNumber,
+        );
+        const footnote = generateFootnote(citationData as CitationData, validStyle, pageNumber);
+        const inlineCitation = generateInTextCitation(
+          citationData as CitationData,
+          validStyle,
+          pageNumber,
+        );
+        const bibliography = generateBibliographyEntry(citationData as CitationData, validStyle);
 
         await tokenUsage.flush(req.user!.userId, "annotation_footnote_citation");
-        return res.json({
-          footnote: `${docName}.`,
-          footnoteWithQuote: `${docName}: "${displayQuote}."`,
-          inlineCitation: `(${docName})`,
-          bibliography: `${docName}. [Citation metadata unavailable]`,
-          citationData: null
+        res.json({
+          footnote,
+          footnoteWithQuote,
+          inlineCitation,
+          bibliography,
+          citationData,
         });
+      } catch (error) {
+        console.error("Error generating annotation footnote:", error);
+        res.status(500).json({ error: "Failed to generate footnote" });
       }
-
-      const footnoteWithQuote = generateFootnoteWithQuote(citationData as CitationData, annotation.highlightedText, pageNumber);
-      const footnote = generateFootnote(citationData as CitationData, validStyle, pageNumber);
-      const inlineCitation = generateInTextCitation(citationData as CitationData, validStyle, pageNumber);
-      const bibliography = generateBibliographyEntry(citationData as CitationData, validStyle);
-
-      await tokenUsage.flush(req.user!.userId, "annotation_footnote_citation");
-      res.json({
-        footnote,
-        footnoteWithQuote,
-        inlineCitation,
-        bibliography,
-        citationData
-      });
-    } catch (error) {
-      console.error("Error generating annotation footnote:", error);
-      res.status(500).json({ error: "Failed to generate footnote" });
-    }
-  });
+    },
+  );
 
   // === STATE PERSISTENCE ===
 
-  app.put("/api/project-documents/:id/view-state", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
-      if (!projectDoc) return;
+  app.put(
+    "/api/project-documents/:id/view-state",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
+        if (!projectDoc) return;
 
-      const { scrollPosition } = req.body;
-      const updated = await projectStorage.updateProjectDocument(req.params.id, {
-        lastViewedAt: new Date(),
-        scrollPosition: scrollPosition || 0,
-      });
-      if (!updated) {
-        return res.status(404).json({ error: "Project document not found" });
+        const { scrollPosition } = req.body;
+        const updated = await projectStorage.updateProjectDocument(req.params.id, {
+          lastViewedAt: new Date(),
+          scrollPosition: scrollPosition || 0,
+        });
+        if (!updated) {
+          return res.status(404).json({ error: "Project document not found" });
+        }
+        res.json(updated);
+      } catch (error) {
+        console.error("Error updating view state:", error);
+        res.status(500).json({ error: "Failed to update view state" });
       }
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating view state:", error);
-      res.status(500).json({ error: "Failed to update view state" });
-    }
-  });
+    },
+  );
 
   // === VOICE PROFILE ===
 
   /** Analyze writing samples and generate a voice profile */
-  app.post("/api/projects/:id/voice-profile/analyze", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const project = await verifyProjectOwnership(req, res, req.params.id);
-      if (!project) return;
+  app.post(
+    "/api/projects/:id/voice-profile/analyze",
+    requireAuth,
+    aiLimiter,
+    requireTier("pro"),
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
+      try {
+        const project = await verifyProjectOwnership(req, res, req.params.id);
+        if (!project) return;
 
-      const validation = validateWritingSamples(req.body?.samples);
-      if (!validation.ok || !validation.samples) {
-        return res.status(400).json({ error: validation.error || "Provide 2-10 writing samples" });
+        const validation = validateWritingSamples(req.body?.samples);
+        if (!validation.ok || !validation.samples) {
+          return res
+            .status(400)
+            .json({ error: validation.error || "Provide 2-10 writing samples" });
+        }
+
+        const samples = validation.samples;
+        const voiceProfile = await analyzeVoiceProfileSamples(samples, tokenUsage.add);
+
+        // Store both the profile and the original samples (for re-analysis later)
+        await projectStorage.updateProject(req.params.id, {
+          voiceProfile: JSON.stringify(voiceProfile),
+          voiceProfileSamples: JSON.stringify(samples),
+        } as any);
+
+        await tokenUsage.flush(req.user!.userId, "voice_profile_analysis");
+        res.json({ voiceProfile });
+      } catch (error) {
+        console.error("Error analyzing voice profile:", error);
+        res.status(500).json({ error: "Failed to analyze writing style" });
       }
-
-      const samples = validation.samples;
-      const voiceProfile = await analyzeVoiceProfileSamples(samples, tokenUsage.add);
-
-      // Store both the profile and the original samples (for re-analysis later)
-      await projectStorage.updateProject(req.params.id, {
-        voiceProfile: JSON.stringify(voiceProfile),
-        voiceProfileSamples: JSON.stringify(samples),
-      } as any);
-
-      await tokenUsage.flush(req.user!.userId, "voice_profile_analysis");
-      res.json({ voiceProfile });
-    } catch (error) {
-      console.error("Error analyzing voice profile:", error);
-      res.status(500).json({ error: "Failed to analyze writing style" });
-    }
-  });
+    },
+  );
 
   /** Get the voice profile for a project */
   app.get("/api/projects/:id/voice-profile", requireAuth, async (req: Request, res: Response) => {
@@ -1716,20 +1921,24 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   /** Delete the voice profile */
-  app.delete("/api/projects/:id/voice-profile", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const project = await verifyProjectOwnership(req, res, req.params.id);
-      if (!project) return;
+  app.delete(
+    "/api/projects/:id/voice-profile",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const project = await verifyProjectOwnership(req, res, req.params.id);
+        if (!project) return;
 
-      await projectStorage.updateProject(req.params.id, {
-        voiceProfile: null,
-        voiceProfileSamples: null,
-      } as any);
+        await projectStorage.updateProject(req.params.id, {
+          voiceProfile: null,
+          voiceProfileSamples: null,
+        } as any);
 
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting voice profile:", error);
-      res.status(500).json({ error: "Failed to delete voice profile" });
-    }
-  });
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error deleting voice profile:", error);
+        res.status(500).json({ error: "Failed to delete voice profile" });
+      }
+    },
+  );
 }

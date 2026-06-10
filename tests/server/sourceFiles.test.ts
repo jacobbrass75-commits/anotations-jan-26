@@ -20,15 +20,14 @@ describe("source file persistence", () => {
   });
 
   it("stores uploads under data/uploads and detects saved files", async () => {
-    const { getDocumentSourcePath, hasDocumentSource, saveDocumentSource } = await import(
-      "../../server/sourceFiles"
-    );
+    const { getDocumentSourcePath, hasDocumentSource, saveDocumentSource } =
+      await import("../../server/sourceFiles");
 
     const filePath = await saveDocumentSource("doc-1", "Paper.PDF", Buffer.from("pdf-body"));
 
     expect(filePath).toBe(join(tempDir, "data", "uploads", "doc-1.pdf"));
     expect(getDocumentSourcePath("doc-2", "archive.thisextensioniswaytoolong")).toBe(
-      join(tempDir, "data", "uploads", "doc-2.bin")
+      join(tempDir, "data", "uploads", "doc-2.bin"),
     );
     expect(await hasDocumentSource("doc-1", "Paper.PDF")).toBe(true);
     expect(await readFile(filePath, "utf8")).toBe("pdf-body");
@@ -39,6 +38,8 @@ describe("source file persistence", () => {
 
     expect(inferDocumentSourceMimeType("scan.HEIC")).toBe("image/heic");
     expect(inferDocumentSourceMimeType("report.pdf")).toBe("application/pdf");
-    expect(inferDocumentSourceMimeType("unknown.reallylongextension")).toBe("application/octet-stream");
+    expect(inferDocumentSourceMimeType("unknown.reallylongextension")).toBe(
+      "application/octet-stream",
+    );
   });
 });

@@ -29,7 +29,7 @@ export async function bootstrapTempWorkspace(tempDir: string): Promise<void> {
 
   if (bootstrap.status !== 0) {
     throw new Error(
-      `Failed to bootstrap temp workspace.\n${bootstrap.stdout ?? ""}\n${bootstrap.stderr ?? ""}`.trim()
+      `Failed to bootstrap temp workspace.\n${bootstrap.stdout ?? ""}\n${bootstrap.stderr ?? ""}`.trim(),
     );
   }
 }

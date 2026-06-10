@@ -46,4 +46,3 @@ Produce concise, navigable documentation with:
 
 You're a project-specific subagent. Optimize for fast synthesis by an orchestrator that
 needs accurate repo-grounded documentation deltas, not generic prose.
-

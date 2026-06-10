@@ -22,13 +22,13 @@ The core writing engine. Three phases streamed via SSE.
 ```typescript
 interface WritingRequest {
   topic: string;
-  annotationIds: string[];        // selected annotations to use as sources
-  projectId?: string;             // optional project context
+  annotationIds: string[]; // selected annotations to use as sources
+  projectId?: string; // optional project context
   citationStyle: "mla" | "apa" | "chicago";
   tone: "academic" | "casual" | "ap_style";
   targetLength: "short" | "medium" | "long"; // ~3 pages, ~5 pages, ~8 pages
-  noEnDashes: boolean;            // prompt injection toggle
-  deepWrite: boolean;             // extended thinking (Max only)
+  noEnDashes: boolean; // prompt injection toggle
+  deepWrite: boolean; // extended thinking (Max only)
 }
 
 interface WritingPlan {
@@ -36,7 +36,7 @@ interface WritingPlan {
   sections: Array<{
     title: string;
     description: string;
-    annotationIds: string[];       // which annotations map to this section
+    annotationIds: string[]; // which annotations map to this section
     targetWords: number;
   }>;
   bibliography: string[];
@@ -46,6 +46,7 @@ interface WritingPlan {
 **Phase 1: PLANNER** (1 API call)
 
 System prompt:
+
 ```
 You are an academic writing planner. Given a topic, tone, and a set of source annotations,
 create a detailed outline for a paper.
@@ -70,6 +71,7 @@ Output: `WritingPlan` JSON
 For each section in the plan, make a separate Claude call:
 
 System prompt:
+
 ```
 You are an academic writer. Write the following section of a paper.
 
@@ -96,6 +98,7 @@ Output the section text in markdown format.
 ```
 
 If `deepWrite` is true, add extended thinking:
+
 ```typescript
 {
   thinking: { type: "enabled", budget_tokens: 4096 }
@@ -105,6 +108,7 @@ If `deepWrite` is true, add extended thinking:
 **Phase 3: STITCHER** (1 API call)
 
 System prompt:
+
 ```
 You are an academic editor. You've been given all sections of a paper written by different writers.
 Your job is to:
@@ -120,10 +124,10 @@ Output the complete paper in markdown format.
 
 ### 2. `server/writingRoutes.ts` (NEW)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/write` | Start writing pipeline, stream results via SSE |
-| GET | `/api/write/history` | List previous writing sessions (future) |
+| Method | Path                 | Description                                    |
+| ------ | -------------------- | ---------------------------------------------- |
+| POST   | `/api/write`         | Start writing pipeline, stream results via SSE |
+| GET    | `/api/write/history` | List previous writing sessions (future)        |
 
 **The streaming endpoint (`POST /api/write`):**
 
@@ -186,6 +190,7 @@ A side panel/pane for the writing interface. Can be opened from the project work
 ```
 
 **Implementation:**
+
 - Use `react-markdown` for rendering (install: `npm install react-markdown`)
 - Progress indicator showing current phase and section
 - Real-time streaming display with blinking cursor
@@ -234,6 +239,7 @@ npm install @anthropic-ai/sdk react-markdown
 ```
 
 If export DOCX is needed:
+
 ```bash
 npm install html-to-docx
 ```
@@ -243,6 +249,7 @@ npm install html-to-docx
 ## Environment Variables
 
 Add to `.env`:
+
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
@@ -258,6 +265,7 @@ npm run dev
 ```
 
 Test:
+
 1. Navigate to `/write` or open writing pane in a project
 2. Enter a topic, select some annotations
 3. Click Generate — verify plan streams first

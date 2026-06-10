@@ -20,7 +20,9 @@ const sqlite = new Database(DB_PATH);
 sqlite.pragma("foreign_keys = ON");
 
 function getExistingColumnNames(tableName: string): Set<string> {
-  const columns = sqlite.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  const columns = sqlite.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+    name: string;
+  }>;
   return new Set(columns.map((column) => column.name));
 }
 

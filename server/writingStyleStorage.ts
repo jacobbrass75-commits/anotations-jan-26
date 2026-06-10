@@ -1,14 +1,13 @@
 import { and, desc, eq } from "drizzle-orm";
-import {
-  writingStyles,
-  type InsertWritingStyle,
-  type WritingStyle,
-} from "@shared/schema";
+import { writingStyles, type InsertWritingStyle, type WritingStyle } from "@shared/schema";
 import { db } from "./db";
 
 export const writingStyleStorage = {
   async createWritingStyle(data: InsertWritingStyle): Promise<WritingStyle> {
-    const [created] = await db.insert(writingStyles).values(data as any).returning();
+    const [created] = await db
+      .insert(writingStyles)
+      .values(data as any)
+      .returning();
     return created;
   },
 
@@ -33,7 +32,10 @@ export const writingStyleStorage = {
       .orderBy(desc(writingStyles.updatedAt));
   },
 
-  async getWritingStyleByNameForUser(name: string, userId: string): Promise<WritingStyle | undefined> {
+  async getWritingStyleByNameForUser(
+    name: string,
+    userId: string,
+  ): Promise<WritingStyle | undefined> {
     const [style] = await db
       .select()
       .from(writingStyles)

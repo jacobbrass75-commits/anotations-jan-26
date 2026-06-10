@@ -49,20 +49,104 @@ function Router() {
       <Route path="/sign-up/*" component={Register} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/privacy" component={Privacy} />
-      <Route path="/account">{() => <ProtectedRoute><Account /></ProtectedRoute>}</Route>
-      <Route path="/extension-auth">{() => <ProtectedRoute><ExtensionAuth /></ProtectedRoute>}</Route>
-      <Route path="/dashboard">{() => <ProtectedRoute><Home /></ProtectedRoute>}</Route>
-      <Route path="/">{() => <ProtectedRoute><Home /></ProtectedRoute>}</Route>
-      <Route path="/projects">{() => <ProtectedRoute><Projects /></ProtectedRoute>}</Route>
-      <Route path="/web-clips">{() => <ProtectedRoute><WebClips /></ProtectedRoute>}</Route>
-      <Route path="/projects/:id">{() => <ProtectedRoute><ProjectWorkspace /></ProtectedRoute>}</Route>
-      <Route path="/projects/:projectId/documents/:docId">{() => <ProtectedRoute><ProjectDocument /></ProtectedRoute>}</Route>
-      <Route path="/chat">{() => <ProtectedRoute><Chat /></ProtectedRoute>}</Route>
-      <Route path="/chat/:conversationId">{() => <ProtectedRoute><Chat /></ProtectedRoute>}</Route>
-      <Route path="/write">{() => <ProtectedRoute><WritingPage /></ProtectedRoute>}</Route>
-      <Route path="/writing">{() => <ProtectedRoute><WritingPage /></ProtectedRoute>}</Route>
-      <Route path="/writing-styles">{() => <ProtectedRoute><WritingStyles /></ProtectedRoute>}</Route>
-      <Route path="/admin/analytics">{() => <ProtectedRoute><AdminAnalytics /></ProtectedRoute>}</Route>
+      <Route path="/account">
+        {() => (
+          <ProtectedRoute>
+            <Account />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/extension-auth">
+        {() => (
+          <ProtectedRoute>
+            <ExtensionAuth />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/dashboard">
+        {() => (
+          <ProtectedRoute>
+            <Home />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/">
+        {() => (
+          <ProtectedRoute>
+            <Home />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/projects">
+        {() => (
+          <ProtectedRoute>
+            <Projects />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/web-clips">
+        {() => (
+          <ProtectedRoute>
+            <WebClips />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/projects/:id">
+        {() => (
+          <ProtectedRoute>
+            <ProjectWorkspace />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/projects/:projectId/documents/:docId">
+        {() => (
+          <ProtectedRoute>
+            <ProjectDocument />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/chat">
+        {() => (
+          <ProtectedRoute>
+            <Chat />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/chat/:conversationId">
+        {() => (
+          <ProtectedRoute>
+            <Chat />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/write">
+        {() => (
+          <ProtectedRoute>
+            <WritingPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/writing">
+        {() => (
+          <ProtectedRoute>
+            <WritingPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/writing-styles">
+        {() => (
+          <ProtectedRoute>
+            <WritingStyles />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/admin/analytics">
+        {() => (
+          <ProtectedRoute>
+            <AdminAnalytics />
+          </ProtectedRoute>
+        )}
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

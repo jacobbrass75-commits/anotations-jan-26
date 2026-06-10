@@ -63,9 +63,7 @@ export function ChatSidebar({
   const [editTitle, setEditTitle] = useState("");
 
   const filtered = search
-    ? conversations.filter((c) =>
-        c.title.toLowerCase().includes(search.toLowerCase())
-      )
+    ? conversations.filter((c) => c.title.toLowerCase().includes(search.toLowerCase()))
     : conversations;
 
   const groups = groupByDate(filtered);
@@ -177,7 +175,10 @@ export function ChatSidebar({
 
       <div className="border-t p-3 space-y-2">
         <Link href="/">
-          <Button variant="ghost" className="w-full justify-start gap-2 uppercase tracking-wider text-xs font-mono">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2 uppercase tracking-wider text-xs font-mono"
+          >
             <House className="h-4 w-4" />
             Dashboard
           </Button>

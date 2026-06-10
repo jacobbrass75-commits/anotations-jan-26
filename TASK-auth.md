@@ -32,12 +32,17 @@ export const users = sqliteTable("users", {
   storageLimit: integer("storage_limit").notNull().default(52428800), // 50MB for free
   emailVerified: integer("email_verified", { mode: "boolean" }).default(false),
   billingCycleStart: integer("billing_cycle_start", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 ```
 
 Add Zod schemas:
+
 ```typescript
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
@@ -77,6 +82,7 @@ export const registerSchema = z.object({
 ```
 
 **Implementation details:**
+
 - Use `bcrypt` (install: `npm install bcrypt @types/bcrypt`) for password hashing, 12 salt rounds
 - Use `jsonwebtoken` (install: `npm install jsonwebtoken @types/jsonwebtoken`) for JWT
 - JWT secret: `process.env.JWT_SECRET` (generate a random 64-char string for .env)
@@ -89,16 +95,17 @@ export const registerSchema = z.object({
 
 Endpoints:
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/auth/register` | No | Create account, return JWT |
-| POST | `/api/auth/login` | No | Validate credentials, return JWT |
-| POST | `/api/auth/logout` | Yes | Invalidate token (optional - JWT is stateless) |
-| GET | `/api/auth/me` | Yes | Return current user profile (no password) |
-| PUT | `/api/auth/me` | Yes | Update profile (firstName, lastName, username) |
-| GET | `/api/auth/usage` | Yes | Return token usage, storage usage, limits |
+| Method | Path                 | Auth | Description                                    |
+| ------ | -------------------- | ---- | ---------------------------------------------- |
+| POST   | `/api/auth/register` | No   | Create account, return JWT                     |
+| POST   | `/api/auth/login`    | No   | Validate credentials, return JWT               |
+| POST   | `/api/auth/logout`   | Yes  | Invalidate token (optional - JWT is stateless) |
+| GET    | `/api/auth/me`       | Yes  | Return current user profile (no password)      |
+| PUT    | `/api/auth/me`       | Yes  | Update profile (firstName, lastName, username) |
+| GET    | `/api/auth/usage`    | Yes  | Return token usage, storage usage, limits      |
 
 **Register flow:**
+
 1. Validate body with `registerSchema`
 2. Check email + username uniqueness
 3. Hash password with bcrypt
@@ -107,6 +114,7 @@ Endpoints:
 6. Return `{ user: { id, email, username, tier, ... }, token: string }`
 
 **Login flow:**
+
 1. Validate body with `loginSchema`
 2. Find user by email
 3. Compare password with bcrypt
@@ -114,6 +122,7 @@ Endpoints:
 5. Return `{ user: { ... }, token: string }`
 
 **Usage endpoint:**
+
 ```json
 {
   "tokensUsed": 12500,
@@ -130,6 +139,7 @@ Endpoints:
 ### 3. `server/authStorage.ts` (NEW)
 
 Storage layer for user operations:
+
 - `createUser(data: RegisterData): Promise<User>`
 - `getUserByEmail(email: string): Promise<User | null>`
 - `getUserByUsername(username: string): Promise<User | null>`
@@ -194,6 +204,7 @@ npm install -D @types/bcrypt @types/jsonwebtoken
 ## After Implementation
 
 Run:
+
 ```bash
 npm run db:push   # Sync schema changes to SQLite
 npm run check     # TypeScript type check
@@ -201,6 +212,7 @@ npm run dev       # Test the dev server
 ```
 
 Test manually:
+
 1. POST `/api/auth/register` with email/username/password
 2. POST `/api/auth/login` with email/password
 3. GET `/api/auth/me` with Bearer token

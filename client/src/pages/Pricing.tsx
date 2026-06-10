@@ -2,7 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isLocalDevAuthEnabled, useAuth } from "@/lib/auth";
 import { UserButton } from "@clerk/clerk-react";
 import { useLocation } from "wouter";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -46,11 +53,21 @@ const features: TierFeature[] = [
   { label: "Documents", free: "5 active", pro: "50 active", max: "Unlimited" },
   { label: "Projects", free: "1", pro: "10", max: "Unlimited" },
   { label: "Storage", free: "50 MB", pro: "500 MB", max: "5 GB" },
-  { label: "Citations", free: "10/day (Chicago)", pro: "Unlimited (all formats)", max: "Unlimited (all formats)" },
+  {
+    label: "Citations",
+    free: "10/day (Chicago)",
+    pro: "Unlimited (all formats)",
+    max: "Unlimited (all formats)",
+  },
   { label: "OCR", free: "PaddleOCR", pro: "GPT-4o-mini Vision", max: "GPT-4o Vision" },
   { label: "Chat History", free: "Last 5", pro: "Unlimited", max: "Unlimited" },
   { label: "Output Tokens/mo", free: "50K", pro: "500K", max: "2M" },
-  { label: "AI Writing", free: "---", pro: "Quick Draft (Haiku 4.5)", max: "Quick + Deep Write (Sonnet 4.5)" },
+  {
+    label: "AI Writing",
+    free: "---",
+    pro: "Quick Draft (Haiku 4.5)",
+    max: "Quick + Deep Write (Sonnet 4.5)",
+  },
   { label: "Source Verified", free: "---", pro: "---", max: "Yes" },
   { label: "Export", free: "---", pro: "DOCX / PDF", max: "Bulk Export" },
   { label: "Chrome Extension", free: "---", pro: "Yes", max: "Yes" },
@@ -175,7 +192,8 @@ function AutomatedVenmoButton({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isSignedIn || !config.enabled || !containerRef.current) {
+    const container = containerRef.current;
+    if (!isSignedIn || !config.enabled || !container) {
       return;
     }
 
@@ -186,7 +204,7 @@ function AutomatedVenmoButton({
 
     loadPayPalSdk(config)
       .then(() => {
-        if (cancelled || !containerRef.current || !window.paypal) return;
+        if (cancelled || !window.paypal) return;
 
         buttons = window.paypal.Buttons({
           fundingSource: window.paypal.FUNDING.VENMO,
@@ -227,14 +245,16 @@ function AutomatedVenmoButton({
         });
 
         if (buttons.isEligible && !buttons.isEligible()) {
-          setError("Venmo checkout is not available on this device/browser. Use manual Venmo instead.");
+          setError(
+            "Venmo checkout is not available on this device/browser. Use manual Venmo instead.",
+          );
           setStatus("error");
           return;
         }
 
-        containerRef.current.innerHTML = "";
+        container.innerHTML = "";
         buttons
-          .render(containerRef.current)
+          .render(container)
           .then(() => {
             if (!cancelled) setStatus("ready");
           })
@@ -257,9 +277,7 @@ function AutomatedVenmoButton({
     return () => {
       cancelled = true;
       buttons?.close?.();
-      if (containerRef.current) {
-        containerRef.current.innerHTML = "";
-      }
+      container.innerHTML = "";
     };
   }, [config, isSignedIn, onComplete, tier]);
 
@@ -387,7 +405,11 @@ export default function Pricing() {
           <div className="flex items-center gap-3">
             {isSignedIn ? (
               <>
-                <Button variant="ghost" onClick={() => setLocation("/account")} data-testid="button-open-account">
+                <Button
+                  variant="ghost"
+                  onClick={() => setLocation("/account")}
+                  data-testid="button-open-account"
+                >
                   Account
                 </Button>
                 <Button variant="ghost" onClick={() => setLocation("/")}>
@@ -408,7 +430,9 @@ export default function Pricing() {
             <CardHeader>
               <CardTitle>Free</CardTitle>
               <CardDescription>Get started with the basics</CardDescription>
-              <div className="text-3xl font-bold mt-2">$0<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+              <div className="text-3xl font-bold mt-2">
+                $0<span className="text-sm font-normal text-muted-foreground">/mo</span>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>5 active documents</p>
@@ -420,9 +444,15 @@ export default function Pricing() {
             </CardContent>
             <CardFooter>
               {currentTier === "free" ? (
-                <Button className="w-full" variant="outline" disabled>Current Plan</Button>
+                <Button className="w-full" variant="outline" disabled>
+                  Current Plan
+                </Button>
               ) : (
-                <Button className="w-full" variant="outline" onClick={() => setLocation("/sign-up")}>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => setLocation("/sign-up")}
+                >
                   Sign Up Free
                 </Button>
               )}
@@ -430,12 +460,16 @@ export default function Pricing() {
           </Card>
 
           {/* Pro */}
-          <Card className={`border-2 ${currentTier === "pro" ? "border-primary" : "border-primary/50"}`}>
+          <Card
+            className={`border-2 ${currentTier === "pro" ? "border-primary" : "border-primary/50"}`}
+          >
             <CardHeader>
               <div className="text-xs font-semibold uppercase text-primary mb-1">Most Popular</div>
               <CardTitle>Pro</CardTitle>
               <CardDescription>For serious researchers</CardDescription>
-              <div className="text-3xl font-bold mt-2">$14<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+              <div className="text-3xl font-bold mt-2">
+                $14<span className="text-sm font-normal text-muted-foreground">/mo</span>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>50 active documents</p>
@@ -451,7 +485,9 @@ export default function Pricing() {
             </CardContent>
             <CardFooter>
               {currentTier === "pro" ? (
-                <Button className="w-full" disabled>Current Plan</Button>
+                <Button className="w-full" disabled>
+                  Current Plan
+                </Button>
               ) : (
                 <PlanCheckoutButton
                   tier="pro"
@@ -472,7 +508,9 @@ export default function Pricing() {
             <CardHeader>
               <CardTitle>Max</CardTitle>
               <CardDescription>Unlimited power for your thesis</CardDescription>
-              <div className="text-3xl font-bold mt-2">$50<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+              <div className="text-3xl font-bold mt-2">
+                $50<span className="text-sm font-normal text-muted-foreground">/mo</span>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>Unlimited documents</p>
@@ -488,7 +526,9 @@ export default function Pricing() {
             </CardContent>
             <CardFooter>
               {currentTier === "max" ? (
-                <Button className="w-full" disabled>Current Plan</Button>
+                <Button className="w-full" disabled>
+                  Current Plan
+                </Button>
               ) : (
                 <PlanCheckoutButton
                   tier="max"

@@ -14,7 +14,7 @@ for (const testFile of testFiles) {
     {
       stdio: "inherit",
       env: process.env,
-    }
+    },
   );
 
   if (result.status !== 0) {

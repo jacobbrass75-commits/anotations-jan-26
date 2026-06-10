@@ -1,12 +1,33 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { Link, useRoute } from "wouter";
-import { useProject, useFolders, useProjectDocuments, useCreateFolder, useDeleteFolder, useUpdateProject, useAddDocumentToProject, useRemoveDocumentFromProject, useAutoAnalyzeProjectDocument } from "@/hooks/useProjects";
+import {
+  useProject,
+  useFolders,
+  useProjectDocuments,
+  useCreateFolder,
+  useDeleteFolder,
+  useUpdateProject,
+  useAddDocumentToProject,
+  useRemoveDocumentFromProject,
+  useAutoAnalyzeProjectDocument,
+} from "@/hooks/useProjects";
 import { useGlobalSearch, useGenerateCitation } from "@/hooks/useProjectSearch";
-import { useUploadDocument, useUploadDocumentGroup, useUploadTextDocument } from "@/hooks/useDocument";
+import {
+  useUploadDocument,
+  useUploadDocumentGroup,
+  useUploadTextDocument,
+} from "@/hooks/useDocument";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -14,10 +35,35 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, FolderPlus, FileText, Search, Plus, ChevronRight, ChevronDown, Folder, Trash2, Copy, BookOpen, ExternalLink, Sparkles, Settings, Upload, Quote, PenTool, Mic } from "lucide-react";
+import {
+  ArrowLeft,
+  FolderPlus,
+  FileText,
+  Search,
+  Plus,
+  ChevronRight,
+  ChevronDown,
+  Folder,
+  Trash2,
+  Copy,
+  BookOpen,
+  ExternalLink,
+  Sparkles,
+  Settings,
+  Upload,
+  Quote,
+  PenTool,
+  Mic,
+} from "lucide-react";
 import { BatchAnalysisModal } from "@/components/BatchAnalysisModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import WritingChat from "@/components/WritingChat";
@@ -26,28 +72,33 @@ import { useToast } from "@/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Folder as FolderType, GlobalSearchResult, Document } from "@shared/schema";
 
-type DocumentLibraryItem = Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">;
-type AutoAnalyzeSourceState = Pick<DocumentLibraryItem, "status" | "chunkCount" | "processingError">;
+type DocumentLibraryItem = Pick<
+  Document,
+  "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError"
+>;
+type AutoAnalyzeSourceState = Pick<
+  DocumentLibraryItem,
+  "status" | "chunkCount" | "processingError"
+>;
 
-function FolderTree({ 
-  folders, 
-  selectedFolderId, 
-  onSelectFolder, 
+function FolderTree({
+  folders,
+  selectedFolderId,
+  onSelectFolder,
   onDeleteFolder,
-  level = 0 
-}: { 
+}: {
   folders: FolderType[];
   selectedFolderId: string | null;
   onSelectFolder: (id: string | null) => void;
   onDeleteFolder: (id: string) => void;
-  level?: number;
 }) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
-  const rootFolders = folders.filter(f => !f.parentFolderId);
-  
-  const getChildFolders = (parentId: string) => folders.filter(f => f.parentFolderId === parentId);
-  
+  const rootFolders = folders.filter((f) => !f.parentFolderId);
+
+  const getChildFolders = (parentId: string) =>
+    folders.filter((f) => f.parentFolderId === parentId);
+
   const toggleExpand = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const newExpanded = new Set(expandedFolders);
@@ -87,7 +138,9 @@ function FolderTree({
             <span className="w-4" />
           )}
           <Folder className="h-4 w-4 text-muted-foreground" />
-          <span className="font-mono text-xs uppercase tracking-wider flex-1 truncate">{folder.name}</span>
+          <span className="font-mono text-xs uppercase tracking-wider flex-1 truncate">
+            {folder.name}
+          </span>
           <button
             className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive"
             onClick={(e) => {
@@ -100,9 +153,7 @@ function FolderTree({
           </button>
         </div>
         {isExpanded && hasChildren && (
-          <div>
-            {children.map(child => renderFolder(child, depth + 1))}
-          </div>
+          <div>{children.map((child) => renderFolder(child, depth + 1))}</div>
         )}
       </div>
     );
@@ -112,7 +163,9 @@ function FolderTree({
     <div className="space-y-0.5">
       <div
         className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer ${
-          selectedFolderId === null ? "text-primary bg-primary/10 border-l-2 border-primary" : "hover-elevate"
+          selectedFolderId === null
+            ? "text-primary bg-primary/10 border-l-2 border-primary"
+            : "hover-elevate"
         }`}
         onClick={() => onSelectFolder(null)}
         data-testid="folder-root"
@@ -120,7 +173,7 @@ function FolderTree({
         <Folder className="h-4 w-4 text-muted-foreground" />
         <span className="font-mono text-xs uppercase tracking-wider">All Documents</span>
       </div>
-      {rootFolders.map(folder => renderFolder(folder, 0))}
+      {rootFolders.map((folder) => renderFolder(folder, 0))}
     </div>
   );
 }
@@ -157,23 +210,35 @@ function SearchResultCard({
   };
 
   return (
-    <Card 
-      className="hover-elevate cursor-pointer eva-clip-sm" 
+    <Card
+      className="hover-elevate cursor-pointer eva-clip-sm"
       data-testid={`search-result-${result.annotationId || result.documentId}`}
       onClick={onNavigateToDocument}
     >
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className={categoryColors[result.category || result.type] || ""}>
+            <Badge
+              variant="outline"
+              className={categoryColors[result.category || result.type] || ""}
+            >
               {result.category?.replace("_", " ") || result.type.replace("_", " ")}
             </Badge>
-            <Badge variant="outline" className={relevanceClasses[result.relevanceLevel] || relevanceClasses.low}>
+            <Badge
+              variant="outline"
+              className={relevanceClasses[result.relevanceLevel] || relevanceClasses.low}
+            >
               {Math.round(result.similarityScore * 100)}% match
             </Badge>
           </div>
           <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" onClick={onCopyQuote} data-testid="button-copy-quote" title="Copy quote">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onCopyQuote}
+              data-testid="button-copy-quote"
+              title="Copy quote"
+            >
               <Copy className="h-4 w-4" />
             </Button>
             <Button
@@ -206,17 +271,15 @@ function SearchResultCard({
             </Button>
           </div>
         </div>
-        
+
         {result.highlightedText && (
           <blockquote className="border-l-4 border-primary/50 pl-3 italic text-sm font-mono">
             "{result.highlightedText}"
           </blockquote>
         )}
-        
-        {result.note && (
-          <p className="text-sm text-muted-foreground">{result.note}</p>
-        )}
-        
+
+        {result.note && <p className="text-sm text-muted-foreground">{result.note}</p>}
+
         {result.documentFilename && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <FileText className="h-3 w-3" />
@@ -294,14 +357,14 @@ export default function ProjectWorkspace() {
   const [, params] = useRoute("/projects/:id");
   const projectId = params?.id || "";
   const { toast } = useToast();
-  
+
   const { data: project, isLoading: projectLoading } = useProject(projectId);
   const { data: folders = [] } = useFolders(projectId);
   const { data: projectDocuments = [] } = useProjectDocuments(projectId);
   const { data: allDocuments = [] } = useQuery<DocumentLibraryItem[]>({
     queryKey: ["/api/documents/meta"],
   });
-  
+
   const createFolder = useCreateFolder();
   const deleteFolder = useDeleteFolder();
   const updateProject = useUpdateProject();
@@ -310,7 +373,7 @@ export default function ProjectWorkspace() {
   const autoAnalyzeProjectDocument = useAutoAnalyzeProjectDocument();
   const globalSearch = useGlobalSearch();
   const generateCitation = useGenerateCitation();
-  
+
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<"documents" | "write" | "voice">("documents");
   const [searchQuery, setSearchQuery] = useState("");
@@ -319,15 +382,27 @@ export default function ProjectWorkspace() {
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
   const [isAddDocOpen, setIsAddDocOpen] = useState(false);
   const [isEditProjectOpen, setIsEditProjectOpen] = useState(false);
-  const [editProjectForm, setEditProjectForm] = useState({ name: "", description: "", thesis: "", scope: "" });
+  const [editProjectForm, setEditProjectForm] = useState({
+    name: "",
+    description: "",
+    thesis: "",
+    scope: "",
+  });
   const [newFolderName, setNewFolderName] = useState("");
   const [selectedDocId, setSelectedDocId] = useState("");
-  const [citationModal, setCitationModal] = useState<{ footnote: string; bibliography: string } | null>(null);
+  const [citationModal, setCitationModal] = useState<{
+    footnote: string;
+    bibliography: string;
+  } | null>(null);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [generatingCitationFor, setGeneratingCitationFor] = useState<string | null>(null);
   const [generatingFootnoteFor, setGeneratingFootnoteFor] = useState<string | null>(null);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; label: string } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{
+    current: number;
+    total: number;
+    label: string;
+  } | null>(null);
   const [uploadOcrMode, setUploadOcrMode] = useState<string>("standard");
   const [uploadOcrModel, setUploadOcrModel] = useState<string>("gpt-4o");
   const [pastedSourceTitle, setPastedSourceTitle] = useState("");
@@ -351,21 +426,22 @@ export default function ProjectWorkspace() {
       scope: project.scope || "",
     });
   }, [project]);
-  
+
   const filteredDocuments = useMemo(() => {
     if (selectedFolderId === null) return projectDocuments;
-    return projectDocuments.filter(pd => pd.folderId === selectedFolderId);
+    return projectDocuments.filter((pd) => pd.folderId === selectedFolderId);
   }, [projectDocuments, selectedFolderId]);
 
   const availableDocuments = useMemo(() => {
-    const addedDocIds = new Set(projectDocuments.map(pd => pd.documentId));
-    return allDocuments.filter(doc => !addedDocIds.has(doc.id));
+    const addedDocIds = new Set(projectDocuments.map((pd) => pd.documentId));
+    return allDocuments.filter((doc) => !addedDocIds.has(doc.id));
   }, [allDocuments, projectDocuments]);
 
   const hasPdfUploadFiles = uploadFiles.some((file) => isPdfFile(file));
   const hasImageUploadFiles = uploadFiles.some((file) => isImageFile(file));
   const shouldShowVisionModelSelector =
-    hasImageUploadFiles || (hasPdfUploadFiles && (uploadOcrMode === "vision" || uploadOcrMode === "vision_batch"));
+    hasImageUploadFiles ||
+    (hasPdfUploadFiles && (uploadOcrMode === "vision" || uploadOcrMode === "vision_batch"));
   const canCombineSelectedImages =
     uploadFiles.length > 1 && uploadFiles.every((file) => isCombinableImageFile(file));
   const combinedUploadChunks = canCombineSelectedImages
@@ -376,7 +452,7 @@ export default function ProjectWorkspace() {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-    
+
     setIsSearching(true);
     try {
       const response = await globalSearch.mutateAsync({
@@ -398,7 +474,7 @@ export default function ProjectWorkspace() {
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
-    
+
     try {
       await createFolder.mutateAsync({
         projectId,
@@ -417,7 +493,7 @@ export default function ProjectWorkspace() {
 
   const handleDeleteFolder = async (id: string) => {
     if (!confirm("Delete this folder? Documents inside will be moved to root.")) return;
-    
+
     try {
       await deleteFolder.mutateAsync({ id, projectId });
       if (selectedFolderId === id) setSelectedFolderId(null);
@@ -466,7 +542,10 @@ export default function ProjectWorkspace() {
       if (!options?.quiet) {
         toast({
           title: "Auto analysis failed",
-          description: error instanceof Error ? error.message : "The source may still be processing. Try again in a minute.",
+          description:
+            error instanceof Error
+              ? error.message
+              : "The source may still be processing. Try again in a minute.",
           variant: "destructive",
         });
       }
@@ -479,7 +558,10 @@ export default function ProjectWorkspace() {
     }
   };
 
-  const maybeRunAutoAnalyze = (projectDocumentId?: string, source?: Partial<AutoAnalyzeSourceState> | null) => {
+  const maybeRunAutoAnalyze = (
+    projectDocumentId?: string,
+    source?: Partial<AutoAnalyzeSourceState> | null,
+  ) => {
     if (!projectDocumentId || !autoAnalyzeNewSources) return;
     if (!canAutoAnalyzeSource(source)) return;
     void runAutoAnalyze(projectDocumentId, { quiet: true });
@@ -487,7 +569,7 @@ export default function ProjectWorkspace() {
 
   const handleAddDocument = async () => {
     if (!selectedDocId) return;
-    
+
     try {
       const projectDoc = await addDocument.mutateAsync({
         projectId,
@@ -508,7 +590,7 @@ export default function ProjectWorkspace() {
 
   const handleRemoveDocument = async (id: string) => {
     if (!confirm("Remove this document from the project?")) return;
-    
+
     try {
       await removeDocument.mutateAsync({ id, projectId });
       toast({ title: "Success", description: "Document removed" });
@@ -523,9 +605,11 @@ export default function ProjectWorkspace() {
     if (selectedFiles.length === 0) return;
 
     setUploadFiles((prev) => {
-      const existingKeys = new Set(prev.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+      const existingKeys = new Set(
+        prev.map((file) => `${file.name}:${file.size}:${file.lastModified}`),
+      );
       const newFiles = selectedFiles.filter(
-        (file) => !existingKeys.has(`${file.name}:${file.size}:${file.lastModified}`)
+        (file) => !existingKeys.has(`${file.name}:${file.size}:${file.lastModified}`),
       );
       return [...prev, ...newFiles];
     });
@@ -538,7 +622,10 @@ export default function ProjectWorkspace() {
   const handleUploadAndAddDocuments = async () => {
     if (uploadFiles.length === 0) return;
     setIsUploadingAndAdding(true);
-    const uploadUnits = canCombineSelectedImages && combineImageUploads ? combinedUploadChunks.length : uploadFiles.length;
+    const uploadUnits =
+      canCombineSelectedImages && combineImageUploads
+        ? combinedUploadChunks.length
+        : uploadFiles.length;
     setUploadProgress({ current: 0, total: uploadUnits, label: "Starting upload..." });
 
     let addedCount = 0;
@@ -708,7 +795,8 @@ export default function ProjectWorkspace() {
     } catch (error) {
       toast({
         title: "Paste failed",
-        description: error instanceof Error ? error.message : "Could not create a source from pasted text.",
+        description:
+          error instanceof Error ? error.message : "Could not create a source from pasted text.",
         variant: "destructive",
       });
     } finally {
@@ -720,7 +808,7 @@ export default function ProjectWorkspace() {
   const handleGenerateCitation = async (result: GlobalSearchResult) => {
     const resultKey = result.annotationId || result.documentId || "";
     setGeneratingCitationFor(resultKey);
-    
+
     try {
       if (result.citationData) {
         const citation = await generateCitation.mutateAsync({
@@ -740,8 +828,8 @@ export default function ProjectWorkspace() {
         if (citation.footnote && citation.bibliography) {
           setCitationModal({ footnote: citation.footnote, bibliography: citation.bibliography });
           if (!res.ok) {
-            toast({ 
-              title: "Partial Citation", 
+            toast({
+              title: "Partial Citation",
               description: "Some metadata could not be extracted. Citation may be incomplete.",
             });
           }
@@ -749,7 +837,11 @@ export default function ProjectWorkspace() {
           throw new Error(citation.error || "Citation generation failed");
         }
       } else {
-        toast({ title: "Error", description: "Cannot generate citation without document", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: "Cannot generate citation without document",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       toast({ title: "Error", description: "Failed to generate citation", variant: "destructive" });
@@ -763,7 +855,7 @@ export default function ProjectWorkspace() {
       toast({ title: "Error", description: "Document not found", variant: "destructive" });
       return;
     }
-    const projectDoc = projectDocuments.find(pd => pd.documentId === result.documentId);
+    const projectDoc = projectDocuments.find((pd) => pd.documentId === result.documentId);
     if (projectDoc) {
       const params = new URLSearchParams();
       if (result.annotationId) {
@@ -773,9 +865,17 @@ export default function ProjectWorkspace() {
         params.set("start", String(result.startPosition));
       }
       const query = params.toString();
-      window.open(`/projects/${projectId}/documents/${projectDoc.id}${query ? `?${query}` : ""}`, "_blank", "noopener,noreferrer");
+      window.open(
+        `/projects/${projectId}/documents/${projectDoc.id}${query ? `?${query}` : ""}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
     } else {
-      toast({ title: "Document Not Found", description: "The document may have been removed from this project", variant: "destructive" });
+      toast({
+        title: "Document Not Found",
+        description: "The document may have been removed from this project",
+        variant: "destructive",
+      });
     }
   };
 
@@ -875,7 +975,9 @@ export default function ProjectWorkspace() {
             </Button>
           </Link>
           <div className="flex items-start gap-2">
-            <h2 className="min-w-0 flex-1 font-semibold text-lg truncate font-mono uppercase tracking-wider">{project.name}</h2>
+            <h2 className="min-w-0 flex-1 font-semibold text-lg truncate font-mono uppercase tracking-wider">
+              {project.name}
+            </h2>
             <Button
               variant="ghost"
               size="icon"
@@ -891,11 +993,11 @@ export default function ProjectWorkspace() {
             <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{project.thesis}</p>
           )}
         </div>
-        
+
         <div className="p-2 border-b">
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="w-full justify-start"
             onClick={() => setIsAddFolderOpen(true)}
             data-testid="button-add-folder"
@@ -904,7 +1006,7 @@ export default function ProjectWorkspace() {
             New Folder
           </Button>
         </div>
-        
+
         <ScrollArea className="flex-1 p-2">
           <FolderTree
             folders={folders}
@@ -918,7 +1020,10 @@ export default function ProjectWorkspace() {
       <main className="flex-1 flex flex-col eva-grid-bg">
         <header className="border-b border-border bg-background/95 backdrop-blur-md p-4">
           <div className="flex items-center justify-between gap-4">
-            <Tabs value={workspaceTab} onValueChange={(v) => setWorkspaceTab(v as "documents" | "write" | "voice")}>
+            <Tabs
+              value={workspaceTab}
+              onValueChange={(v) => setWorkspaceTab(v as "documents" | "write" | "voice")}
+            >
               <TabsList>
                 <TabsTrigger value="documents" data-testid="tab-workspace-documents">
                   <FileText className="h-4 w-4 mr-2" />
@@ -959,7 +1064,11 @@ export default function ProjectWorkspace() {
                   <Sparkles className="h-4 w-4 mr-2" />
                   Batch Analyze
                 </Button>
-                <Button className="uppercase tracking-wider text-xs" onClick={() => setIsAddDocOpen(true)} data-testid="button-add-document">
+                <Button
+                  className="uppercase tracking-wider text-xs"
+                  onClick={() => setIsAddDocOpen(true)}
+                  data-testid="button-add-document"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Document
                 </Button>
@@ -977,7 +1086,11 @@ export default function ProjectWorkspace() {
                   Add Source
                 </Button>
                 <Link href={`/write?projectId=${projectId}`}>
-                  <Button variant="outline" className="uppercase tracking-wider text-xs" data-testid="button-open-full-write">
+                  <Button
+                    variant="outline"
+                    className="uppercase tracking-wider text-xs"
+                    data-testid="button-open-full-write"
+                  >
                     <ExternalLink className="h-4 w-4 mr-2" />
                     Open Full Page
                   </Button>
@@ -1005,7 +1118,9 @@ export default function ProjectWorkspace() {
             {searchResults.length > 0 ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="eva-section-title text-sm">SEARCH RESULTS ({searchResults.length})</h3>
+                  <h3 className="eva-section-title text-sm">
+                    SEARCH RESULTS ({searchResults.length})
+                  </h3>
                   <Button variant="ghost" size="sm" onClick={() => setSearchResults([])}>
                     Clear Results
                   </Button>
@@ -1016,11 +1131,17 @@ export default function ProjectWorkspace() {
                       key={`${result.annotationId || result.documentId}-${idx}`}
                       result={result}
                       onGenerateCitation={() => handleGenerateCitation(result)}
-                      onCopyQuote={() => handleCopyQuote(result.highlightedText || result.matchedText)}
+                      onCopyQuote={() =>
+                        handleCopyQuote(result.highlightedText || result.matchedText)
+                      }
                       onCopyFootnote={() => handleCopyFootnote(result)}
                       onNavigateToDocument={() => handleNavigateToDocument(result)}
-                      isGeneratingCitation={generatingCitationFor === (result.annotationId || result.documentId)}
-                      isGeneratingFootnote={generatingFootnoteFor === (result.annotationId || result.documentId)}
+                      isGeneratingCitation={
+                        generatingCitationFor === (result.annotationId || result.documentId)
+                      }
+                      isGeneratingFootnote={
+                        generatingFootnoteFor === (result.annotationId || result.documentId)
+                      }
                     />
                   ))}
                 </div>
@@ -1029,15 +1150,21 @@ export default function ProjectWorkspace() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold font-mono text-sm uppercase tracking-wider">
-                    {selectedFolderId ? folders.find(f => f.id === selectedFolderId)?.name : "All Documents"}
-                    <span className="text-muted-foreground font-normal ml-2">({filteredDocuments.length})</span>
+                    {selectedFolderId
+                      ? folders.find((f) => f.id === selectedFolderId)?.name
+                      : "All Documents"}
+                    <span className="text-muted-foreground font-normal ml-2">
+                      ({filteredDocuments.length})
+                    </span>
                   </h3>
                 </div>
-                
+
                 {filteredDocuments.length === 0 ? (
                   <div className="text-center py-16 space-y-4">
                     <FileText className="h-12 w-12 mx-auto text-muted-foreground" />
-                    <p className="text-muted-foreground">No documents in this {selectedFolderId ? "folder" : "project"} yet.</p>
+                    <p className="text-muted-foreground">
+                      No documents in this {selectedFolderId ? "folder" : "project"} yet.
+                    </p>
                     <Button onClick={() => setIsAddDocOpen(true)}>
                       <Plus className="h-4 w-4 mr-2" />
                       Add Document
@@ -1046,13 +1173,24 @@ export default function ProjectWorkspace() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredDocuments.map((pd) => (
-                      <Card key={pd.id} className="group hover-elevate" data-testid={`doc-card-${pd.id}`}>
+                      <Card
+                        key={pd.id}
+                        className="group hover-elevate"
+                        data-testid={`doc-card-${pd.id}`}
+                      >
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between gap-2">
-                            <CardTitle className="text-base line-clamp-1 font-mono text-sm">{pd.document.filename}</CardTitle>
+                            <CardTitle className="text-base line-clamp-1 font-mono text-sm">
+                              {pd.document.filename}
+                            </CardTitle>
                             <div className="flex gap-1">
                               <Link href={`/projects/${projectId}/documents/${pd.id}`}>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-view-doc-${pd.id}`}>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  data-testid={`button-view-doc-${pd.id}`}
+                                >
                                   <ExternalLink className="h-3 w-3" />
                                 </Button>
                               </Link>
@@ -1061,23 +1199,29 @@ export default function ProjectWorkspace() {
                                 size="icon"
                                 className="h-7 w-7"
                                 onClick={() => runAutoAnalyze(pd.id)}
-                                disabled={autoAnalyzingIds.has(pd.id) || !canAutoAnalyzeSource(pd.document)}
+                                disabled={
+                                  autoAnalyzingIds.has(pd.id) || !canAutoAnalyzeSource(pd.document)
+                                }
                                 title={
                                   canAutoAnalyzeSource(pd.document)
                                     ? "Auto-generate project-aware annotations for this source"
-                                    : pd.document.processingError || "This source is still processing and is not ready for auto-analysis"
+                                    : pd.document.processingError ||
+                                      "This source is still processing and is not ready for auto-analysis"
                                 }
                                 data-testid={`button-auto-analyze-doc-${pd.id}`}
                               >
                                 {autoAnalyzingIds.has(pd.id) ? (
-                                  <div className="eva-hex-spinner" style={{ width: "0.85rem", height: "0.85rem" }} />
+                                  <div
+                                    className="eva-hex-spinner"
+                                    style={{ width: "0.85rem", height: "0.85rem" }}
+                                  />
                                 ) : (
                                   <Sparkles className="h-3 w-3" />
                                 )}
                               </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 className="h-7 w-7 opacity-0 group-hover:opacity-100"
                                 onClick={() => handleRemoveDocument(pd.id)}
                                 data-testid={`button-remove-doc-${pd.id}`}
@@ -1114,8 +1258,8 @@ export default function ProjectWorkspace() {
           <DialogHeader>
             <DialogTitle>Create Folder</DialogTitle>
             <DialogDescription>
-              {selectedFolderId 
-                ? `Creating subfolder in "${folders.find(f => f.id === selectedFolderId)?.name}"`
+              {selectedFolderId
+                ? `Creating subfolder in "${folders.find((f) => f.id === selectedFolderId)?.name}"`
                 : "Creating folder at root level"}
             </DialogDescription>
           </DialogHeader>
@@ -1130,8 +1274,14 @@ export default function ProjectWorkspace() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddFolderOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreateFolder} disabled={createFolder.isPending} data-testid="button-confirm-folder">
+            <Button variant="outline" onClick={() => setIsAddFolderOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateFolder}
+              disabled={createFolder.isPending}
+              data-testid="button-confirm-folder"
+            >
               Create
             </Button>
           </DialogFooter>
@@ -1161,7 +1311,9 @@ export default function ProjectWorkspace() {
               <Input
                 id="edit-project-domain"
                 value={editProjectForm.description}
-                onChange={(e) => setEditProjectForm((prev) => ({ ...prev, description: e.target.value }))}
+                onChange={(e) =>
+                  setEditProjectForm((prev) => ({ ...prev, description: e.target.value }))
+                }
                 placeholder="e.g., developmental psychology, public health, legal research"
                 data-testid="input-edit-project-domain"
               />
@@ -1171,7 +1323,9 @@ export default function ProjectWorkspace() {
               <Textarea
                 id="edit-project-thesis"
                 value={editProjectForm.thesis}
-                onChange={(e) => setEditProjectForm((prev) => ({ ...prev, thesis: e.target.value }))}
+                onChange={(e) =>
+                  setEditProjectForm((prev) => ({ ...prev, thesis: e.target.value }))
+                }
                 className="min-h-24"
                 data-testid="textarea-edit-project-thesis"
               />
@@ -1188,29 +1342,39 @@ export default function ProjectWorkspace() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditProjectOpen(false)}>Cancel</Button>
-            <Button onClick={handleUpdateProject} disabled={updateProject.isPending || !editProjectForm.name.trim()}>
-              {updateProject.isPending && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
+            <Button variant="outline" onClick={() => setIsEditProjectOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateProject}
+              disabled={updateProject.isPending || !editProjectForm.name.trim()}
+            >
+              {updateProject.isPending && (
+                <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />
+              )}
               Save Project
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isAddDocOpen} onOpenChange={(open) => {
-        setIsAddDocOpen(open);
-        if (!open) {
-          setUploadFiles([]);
-          setUploadOcrMode("standard");
-          setUploadOcrModel("gpt-4o");
-          setIsUploadingAndAdding(false);
-          setCombineImageUploads(true);
-          setSelectedDocId("");
-          setAddDocTab("library");
-          setPastedSourceTitle("");
-          setPastedSourceText("");
-        }
-      }}>
+      <Dialog
+        open={isAddDocOpen}
+        onOpenChange={(open) => {
+          setIsAddDocOpen(open);
+          if (!open) {
+            setUploadFiles([]);
+            setUploadOcrMode("standard");
+            setUploadOcrModel("gpt-4o");
+            setIsUploadingAndAdding(false);
+            setCombineImageUploads(true);
+            setSelectedDocId("");
+            setAddDocTab("library");
+            setPastedSourceTitle("");
+            setPastedSourceText("");
+          }
+        }}
+      >
         <DialogContent className="w-[min(92vw,58rem)] max-w-none max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Document to Project</DialogTitle>
@@ -1218,7 +1382,11 @@ export default function ProjectWorkspace() {
               Add a document from your library, upload a file, or paste text as a source.
             </DialogDescription>
           </DialogHeader>
-          <Tabs value={addDocTab} onValueChange={(v) => setAddDocTab(v as "library" | "upload" | "paste")} className="py-2">
+          <Tabs
+            value={addDocTab}
+            onValueChange={(v) => setAddDocTab(v as "library" | "upload" | "paste")}
+            className="py-2"
+          >
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="library" className="flex-1" data-testid="tab-library">
                 <BookOpen className="h-4 w-4 mr-2" />
@@ -1279,7 +1447,9 @@ export default function ProjectWorkspace() {
                   </p>
                 ) : (
                   <>
-                    <p className="text-sm text-muted-foreground">Click to select one or more PDF, TXT, or image files</p>
+                    <p className="text-sm text-muted-foreground">
+                      Click to select one or more PDF, TXT, or image files
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1">Max 50MB</p>
                   </>
                 )}
@@ -1317,13 +1487,15 @@ export default function ProjectWorkspace() {
                     data-testid="checkbox-combine-image-uploads"
                   />
                   <span className="leading-5">
-                    Combine selected images into document batches (keeps upload order, max {MAX_COMBINED_UPLOAD_FILES_PER_DOC} images per document)
+                    Combine selected images into document batches (keeps upload order, max{" "}
+                    {MAX_COMBINED_UPLOAD_FILES_PER_DOC} images per document)
                   </span>
                 </label>
               )}
               {exceedsSafeCombinedThreshold && combineImageUploads && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Large image sets are automatically split into {combinedUploadChunks.length} documents to prevent OCR failures and restarts.
+                  Large image sets are automatically split into {combinedUploadChunks.length}{" "}
+                  documents to prevent OCR failures and restarts.
                 </p>
               )}
               {hasPdfUploadFiles && (
@@ -1335,16 +1507,24 @@ export default function ProjectWorkspace() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
-                      <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
+                      <SelectItem value="advanced">
+                        Advanced OCR (scanned PDFs, PaddleOCR)
+                      </SelectItem>
                       <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
-                      <SelectItem value="vision_batch">Vision OCR Batch (long scanned PDFs, faster)</SelectItem>
+                      <SelectItem value="vision_batch">
+                        Vision OCR Batch (long scanned PDFs, faster)
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {uploadOcrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
-                    {uploadOcrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
-                    {uploadOcrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
-                    {uploadOcrMode === "vision_batch" && "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
+                    {uploadOcrMode === "standard" &&
+                      "Best for PDFs with selectable text. Fastest option."}
+                    {uploadOcrMode === "advanced" &&
+                      "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
+                    {uploadOcrMode === "vision" &&
+                      "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+                    {uploadOcrMode === "vision_batch" &&
+                      "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
                   </p>
                 </div>
               )}
@@ -1391,7 +1571,8 @@ export default function ProjectWorkspace() {
                   data-testid="textarea-pasted-source-text"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Pasted text becomes a normal source with chunking, search, summary, and citation support.
+                  Pasted text becomes a normal source with chunking, search, summary, and citation
+                  support.
                 </p>
               </div>
             </TabsContent>
@@ -1409,7 +1590,10 @@ export default function ProjectWorkspace() {
             </label>
           </div>
           {isUploadingAndAdding && uploadProgress && (
-            <div className="rounded-md border bg-background p-3 space-y-2" data-testid="upload-progress">
+            <div
+              className="rounded-md border bg-background p-3 space-y-2"
+              data-testid="upload-progress"
+            >
               <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                 <span className="truncate">{uploadProgress.label}</span>
                 <span className="shrink-0">
@@ -1417,29 +1601,37 @@ export default function ProjectWorkspace() {
                 </span>
               </div>
               <Progress
-                value={Math.round((uploadProgress.current / Math.max(1, uploadProgress.total)) * 100)}
+                value={Math.round(
+                  (uploadProgress.current / Math.max(1, uploadProgress.total)) * 100,
+                )}
                 className="h-2"
               />
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDocOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsAddDocOpen(false)}>
+              Cancel
+            </Button>
             {addDocTab === "library" ? (
-              <Button 
-                onClick={handleAddDocument} 
-                disabled={!selectedDocId || addDocument.isPending} 
+              <Button
+                onClick={handleAddDocument}
+                disabled={!selectedDocId || addDocument.isPending}
                 data-testid="button-confirm-add-doc"
               >
-                {addDocument.isPending && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
+                {addDocument.isPending && (
+                  <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />
+                )}
                 Add
               </Button>
             ) : addDocTab === "upload" ? (
-              <Button 
+              <Button
                 onClick={handleUploadAndAddDocuments}
                 disabled={uploadFiles.length === 0 || isUploadingAndAdding}
                 data-testid="button-upload-add"
               >
-                {isUploadingAndAdding && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
+                {isUploadingAndAdding && (
+                  <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />
+                )}
                 {canCombineSelectedImages && combineImageUploads
                   ? `Upload & Add ${combinedUploadChunks.length} Document${combinedUploadChunks.length === 1 ? "" : "s"}`
                   : `Upload & Add ${uploadFiles.length > 0 ? uploadFiles.length : ""} ${
@@ -1452,7 +1644,9 @@ export default function ProjectWorkspace() {
                 disabled={!pastedSourceText.trim() || isUploadingAndAdding}
                 data-testid="button-paste-text-add"
               >
-                {isUploadingAndAdding && <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />}
+                {isUploadingAndAdding && (
+                  <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />
+                )}
                 Save & Add Source
               </Button>
             )}

@@ -38,7 +38,7 @@ export async function startHttpServer(app: Express): Promise<{
 export async function requestJson<T = unknown>(
   baseUrl: string,
   path: string,
-  init: Omit<RequestInit, "body"> & { body?: Record<string, unknown> | string } = {}
+  init: Omit<RequestInit, "body"> & { body?: Record<string, unknown> | string } = {},
 ): Promise<JsonResponse<T>> {
   const headers = new Headers(init.headers);
   let body: string | undefined;

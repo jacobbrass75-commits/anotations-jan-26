@@ -36,7 +36,7 @@ describe("humanizer", () => {
     const { MAX_HUMANIZER_TEXT_LENGTH, humanizeText } = await import("../../server/humanizer");
 
     await expect(humanizeText("a".repeat(MAX_HUMANIZER_TEXT_LENGTH + 1))).rejects.toThrow(
-      `Text exceeds ${MAX_HUMANIZER_TEXT_LENGTH} character limit`
+      `Text exceeds ${MAX_HUMANIZER_TEXT_LENGTH} character limit`,
     );
   });
 
@@ -44,7 +44,7 @@ describe("humanizer", () => {
     const { humanizeText } = await import("../../server/humanizer");
 
     await expect(humanizeText("Hello world")).rejects.toThrow(
-      "No humanizer provider key configured"
+      "No humanizer provider key configured",
     );
   });
 
@@ -57,7 +57,7 @@ describe("humanizer", () => {
         ok: false,
         status: 429,
         text: async () => "rate limited",
-      })
+      }),
     );
     anthropicCreate.mockResolvedValue({
       content: [{ type: "text", text: "Humanized output" }],

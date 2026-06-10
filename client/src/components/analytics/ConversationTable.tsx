@@ -54,7 +54,11 @@ export function ConversationTable({ conversations, isLoading, onSelect }: Conver
                     </td>
                     <td className="py-2.5 px-2 text-right text-chart-3">{conv.toolCallCount}</td>
                     <td className="py-2.5 px-2 text-right">
-                      <span className={conv.failureCount > 0 ? "text-destructive" : "text-muted-foreground"}>
+                      <span
+                        className={
+                          conv.failureCount > 0 ? "text-destructive" : "text-muted-foreground"
+                        }
+                      >
                         {conv.failureCount}
                       </span>
                     </td>
@@ -69,11 +73,17 @@ export function ConversationTable({ conversations, isLoading, onSelect }: Conver
                           CRITICAL
                         </Badge>
                       ) : conv.failureCount > 0 ? (
-                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-yellow-500 border-yellow-500/50">
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 text-yellow-500 border-yellow-500/50"
+                        >
                           WARN
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-chart-2 border-chart-2/50">
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 text-chart-2 border-chart-2/50"
+                        >
                           OK
                         </Badge>
                       )}

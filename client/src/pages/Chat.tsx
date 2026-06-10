@@ -19,7 +19,7 @@ export default function Chat() {
   const { toast } = useToast();
 
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    params.conversationId || null
+    params.conversationId || null,
   );
 
   // Sync URL param changes
@@ -53,7 +53,7 @@ export default function Chat() {
     (id: string) => {
       setLocation(`/chat/${id}`);
     },
-    [setLocation]
+    [setLocation],
   );
 
   const handleDelete = useCallback(
@@ -71,7 +71,7 @@ export default function Chat() {
         });
       }
     },
-    [deleteConversation, activeConversationId, setLocation, toast]
+    [deleteConversation, activeConversationId, setLocation, toast],
   );
 
   const handleRename = useCallback(
@@ -86,7 +86,7 @@ export default function Chat() {
         });
       }
     },
-    [updateConversation, toast]
+    [updateConversation, toast],
   );
 
   const handleSend = useCallback(
@@ -99,19 +99,15 @@ export default function Chat() {
           // Wait a tick for state to update, then send via direct fetch
           // We need to call send on the new conversation
           setTimeout(async () => {
-            const response = await fetch(
-              `/api/chat/conversations/${conv.id}/messages`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content }),
-                credentials: "include",
-              }
-            );
+            const response = await fetch(`/api/chat/conversations/${conv.id}/messages`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content }),
+              credentials: "include",
+            });
             // Process the stream manually for this first message
             if (response.ok && response.body) {
               const reader = response.body.getReader();
-              const decoder = new TextDecoder();
               while (true) {
                 const { done } = await reader.read();
                 if (done) break;
@@ -138,7 +134,7 @@ export default function Chat() {
 
       await send(content);
     },
-    [activeConversationId, send, createConversation, setLocation, toast]
+    [activeConversationId, send, createConversation, setLocation, toast],
   );
 
   return (

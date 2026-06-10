@@ -31,7 +31,7 @@ const journalCitation: CitationData = {
 describe("citation generator", () => {
   it("formats full and subsequent Chicago book footnotes", () => {
     expect(generateChicagoFootnote(bookCitation, "42")).toBe(
-      "John Doe, History of Things (New York: Acme Press, 2024), 42."
+      "John Doe, History of Things (New York: Acme Press, 2024), 42.",
     );
     expect(generateChicagoFootnote(bookCitation, "42", true)).toBe("Doe, History of Things, 42.");
   });
@@ -39,13 +39,13 @@ describe("citation generator", () => {
   it("formats inline citations and bibliography entries", () => {
     expect(generateInlineCitation(bookCitation, "42")).toBe("(Doe, History of Things, 42)");
     expect(generateChicagoBibliography(bookCitation)).toBe(
-      "Doe, John. History of Things. New York: Acme Press, 2024."
+      "Doe, John. History of Things. New York: Acme Press, 2024.",
     );
   });
 
   it("formats journal bibliography entries with issue, pages, and DOI", () => {
     expect(generateChicagoBibliography(journalCitation)).toBe(
-      'Smith, Jane. "Archival Patterns in Modern Research." Journal of Research Systems 12, no. 3 (2023): 101-119. https://doi.org/10.1234/example.'
+      'Smith, Jane. "Archival Patterns in Modern Research." Journal of Research Systems 12, no. 3 (2023): 101-119. https://doi.org/10.1234/example.',
     );
   });
 

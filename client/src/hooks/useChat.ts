@@ -80,15 +80,12 @@ export function useSendMessage(conversationId: string | null) {
       setStreamingText("");
 
       try {
-        const response = await fetch(
-          `/api/chat/conversations/${conversationId}/messages`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-            body: JSON.stringify({ content }),
-            credentials: "include",
-          }
-        );
+        const response = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          body: JSON.stringify({ content }),
+          credentials: "include",
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -136,7 +133,7 @@ export function useSendMessage(conversationId: string | null) {
         setStreamingText("");
       }
     },
-    [conversationId]
+    [conversationId],
   );
 
   return { send, streamingText, isStreaming };

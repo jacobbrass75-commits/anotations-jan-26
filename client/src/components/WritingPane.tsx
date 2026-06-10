@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useProjects, useProjectDocuments } from "@/hooks/useProjects";
-import {
-  useWritingPipeline,
-  type WritingRequest,
-  type SavedPaper,
-} from "@/hooks/useWriting";
+import { useWritingPipeline, type WritingRequest, type SavedPaper } from "@/hooks/useWriting";
 import {
   buildDocxBlob,
   buildPdfBlob,
@@ -35,8 +31,6 @@ import { queryClient } from "@/lib/queryClient";
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   Copy,
   Download,
   Eye,
@@ -61,10 +55,7 @@ interface GeneratedPaper {
   savedPaper: SavedPaper | null;
 }
 
-export default function WritingPane({
-  initialProjectId,
-  lockProject = false,
-}: WritingPaneProps) {
+export default function WritingPane({ initialProjectId, lockProject = false }: WritingPaneProps) {
   const { toast } = useToast();
   const rightPanelRef = useRef<HTMLDivElement>(null);
   const lastCompletedTextRef = useRef("");
@@ -104,12 +95,12 @@ export default function WritingPane({
 
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { data: projectSources = [], isLoading: projectSourcesLoading } = useProjectDocuments(
-    selectedProjectId || ""
+    selectedProjectId || "",
   );
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId),
-    [projects, selectedProjectId]
+    [projects, selectedProjectId],
   );
 
   useEffect(() => {
@@ -169,11 +160,13 @@ export default function WritingPane({
     if (!savedPaper || !latestPaperIdRef.current) return;
     setGeneratedPapers((prev) =>
       prev.map((paper) =>
-        paper.id === latestPaperIdRef.current ? { ...paper, savedPaper } : paper
-      )
+        paper.id === latestPaperIdRef.current ? { ...paper, savedPaper } : paper,
+      ),
     );
     if (selectedProjectId) {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", selectedProjectId, "documents"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/projects", selectedProjectId, "documents"],
+      });
     }
     toast({ title: "Saved to Project", description: savedPaper.filename });
   }, [savedPaper, selectedProjectId, toast]);
@@ -192,15 +185,25 @@ export default function WritingPane({
   }, [generatedPapers, selectedPaperId]);
   const orderedPapers = useMemo(
     () => [...generatedPapers].sort((a, b) => a.createdAt - b.createdAt),
-    [generatedPapers]
+    [generatedPapers],
   );
 
-  const activeContent = isGenerating ? streamingContent : selectedPaper?.content || streamingContent;
-  const activeTopic = isGenerating ? currentPrompt : selectedPaper?.topic || currentPrompt || "Generated Paper";
+  const activeContent = isGenerating
+    ? streamingContent
+    : selectedPaper?.content || streamingContent;
+  const activeTopic = isGenerating
+    ? currentPrompt
+    : selectedPaper?.topic || currentPrompt || "Generated Paper";
   const activeSavedPaper = isGenerating ? null : selectedPaper?.savedPaper || null;
   const plainText = useMemo(() => stripMarkdown(activeContent), [activeContent]);
-  const wordCount = useMemo(() => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0), [plainText]);
-  const pageEstimate = useMemo(() => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0), [wordCount]);
+  const wordCount = useMemo(
+    () => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0),
+    [plainText],
+  );
+  const pageEstimate = useMemo(
+    () => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0),
+    [wordCount],
+  );
 
   const progressPercent = plan
     ? phase === "complete"
@@ -221,15 +224,27 @@ export default function WritingPane({
 
   const handleGenerate = () => {
     if (!selectedProjectId) {
-      toast({ title: "Project Required", description: "Select a project first.", variant: "destructive" });
+      toast({
+        title: "Project Required",
+        description: "Select a project first.",
+        variant: "destructive",
+      });
       return;
     }
     if (!topic.trim()) {
-      toast({ title: "Topic Required", description: "Enter a topic or prompt.", variant: "destructive" });
+      toast({
+        title: "Topic Required",
+        description: "Enter a topic or prompt.",
+        variant: "destructive",
+      });
       return;
     }
     if (selectedSourceDocumentIds.length === 0) {
-      toast({ title: "No Sources Selected", description: "Select at least one source.", variant: "destructive" });
+      toast({
+        title: "No Sources Selected",
+        description: "Select at least one source.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -281,7 +296,8 @@ export default function WritingPane({
     } catch (downloadError) {
       toast({
         title: "DOCX Export Failed",
-        description: downloadError instanceof Error ? downloadError.message : "Could not export DOCX.",
+        description:
+          downloadError instanceof Error ? downloadError.message : "Could not export DOCX.",
         variant: "destructive",
       });
     } finally {
@@ -298,7 +314,8 @@ export default function WritingPane({
     } catch (downloadError) {
       toast({
         title: "PDF Export Failed",
-        description: downloadError instanceof Error ? downloadError.message : "Could not export PDF.",
+        description:
+          downloadError instanceof Error ? downloadError.message : "Could not export PDF.",
         variant: "destructive",
       });
     } finally {
@@ -322,7 +339,8 @@ export default function WritingPane({
     } catch (previewError) {
       toast({
         title: "Preview Failed",
-        description: previewError instanceof Error ? previewError.message : "Could not generate preview.",
+        description:
+          previewError instanceof Error ? previewError.message : "Could not generate preview.",
         variant: "destructive",
       });
     } finally {
@@ -334,7 +352,7 @@ export default function WritingPane({
     setSelectedSourceDocumentIds((prev) =>
       prev.includes(projectDocumentId)
         ? prev.filter((id) => id !== projectDocumentId)
-        : [...prev, projectDocumentId]
+        : [...prev, projectDocumentId],
     );
   };
 
@@ -356,9 +374,17 @@ export default function WritingPane({
               <span className="font-semibold">{selectedProject?.name || "Select project"}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="font-mono text-[10px] uppercase">{wordCount} words</Badge>
-              <Badge variant="outline" className="font-mono text-[10px] uppercase">{pageEstimate} page{pageEstimate === 1 ? "" : "s"}</Badge>
-              {activeSavedPaper && <Badge variant="secondary" className="font-mono text-[10px] uppercase">Saved</Badge>}
+              <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                {wordCount} words
+              </Badge>
+              <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                {pageEstimate} page{pageEstimate === 1 ? "" : "s"}
+              </Badge>
+              {activeSavedPaper && (
+                <Badge variant="secondary" className="font-mono text-[10px] uppercase">
+                  Saved
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -430,13 +456,23 @@ export default function WritingPane({
             <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wider">Project</Label>
               {lockProject ? (
-                <div className="rounded-md border px-3 py-2 text-sm">{selectedProject?.name || "Current Project"}</div>
+                <div className="rounded-md border px-3 py-2 text-sm">
+                  {selectedProject?.name || "Current Project"}
+                </div>
               ) : (
-                <Select value={selectedProjectId} onValueChange={setSelectedProjectId} disabled={projectsLoading || isGenerating}>
-                  <SelectTrigger data-testid="select-writing-project"><SelectValue placeholder="Select project" /></SelectTrigger>
+                <Select
+                  value={selectedProjectId}
+                  onValueChange={setSelectedProjectId}
+                  disabled={projectsLoading || isGenerating}
+                >
+                  <SelectTrigger data-testid="select-writing-project">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
                   <SelectContent>
                     {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -456,24 +492,42 @@ export default function WritingPane({
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <Select value={tone} onValueChange={(v) => setTone(v as typeof tone)} disabled={isGenerating}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={tone}
+              onValueChange={(v) => setTone(v as typeof tone)}
+              disabled={isGenerating}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="academic">Academic</SelectItem>
                 <SelectItem value="casual">Casual</SelectItem>
                 <SelectItem value="ap_style">AP Style</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={targetLength} onValueChange={(v) => setTargetLength(v as typeof targetLength)} disabled={isGenerating}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={targetLength}
+              onValueChange={(v) => setTargetLength(v as typeof targetLength)}
+              disabled={isGenerating}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="short">Short</SelectItem>
                 <SelectItem value="medium">Medium</SelectItem>
                 <SelectItem value="long">Long</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={citationStyle} onValueChange={(v) => setCitationStyle(v as typeof citationStyle)} disabled={isGenerating}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={citationStyle}
+              onValueChange={(v) => setCitationStyle(v as typeof citationStyle)}
+              disabled={isGenerating}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="chicago">Chicago</SelectItem>
                 <SelectItem value="mla">MLA</SelectItem>
@@ -482,11 +536,19 @@ export default function WritingPane({
             </Select>
             <div className="flex items-center gap-3 px-2">
               <label className="flex items-center gap-2 text-xs">
-                <Checkbox checked={noEnDashes} onCheckedChange={(v) => setNoEnDashes(Boolean(v))} disabled={isGenerating} />
+                <Checkbox
+                  checked={noEnDashes}
+                  onCheckedChange={(v) => setNoEnDashes(Boolean(v))}
+                  disabled={isGenerating}
+                />
                 No dashes
               </label>
               <label className="flex items-center gap-2 text-xs">
-                <Checkbox checked={deepWrite} onCheckedChange={(v) => setDeepWrite(Boolean(v))} disabled={isGenerating} />
+                <Checkbox
+                  checked={deepWrite}
+                  onCheckedChange={(v) => setDeepWrite(Boolean(v))}
+                  disabled={isGenerating}
+                />
                 Deep
               </label>
             </div>
@@ -495,7 +557,13 @@ export default function WritingPane({
           {(isGenerating || phase) && (
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-xs">
-                {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : error ? <AlertCircle className="h-3.5 w-3.5 text-destructive" /> : <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
+                {isGenerating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                ) : error ? (
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                )}
                 <span className="text-muted-foreground">{status}</span>
               </div>
               {isGenerating && <Progress value={progressPercent} className="h-1.5" />}
@@ -504,7 +572,11 @@ export default function WritingPane({
 
           <div className="flex items-center gap-2">
             {!isGenerating ? (
-              <Button onClick={handleGenerate} className="flex-1" data-testid="button-generate-paper">
+              <Button
+                onClick={handleGenerate}
+                className="flex-1"
+                data-testid="button-generate-paper"
+              >
                 <FileText className="h-4 w-4 mr-2" />
                 Generate Paper
               </Button>
@@ -514,7 +586,10 @@ export default function WritingPane({
                 Stop
               </Button>
             )}
-            <Button variant="outline" onClick={handleReset}><RotateCcw className="h-4 w-4 mr-2" />Reset</Button>
+            <Button variant="outline" onClick={handleReset}>
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset
+            </Button>
           </div>
         </div>
       </section>
@@ -526,14 +601,39 @@ export default function WritingPane({
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Artifacts</CardTitle>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!activeContent}><Copy className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="sm" onClick={handleDownloadDocx} disabled={!activeContent || isPreparingDocx}>
-                    {isPreparingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!activeContent}>
+                    <Copy className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={handleDownloadPdf} disabled={!activeContent || isPreparingPdf}>
-                    {isPreparingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDownloadDocx}
+                    disabled={!activeContent || isPreparingDocx}
+                  >
+                    {isPreparingDocx ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={handleTogglePdfPreview} disabled={!activeContent || isPreparingPdf}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDownloadPdf}
+                    disabled={!activeContent || isPreparingPdf}
+                  >
+                    {isPreparingPdf ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleTogglePdfPreview}
+                    disabled={!activeContent || isPreparingPdf}
+                  >
                     {showPdfPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
@@ -552,7 +652,9 @@ export default function WritingPane({
                   >
                     <div className="text-sm font-medium truncate">{paper.topic}</div>
                     <div className="text-xs text-muted-foreground mt-1">
-                      {paper.savedPaper ? paper.savedPaper.filename : `${new Date(paper.createdAt).toLocaleTimeString()}`}
+                      {paper.savedPaper
+                        ? paper.savedPaper.filename
+                        : `${new Date(paper.createdAt).toLocaleTimeString()}`}
                     </div>
                   </button>
                 ))
@@ -567,7 +669,11 @@ export default function WritingPane({
               </CardHeader>
               <CardContent>
                 <div className="h-[320px] overflow-hidden rounded border">
-                  <iframe src={pdfPreviewUrl} title="Generated PDF Preview" className="w-full h-full" />
+                  <iframe
+                    src={pdfPreviewUrl}
+                    title="Generated PDF Preview"
+                    className="w-full h-full"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -577,7 +683,11 @@ export default function WritingPane({
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Project Content</CardTitle>
-                <button type="button" className="text-xs text-muted-foreground" onClick={() => setSourcesExpanded((v) => !v)}>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground"
+                  onClick={() => setSourcesExpanded((v) => !v)}
+                >
                   {sourcesExpanded ? "Hide" : "Show"}
                 </button>
               </div>
@@ -586,24 +696,46 @@ export default function WritingPane({
               {sourcesExpanded && (
                 <>
                   <div className="flex justify-end mb-2">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={toggleAllSources} disabled={projectSources.length === 0 || isGenerating}>
-                      {selectedSourceDocumentIds.length === projectSources.length ? "Deselect all" : "Select all"}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={toggleAllSources}
+                      disabled={projectSources.length === 0 || isGenerating}
+                    >
+                      {selectedSourceDocumentIds.length === projectSources.length
+                        ? "Deselect all"
+                        : "Select all"}
                     </Button>
                   </div>
                   <ScrollArea className="h-64">
                     {projectSourcesLoading ? (
                       <p className="text-xs text-muted-foreground">Loading project sources...</p>
                     ) : projectSources.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No source documents in this project.</p>
+                      <p className="text-xs text-muted-foreground">
+                        No source documents in this project.
+                      </p>
                     ) : (
                       <div className="space-y-2">
                         {projectSources.map((source) => (
-                          <label key={source.id} className="flex gap-2 rounded-md p-2 hover:bg-muted/40 cursor-pointer">
-                            <Checkbox checked={selectedSourceDocumentIds.includes(source.id)} onCheckedChange={() => toggleSource(source.id)} disabled={isGenerating} className="mt-0.5" />
+                          <label
+                            key={source.id}
+                            className="flex gap-2 rounded-md p-2 hover:bg-muted/40 cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={selectedSourceDocumentIds.includes(source.id)}
+                              onCheckedChange={() => toggleSource(source.id)}
+                              disabled={isGenerating}
+                              className="mt-0.5"
+                            />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium truncate">{source.document.filename}</span>
-                                <Badge variant="outline" className="text-[10px]">{getDocTypeLabel(source.document.filename)}</Badge>
+                                <span className="text-xs font-medium truncate">
+                                  {source.document.filename}
+                                </span>
+                                <Badge variant="outline" className="text-[10px]">
+                                  {getDocTypeLabel(source.document.filename)}
+                                </Badge>
                               </div>
                               <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
                                 {source.document.summary || "No summary available for this source."}

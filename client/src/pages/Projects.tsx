@@ -3,11 +3,29 @@ import { Link, useLocation } from "wouter";
 import { useProjects, useCreateProject, useDeleteProject } from "@/hooks/useProjects";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, FolderOpen, FileText, Trash2, ArrowLeft, Search, PenLine, PenTool, UserRound } from "lucide-react";
+import {
+  Plus,
+  FolderOpen,
+  FileText,
+  Trash2,
+  ArrowLeft,
+  Search,
+  PenLine,
+  PenTool,
+  UserRound,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Projects() {
@@ -16,7 +34,7 @@ export default function Projects() {
   const createProject = useCreateProject();
   const deleteProject = useDeleteProject();
   const { toast } = useToast();
-  
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newProject, setNewProject] = useState({
     name: "",
@@ -30,7 +48,7 @@ export default function Projects() {
       toast({ title: "Error", description: "Project name is required", variant: "destructive" });
       return;
     }
-    
+
     try {
       const project = await createProject.mutateAsync(newProject);
       setIsCreateOpen(false);
@@ -45,11 +63,11 @@ export default function Projects() {
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
       return;
     }
-    
+
     try {
       await deleteProject.mutateAsync(id);
       toast({ title: "Success", description: "Project deleted" });
@@ -90,24 +108,40 @@ export default function Projects() {
 
           <div className="flex items-center gap-2">
             <Link href="/write">
-              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-open-write">
+              <Button
+                variant="outline"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-open-write"
+              >
                 <PenTool className="h-4 w-4 mr-2" />
                 Write
               </Button>
             </Link>
             <Link href="/writing-styles">
-              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-open-writing-styles">
+              <Button
+                variant="outline"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-open-writing-styles"
+              >
                 <PenLine className="h-4 w-4 mr-2" />
                 Styles
               </Button>
             </Link>
             <Link href="/web-clips">
-              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-open-web-clips">
+              <Button
+                variant="outline"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-open-web-clips"
+              >
                 Web Clips
               </Button>
             </Link>
             <Link href="/account">
-              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-open-account">
+              <Button
+                variant="outline"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-open-account"
+              >
                 <UserRound className="h-4 w-4 mr-2" />
                 Account
               </Button>
@@ -124,7 +158,8 @@ export default function Projects() {
                 <DialogHeader>
                   <DialogTitle>Create New Project</DialogTitle>
                   <DialogDescription>
-                    Define your research project. The thesis and scope help optimize AI-assisted search.
+                    Define your research project. The thesis and scope help optimize AI-assisted
+                    search.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -143,7 +178,9 @@ export default function Projects() {
                     <Textarea
                       id="description"
                       value={newProject.description}
-                      onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                      onChange={(e) =>
+                        setNewProject({ ...newProject, description: e.target.value })
+                      }
                       placeholder="Brief description of your research project"
                       className="resize-none"
                       data-testid="input-project-description"
@@ -173,10 +210,18 @@ export default function Projects() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsCreateOpen(false)} data-testid="button-cancel-create">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsCreateOpen(false)}
+                    data-testid="button-cancel-create"
+                  >
                     Cancel
                   </Button>
-                  <Button onClick={handleCreate} disabled={createProject.isPending} data-testid="button-confirm-create">
+                  <Button
+                    onClick={handleCreate}
+                    disabled={createProject.isPending}
+                    data-testid="button-confirm-create"
+                  >
                     {createProject.isPending ? "Creating..." : "Create Project"}
                   </Button>
                 </DialogFooter>
@@ -192,9 +237,14 @@ export default function Projects() {
             <FolderOpen className="h-16 w-16 mx-auto text-primary" />
             <h2 className="eva-section-title text-base">NO ACTIVE PROJECTS</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Create a research project to organize your documents, annotations, and enable global search across your entire collection.
+              Create a research project to organize your documents, annotations, and enable global
+              search across your entire collection.
             </p>
-            <Button className="uppercase tracking-wider" onClick={() => setIsCreateOpen(true)} data-testid="button-create-first-project">
+            <Button
+              className="uppercase tracking-wider"
+              onClick={() => setIsCreateOpen(true)}
+              data-testid="button-create-first-project"
+            >
               <Plus className="h-4 w-4 mr-2" />
               Create Your First Project
             </Button>
@@ -203,10 +253,15 @@ export default function Projects() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects?.map((project) => (
               <Link key={project.id} href={`/projects/${project.id}`}>
-                <Card className="h-full hover-elevate cursor-pointer group eva-clip-panel eva-corner-decor hover:shadow-lg transition-all duration-200" data-testid={`card-project-${project.id}`}>
+                <Card
+                  className="h-full hover-elevate cursor-pointer group eva-clip-panel eva-corner-decor hover:shadow-lg transition-all duration-200"
+                  data-testid={`card-project-${project.id}`}
+                >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-lg line-clamp-1 font-sans uppercase tracking-wider">{project.name}</CardTitle>
+                      <CardTitle className="text-lg line-clamp-1 font-sans uppercase tracking-wider">
+                        {project.name}
+                      </CardTitle>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -218,7 +273,9 @@ export default function Projects() {
                       </Button>
                     </div>
                     {project.description && (
-                      <CardDescription className="line-clamp-2">{project.description}</CardDescription>
+                      <CardDescription className="line-clamp-2">
+                        {project.description}
+                      </CardDescription>
                     )}
                   </CardHeader>
                   <CardContent className="space-y-3">

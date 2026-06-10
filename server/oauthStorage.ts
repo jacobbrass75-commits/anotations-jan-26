@@ -93,7 +93,7 @@ const upsertOAuthClientStmt = sqlite.prepare(
      redirect_uris = excluded.redirect_uris,
      grant_types = excluded.grant_types,
      response_types = excluded.response_types,
-     token_endpoint_auth_method = excluded.token_endpoint_auth_method`
+     token_endpoint_auth_method = excluded.token_endpoint_auth_method`,
 );
 
 const selectOAuthClientById = sqlite.prepare(
@@ -108,7 +108,7 @@ const selectOAuthClientById = sqlite.prepare(
       created_at
    FROM mcp_oauth_clients
    WHERE client_id = ?
-   LIMIT 1`
+   LIMIT 1`,
 );
 
 const insertAuthCode = sqlite.prepare(
@@ -123,7 +123,7 @@ const insertAuthCode = sqlite.prepare(
      expires_at,
      used,
      created_at
-   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`
+   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
 );
 
 const selectAuthCodeByHash = sqlite.prepare(
@@ -140,19 +140,19 @@ const selectAuthCodeByHash = sqlite.prepare(
       created_at
    FROM mcp_auth_codes
    WHERE code_hash = ?
-   LIMIT 1`
+   LIMIT 1`,
 );
 
 const markAuthCodeUsed = sqlite.prepare(
   `UPDATE mcp_auth_codes
    SET used = 1
    WHERE code_hash = ?
-     AND used = 0`
+     AND used = 0`,
 );
 
 const cleanupExpiredAuthCodes = sqlite.prepare(
   `DELETE FROM mcp_auth_codes
-   WHERE expires_at <= ?`
+   WHERE expires_at <= ?`,
 );
 
 const insertMcpToken = sqlite.prepare(
@@ -166,7 +166,7 @@ const insertMcpToken = sqlite.prepare(
      refresh_token_hash,
      expires_at,
      created_at
-   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const selectActiveMcpTokenByRefreshHash = sqlite.prepare(
@@ -185,21 +185,21 @@ const selectActiveMcpTokenByRefreshHash = sqlite.prepare(
    FROM mcp_tokens
    WHERE refresh_token_hash = ?
      AND revoked_at IS NULL
-   LIMIT 1`
+   LIMIT 1`,
 );
 
 const revokeMcpTokenByIdStmt = sqlite.prepare(
   `UPDATE mcp_tokens
    SET revoked_at = ?
    WHERE id = ?
-     AND revoked_at IS NULL`
+     AND revoked_at IS NULL`,
 );
 
 const revokeMcpTokenByAnyHashStmt = sqlite.prepare(
   `UPDATE mcp_tokens
    SET revoked_at = ?
    WHERE revoked_at IS NULL
-     AND (key_hash = ? OR refresh_token_hash = ?)`
+     AND (key_hash = ? OR refresh_token_hash = ?)`,
 );
 
 function parseJsonArray(rawValue: string, fallback: string[]): string[] {
@@ -276,7 +276,7 @@ export function createOAuthClient(input: {
     JSON.stringify(input.grantTypes),
     JSON.stringify(input.responseTypes),
     input.tokenEndpointAuthMethod,
-    input.createdAt
+    input.createdAt,
   );
 }
 
@@ -306,23 +306,25 @@ export function createAuthorizationCode(input: {
     input.codeChallenge,
     input.codeChallengeMethod,
     input.expiresAt,
-    input.createdAt
+    input.createdAt,
   );
 }
 
-const consumeAuthCodeTx = sqlite.transaction((codeHash: string, now: number): AuthCodeRecord | null => {
-  const row = selectAuthCodeByHash.get(codeHash) as AuthCodeRow | undefined;
-  if (!row) return null;
-  if (row.used !== 0) return null;
-  if (row.expires_at <= now) return null;
+const consumeAuthCodeTx = sqlite.transaction(
+  (codeHash: string, now: number): AuthCodeRecord | null => {
+    const row = selectAuthCodeByHash.get(codeHash) as AuthCodeRow | undefined;
+    if (!row) return null;
+    if (row.used !== 0) return null;
+    if (row.expires_at <= now) return null;
 
-  const updateResult = markAuthCodeUsed.run(codeHash);
-  if (updateResult.changes === 0) {
-    return null;
-  }
+    const updateResult = markAuthCodeUsed.run(codeHash);
+    if (updateResult.changes === 0) {
+      return null;
+    }
 
-  return mapAuthCodeRow(row);
-});
+    return mapAuthCodeRow(row);
+  },
+);
 
 export function consumeAuthorizationCode(codeHash: string, now: number): AuthCodeRecord | null {
   return consumeAuthCodeTx(codeHash, now);
@@ -358,7 +360,7 @@ export function createMcpToken(input: {
     input.scope,
     input.refreshTokenHash,
     input.expiresAt,
-    input.createdAt
+    input.createdAt,
   );
 }
 

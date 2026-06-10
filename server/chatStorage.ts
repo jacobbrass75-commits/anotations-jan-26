@@ -11,7 +11,10 @@ import { eq, desc, asc, and, isNull } from "drizzle-orm";
 
 export const chatStorage = {
   async createConversation(data: InsertConversation): Promise<Conversation> {
-    const [created] = await db.insert(conversations).values(data as any).returning();
+    const [created] = await db
+      .insert(conversations)
+      .values(data as any)
+      .returning();
     return created;
   },
 
@@ -22,29 +25,41 @@ export const chatStorage = {
 
   async getConversationsForUser(userId?: string, projectId?: string): Promise<Conversation[]> {
     if (userId && projectId) {
-      return db.select().from(conversations)
+      return db
+        .select()
+        .from(conversations)
         .where(and(eq(conversations.userId, userId), eq(conversations.projectId, projectId)))
         .orderBy(desc(conversations.updatedAt));
     }
     if (userId) {
-      return db.select().from(conversations).where(eq(conversations.userId, userId)).orderBy(desc(conversations.updatedAt));
+      return db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.userId, userId))
+        .orderBy(desc(conversations.updatedAt));
     }
     return db.select().from(conversations).orderBy(desc(conversations.updatedAt));
   },
 
   async getConversationsForProject(projectId: string, userId?: string): Promise<Conversation[]> {
     if (userId) {
-      return db.select().from(conversations)
+      return db
+        .select()
+        .from(conversations)
         .where(and(eq(conversations.projectId, projectId), eq(conversations.userId, userId)))
         .orderBy(desc(conversations.updatedAt));
     }
-    return db.select().from(conversations)
+    return db
+      .select()
+      .from(conversations)
       .where(eq(conversations.projectId, projectId))
       .orderBy(desc(conversations.updatedAt));
   },
 
   async getStandaloneConversations(userId: string): Promise<Conversation[]> {
-    return db.select().from(conversations)
+    return db
+      .select()
+      .from(conversations)
       .where(and(eq(conversations.userId, userId), isNull(conversations.projectId)))
       .orderBy(desc(conversations.updatedAt));
   },
@@ -54,9 +69,17 @@ export const chatStorage = {
     data: Partial<
       Pick<
         Conversation,
-        "title" | "model" | "writingModel" | "selectedSourceIds" | "writingStyleId" | "citationStyle" | "tone" | "humanize" | "noEnDashes"
+        | "title"
+        | "model"
+        | "writingModel"
+        | "selectedSourceIds"
+        | "writingStyleId"
+        | "citationStyle"
+        | "tone"
+        | "humanize"
+        | "noEnDashes"
       >
-    >
+    >,
   ): Promise<Conversation> {
     const [updated] = await db
       .update(conversations)
@@ -88,7 +111,10 @@ export const chatStorage = {
   },
 
   async createMessage(data: InsertMessage): Promise<Message> {
-    const [created] = await db.insert(messages).values(data as any).returning();
+    const [created] = await db
+      .insert(messages)
+      .values(data as any)
+      .returning();
     // Touch the conversation's updatedAt
     await db
       .update(conversations)
@@ -98,7 +124,10 @@ export const chatStorage = {
   },
 };
 
-export async function updateConversationClipboard(id: string, clipboard: string | null): Promise<void> {
+export async function updateConversationClipboard(
+  id: string,
+  clipboard: string | null,
+): Promise<void> {
   await db
     .update(conversations)
     .set({

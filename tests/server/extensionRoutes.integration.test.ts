@@ -109,11 +109,15 @@ describe("extension web clip integration", () => {
     const { token, db, webClips, server } = await createExtensionApp("free");
 
     try {
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: extensionClipPayload(),
-      });
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/web-clips",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: extensionClipPayload(),
+        },
+      );
 
       expect(response.status).toBe(403);
       expect(response.body).toEqual({
@@ -131,15 +135,19 @@ describe("extension web clip integration", () => {
     const { token, server } = await createExtensionApp("pro");
 
     try {
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: extensionClipPayload({
-          highlightedText: "",
-          sourceUrl: "not-a-url",
-          pageTitle: "",
-        }),
-      });
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/web-clips",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: extensionClipPayload({
+            highlightedText: "",
+            sourceUrl: "not-a-url",
+            pageTitle: "",
+          }),
+        },
+      );
 
       expect(response.status).toBe(400);
       expect(response.body).toMatchObject({ error: "Invalid web clip payload" });
@@ -152,11 +160,15 @@ describe("extension web clip integration", () => {
     const { token, db, webClips, server } = await createExtensionApp("pro");
 
     try {
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: extensionClipPayload(),
-      });
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/web-clips",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: extensionClipPayload(),
+        },
+      );
 
       expect(response.status).toBe(201);
       expect(response.body).toMatchObject({

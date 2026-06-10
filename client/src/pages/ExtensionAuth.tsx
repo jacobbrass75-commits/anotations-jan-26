@@ -80,13 +80,15 @@ export default function ExtensionAuth() {
             tier: me.tier ?? "free",
             serverUrl: window.location.origin,
           },
-          window.location.origin
+          window.location.origin,
         );
 
         window.setTimeout(() => {
           if (!acked) {
             setState("error");
-            setMessage("No extension response detected. Make sure the ScholarMark extension is installed.");
+            setMessage(
+              "No extension response detected. Make sure the ScholarMark extension is installed.",
+            );
           }
         }, 12000);
       } catch (error) {

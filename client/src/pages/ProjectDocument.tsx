@@ -7,7 +7,6 @@ import {
   useCreateProjectAnnotation,
   useDeleteProjectAnnotation,
   useUpdateProjectDocument,
-  useAnalyzeProjectDocument,
   useSearchProjectDocument,
   useAnalyzeMultiPrompt,
   usePromptTemplates,
@@ -28,9 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -40,15 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  ArrowLeft,
-  BookOpen,
-  Copy,
-  Plus,
-  Trash2,
-  Sparkles,
-  FileText,
-} from "lucide-react";
+import { ArrowLeft, BookOpen, Copy, Plus, Trash2, Sparkles, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { MultiPromptPanel, type Prompt } from "@/components/MultiPromptPanel";
@@ -139,14 +128,7 @@ export default function ProjectDocumentPage() {
       documentLoaded: !!document,
       annotationsCount: projectAnnotations.length,
     });
-  }, [
-    projectId,
-    projectDocId,
-    projectDoc?.id,
-    projectDoc?.documentId,
-    document?.id,
-    projectAnnotations.length,
-  ]);
+  }, [projectId, projectDocId, projectDoc, document, projectAnnotations.length]);
 
   const deepLinkQuery = useMemo(() => {
     const queryFromLocation = location.includes("?") ? location.slice(location.indexOf("?")) : "";
@@ -171,7 +153,6 @@ export default function ProjectDocumentPage() {
   const deleteAnnotation = useDeleteProjectAnnotation();
   const updateProjectDoc = useUpdateProjectDocument();
   const generateCitation = useGenerateCitation();
-  const analyzeDocument = useAnalyzeProjectDocument();
   const searchDocument = useSearchProjectDocument();
   const analyzeMultiPrompt = useAnalyzeMultiPrompt();
   const createPromptTemplate = useCreatePromptTemplate();
@@ -180,7 +161,10 @@ export default function ProjectDocumentPage() {
   const { data: promptTemplates = [] } = usePromptTemplates(projectId);
 
   // Extended annotation type with prompt fields
-  interface AnnotationWithPrompt extends Omit<Annotation, 'promptText' | 'promptIndex' | 'promptColor'> {
+  interface AnnotationWithPrompt extends Omit<
+    Annotation,
+    "promptText" | "promptIndex" | "promptColor"
+  > {
     promptText?: string | null;
     promptIndex?: number | null;
     promptColor?: string | null;
@@ -273,44 +257,10 @@ export default function ProjectDocumentPage() {
   ]);
 
   // Handlers
-  const handleAnalyze = useCallback(
-    async (
-      research: string,
-      goals: string,
-      thoroughness: "quick" | "standard" | "thorough" | "exhaustive" = "standard"
-    ) => {
-      if (!projectDocId) return;
-
-      const intent = `Research topic: ${research}\n\nGoals: ${goals}`;
-
-      try {
-        await analyzeDocument.mutateAsync({
-          projectDocumentId: projectDocId,
-          intent,
-          thoroughness,
-        });
-        setHasAnalyzed(true);
-
-        toast({
-          title: "Analysis complete",
-          description: "AI has highlighted relevant passages in your document.",
-        });
-      } catch (error) {
-        toast({
-          title: "Analysis failed",
-          description:
-            error instanceof Error ? error.message : "Could not analyze the document.",
-          variant: "destructive",
-        });
-      }
-    },
-    [projectDocId, analyzeDocument, toast]
-  );
-
   const handleMultiPromptAnalyze = useCallback(
     async (
       prompts: Prompt[],
-      thoroughness: "quick" | "standard" | "thorough" | "exhaustive" = "standard"
+      thoroughness: "quick" | "standard" | "thorough" | "exhaustive" = "standard",
     ) => {
       if (!projectDocId) return;
 
@@ -329,13 +279,12 @@ export default function ProjectDocumentPage() {
       } catch (error) {
         toast({
           title: "Analysis failed",
-          description:
-            error instanceof Error ? error.message : "Could not analyze the document.",
+          description: error instanceof Error ? error.message : "Could not analyze the document.",
           variant: "destructive",
         });
       }
     },
-    [projectDocId, analyzeMultiPrompt, toast]
+    [projectDocId, analyzeMultiPrompt, toast],
   );
 
   const handleSaveTemplate = useCallback(
@@ -356,13 +305,12 @@ export default function ProjectDocumentPage() {
       } catch (error) {
         toast({
           title: "Failed to save template",
-          description:
-            error instanceof Error ? error.message : "Could not save the template.",
+          description: error instanceof Error ? error.message : "Could not save the template.",
           variant: "destructive",
         });
       }
     },
-    [projectId, createPromptTemplate, toast]
+    [projectId, createPromptTemplate, toast],
   );
 
   const handleAnnotationClick = useCallback((annotation: AnnotationWithPrompt) => {
@@ -374,7 +322,7 @@ export default function ProjectDocumentPage() {
       setPendingSelection(selection);
       setManualDialogOpen(true);
     },
-    []
+    [],
   );
 
   const handleAddManualAnnotation = useCallback(() => {
@@ -408,13 +356,12 @@ export default function ProjectDocumentPage() {
       } catch (error) {
         toast({
           title: "Failed to add annotation",
-          description:
-            error instanceof Error ? error.message : "Could not save the annotation.",
+          description: error instanceof Error ? error.message : "Could not save the annotation.",
           variant: "destructive",
         });
       }
     },
-    [projectDocId, pendingSelection, createAnnotation, toast]
+    [projectDocId, pendingSelection, createAnnotation, toast],
   );
 
   const handleUpdateAnnotation = useCallback(
@@ -433,13 +380,12 @@ export default function ProjectDocumentPage() {
       } catch (error) {
         toast({
           title: "Update failed",
-          description:
-            error instanceof Error ? error.message : "Could not update the annotation.",
+          description: error instanceof Error ? error.message : "Could not update the annotation.",
           variant: "destructive",
         });
       }
     },
-    [projectDocId, toast]
+    [projectDocId, toast],
   );
 
   const handleDeleteAnnotation = useCallback(
@@ -461,13 +407,12 @@ export default function ProjectDocumentPage() {
       } catch (error) {
         toast({
           title: "Delete failed",
-          description:
-            error instanceof Error ? error.message : "Could not delete the annotation.",
+          description: error instanceof Error ? error.message : "Could not delete the annotation.",
           variant: "destructive",
         });
       }
     },
-    [projectDocId, selectedAnnotationId, deleteAnnotation, toast]
+    [projectDocId, selectedAnnotationId, deleteAnnotation, toast],
   );
 
   const handleSearch = useCallback(
@@ -483,26 +428,25 @@ export default function ProjectDocumentPage() {
       } catch (error) {
         toast({
           title: "Search failed",
-          description:
-            error instanceof Error ? error.message : "Could not search the document.",
+          description: error instanceof Error ? error.message : "Could not search the document.",
           variant: "destructive",
         });
         return [];
       }
     },
-    [projectDocId, searchDocument, toast]
+    [projectDocId, searchDocument, toast],
   );
 
   const handleJumpToPosition = useCallback(
     (start: number, end: number) => {
       const matchingAnnotation = annotations.find(
-        (a) => a.startPosition === start && a.endPosition === end
+        (a) => a.startPosition === start && a.endPosition === end,
       );
       if (matchingAnnotation) {
         setSelectedAnnotationId(matchingAnnotation.id);
       }
     },
-    [annotations]
+    [annotations],
   );
 
   const handleCopyFootnote = useCallback(
@@ -512,9 +456,11 @@ export default function ProjectDocumentPage() {
           style: citationStyle,
         });
         const data = await res.json();
-        const styleLabel = citationStyle === "mla" ? "MLA" : citationStyle === "apa" ? "APA" : "Chicago";
+        const styleLabel =
+          citationStyle === "mla" ? "MLA" : citationStyle === "apa" ? "APA" : "Chicago";
         // For MLA/APA copy in-text citation; for Chicago copy footnoteWithQuote
-        const textToCopy = citationStyle === "chicago" ? data.footnoteWithQuote : data.inlineCitation;
+        const textToCopy =
+          citationStyle === "chicago" ? data.footnoteWithQuote : data.inlineCitation;
         await copyTextToClipboard(textToCopy);
         toast({
           title: "Citation Copied",
@@ -528,7 +474,7 @@ export default function ProjectDocumentPage() {
         });
       }
     },
-    [toast, citationStyle]
+    [toast, citationStyle],
   );
 
   const handleCopyQuote = useCallback(
@@ -547,7 +493,7 @@ export default function ProjectDocumentPage() {
         });
       }
     },
-    [toast]
+    [toast],
   );
 
   // Citation handlers
@@ -588,11 +534,7 @@ export default function ProjectDocumentPage() {
     });
   };
 
-  const updateAuthor = (
-    index: number,
-    field: "firstName" | "lastName",
-    value: string
-  ) => {
+  const updateAuthor = (index: number, field: "firstName" | "lastName", value: string) => {
     const newAuthors = [...citationForm.authors];
     newAuthors[index] = { ...newAuthors[index], [field]: value };
     setCitationForm({ ...citationForm, authors: newAuthors });
@@ -619,9 +561,7 @@ export default function ProjectDocumentPage() {
         const cd = data.citationData;
         setCitationForm((prev) => {
           const hasEmptyAuthor =
-            prev.authors.length === 1 &&
-            !prev.authors[0].firstName &&
-            !prev.authors[0].lastName;
+            prev.authors.length === 1 && !prev.authors[0].firstName && !prev.authors[0].lastName;
 
           let mergedAuthors: { firstName: string; lastName: string }[];
           if (hasEmptyAuthor && cd.authors?.length > 0) {
@@ -636,19 +576,14 @@ export default function ProjectDocumentPage() {
               };
             });
             if (cd.authors && cd.authors.length > prev.authors.length) {
-              mergedAuthors = [
-                ...mergedAuthors,
-                ...cd.authors.slice(prev.authors.length),
-              ];
+              mergedAuthors = [...mergedAuthors, ...cd.authors.slice(prev.authors.length)];
             }
           }
 
           return {
             ...prev,
             sourceType:
-              prev.sourceType === "book" && cd.sourceType
-                ? cd.sourceType
-                : prev.sourceType,
+              prev.sourceType === "book" && cd.sourceType ? cd.sourceType : prev.sourceType,
             authors: mergedAuthors,
             title: prev.title || cd.title || "",
             publisher: prev.publisher || cd.publisher,
@@ -670,10 +605,7 @@ export default function ProjectDocumentPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to extract citation metadata",
+        description: error instanceof Error ? error.message : "Failed to extract citation metadata",
         variant: "destructive",
       });
     } finally {
@@ -684,9 +616,7 @@ export default function ProjectDocumentPage() {
   if (docLoading || documentLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">
-          Loading document...
-        </div>
+        <div className="animate-pulse text-muted-foreground">Loading document...</div>
       </div>
     );
   }
@@ -717,13 +647,15 @@ export default function ProjectDocumentPage() {
             </Link>
             <div>
               <h1 className="font-semibold font-mono text-sm">{document.filename}</h1>
-              {project && (
-                <p className="text-xs text-muted-foreground">{project.name}</p>
-              )}
+              {project && <p className="text-xs text-muted-foreground">{project.name}</p>}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button className="uppercase tracking-wider text-xs" onClick={() => setIsCitationOpen(true)} data-testid="button-edit-citation">
+            <Button
+              className="uppercase tracking-wider text-xs"
+              onClick={() => setIsCitationOpen(true)}
+              data-testid="button-edit-citation"
+            >
               <BookOpen className="h-4 w-4 mr-2" />
               Citation
             </Button>
@@ -841,20 +773,24 @@ export default function ProjectDocumentPage() {
                 data-testid="button-autofill-citation"
               >
                 {isAutoFilling ? (
-                  <div className="eva-hex-spinner mr-1.5" style={{ width: "0.75rem", height: "0.75rem" }} />
+                  <div
+                    className="eva-hex-spinner mr-1.5"
+                    style={{ width: "0.75rem", height: "0.75rem" }}
+                  />
                 ) : (
                   <Sparkles className="h-3 w-3 mr-1.5" />
                 )}
                 {isAutoFilling ? "Extracting..." : "Auto-fill with AI"}
               </Button>
             </DialogTitle>
-            <DialogDescription>
-              Enter bibliographic information for citations
-            </DialogDescription>
+            <DialogDescription>Enter bibliographic information for citations</DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2 py-2">
             <Label className="text-sm whitespace-nowrap">Citation Style</Label>
-            <Select value={citationStyle} onValueChange={(v) => setCitationStyle(v as CitationStyle)}>
+            <Select
+              value={citationStyle}
+              onValueChange={(v) => setCitationStyle(v as CitationStyle)}
+            >
               <SelectTrigger className="w-[200px]" data-testid="select-citation-style">
                 <SelectValue placeholder="Citation Style" />
               </SelectTrigger>
@@ -917,18 +853,14 @@ export default function ProjectDocumentPage() {
                     <Input
                       placeholder="First name"
                       value={author.firstName}
-                      onChange={(e) =>
-                        updateAuthor(idx, "firstName", e.target.value)
-                      }
+                      onChange={(e) => updateAuthor(idx, "firstName", e.target.value)}
                       className="flex-1 font-mono"
                       data-testid={`input-author-first-${idx}`}
                     />
                     <Input
                       placeholder="Last name"
                       value={author.lastName}
-                      onChange={(e) =>
-                        updateAuthor(idx, "lastName", e.target.value)
-                      }
+                      onChange={(e) => updateAuthor(idx, "lastName", e.target.value)}
                       className="flex-1 font-mono"
                       data-testid={`input-author-last-${idx}`}
                     />
@@ -950,9 +882,7 @@ export default function ProjectDocumentPage() {
                 <Label>Title</Label>
                 <Input
                   value={citationForm.title}
-                  onChange={(e) =>
-                    setCitationForm({ ...citationForm, title: e.target.value })
-                  }
+                  onChange={(e) => setCitationForm({ ...citationForm, title: e.target.value })}
                   placeholder="Title of the work"
                   className="font-mono"
                   data-testid="input-title"
@@ -1012,9 +942,7 @@ export default function ProjectDocumentPage() {
                   <Label>URL (if any)</Label>
                   <Input
                     value={citationForm.url || ""}
-                    onChange={(e) =>
-                      setCitationForm({ ...citationForm, url: e.target.value })
-                    }
+                    onChange={(e) => setCitationForm({ ...citationForm, url: e.target.value })}
                     placeholder="https://..."
                     className="font-mono"
                     data-testid="input-url"
@@ -1022,14 +950,11 @@ export default function ProjectDocumentPage() {
                 </div>
               </div>
 
-              {(citationForm.sourceType === "journal" ||
-                citationForm.sourceType === "chapter") && (
+              {(citationForm.sourceType === "journal" || citationForm.sourceType === "chapter") && (
                 <>
                   <div className="space-y-2">
                     <Label>
-                      {citationForm.sourceType === "journal"
-                        ? "Journal Name"
-                        : "Book Title"}
+                      {citationForm.sourceType === "journal" ? "Journal Name" : "Book Title"}
                     </Label>
                     <Input
                       value={citationForm.containerTitle || ""}
@@ -1112,7 +1037,9 @@ export default function ProjectDocumentPage() {
                       className="mt-2"
                       onClick={async () => {
                         try {
-                          await copyTextToClipboard(citationPreview.inlineCitation || citationPreview.footnote);
+                          await copyTextToClipboard(
+                            citationPreview.inlineCitation || citationPreview.footnote,
+                          );
                           toast({ title: "Copied" });
                         } catch {
                           toast({
@@ -1130,7 +1057,11 @@ export default function ProjectDocumentPage() {
                   <Separator />
                   <div>
                     <Label className="text-xs text-muted-foreground">
-                      {citationStyle === "mla" ? "Works Cited" : citationStyle === "apa" ? "Reference" : "Bibliography"}
+                      {citationStyle === "mla"
+                        ? "Works Cited"
+                        : citationStyle === "apa"
+                          ? "Reference"
+                          : "Bibliography"}
                     </Label>
                     <div className="p-3 bg-muted rounded-md text-sm font-mono">
                       {citationPreview.bibliography}

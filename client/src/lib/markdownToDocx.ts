@@ -66,14 +66,22 @@ function ensureFootnoteId(context: FootnoteRefContext, identifier: string): numb
   return id;
 }
 
-function inlineToRuns(node: MdNode, context: FootnoteRefContext, marks: { bold?: boolean; italics?: boolean } = {}): Array<TextRun | ExternalHyperlink | FootnoteReferenceRun> {
+function inlineToRuns(
+  node: MdNode,
+  context: FootnoteRefContext,
+  marks: { bold?: boolean; italics?: boolean } = {},
+): Array<TextRun | ExternalHyperlink | FootnoteReferenceRun> {
   switch (node.type) {
     case "text":
       return [new TextRun({ text: node.value || "", ...marks })];
     case "strong":
-      return (node.children || []).flatMap((child) => inlineToRuns(child, context, { ...marks, bold: true }));
+      return (node.children || []).flatMap((child) =>
+        inlineToRuns(child, context, { ...marks, bold: true }),
+      );
     case "emphasis":
-      return (node.children || []).flatMap((child) => inlineToRuns(child, context, { ...marks, italics: true }));
+      return (node.children || []).flatMap((child) =>
+        inlineToRuns(child, context, { ...marks, italics: true }),
+      );
     case "inlineCode":
       return [new TextRun({ text: node.value || "", ...marks, font: "Courier New" })];
     case "break":
@@ -85,7 +93,9 @@ function inlineToRuns(node: MdNode, context: FootnoteRefContext, marks: { bold?:
       return [new FootnoteReferenceRun(id)];
     }
     case "link": {
-      const children = (node.children || []).flatMap((child) => inlineToRuns(child, context, marks));
+      const children = (node.children || []).flatMap((child) =>
+        inlineToRuns(child, context, marks),
+      );
       return [new ExternalHyperlink({ link: node.url || "", children: children as TextRun[] })];
     }
     default:
@@ -93,7 +103,11 @@ function inlineToRuns(node: MdNode, context: FootnoteRefContext, marks: { bold?:
   }
 }
 
-function paragraphFromNode(node: MdNode, context: FootnoteRefContext, options: { headingDepth?: number; bullet?: boolean; indentLevel?: number } = {}): Paragraph {
+function paragraphFromNode(
+  node: MdNode,
+  context: FootnoteRefContext,
+  options: { headingDepth?: number; bullet?: boolean; indentLevel?: number } = {},
+): Paragraph {
   const children = (node.children || []).flatMap((child) => inlineToRuns(child, context));
   const headingDepth = options.headingDepth;
   const styleByDepth: Record<number, string> = {
@@ -140,7 +154,9 @@ function blocksFromNode(node: MdNode, context: FootnoteRefContext): Paragraph[] 
         const rest = itemContent.filter((child) => child !== firstParagraph);
         const paragraphs: Paragraph[] = [];
         if (firstParagraph) {
-          const runs = (firstParagraph.children || []).flatMap((child) => inlineToRuns(child, context));
+          const runs = (firstParagraph.children || []).flatMap((child) =>
+            inlineToRuns(child, context),
+          );
           const listRuns = node.ordered
             ? [new TextRun(`${index + 1}. `), ...(runs as TextRun[])]
             : (runs as TextRun[]);
@@ -149,7 +165,7 @@ function blocksFromNode(node: MdNode, context: FootnoteRefContext): Paragraph[] 
               children: listRuns,
               bullet: !node.ordered ? { level: 0 } : undefined,
               spacing: { line: 480, after: 120 },
-            })
+            }),
           );
         }
         for (const child of rest) {
@@ -195,7 +211,10 @@ function buildFootnotes(context: FootnoteRefContext): Record<string, { children:
   return footnotes;
 }
 
-export async function markdownToDocx(markdownContent: string, options: MarkdownToDocxOptions = {}): Promise<Blob> {
+export async function markdownToDocx(
+  markdownContent: string,
+  options: MarkdownToDocxOptions = {},
+): Promise<Blob> {
   const root = parseMarkdown(markdownContent);
   const topLevelChildren = root.children || [];
   const footnoteDefinitionByIdentifier = new Map<string, MdNode>();

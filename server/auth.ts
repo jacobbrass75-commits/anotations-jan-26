@@ -8,6 +8,8 @@ import { sqlite } from "./db";
 
 // Extend Express Request to include user property (same shape as before)
 declare global {
+  // TODO(lint): Express augments request state through this namespace declaration.
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface User {
       userId: string;
@@ -31,9 +33,9 @@ const TIER_TOKEN_LIMITS: Record<string, number> = {
 };
 
 const TIER_STORAGE_LIMITS: Record<string, number> = {
-  free: 52_428_800,       // 50 MB
-  pro: 524_288_000,       // 500 MB
-  max: 5_368_709_120,     // 5 GB
+  free: 52_428_800, // 50 MB
+  pro: 524_288_000, // 500 MB
+  max: 5_368_709_120, // 5 GB
 };
 
 const DEFAULT_JWT_SECRET = "dev-jwt-secret-change-in-production-64chars-long-string-placeholder!!";
@@ -103,13 +105,13 @@ const selectApiKeyByHash = sqlite.prepare(
    FROM api_keys
    WHERE key_hash = ?
      AND revoked_at IS NULL
-   LIMIT 1`
+   LIMIT 1`,
 );
 
 const touchApiKeyLastUsed = sqlite.prepare(
   `UPDATE api_keys
    SET last_used_at = ?
-   WHERE id = ?`
+   WHERE id = ?`,
 );
 
 const selectMcpTokenByHash = sqlite.prepare(
@@ -117,20 +119,20 @@ const selectMcpTokenByHash = sqlite.prepare(
    FROM mcp_tokens
    WHERE key_hash = ?
      AND revoked_at IS NULL
-   LIMIT 1`
+   LIMIT 1`,
 );
 
 const touchMcpTokenLastUsed = sqlite.prepare(
   `UPDATE mcp_tokens
    SET last_used_at = ?
-   WHERE id = ?`
+   WHERE id = ?`,
 );
 
 const selectLatestLocalDevUser = sqlite.prepare(
   `SELECT id, email, tier
    FROM users
    ORDER BY updated_at DESC
-   LIMIT 1`
+   LIMIT 1`,
 );
 
 function assertProductionClerkConfig(): void {
@@ -197,22 +199,29 @@ function getPrimaryClerkEmail(clerkUser: ClerkUserEmailLike): ClerkEmailSelectio
 }
 
 function parseScopes(scope: string | null | undefined): string[] {
-  return Array.from(new Set((scope ?? "").split(/\s+/).map((entry) => entry.trim()).filter(Boolean)));
+  return Array.from(
+    new Set(
+      (scope ?? "")
+        .split(/\s+/)
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  );
 }
 
 function requiredScopeForRequest(req: Request): "read" | "write" {
   if (
     req.method === "POST" &&
-    (
-      /^\/api\/documents\/[^/]+\/search$/.test(req.path) ||
+    (/^\/api\/documents\/[^/]+\/search$/.test(req.path) ||
       /^\/api\/project-documents\/[^/]+\/search$/.test(req.path) ||
-      /^\/api\/projects\/[^/]+\/search$/.test(req.path)
-    )
+      /^\/api\/projects\/[^/]+\/search$/.test(req.path))
   ) {
     return "read";
   }
 
-  return req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS" ? "read" : "write";
+  return req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS"
+    ? "read"
+    : "write";
 }
 
 function finishAuth(req: Request, res: Response, next: NextFunction, user: Express.User): void {
@@ -227,7 +236,11 @@ function finishAuth(req: Request, res: Response, next: NextFunction, user: Expre
     }
   }
 
-  if (user.authType === "api_key" && user.scopes?.length && !isScopedApiKeyRequestAllowed(req, user)) {
+  if (
+    user.authType === "api_key" &&
+    user.scopes?.length &&
+    !isScopedApiKeyRequestAllowed(req, user)
+  ) {
     res.status(403).json({
       message: "API key lacks permission for this endpoint",
     });
@@ -320,8 +333,8 @@ async function resolveLocalDevUser(): Promise<Express.User | null> {
   }
 
   let dbUser =
-    (LOCAL_DEV_USER_ID && await getUserById(LOCAL_DEV_USER_ID)) ||
-    (LOCAL_DEV_USER_EMAIL && await getUserByEmail(LOCAL_DEV_USER_EMAIL)) ||
+    (LOCAL_DEV_USER_ID && (await getUserById(LOCAL_DEV_USER_ID))) ||
+    (LOCAL_DEV_USER_EMAIL && (await getUserByEmail(LOCAL_DEV_USER_EMAIL))) ||
     null;
 
   if (!dbUser) {
@@ -411,7 +424,12 @@ async function resolveApiKeyUser(req: Request): Promise<ApiKeyAuthResult> {
 
 async function resolveJwtUser(req: Request): Promise<Express.User | null> {
   const token = extractBearerToken(req);
-  if (!token || token.startsWith("sk_sm_") || token.startsWith("mcp_sm_") || !isStructuredJwt(token)) {
+  if (
+    !token ||
+    token.startsWith("sk_sm_") ||
+    token.startsWith("mcp_sm_") ||
+    !isStructuredJwt(token)
+  ) {
     return null;
   }
 
@@ -600,7 +618,11 @@ export async function hasTokenBudgetAvailable(req: Request): Promise<boolean> {
   }
 }
 
-export async function checkTokenBudget(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function checkTokenBudget(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   if (await hasTokenBudget(req, res)) {
     next();
   }

@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useProjects } from "@/hooks/useProjects";
 import { useDeleteWebClip, usePromoteWebClip, useWebClips } from "@/hooks/useWebClips";
@@ -174,7 +180,10 @@ export default function WebClips() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={promoteProjectId || "none"} onValueChange={(value) => setPromoteProjectId(value === "none" ? "" : value)}>
+            <Select
+              value={promoteProjectId || "none"}
+              onValueChange={(value) => setPromoteProjectId(value === "none" ? "" : value)}
+            >
               <SelectTrigger data-testid="select-web-clips-promote-target">
                 <SelectValue placeholder="Promote target" />
               </SelectTrigger>
@@ -215,7 +224,9 @@ export default function WebClips() {
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-2 min-w-0">
-                      <CardTitle className="text-base leading-tight break-words">{clip.pageTitle}</CardTitle>
+                      <CardTitle className="text-base leading-tight break-words">
+                        {clip.pageTitle}
+                      </CardTitle>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <Badge variant="outline" className="uppercase tracking-wider text-[10px]">
                           {clip.category}
@@ -241,7 +252,9 @@ export default function WebClips() {
                     {clip.highlightedText}
                   </blockquote>
 
-                  {clip.note && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{clip.note}</p>}
+                  {clip.note && (
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{clip.note}</p>
+                  )}
 
                   {clip.footnote && (
                     <div className="text-xs text-muted-foreground bg-muted/30 rounded-md p-2">

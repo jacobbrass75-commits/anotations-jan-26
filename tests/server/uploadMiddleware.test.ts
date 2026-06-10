@@ -7,7 +7,7 @@ import { startHttpServer } from "./helpers/http";
 async function requestMultipart(
   baseUrl: string,
   path: string,
-  file: { name: string; type: string; contents: string }
+  file: { name: string; type: string; contents: string },
 ) {
   const form = new FormData();
   form.set("file", new File([file.contents], file.name, { type: file.type }));
@@ -34,7 +34,7 @@ async function requestMultipart(
 async function requestMultipartFields(
   baseUrl: string,
   path: string,
-  fields: Record<string, string>
+  fields: Record<string, string>,
 ) {
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) {

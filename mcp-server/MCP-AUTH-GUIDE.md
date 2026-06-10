@@ -38,12 +38,12 @@ Claude.ai  ──►  mcp.scholarmark.ai:5002 (MCP server)
 
 ## Environment Variables (deploy/refresh-prod.sh)
 
-| Variable | Value | Notes |
-|----------|-------|-------|
-| `MCP_SERVER_PORT` | `5002` | MCP server port |
-| `SCHOLARMARK_BACKEND_URL` | `http://127.0.0.1:5001` | Internal backend URL |
-| `MCP_AUTHORIZATION_SERVER` | `https://app.scholarmark.ai` | OAuth server URL |
-| `MCP_RESOURCE_URL` | `https://mcp.scholarmark.ai` | **No `/mcp` suffix!** |
+| Variable                   | Value                        | Notes                 |
+| -------------------------- | ---------------------------- | --------------------- |
+| `MCP_SERVER_PORT`          | `5002`                       | MCP server port       |
+| `SCHOLARMARK_BACKEND_URL`  | `http://127.0.0.1:5001`      | Internal backend URL  |
+| `MCP_AUTHORIZATION_SERVER` | `https://app.scholarmark.ai` | OAuth server URL      |
+| `MCP_RESOURCE_URL`         | `https://mcp.scholarmark.ai` | **No `/mcp` suffix!** |
 
 **Warning:** `MCP_RESOURCE_URL` must NOT have a `/mcp` path suffix. The resource metadata returns this value directly. Adding `/mcp` breaks the OAuth resource parameter matching.
 
@@ -54,6 +54,7 @@ Claude.ai  ──►  mcp.scholarmark.ai:5002 (MCP server)
 **Cause:** Stale cached OAuth state on Claude's side.
 
 **Fix:**
+
 1. Disconnect ScholarMark in Claude.ai Settings → Integrations
 2. Clear stale tokens: `sqlite3 /opt/app/data/sourceannotator.db "DELETE FROM mcp_tokens; DELETE FROM mcp_auth_codes;"`
 3. Reconnect in Claude.ai
@@ -69,6 +70,7 @@ Claude.ai  ──►  mcp.scholarmark.ai:5002 (MCP server)
 **Cause:** PM2 inherits env from parent shell or saved process list.
 
 **Fix:** Manually restart with explicit env:
+
 ```bash
 pm2 delete scholarmark-mcp
 cd /opt/app/mcp-server
@@ -87,6 +89,7 @@ Verify with: `cat /proc/$(pm2 pid scholarmark-mcp)/environ | tr '\0' '\n' | grep
 **Cause:** `transport.onclose` calling `mcpServer.close()` which calls `transport.close()` → infinite recursion.
 
 **Fix:** The `onclose` handler in `server.mjs` must ONLY clean up the session map. Never call `mcpServer.close()` or `transport.close()` inside it:
+
 ```js
 transport.onclose = () => {
   const sid = transport.sessionId;
@@ -103,6 +106,7 @@ ssh deploy@89.167.10.34 "sudo bash /opt/app/deploy/refresh-prod.sh"
 ```
 
 If MCP env vars need fixing after deploy:
+
 ```bash
 ssh deploy@89.167.10.34 "sudo pm2 startOrReload /opt/app/mcp-server/deploy/ecosystem.config.cjs --update-env && sudo pm2 save"
 ```

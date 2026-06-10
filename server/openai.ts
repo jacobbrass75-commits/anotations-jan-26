@@ -1,9 +1,7 @@
 import OpenAI from "openai";
-import type { 
-  AnnotationCategory, 
-  SearchResult, 
-  AnalysisResult, 
-  TextChunk,
+import type {
+  SearchResult,
+  AnalysisResult,
   CandidateAnnotation,
   VerifiedCandidate,
   VerifierVerdict,
@@ -56,19 +54,27 @@ export const PIPELINE_CONFIG = {
   MAX_CHUNKS_TO_ANNOTATE: 30,
 };
 
-export type ThoroughnessLevel = 'quick' | 'standard' | 'thorough' | 'exhaustive';
+export type ThoroughnessLevel = "quick" | "standard" | "thorough" | "exhaustive";
 
 export function getMaxChunksForLevel(level: ThoroughnessLevel): number {
   switch (level) {
-    case 'quick': return PIPELINE_CONFIG.CHUNKS_QUICK;
-    case 'standard': return PIPELINE_CONFIG.CHUNKS_STANDARD;
-    case 'thorough': return PIPELINE_CONFIG.CHUNKS_THOROUGH;
-    case 'exhaustive': return PIPELINE_CONFIG.CHUNKS_EXHAUSTIVE;
-    default: return PIPELINE_CONFIG.CHUNKS_STANDARD;
+    case "quick":
+      return PIPELINE_CONFIG.CHUNKS_QUICK;
+    case "standard":
+      return PIPELINE_CONFIG.CHUNKS_STANDARD;
+    case "thorough":
+      return PIPELINE_CONFIG.CHUNKS_THOROUGH;
+    case "exhaustive":
+      return PIPELINE_CONFIG.CHUNKS_EXHAUSTIVE;
+    default:
+      return PIPELINE_CONFIG.CHUNKS_STANDARD;
   }
 }
 
-export async function getEmbeddingWithUsage(text: string, onTokenUsage?: TokenUsageReporter): Promise<number[]> {
+export async function getEmbeddingWithUsage(
+  text: string,
+  onTokenUsage?: TokenUsageReporter,
+): Promise<number[]> {
   const response = await getOpenAI().embeddings.create({
     model: EMBEDDING_MODEL,
     input: text,
@@ -98,7 +104,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 export async function analyzeChunkForIntent(
   chunk: string,
   chunkStart: number,
-  intent: string
+  intent: string,
 ): Promise<AnalysisResult> {
   try {
     const response = await getOpenAI().chat.completions.create({
@@ -106,7 +112,8 @@ export async function analyzeChunkForIntent(
       messages: [
         {
           role: "system",
-          content: "You are a research assistant that identifies relevant passages in academic texts. Respond with valid JSON only.",
+          content:
+            "You are a research assistant that identifies relevant passages in academic texts. Respond with valid JSON only.",
         },
         {
           role: "user",
@@ -145,9 +152,7 @@ If not relevant, respond with:
   }
 }
 
-export async function generateDocumentSummary(
-  fullText: string
-): Promise<{
+export async function generateDocumentSummary(fullText: string): Promise<{
   summary: string;
   mainArguments: string[];
   keyConcepts: string[];
@@ -160,7 +165,8 @@ export async function generateDocumentSummary(
       messages: [
         {
           role: "system",
-          content: "You are a research assistant that summarizes academic documents. Respond with valid JSON only.",
+          content:
+            "You are a research assistant that summarizes academic documents. Respond with valid JSON only.",
         },
         {
           role: "user",
@@ -256,9 +262,13 @@ Return:
     });
     reportProviderUsage(response, onTokenUsage);
 
-    const parsed = JSON.parse(response.choices[0]?.message.content || "{}") as { prompts?: unknown };
+    const parsed = JSON.parse(response.choices[0]?.message.content || "{}") as {
+      prompts?: unknown;
+    };
     const prompts = Array.isArray(parsed.prompts)
-      ? parsed.prompts.filter((prompt): prompt is string => typeof prompt === "string" && prompt.trim().length > 0)
+      ? parsed.prompts.filter(
+          (prompt): prompt is string => typeof prompt === "string" && prompt.trim().length > 0,
+        )
       : [];
 
     return prompts.slice(0, 6).length === 6 ? prompts.slice(0, 6) : fallback;
@@ -284,7 +294,8 @@ export async function searchDocument(
       messages: [
         {
           role: "system",
-          content: "You are a research assistant helping find exact quotes from academic documents. Respond with valid JSON only.",
+          content:
+            "You are a research assistant helping find exact quotes from academic documents. Respond with valid JSON only.",
         },
         {
           role: "user",
@@ -334,7 +345,7 @@ Respond with JSON array of results (max 5):
 export function findHighlightPosition(
   fullText: string,
   highlightText: string,
-  chunkStart: number
+  chunkStart: number,
 ): { start: number; end: number } | null {
   // Search within a window around the chunk
   const searchStart = Math.max(0, chunkStart - 100);
@@ -367,7 +378,7 @@ export function calculateOverlap(
   start1: number,
   end1: number,
   start2: number,
-  end2: number
+  end2: number,
 ): number {
   const overlapStart = Math.max(start1, start2);
   const overlapEnd = Math.min(end1, end2);
@@ -381,14 +392,18 @@ export function isDuplicateAnnotation(
   candidateAbsStart: number,
   candidateAbsEnd: number,
   candidateConfidence: number,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+  existingAnnotations: Array<{
+    startPosition: number;
+    endPosition: number;
+    confidenceScore?: number | null;
+  }>,
 ): boolean {
   for (const existing of existingAnnotations) {
     const overlap = calculateOverlap(
       candidateAbsStart,
       candidateAbsEnd,
       existing.startPosition,
-      existing.endPosition
+      existing.endPosition,
     );
 
     if (overlap >= PIPELINE_CONFIG.OVERLAP_THRESHOLD) {
@@ -397,7 +412,8 @@ export function isDuplicateAnnotation(
       const candidateLength = candidateAbsEnd - candidateAbsStart;
 
       if (existingConfidence > candidateConfidence) return true;
-      if (existingConfidence === candidateConfidence && existingLength <= candidateLength) return true;
+      if (existingConfidence === candidateConfidence && existingLength <= candidateLength)
+        return true;
     }
   }
   return false;
@@ -407,7 +423,7 @@ export function isDuplicateAnnotation(
 // Returns corrected candidate with realigned offsets if text is found elsewhere
 export function hardVerifyCandidate(
   candidate: CandidateAnnotation,
-  chunk: string
+  chunk: string,
 ): { valid: boolean; errors: string[]; correctedCandidate?: CandidateAnnotation } {
   const errors: string[] = [];
 
@@ -456,7 +472,7 @@ export function hardVerifyCandidate(
 export async function generateCandidates(
   chunk: string,
   intent: string,
-  documentContext?: DocumentContext
+  documentContext?: DocumentContext,
 ): Promise<CandidateAnnotation[]> {
   const contextStr = documentContext
     ? `Document summary: ${documentContext.summary}\nKey concepts: ${documentContext.keyConcepts.join(", ")}\n\n`
@@ -486,7 +502,10 @@ If nothing relevant, return: {"candidates": []}`;
     const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_CONFIG.MODEL,
       messages: [
-        { role: "system", content: "You are a precise research assistant. Output valid JSON only." },
+        {
+          role: "system",
+          content: "You are a precise research assistant. Output valid JSON only.",
+        },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
@@ -517,7 +536,7 @@ If nothing relevant, return: {"candidates": []}`;
 export async function softVerifyCandidates(
   candidates: CandidateAnnotation[],
   chunk: string,
-  intent: string
+  intent: string,
 ): Promise<VerifierVerdict[]> {
   if (candidates.length === 0) return [];
 
@@ -564,7 +583,10 @@ Return JSON:
     const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_CONFIG.MODEL,
       messages: [
-        { role: "system", content: "You are a strict research quality reviewer. Output valid JSON only." },
+        {
+          role: "system",
+          content: "You are a strict research quality reviewer. Output valid JSON only.",
+        },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
@@ -595,7 +617,11 @@ export async function verifyCandidates(
   chunk: string,
   chunkStart: number,
   intent: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+  existingAnnotations: Array<{
+    startPosition: number;
+    endPosition: number;
+    confidenceScore?: number | null;
+  }>,
 ): Promise<VerifiedCandidate[]> {
   const verified: VerifiedCandidate[] = [];
 
@@ -618,15 +644,17 @@ export async function verifyCandidates(
 
   // Then, apply soft verification using LLM
   const softVerdicts = await softVerifyCandidates(
-    hardVerified.map(h => h.candidate),
+    hardVerified.map((h) => h.candidate),
     chunk,
-    intent
+    intent,
   );
 
   // Merge results
   for (const { candidate, index } of hardVerified) {
-    const verdict = softVerdicts.find(v => v.candidateIndex === hardVerified.findIndex(h => h.index === index));
-    
+    const verdict = softVerdicts.find(
+      (v) => v.candidateIndex === hardVerified.findIndex((h) => h.index === index),
+    );
+
     if (verdict && verdict.approved && verdict.qualityScore >= PIPELINE_CONFIG.VERIFIER_THRESHOLD) {
       verified.push({
         ...candidate,
@@ -647,13 +675,13 @@ export async function verifyCandidates(
 export async function refineAnnotations(
   verified: VerifiedCandidate[],
   intent: string,
-  documentContext?: DocumentContext
+  documentContext?: DocumentContext,
 ): Promise<RefinedAnnotation[]> {
   if (verified.length === 0) return [];
 
   // For small sets, skip refining and pass through
   if (verified.length <= 2) {
-    return verified.map(v => ({
+    return verified.map((v) => ({
       highlightStart: v.highlightStart,
       highlightEnd: v.highlightEnd,
       highlightText: v.highlightText,
@@ -663,24 +691,26 @@ export async function refineAnnotations(
     }));
   }
 
-  const contextStr = documentContext
-    ? `Document context: ${documentContext.summary}\n\n`
-    : "";
+  const contextStr = documentContext ? `Document context: ${documentContext.summary}\n\n` : "";
 
   const prompt = `Polish these annotations for final output. Output valid JSON only.
 
 ${contextStr}Research intent: ${intent}
 
 Verified annotations:
-${JSON.stringify(verified.map((v, i) => ({
-  index: i,
-  highlightText: v.highlightText,
-  category: v.adjustedCategory || v.category,
-  note: v.adjustedNote || v.note,
-  confidence: v.qualityScore,
-  highlightStart: v.highlightStart,
-  highlightEnd: v.highlightEnd,
-})), null, 2)}
+${JSON.stringify(
+  verified.map((v, i) => ({
+    index: i,
+    highlightText: v.highlightText,
+    category: v.adjustedCategory || v.category,
+    note: v.adjustedNote || v.note,
+    confidence: v.qualityScore,
+    highlightStart: v.highlightStart,
+    highlightEnd: v.highlightEnd,
+  })),
+  null,
+  2,
+)}
 
 For each annotation:
 1. Keep the note concise but informative (1-2 sentences max)
@@ -716,7 +746,7 @@ Return JSON:
     const content = response.choices[0].message.content;
     if (!content) {
       // Fallback to verified annotations
-      return verified.map(v => ({
+      return verified.map((v) => ({
         highlightStart: v.highlightStart,
         highlightEnd: v.highlightEnd,
         highlightText: v.highlightText,
@@ -732,7 +762,7 @@ Return JSON:
     if (!validated.success) {
       console.error("Refiner response validation failed:", validated.error);
       // Fallback
-      return verified.map(v => ({
+      return verified.map((v) => ({
         highlightStart: v.highlightStart,
         highlightEnd: v.highlightEnd,
         highlightText: v.highlightText,
@@ -746,7 +776,7 @@ Return JSON:
   } catch (error) {
     console.error("Refiner error:", error);
     // Fallback
-    return verified.map(v => ({
+    return verified.map((v) => ({
       highlightStart: v.highlightStart,
       highlightEnd: v.highlightEnd,
       highlightText: v.highlightText,
@@ -761,7 +791,7 @@ Return JSON:
 
 export async function getDocumentContext(
   documentId: string,
-  fullText: string
+  fullText: string,
 ): Promise<DocumentContext | undefined> {
   // Check cache
   if (documentContextCache.has(documentId)) {
@@ -774,8 +804,13 @@ export async function getDocumentContext(
     const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_CONFIG.MODEL,
       messages: [
-        { role: "system", content: "You summarize documents for research context. Output valid JSON only." },
-        { role: "user", content: `Summarize this document briefly.
+        {
+          role: "system",
+          content: "You summarize documents for research context. Output valid JSON only.",
+        },
+        {
+          role: "user",
+          content: `Summarize this document briefly.
 
 Text:
 ${truncatedText}
@@ -784,7 +819,8 @@ Return JSON:
 {
   "summary": "2-3 sentence summary",
   "keyConcepts": ["concept1", "concept2", ...]
-}` },
+}`,
+        },
       ],
       response_format: { type: "json_object" },
       max_tokens: PIPELINE_CONFIG.SUMMARIZER_MAX_TOKENS,
@@ -824,7 +860,11 @@ export async function analyzeChunkWithPipeline(
   intent: string,
   documentId: string,
   fullText: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+  existingAnnotations: Array<{
+    startPosition: number;
+    endPosition: number;
+    confidenceScore?: number | null;
+  }>,
 ): Promise<PipelineAnnotation[]> {
   // Get document context (cached)
   const context = await getDocumentContext(documentId, fullText);
@@ -839,7 +879,7 @@ export async function analyzeChunkWithPipeline(
     chunk,
     chunkStart,
     intent,
-    existingAnnotations
+    existingAnnotations,
   );
   if (verified.length === 0) return [];
 
@@ -862,7 +902,11 @@ export async function processChunksWithPipeline(
   intent: string,
   documentId: string,
   fullText: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+  existingAnnotations: Array<{
+    startPosition: number;
+    endPosition: number;
+    confidenceScore?: number | null;
+  }>,
 ): Promise<PipelineAnnotation[]> {
   const allAnnotations: PipelineAnnotation[] = [];
   const runningAnnotations = [...existingAnnotations];
@@ -880,20 +924,22 @@ export async function processChunksWithPipeline(
           intent,
           documentId,
           fullText,
-          runningAnnotations
-        )
-      )
+          runningAnnotations,
+        ),
+      ),
     );
 
     // Flatten and add to running list for duplicate detection
     for (const annotations of batchResults) {
       for (const ann of annotations) {
-        if (!isDuplicateAnnotation(
-          ann.absoluteStart,
-          ann.absoluteEnd,
-          ann.confidence,
-          runningAnnotations
-        )) {
+        if (
+          !isDuplicateAnnotation(
+            ann.absoluteStart,
+            ann.absoluteEnd,
+            ann.confidence,
+            runningAnnotations,
+          )
+        ) {
           allAnnotations.push(ann);
           runningAnnotations.push({
             startPosition: ann.absoluteStart,
@@ -918,7 +964,7 @@ export async function extractCitationMetadata(
   onTokenUsage?: TokenUsageReporter,
 ): Promise<CitationData | null> {
   const textSample = documentText.substring(0, 3000);
-  const contextHint = highlightedText 
+  const contextHint = highlightedText
     ? `The user wants to cite this specific quote: "${highlightedText.substring(0, 200)}..."\n\n`
     : "";
 
@@ -932,7 +978,7 @@ export async function extractCitationMetadata(
 Analyze the provided document text to extract bibliographic information.
 Look for author names, titles, publication details, dates, DOIs, and journal/publisher information.
 Academic PDFs often have author names and titles in the header or first paragraphs.
-Respond with valid JSON only.`
+Respond with valid JSON only.`,
         },
         {
           role: "user",
@@ -961,8 +1007,8 @@ Respond with JSON in this exact format:
 }
 
 Only include fields you can confidently extract. Omit uncertain fields.
-If you cannot identify any citation information, respond with: {"error": "Unable to extract citation metadata"}`
-        }
+If you cannot identify any citation information, respond with: {"error": "Unable to extract citation metadata"}`,
+        },
       ],
       response_format: { type: "json_object" },
       max_tokens: 800,
@@ -978,9 +1024,17 @@ If you cannot identify any citation information, respond with: {"error": "Unable
       return null;
     }
 
-    const validSourceTypes = ['book', 'journal', 'website', 'newspaper', 'chapter', 'thesis', 'other'];
+    const validSourceTypes = [
+      "book",
+      "journal",
+      "website",
+      "newspaper",
+      "chapter",
+      "thesis",
+      "other",
+    ];
     if (!validSourceTypes.includes(parsed.sourceType)) {
-      parsed.sourceType = 'other';
+      parsed.sourceType = "other";
     }
 
     if (!parsed.authors || !Array.isArray(parsed.authors)) {

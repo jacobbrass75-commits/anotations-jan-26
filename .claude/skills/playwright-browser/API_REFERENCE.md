@@ -57,10 +57,7 @@ const context = await browser.newContext({
 
 ```javascript
 // Wait for popup
-const [popup] = await Promise.all([
-  page.waitForEvent("popup"),
-  page.click('a[target="_blank"]'),
-]);
+const [popup] = await Promise.all([page.waitForEvent("popup"), page.click('a[target="_blank"]')]);
 await popup.waitForLoadState();
 console.log(await popup.title());
 
@@ -222,9 +219,7 @@ const value = await page.evaluate(() => localStorage.getItem("key"));
 await page.waitForFunction(() => document.querySelector(".loaded") !== null);
 
 // Wait for specific response
-await page.waitForResponse(
-  (res) => res.url().includes("/api/") && res.status() === 200
-);
+await page.waitForResponse((res) => res.url().includes("/api/") && res.status() === 200);
 
 // Wait for navigation
 await Promise.all([page.waitForNavigation(), page.click("a.nav-link")]);
@@ -234,10 +229,7 @@ await Promise.all([page.waitForNavigation(), page.click("a.nav-link")]);
 
 ```javascript
 // Run multiple isolated sessions
-const [context1, context2] = await Promise.all([
-  browser.newContext(),
-  browser.newContext(),
-]);
+const [context1, context2] = await Promise.all([browser.newContext(), browser.newContext()]);
 
 const [page1, page2] = await Promise.all([context1.newPage(), context2.newPage()]);
 

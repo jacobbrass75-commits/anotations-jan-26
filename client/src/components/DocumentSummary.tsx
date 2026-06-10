@@ -41,9 +41,7 @@ export function DocumentSummary({ document, isLoading }: DocumentSummaryProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {document.summary}
-        </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">{document.summary}</p>
 
         {document.mainArguments && document.mainArguments.length > 0 && (
           <div className="space-y-2">
@@ -74,7 +72,11 @@ export function DocumentSummary({ document, isLoading }: DocumentSummaryProps) {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {document.keyConcepts.map((concept, i) => (
-                <Badge key={i} variant="secondary" className="bg-secondary/30 text-chart-3 border border-chart-3/20 font-mono text-xs">
+                <Badge
+                  key={i}
+                  variant="secondary"
+                  className="bg-secondary/30 text-chart-3 border border-chart-3/20 font-mono text-xs"
+                >
                   {concept}
                 </Badge>
               ))}

@@ -19,7 +19,11 @@ if (!userRef || !tier || !(tier in TIER_LIMITS)) {
   usage();
 }
 
-const dbPath = resolve(process.env.SCHOLARMARK_DB_PATH || process.env.SOURCEANNOTATOR_DB_PATH || "data/sourceannotator.db");
+const dbPath = resolve(
+  process.env.SCHOLARMARK_DB_PATH ||
+    process.env.SOURCEANNOTATOR_DB_PATH ||
+    "data/sourceannotator.db",
+);
 if (!existsSync(dbPath)) {
   console.error(`Database not found: ${dbPath}`);
   process.exit(1);
@@ -39,7 +43,8 @@ if (!user) {
 }
 
 sqlite
-  .prepare(`
+  .prepare(
+    `
     UPDATE users
     SET tier = ?,
         token_limit = ?,
@@ -48,11 +53,14 @@ sqlite
         billing_cycle_start = ?,
         updated_at = ?
     WHERE id = ?
-  `)
+  `,
+  )
   .run(tier, tokenLimit, storageLimit, nowMs, nowMs, user.id);
 
 const updated = sqlite
-  .prepare("SELECT id, email, tier, token_limit, storage_limit, billing_cycle_start FROM users WHERE id = ?")
+  .prepare(
+    "SELECT id, email, tier, token_limit, storage_limit, billing_cycle_start FROM users WHERE id = ?",
+  )
   .get(user.id);
 
 console.log(JSON.stringify(updated, null, 2));

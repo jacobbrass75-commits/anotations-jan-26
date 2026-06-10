@@ -5,9 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-type ThoroughnessLevel = 'quick' | 'standard' | 'thorough' | 'exhaustive';
+type ThoroughnessLevel = "quick" | "standard" | "thorough" | "exhaustive";
 
 interface IntentPanelProps {
   documentId: string | null;
@@ -100,10 +106,18 @@ export function IntentPanel({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="quick">QUICK - {thoroughnessDescriptions.quick.toUpperCase()}</SelectItem>
-                <SelectItem value="standard">STANDARD - {thoroughnessDescriptions.standard.toUpperCase()}</SelectItem>
-                <SelectItem value="thorough">THOROUGH - {thoroughnessDescriptions.thorough.toUpperCase()}</SelectItem>
-                <SelectItem value="exhaustive">EXHAUSTIVE - {thoroughnessDescriptions.exhaustive.toUpperCase()}</SelectItem>
+                <SelectItem value="quick">
+                  QUICK - {thoroughnessDescriptions.quick.toUpperCase()}
+                </SelectItem>
+                <SelectItem value="standard">
+                  STANDARD - {thoroughnessDescriptions.standard.toUpperCase()}
+                </SelectItem>
+                <SelectItem value="thorough">
+                  THOROUGH - {thoroughnessDescriptions.thorough.toUpperCase()}
+                </SelectItem>
+                <SelectItem value="exhaustive">
+                  EXHAUSTIVE - {thoroughnessDescriptions.exhaustive.toUpperCase()}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

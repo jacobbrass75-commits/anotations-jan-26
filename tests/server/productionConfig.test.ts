@@ -31,15 +31,18 @@ describe("production config validation", () => {
         expect.stringContaining("without a trailing /mcp"),
         expect.stringContaining("ANTHROPIC_API_KEY"),
         expect.stringContaining("OPENAI_API_KEY"),
-      ])
+      ]),
     );
   });
 
   it("does not require runtime-only secrets during production build validation", () => {
-    const errors = getProductionConfigErrors({
-      NODE_ENV: "production",
-      VITE_CLERK_PUBLISHABLE_KEY: "pk_live_example",
-    } as NodeJS.ProcessEnv, { phase: "build" });
+    const errors = getProductionConfigErrors(
+      {
+        NODE_ENV: "production",
+        VITE_CLERK_PUBLISHABLE_KEY: "pk_live_example",
+      } as NodeJS.ProcessEnv,
+      { phase: "build" },
+    );
 
     expect(errors).toEqual([]);
   });

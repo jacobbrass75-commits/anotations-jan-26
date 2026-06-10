@@ -25,7 +25,7 @@ import {
   refinerResponseSchema,
   documentContextSchema,
 } from "@shared/schema";
-import { ANNOTATION_MODEL, PIPELINE_CONFIG, cosineSimilarity, getEmbedding } from "./openai";
+import { ANNOTATION_MODEL } from "./openai";
 import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
 
 let _openai: OpenAI | null = null;
@@ -127,7 +127,9 @@ function extractIntentKeywords(intent: string): string[] {
   return Array.from(new Set(tokens));
 }
 
-function splitChunkIntoSentences(chunk: string): Array<{ text: string; start: number; end: number }> {
+function splitChunkIntoSentences(
+  chunk: string,
+): Array<{ text: string; start: number; end: number }> {
   const candidates: Array<{ text: string; start: number; end: number }> = [];
   const sentencePattern = /[^.!?\n]+[.!?]?/g;
   let match: RegExpExecArray | null;
@@ -147,7 +149,7 @@ function looksLikeNoise(text: string): boolean {
   const normalized = text.toLowerCase();
   if (normalized.length < 20) return true;
   if (/^\s*\[\d+\]/.test(normalized)) return true;
-  if (/doi:\s*[\d.\/]/.test(normalized)) return true;
+  if (/doi:\s*[\d./]/.test(normalized)) return true;
   if (/^\s*\d+\s+of\s+\d+\s*$/i.test(normalized)) return true;
   if (/^paragraph\s+\d+:/i.test(normalized)) return false;
   if (/^\s*(figure|table)\s+\d+/i.test(normalized)) return true;
@@ -157,7 +159,9 @@ function looksLikeNoise(text: string): boolean {
 
 function inferHeuristicCategory(sentence: string): AnnotationCategory {
   const lower = sentence.toLowerCase();
-  if (/\b(method|methodology|procedure|approach|sample|protocol|review loop|limitation)\b/.test(lower)) {
+  if (
+    /\b(method|methodology|procedure|approach|sample|protocol|review loop|limitation)\b/.test(lower)
+  ) {
     return "methodology";
   }
   if (/\b(result|results|evidence|data|show|shows|found|findings|reduce|increase)\b/.test(lower)) {
@@ -186,10 +190,11 @@ function buildHeuristicCandidates(chunk: string, intent: string): CandidateAnnot
       const lower = candidate.text.toLowerCase();
       const keywordMatches = keywords.reduce(
         (count, keyword) => (lower.includes(keyword) ? count + 1 : count),
-        0
+        0,
       );
-      const bonus =
-        /\b(result|evidence|method|claim|conclusion|limitations?)\b/.test(lower) ? 1 : 0;
+      const bonus = /\b(result|evidence|method|claim|conclusion|limitations?)\b/.test(lower)
+        ? 1
+        : 0;
       return {
         ...candidate,
         score: keywordMatches * 2 + bonus,
@@ -221,7 +226,7 @@ function buildHeuristicCandidates(chunk: string, intent: string): CandidateAnnot
 function logStageFailure(
   stage: "context" | "generator" | "verifier" | "refiner",
   details: { chunkStart: number; chunkLength: number; documentId: string },
-  error: unknown
+  error: unknown,
 ) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`[V2] ${stage} stage failed`, {
@@ -264,7 +269,7 @@ export function filterTextNoise(text: string): { cleanText: string; removedSecti
   // Remove common metadata patterns at the start
   const metadataPatterns = [
     // DOI patterns
-    /^.*?doi:\s*[\d.\/\w-]+\n/i,
+    /^.*?doi:\s*[\d.\w/-]+\n/i,
     // Citation/copyright notices
     /^.*?©\s*\d{4}.*?\n/i,
     // Page numbers alone
@@ -276,8 +281,8 @@ export function filterTextNoise(text: string): { cleanText: string; removedSecti
   for (const pattern of metadataPatterns) {
     const match = cleanText.match(pattern);
     if (match) {
-      cleanText = cleanText.replace(pattern, '');
-      removedSections.push('Metadata header');
+      cleanText = cleanText.replace(pattern, "");
+      removedSections.push("Metadata header");
     }
   }
 
@@ -286,8 +291,8 @@ export function filterTextNoise(text: string): { cleanText: string; removedSecti
   const footnotePattern = /(\n\s*\d+\.\s+[A-Z][^.]+\.\s+[^.]+\.\s*\d{4}[.\s]*)+$/i;
   const footnoteMatch = cleanText.match(footnotePattern);
   if (footnoteMatch && footnoteMatch[0].length > 200) {
-    removedSections.push('Footnote cluster');
-    cleanText = cleanText.replace(footnotePattern, '');
+    removedSections.push("Footnote cluster");
+    cleanText = cleanText.replace(footnotePattern, "");
   }
 
   return { cleanText: cleanText.trim(), removedSections };
@@ -306,7 +311,7 @@ export interface TextChunkDataV2 {
 export function chunkTextV2(
   text: string,
   chunkSize: number = PIPELINE_V2_CONFIG.CHUNK_SIZE,
-  overlap: number = PIPELINE_V2_CONFIG.CHUNK_OVERLAP
+  overlap: number = PIPELINE_V2_CONFIG.CHUNK_OVERLAP,
 ): TextChunkDataV2[] {
   // First, filter noise
   const { cleanText } = filterTextNoise(text);
@@ -360,12 +365,15 @@ function findBestBoundary(text: string, targetLength: number): number {
   let bestPriority = Infinity;
 
   for (const { pattern, priority } of boundaries) {
-    const regex = new RegExp(pattern.source, 'g');
+    const regex = new RegExp(pattern.source, "g");
     let match;
     while ((match = regex.exec(text)) !== null) {
       if (match.index >= targetLength - 100 && match.index <= targetLength + 100) {
-        if (priority < bestPriority ||
-            (priority === bestPriority && Math.abs(match.index - targetLength) < Math.abs(bestPos - targetLength))) {
+        if (
+          priority < bestPriority ||
+          (priority === bestPriority &&
+            Math.abs(match.index - targetLength) < Math.abs(bestPos - targetLength))
+        ) {
           bestPos = match.index + match[0].length;
           bestPriority = priority;
         }
@@ -430,7 +438,8 @@ If nothing genuinely relevant, return: {"candidates": []}`;
       messages: [
         {
           role: "system",
-          content: "You are a precise research assistant that identifies only substantive, relevant passages. You filter out noise like references, metadata, and boilerplate. Output valid JSON only."
+          content:
+            "You are a precise research assistant that identifies only substantive, relevant passages. You filter out noise like references, metadata, and boilerplate. Output valid JSON only.",
         },
         { role: "user", content: prompt },
       ],
@@ -466,7 +475,7 @@ If nothing genuinely relevant, return: {"candidates": []}`;
 
 export function hardVerifyCandidateV2(
   candidate: CandidateAnnotation,
-  chunk: string
+  chunk: string,
 ): { valid: boolean; errors: string[]; correctedCandidate?: CandidateAnnotation } {
   const errors: string[] = [];
 
@@ -491,7 +500,7 @@ export function hardVerifyCandidateV2(
     /^\s*\d+\.\s+[A-Z][^,]+,\s+[A-Z]/, // Reference pattern: "1. Author, A."
     /^\s*\[\d+\]/, // Numbered citation
     /©\s*\d{4}/, // Copyright
-    /doi:\s*[\d.\/]/i, // DOI
+    /doi:\s*[\d./]/i, // DOI
     /vol\.\s*\d+/i, // Volume number
     /pp?\.\s*\d+-\d+/, // Page range
     /^\s*figure\s+\d+/i, // Figure caption start
@@ -599,7 +608,8 @@ Return JSON:
       messages: [
         {
           role: "system",
-          content: "You are a strict research quality reviewer. Reject anything that isn't genuinely useful for the research intent. Output valid JSON only."
+          content:
+            "You are a strict research quality reviewer. Reject anything that isn't genuinely useful for the research intent. Output valid JSON only.",
         },
         { role: "user", content: prompt },
       ],
@@ -657,12 +667,18 @@ function isDuplicateAnnotationV2(
   candidateAbsStart: number,
   candidateAbsEnd: number,
   candidateConfidence: number,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>
+  existingAnnotations: Array<{
+    startPosition: number;
+    endPosition: number;
+    confidenceScore?: number | null;
+  }>,
 ): boolean {
   for (const existing of existingAnnotations) {
     const overlap = calculateOverlap(
-      candidateAbsStart, candidateAbsEnd,
-      existing.startPosition, existing.endPosition
+      candidateAbsStart,
+      candidateAbsEnd,
+      existing.startPosition,
+      existing.endPosition,
     );
     if (overlap >= 0.5) {
       const existingConfidence = existing.confidenceScore ?? 0.5;
@@ -677,7 +693,11 @@ export async function verifyCandidatesV2(
   chunk: string,
   chunkStart: number,
   intent: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>,
+  existingAnnotations: Array<{
+    startPosition: number;
+    endPosition: number;
+    confidenceScore?: number | null;
+  }>,
   onTokenUsage?: TokenUsageReporter,
 ): Promise<VerifiedCandidate[]> {
   const verified: VerifiedCandidate[] = [];
@@ -700,7 +720,7 @@ export async function verifyCandidatesV2(
 
   // Soft verification
   const softVerdicts = await softVerifyCandidatesV2(
-    hardVerified.map(h => h.candidate),
+    hardVerified.map((h) => h.candidate),
     chunk,
     intent,
     onTokenUsage,
@@ -709,9 +729,13 @@ export async function verifyCandidatesV2(
   // Merge results
   for (let i = 0; i < hardVerified.length; i++) {
     const { candidate } = hardVerified[i];
-    const verdict = softVerdicts.find(v => v.candidateIndex === i);
+    const verdict = softVerdicts.find((v) => v.candidateIndex === i);
 
-    if (verdict && verdict.approved && verdict.qualityScore >= PIPELINE_V2_CONFIG.VERIFIER_THRESHOLD) {
+    if (
+      verdict &&
+      verdict.approved &&
+      verdict.qualityScore >= PIPELINE_V2_CONFIG.VERIFIER_THRESHOLD
+    ) {
       verified.push({
         ...candidate,
         qualityScore: verdict.qualityScore,
@@ -738,7 +762,7 @@ export async function refineAnnotationsV2(
 
   // Pass through for small sets
   if (verified.length <= 2) {
-    return verified.map(v => ({
+    return verified.map((v) => ({
       highlightStart: v.highlightStart,
       highlightEnd: v.highlightEnd,
       highlightText: v.highlightText,
@@ -748,24 +772,26 @@ export async function refineAnnotationsV2(
     }));
   }
 
-  const contextStr = documentContext
-    ? `Document context: ${documentContext.summary}\n\n`
-    : "";
+  const contextStr = documentContext ? `Document context: ${documentContext.summary}\n\n` : "";
 
   const prompt = `Polish these annotations for final output. Ensure high quality. Output valid JSON only.
 
 ${contextStr}Research intent: ${intent}
 
 Verified annotations:
-${JSON.stringify(verified.map((v, i) => ({
-  index: i,
-  highlightText: v.highlightText,
-  category: v.adjustedCategory || v.category,
-  note: v.adjustedNote || v.note,
-  confidence: v.qualityScore,
-  highlightStart: v.highlightStart,
-  highlightEnd: v.highlightEnd,
-})), null, 2)}
+${JSON.stringify(
+  verified.map((v, i) => ({
+    index: i,
+    highlightText: v.highlightText,
+    category: v.adjustedCategory || v.category,
+    note: v.adjustedNote || v.note,
+    confidence: v.qualityScore,
+    highlightStart: v.highlightStart,
+    highlightEnd: v.highlightEnd,
+  })),
+  null,
+  2,
+)}
 
 For each annotation:
 1. Ensure note is concise but specific (1-2 sentences max)
@@ -791,7 +817,11 @@ Return JSON:
     const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_V2_CONFIG.MODEL,
       messages: [
-        { role: "system", content: "You polish research annotations for clarity and usefulness. Output valid JSON only." },
+        {
+          role: "system",
+          content:
+            "You polish research annotations for clarity and usefulness. Output valid JSON only.",
+        },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
@@ -802,7 +832,7 @@ Return JSON:
 
     const content = response.choices[0].message.content;
     if (!content) {
-      return verified.map(v => ({
+      return verified.map((v) => ({
         highlightStart: v.highlightStart,
         highlightEnd: v.highlightEnd,
         highlightText: v.highlightText,
@@ -817,7 +847,7 @@ Return JSON:
 
     if (!validated.success) {
       console.error("[V2] Refiner validation failed:", validated.error);
-      return verified.map(v => ({
+      return verified.map((v) => ({
         highlightStart: v.highlightStart,
         highlightEnd: v.highlightEnd,
         highlightText: v.highlightText,
@@ -830,7 +860,7 @@ Return JSON:
     return validated.data.refined;
   } catch (error) {
     console.error("[V2] Refiner error:", error);
-    return verified.map(v => ({
+    return verified.map((v) => ({
       highlightStart: v.highlightStart,
       highlightEnd: v.highlightEnd,
       highlightText: v.highlightText,
@@ -859,8 +889,13 @@ export async function getDocumentContextV2(
     const response = await getOpenAI().chat.completions.create({
       model: PIPELINE_V2_CONFIG.MODEL,
       messages: [
-        { role: "system", content: "You summarize academic documents for research context. Output valid JSON only." },
-        { role: "user", content: `Summarize this document briefly, focusing on the main thesis and key findings.
+        {
+          role: "system",
+          content: "You summarize academic documents for research context. Output valid JSON only.",
+        },
+        {
+          role: "user",
+          content: `Summarize this document briefly, focusing on the main thesis and key findings.
 
 Text:
 ${truncatedText}
@@ -869,7 +904,8 @@ Return JSON:
 {
   "summary": "2-3 sentence summary focusing on main argument/findings",
   "keyConcepts": ["concept1", "concept2", ...]
-}` },
+}`,
+        },
       ],
       response_format: { type: "json_object" },
       max_tokens: 600,
@@ -910,7 +946,11 @@ export async function analyzeChunkWithPipelineV2(
   intent: string,
   documentId: string,
   fullText: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>,
+  existingAnnotations: Array<{
+    startPosition: number;
+    endPosition: number;
+    confidenceScore?: number | null;
+  }>,
   options: PipelineUsageOptions = {},
 ): Promise<PipelineAnnotation[]> {
   let context: DocumentContext | undefined;
@@ -933,7 +973,14 @@ export async function analyzeChunkWithPipelineV2(
 
   let verified: VerifiedCandidate[];
   try {
-    verified = await verifyCandidatesV2(candidates, chunk, chunkStart, intent, existingAnnotations, options.onTokenUsage);
+    verified = await verifyCandidatesV2(
+      candidates,
+      chunk,
+      chunkStart,
+      intent,
+      existingAnnotations,
+      options.onTokenUsage,
+    );
   } catch (error) {
     logStageFailure("verifier", { chunkStart, chunkLength: chunk.length, documentId }, error);
     return [];
@@ -966,7 +1013,11 @@ export async function processChunksWithPipelineV2(
   intent: string,
   documentId: string,
   fullText: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>,
+  existingAnnotations: Array<{
+    startPosition: number;
+    endPosition: number;
+    confidenceScore?: number | null;
+  }>,
   options: PipelineUsageOptions = {},
 ): Promise<PipelineAnnotation[]> {
   const allAnnotations: PipelineAnnotation[] = [];
@@ -987,17 +1038,18 @@ export async function processChunksWithPipelineV2(
           fullText,
           runningAnnotations,
           options,
-        )
-      )
+        ),
+      ),
     );
 
     for (let batchIndex = 0; batchIndex < batchResults.length; batchIndex++) {
       const batchResult = batchResults[batchIndex];
       if (batchResult.status === "rejected") {
         const chunk = batch[batchIndex];
-        const message = batchResult.reason instanceof Error
-          ? batchResult.reason.message
-          : String(batchResult.reason);
+        const message =
+          batchResult.reason instanceof Error
+            ? batchResult.reason.message
+            : String(batchResult.reason);
         console.error("[V2] Chunk analysis failed", {
           chunkId: chunk.id,
           chunkStart: chunk.startPosition,
@@ -1008,12 +1060,14 @@ export async function processChunksWithPipelineV2(
       }
 
       for (const ann of batchResult.value) {
-        if (!isDuplicateAnnotationV2(
-          ann.absoluteStart,
-          ann.absoluteEnd,
-          ann.confidence,
-          runningAnnotations
-        )) {
+        if (
+          !isDuplicateAnnotationV2(
+            ann.absoluteStart,
+            ann.absoluteEnd,
+            ann.confidence,
+            runningAnnotations,
+          )
+        ) {
           allAnnotations.push(ann);
           runningAnnotations.push({
             startPosition: ann.absoluteStart,
@@ -1038,7 +1092,11 @@ export async function processChunksWithMultiplePrompts(
   prompts: Array<{ text: string; color: string; index: number }>,
   documentId: string,
   fullText: string,
-  existingAnnotations: Array<{ startPosition: number; endPosition: number; confidenceScore?: number | null }>,
+  existingAnnotations: Array<{
+    startPosition: number;
+    endPosition: number;
+    confidenceScore?: number | null;
+  }>,
   options: PipelineUsageOptions = {},
 ): Promise<Map<number, PipelineAnnotation[]>> {
   // Run all prompts in parallel
@@ -1055,7 +1113,7 @@ export async function processChunksWithMultiplePrompts(
         options,
       );
       return { promptIndex: prompt.index, annotations };
-    })
+    }),
   );
 
   // Return map of promptIndex -> annotations

@@ -41,12 +41,20 @@ export function DocumentPanel({
             )}
             {onDownloadDocx && (
               <Button variant="ghost" size="sm" onClick={onDownloadDocx} disabled={isPreparingDocx}>
-                {isPreparingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {isPreparingDocx ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
               </Button>
             )}
             {onDownloadPdf && (
               <Button variant="ghost" size="sm" onClick={onDownloadPdf} disabled={isPreparingPdf}>
-                {isPreparingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {isPreparingPdf ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
               </Button>
             )}
             {onClose && (

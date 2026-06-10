@@ -125,7 +125,7 @@ describe("full app bootstrap smoke", () => {
           CLERK_SECRET_KEY: "sk_test_dummy",
         },
         stdio: ["ignore", "pipe", "pipe"],
-      }
+      },
     );
     children.push(child);
 
@@ -149,19 +149,16 @@ describe("full app bootstrap smoke", () => {
 
     const health = await requestJson<Record<string, unknown>>(
       `http://127.0.0.1:${port}`,
-      "/healthz"
+      "/healthz",
     );
-    const ready = await requestJson<Record<string, unknown>>(
-      `http://127.0.0.1:${port}`,
-      "/readyz"
-    );
+    const ready = await requestJson<Record<string, unknown>>(`http://127.0.0.1:${port}`, "/readyz");
     const unauthenticatedStatus = await requestJson<Record<string, unknown>>(
       `http://127.0.0.1:${port}`,
-      "/api/system/status"
+      "/api/system/status",
     );
     const malformed = await requestJson<Record<string, unknown>>(
       `http://127.0.0.1:${port}`,
-      "/%E0%A4%A"
+      "/%E0%A4%A",
     );
     const pricingResponse = await fetch(`http://127.0.0.1:${port}/pricing`);
     const pricingHtml = await pricingResponse.text();
@@ -185,14 +182,16 @@ describe("full app bootstrap smoke", () => {
     expect(pricingResponse.status).toBe(200);
     expect(pricingResponse.headers.get("content-type")).toContain("text/html");
     expect(pricingHtml).toContain('<div id="root"></div>');
-    expect(pricingHtml).toContain('/src/main.tsx');
+    expect(pricingHtml).toContain("/src/main.tsx");
 
     expect(accountResponse.status).toBe(200);
     expect(accountResponse.headers.get("content-type")).toContain("text/html");
     expect(accountHtml).toContain('<div id="root"></div>');
-    expect(accountHtml).toContain('/src/main.tsx');
+    expect(accountHtml).toContain("/src/main.tsx");
 
     expect(localhostCorsResponse.status).toBe(401);
-    expect(localhostCorsResponse.headers.get("access-control-allow-origin")).toBe(localhostCorsOrigin);
+    expect(localhostCorsResponse.headers.get("access-control-allow-origin")).toBe(
+      localhostCorsOrigin,
+    );
   }, 45_000);
 });

@@ -16,6 +16,8 @@ const DEFAULT_PASTED_SOURCE_NAME = "Pasted Source";
 function sanitizeSourceTitle(title: string): string {
   const cleaned = title
     .replace(/[\r\n\t]+/g, " ")
+    // TODO(lint): Strip filesystem-invalid characters and ASCII control chars from titles.
+    // eslint-disable-next-line no-control-regex
     .replace(/[<>:"/\\|?*\u0000-\u001F]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();

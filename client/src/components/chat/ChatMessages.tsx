@@ -88,7 +88,13 @@ function UserBubble({ content }: { content: string }) {
   );
 }
 
-function AssistantMarkdownBubble({ content, isStreaming = false }: { content: string; isStreaming?: boolean }) {
+function AssistantMarkdownBubble({
+  content,
+  isStreaming = false,
+}: {
+  content: string;
+  isStreaming?: boolean;
+}) {
   return (
     <div className="flex justify-start mb-4">
       <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-card border shadow-sm">
@@ -96,7 +102,9 @@ function AssistantMarkdownBubble({ content, isStreaming = false }: { content: st
           <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
             {content}
           </ReactMarkdown>
-          {isStreaming && <span className="inline-block w-2 h-4 bg-foreground/60 animate-pulse ml-0.5 align-text-bottom" />}
+          {isStreaming && (
+            <span className="inline-block w-2 h-4 bg-foreground/60 animate-pulse ml-0.5 align-text-bottom" />
+          )}
         </div>
       </div>
     </div>
@@ -119,7 +127,12 @@ function AssistantMessage({
     <>
       {segments.map((segment, index) => {
         if (segment.type === "chat") {
-          return <AssistantMarkdownBubble key={`${message.id}-chat-${index}`} content={segment.content} />;
+          return (
+            <AssistantMarkdownBubble
+              key={`${message.id}-chat-${index}`}
+              content={segment.content}
+            />
+          );
         }
 
         return (
@@ -163,15 +176,25 @@ export function ChatMessages({
       ? messages.some(
           (message) =>
             message.role === "assistant" &&
-            message.content.includes(streamingDocumentText.slice(0, Math.min(500, streamingDocumentText.length)))
+            message.content.includes(
+              streamingDocumentText.slice(0, Math.min(500, streamingDocumentText.length)),
+            ),
         )
       : false;
   const showStreamingDocument =
-    isDocumentStreaming || Boolean(isDocumentComplete && streamingDocumentText && !persistedStreamingDocument);
+    isDocumentStreaming ||
+    Boolean(isDocumentComplete && streamingDocumentText && !persistedStreamingDocument);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activeStreamingChat, streamingDocumentText, showStreamingDocument, pendingUserMessage, streamStatus]);
+  }, [
+    messages,
+    activeStreamingChat,
+    streamingDocumentText,
+    showStreamingDocument,
+    pendingUserMessage,
+    streamStatus,
+  ]);
 
   if (messages.length === 0 && !isStreaming && !pendingUserMessage) {
     return (
@@ -180,7 +203,8 @@ export function ChatMessages({
           <div>
             <h2 className="text-2xl font-semibold mb-2">ScholarMark AI</h2>
             <p className="text-muted-foreground">
-              Your academic writing assistant. Ask me about research, writing, citations, or anything related to academic work.
+              Your academic writing assistant. Ask me about research, writing, citations, or
+              anything related to academic work.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -208,7 +232,7 @@ export function ChatMessages({
             <UserBubble key={msg.id} content={msg.content} />
           ) : (
             <AssistantMessage key={msg.id} message={msg} onDocumentSelect={onDocumentSelect} />
-          )
+          ),
         )}
 
         {pendingUserMessage && <UserBubble content={pendingUserMessage} />}

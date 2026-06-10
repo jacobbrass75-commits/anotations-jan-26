@@ -27,16 +27,18 @@ describe("database bootstrap", () => {
     const sqlite = new Database(join(tempDir, "data", "sourceannotator.db"));
 
     const tables = new Set(
-      (sqlite
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
-        .all() as Array<{ name: string }>)
-        .map((row) => row.name)
+      (
+        sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+          name: string;
+        }>
+      ).map((row) => row.name),
     );
     const indexes = new Set(
-      (sqlite
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'index'")
-        .all() as Array<{ name: string }>)
-        .map((row) => row.name)
+      (
+        sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{
+          name: string;
+        }>
+      ).map((row) => row.name),
     );
 
     expect(sqlite.pragma("foreign_keys", { simple: true })).toBe(1);

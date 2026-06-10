@@ -59,16 +59,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
-  BookOpen,
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   Copy,
   Download,
   Eye,
   EyeOff,
   FileText,
-  Lightbulb,
   Loader2,
   PenLine,
   PenTool,
@@ -102,36 +98,13 @@ function normalizeSourceRole(value: string | null | undefined): SourceRole {
     : DEFAULT_SOURCE_ROLE;
 }
 
-const WRITING_PROMPTS = [
-  {
-    icon: PenLine,
-    label: "Write the introduction",
-    prompt: "Write an introduction paragraph for my paper. Include a thesis statement based on the sources.",
-  },
-  {
-    icon: BookOpen,
-    label: "Draft a thesis statement",
-    prompt: "Help me craft a strong thesis statement for my paper based on the available source materials.",
-  },
-  {
-    icon: FileText,
-    label: "Write a section",
-    prompt: "Write a section analyzing the key arguments from the sources. Include proper citations.",
-  },
-  {
-    icon: Lightbulb,
-    label: "Write the conclusion",
-    prompt: "Write a conclusion that ties together the main arguments of my paper.",
-  },
-];
-
 export default function WritingChat({ initialProjectId, lockProject }: WritingChatProps) {
   const { toast } = useToast();
 
   // Project selection
   const { data: projects = [] } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState(
-    initialProjectId || (lockProject ? "" : NO_PROJECT_VALUE)
+    initialProjectId || (lockProject ? "" : NO_PROJECT_VALUE),
   );
   const hasSelectedProject = Boolean(selectedProjectId && selectedProjectId !== NO_PROJECT_VALUE);
 
@@ -144,7 +117,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
 
   const selectedProject = useMemo(
     () => (hasSelectedProject ? projects.find((p) => p.id === selectedProjectId) : undefined),
-    [hasSelectedProject, projects, selectedProjectId]
+    [hasSelectedProject, projects, selectedProjectId],
   );
   const { data: writingStyles = [], isLoading: writingStylesLoading } = useWritingStyles();
 
@@ -152,7 +125,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
   const { data: projectConversations = [] } = useProjectConversations(
-    hasSelectedProject ? selectedProjectId : undefined
+    hasSelectedProject ? selectedProjectId : undefined,
   );
   const { data: standaloneConversations = [] } = useStandaloneConversations(!hasSelectedProject);
   const conversations = hasSelectedProject ? projectConversations : standaloneConversations;
@@ -181,9 +154,12 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
 
   // Source management
   const { data: projectSources = [], isLoading: projectSourcesLoading } = useProjectDocuments(
-    hasSelectedProject ? selectedProjectId : ""
+    hasSelectedProject ? selectedProjectId : "",
   );
-  const { data: standaloneWebClips = [], isLoading: webClipsLoading } = useWebClips({}, !hasSelectedProject);
+  const { data: standaloneWebClips = [], isLoading: webClipsLoading } = useWebClips(
+    {},
+    !hasSelectedProject,
+  );
   const sourcesLoading = hasSelectedProject ? projectSourcesLoading : webClipsLoading;
   const sourceIds = hasSelectedProject
     ? projectSources.map((source) => source.id)
@@ -213,7 +189,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const [citationStyle, setCitationStyle] = useState(conversationData?.citationStyle || "chicago");
   const [tone, setTone] = useState(conversationData?.tone || "academic");
   const [writingModel, setWritingModel] = useState<"precision" | "extended">(
-    conversationData?.writingModel === "extended" ? "extended" : "precision"
+    conversationData?.writingModel === "extended" ? "extended" : "precision",
   );
   const [humanize, setHumanize] = useState(conversationData?.humanize ?? true);
   const [noEnDashes, setNoEnDashes] = useState(conversationData?.noEnDashes || false);
@@ -293,7 +269,8 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   }, [documentTitle, isDocumentComplete, isDocumentStreaming, streamingDocumentText]);
 
   // Compile & Verify
-  const { compile, cancelCompile, clearCompiled, compiledContent, isCompiling } = useCompilePaper(activeConversationId);
+  const { compile, cancelCompile, clearCompiled, compiledContent, isCompiling } =
+    useCompilePaper(activeConversationId);
   const { verify, verifyReport, isVerifying } = useVerifyPaper(activeConversationId);
   const humanizeText = useHumanizeText();
   const [humanizedCompiledContent, setHumanizedCompiledContent] = useState<string | null>(null);
@@ -318,19 +295,25 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const effectiveCompiledContent = humanizedCompiledContent ?? compiledContent;
   const plainText = useMemo(
     () => (effectiveCompiledContent ? stripMarkdown(effectiveCompiledContent) : ""),
-    [effectiveCompiledContent]
+    [effectiveCompiledContent],
   );
-  const wordCount = useMemo(() => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0), [plainText]);
-  const pageEstimate = useMemo(() => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0), [wordCount]);
+  const wordCount = useMemo(
+    () => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0),
+    [plainText],
+  );
+  const pageEstimate = useMemo(
+    () => (wordCount > 0 ? Math.max(1, Math.round(wordCount / 500)) : 0),
+    [wordCount],
+  );
   const conversationProjectId = hasSelectedProject ? selectedProjectId : null;
   const generatedProjectDrafts = useMemo(
     () => projectSources.filter((source) => source.roleInProject === "AI-generated draft"),
-    [projectSources]
+    [projectSources],
   );
   const quickGenerateIsPartial = quickGenerate.phase === "partial";
   const quickGenerateTitle = useMemo(
     () => getGeneratedPaperTitle(quickTopic, quickGenerate.savedPaper?.filename),
-    [quickGenerate.savedPaper?.filename, quickTopic]
+    [quickGenerate.savedPaper?.filename, quickTopic],
   );
   const quickGenerateProgress = useMemo(() => {
     if (quickGenerate.fullText || quickGenerate.phase === "complete") return 100;
@@ -338,7 +321,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (quickGenerate.plan) {
       return Math.min(
         95,
-        Math.round((quickGenerate.sections.length / Math.max(1, quickGenerate.plan.sections.length)) * 80) + 10
+        Math.round(
+          (quickGenerate.sections.length / Math.max(1, quickGenerate.plan.sections.length)) * 80,
+        ) + 10,
       );
     }
     return quickGenerate.isGenerating ? 5 : 0;
@@ -397,91 +382,147 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       setActiveConversationId(conv.id);
       clearCompiled();
     } catch {
-      toast({ title: "Error", description: "Failed to create conversation", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to create conversation",
+        variant: "destructive",
+      });
     }
-  }, [conversationProjectId, localSelectedSourceIds, selectedWritingStyleId, citationStyle, tone, writingModel, humanize, noEnDashes, createConversation, updateConversation, clearCompiled, toast]);
+  }, [
+    conversationProjectId,
+    localSelectedSourceIds,
+    selectedWritingStyleId,
+    citationStyle,
+    tone,
+    writingModel,
+    humanize,
+    noEnDashes,
+    createConversation,
+    updateConversation,
+    clearCompiled,
+    toast,
+  ]);
 
-  const handleSelectConversation = useCallback((id: string) => {
-    setActiveConversationId(id);
-    clearCompiled();
-  }, [clearCompiled]);
+  const handleSelectConversation = useCallback(
+    (id: string) => {
+      setActiveConversationId(id);
+      clearCompiled();
+    },
+    [clearCompiled],
+  );
 
-  const handleDeleteConversation = useCallback(async (id: string) => {
-    try {
-      await deleteConversation.mutateAsync(id);
-      if (activeConversationId === id) {
-        setActiveConversationId(null);
-        clearCompiled();
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed to delete conversation", variant: "destructive" });
-    }
-  }, [deleteConversation, activeConversationId, clearCompiled, toast]);
-
-  const handleRenameConversation = useCallback(async (id: string, newTitle: string) => {
-    try {
-      await updateConversation.mutateAsync({ id, data: { title: newTitle } });
-    } catch {
-      toast({ title: "Error", description: "Failed to rename", variant: "destructive" });
-    }
-  }, [updateConversation, toast]);
-
-  const handleSend = useCallback(async (content: string) => {
-    setPendingUserMessage(content);
-    if (!activeConversationId) {
-      // Create a new conversation first
+  const handleDeleteConversation = useCallback(
+    async (id: string) => {
       try {
-        const conv = await createConversation.mutateAsync({
-          projectId: conversationProjectId,
-          selectedSourceIds: localSelectedSourceIds,
-          writingStyleId: selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
-          writingModel,
-          citationStyle,
-          tone,
-          humanize,
-          noEnDashes,
+        await deleteConversation.mutateAsync(id);
+        if (activeConversationId === id) {
+          setActiveConversationId(null);
+          clearCompiled();
+        }
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to delete conversation",
+          variant: "destructive",
         });
-        setActiveConversationId(conv.id);
+      }
+    },
+    [deleteConversation, activeConversationId, clearCompiled, toast],
+  );
 
-        // Save settings
-        await updateConversation.mutateAsync({
-          id: conv.id,
-          data: {
+  const handleRenameConversation = useCallback(
+    async (id: string, newTitle: string) => {
+      try {
+        await updateConversation.mutateAsync({ id, data: { title: newTitle } });
+      } catch {
+        toast({ title: "Error", description: "Failed to rename", variant: "destructive" });
+      }
+    },
+    [updateConversation, toast],
+  );
+
+  const handleSend = useCallback(
+    async (content: string) => {
+      setPendingUserMessage(content);
+      if (!activeConversationId) {
+        // Create a new conversation first
+        try {
+          const conv = await createConversation.mutateAsync({
+            projectId: conversationProjectId,
+            selectedSourceIds: localSelectedSourceIds,
+            writingStyleId:
+              selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
+            writingModel,
             citationStyle,
             tone,
-            writingModel,
             humanize,
             noEnDashes,
-            writingStyleId: selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
-          },
-        });
+          });
+          setActiveConversationId(conv.id);
 
-        await send(content, conv.id);
-      } catch {
-        toast({ title: "Error", description: "Failed to start conversation", variant: "destructive" });
+          // Save settings
+          await updateConversation.mutateAsync({
+            id: conv.id,
+            data: {
+              citationStyle,
+              tone,
+              writingModel,
+              humanize,
+              noEnDashes,
+              writingStyleId:
+                selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
+            },
+          });
+
+          await send(content, conv.id);
+        } catch {
+          toast({
+            title: "Error",
+            description: "Failed to start conversation",
+            variant: "destructive",
+          });
+        } finally {
+          setPendingUserMessage(null);
+        }
+        return;
+      }
+
+      try {
+        await send(content);
       } finally {
         setPendingUserMessage(null);
       }
-      return;
-    }
+    },
+    [
+      activeConversationId,
+      conversationProjectId,
+      localSelectedSourceIds,
+      selectedWritingStyleId,
+      citationStyle,
+      tone,
+      writingModel,
+      humanize,
+      noEnDashes,
+      send,
+      createConversation,
+      updateConversation,
+      toast,
+    ],
+  );
 
-    try {
-      await send(content);
-    } finally {
-      setPendingUserMessage(null);
-    }
-  }, [activeConversationId, conversationProjectId, localSelectedSourceIds, selectedWritingStyleId, citationStyle, tone, writingModel, humanize, noEnDashes, send, createConversation, updateConversation, toast]);
-
-  const toggleSource = useCallback((id: string) => {
-    setLocalSelectedSourceIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id];
-      // Persist to server
-      if (activeConversationId) {
-        updateSources.mutate({ conversationId: activeConversationId, selectedSourceIds: next });
-      }
-      return next;
-    });
-  }, [activeConversationId, updateSources]);
+  const toggleSource = useCallback(
+    (id: string) => {
+      setLocalSelectedSourceIds((prev) => {
+        const next = prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id];
+        // Persist to server
+        if (activeConversationId) {
+          updateSources.mutate({ conversationId: activeConversationId, selectedSourceIds: next });
+        }
+        return next;
+      });
+    },
+    [activeConversationId, updateSources],
+  );
 
   const toggleAllSources = useCallback(() => {
     const allIds = sourceIds;
@@ -492,39 +533,45 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
   }, [sourceIds, localSelectedSourceIds, activeConversationId, updateSources]);
 
-  const handleSourceRoleChange = useCallback(async (sourceId: string, sourceRole: SourceRole) => {
-    if (!hasSelectedProject) return;
+  const handleSourceRoleChange = useCallback(
+    async (sourceId: string, sourceRole: SourceRole) => {
+      if (!hasSelectedProject) return;
 
-    try {
-      await updateSourceRole.mutateAsync({
-        sourceId,
-        projectId: selectedProjectId,
-        sourceRole,
-      });
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to update source role",
-        variant: "destructive",
-      });
-    }
-  }, [hasSelectedProject, selectedProjectId, toast, updateSourceRole]);
+      try {
+        await updateSourceRole.mutateAsync({
+          sourceId,
+          projectId: selectedProjectId,
+          sourceRole,
+        });
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to update source role",
+          variant: "destructive",
+        });
+      }
+    },
+    [hasSelectedProject, selectedProjectId, toast, updateSourceRole],
+  );
 
-  const handleSettingChange = useCallback((key: string, value: any) => {
-    if (key === "citationStyle") setCitationStyle(value);
-    if (key === "tone") setTone(value);
-    if (key === "writingModel") setWritingModel(value);
-    if (key === "humanize") setHumanize(value);
-    if (key === "noEnDashes") setNoEnDashes(value);
-    if (key === "writingStyleId") setSelectedWritingStyleId(value || NO_STYLE_VALUE);
+  const handleSettingChange = useCallback(
+    (key: string, value: any) => {
+      if (key === "citationStyle") setCitationStyle(value);
+      if (key === "tone") setTone(value);
+      if (key === "writingModel") setWritingModel(value);
+      if (key === "humanize") setHumanize(value);
+      if (key === "noEnDashes") setNoEnDashes(value);
+      if (key === "writingStyleId") setSelectedWritingStyleId(value || NO_STYLE_VALUE);
 
-    if (activeConversationId) {
-      updateConversation.mutate({
-        id: activeConversationId,
-        data: { [key]: key === "writingStyleId" && value === NO_STYLE_VALUE ? null : value },
-      });
-    }
-  }, [activeConversationId, updateConversation]);
+      if (activeConversationId) {
+        updateConversation.mutate({
+          id: activeConversationId,
+          data: { [key]: key === "writingStyleId" && value === NO_STYLE_VALUE ? null : value },
+        });
+      }
+    },
+    [activeConversationId, updateConversation],
+  );
 
   const handleCompile = useCallback(() => {
     compile({ citationStyle, tone, noEnDashes });
@@ -548,10 +595,17 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     if (!effectiveCompiledContent) return;
     setIsPreparingDocx(true);
     try {
-      const blob = await buildDocxBlob(conversationData?.title || "Paper", effectiveCompiledContent);
+      const blob = await buildDocxBlob(
+        conversationData?.title || "Paper",
+        effectiveCompiledContent,
+      );
       downloadBlob(blob, `${toSafeFilename(conversationData?.title || "Paper")}.docx`);
     } catch (e) {
-      toast({ title: "Export failed", description: e instanceof Error ? e.message : "DOCX export failed", variant: "destructive" });
+      toast({
+        title: "Export failed",
+        description: e instanceof Error ? e.message : "DOCX export failed",
+        variant: "destructive",
+      });
     } finally {
       setIsPreparingDocx(false);
     }
@@ -599,7 +653,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   const handleRevertHumanized = useCallback(() => {
     setHumanizedCompiledContent(null);
     toast({ title: "Reverted", description: "Showing original compiled paper" });
-  }, []);
+  }, [toast]);
 
   const handleQuickGenerate = useCallback(() => {
     if (!hasSelectedProject || !quickTopic.trim() || localSelectedSourceIds.length === 0) {
@@ -626,18 +680,35 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       deepWrite: quickDeepWrite,
     };
     quickGenerate.generate(request);
-  }, [hasSelectedProject, selectedProjectId, selectedWritingStyleId, quickTopic, quickAssignmentInstructions, localSelectedSourceIds, citationStyle, tone, quickTargetLength, noEnDashes, quickDeepWrite, quickGenerate, toast]);
+  }, [
+    hasSelectedProject,
+    selectedProjectId,
+    selectedWritingStyleId,
+    quickTopic,
+    quickAssignmentInstructions,
+    localSelectedSourceIds,
+    citationStyle,
+    tone,
+    quickTargetLength,
+    noEnDashes,
+    quickDeepWrite,
+    quickGenerate,
+    toast,
+  ]);
 
   // Custom suggested prompts for writing context
-  const handleSuggestedPrompt = useCallback((prompt: string) => {
-    handleSend(prompt);
-  }, [handleSend]);
+  const handleSuggestedPrompt = useCallback(
+    (prompt: string) => {
+      handleSend(prompt);
+    },
+    [handleSend],
+  );
 
   const handleSelectDocument = useCallback((document: { title: string; content: string }) => {
     setShowControlsWhenDocument(false);
     setDocuments((prev) => {
       const existingIndex = prev.findIndex(
-        (item) => item.title === document.title && item.content === document.content
+        (item) => item.title === document.title && item.content === document.content,
       );
       if (existingIndex >= 0) {
         setSelectedDocIndex(existingIndex);
@@ -649,10 +720,14 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
       return next;
     });
     requestAnimationFrame(() => {
-      documentPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+      documentPanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
       documentPanelRef.current?.focus({ preventScroll: true });
     });
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     const content = quickGenerate.fullText.trim();
@@ -683,7 +758,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   useEffect(() => {
     if (!quickGenerate.savedPaper) return;
     if (selectedProjectId) {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", selectedProjectId, "documents"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/projects", selectedProjectId, "documents"],
+      });
     }
     toast({
       title: "Saved to Project",
@@ -738,54 +815,55 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
     }
   }, [activeDocument, toast]);
 
-  const handleDownloadGeneratedDocx = useCallback(async (
-    title: string,
-    content: string,
-  ) => {
-    if (!content.trim()) return;
-    setIsPreparingDocx(true);
+  const handleDownloadGeneratedDocx = useCallback(
+    async (title: string, content: string) => {
+      if (!content.trim()) return;
+      setIsPreparingDocx(true);
 
-    try {
-      const blob = await buildDocxBlob(title || "Generated Paper", content);
-      downloadBlob(blob, `${toSafeFilename(title || "Generated Paper")}.docx`);
-    } catch (e) {
-      toast({
-        title: "Export failed",
-        description: e instanceof Error ? e.message : "DOCX export failed",
-        variant: "destructive",
-      });
-    } finally {
-      setIsPreparingDocx(false);
-    }
-  }, [toast]);
+      try {
+        const blob = await buildDocxBlob(title || "Generated Paper", content);
+        downloadBlob(blob, `${toSafeFilename(title || "Generated Paper")}.docx`);
+      } catch (e) {
+        toast({
+          title: "Export failed",
+          description: e instanceof Error ? e.message : "DOCX export failed",
+          variant: "destructive",
+        });
+      } finally {
+        setIsPreparingDocx(false);
+      }
+    },
+    [toast],
+  );
 
-  const handleDownloadSavedGeneratedDraftDocx = useCallback(async (
-    draft: (typeof projectSources)[number],
-  ) => {
-    setIsPreparingDocx(true);
+  const handleDownloadSavedGeneratedDraftDocx = useCallback(
+    async (draft: (typeof projectSources)[number]) => {
+      setIsPreparingDocx(true);
 
-    try {
-      const res = await fetch(`/api/documents/${draft.documentId}`, {
-        headers: { ...getAuthHeaders() },
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Could not load saved paper.");
-      const document = await res.json() as { filename?: string; fullText?: string };
-      const title = document.filename || draft.document.filename || "Generated Paper";
-      const content = document.fullText || "";
-      if (!content.trim()) throw new Error("Saved paper has no text to export.");
-      const blob = await buildDocxBlob(title, content);
-      downloadBlob(blob, `${toSafeFilename(title)}.docx`);
-    } catch (e) {
-      toast({
-        title: "Export failed",
-        description: e instanceof Error ? e.message : "DOCX export failed",
-        variant: "destructive",
-      });
-    } finally {
-      setIsPreparingDocx(false);
-    }
-  }, [toast]);
+      try {
+        const res = await fetch(`/api/documents/${draft.documentId}`, {
+          headers: { ...getAuthHeaders() },
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("Could not load saved paper.");
+        const document = (await res.json()) as { filename?: string; fullText?: string };
+        const title = document.filename || draft.document.filename || "Generated Paper";
+        const content = document.fullText || "";
+        if (!content.trim()) throw new Error("Saved paper has no text to export.");
+        const blob = await buildDocxBlob(title, content);
+        downloadBlob(blob, `${toSafeFilename(title)}.docx`);
+      } catch (e) {
+        toast({
+          title: "Export failed",
+          description: e instanceof Error ? e.message : "DOCX export failed",
+          variant: "destructive",
+        });
+      } finally {
+        setIsPreparingDocx(false);
+      }
+    },
+    [toast],
+  );
 
   return (
     <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-[250px_1fr_380px] border border-border rounded-xl overflow-auto lg:overflow-hidden bg-[#F5F0E8] dark:bg-background">
@@ -826,7 +904,9 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                   <SelectContent>
                     <SelectItem value={NO_PROJECT_VALUE}>No Project (General Writing)</SelectItem>
                     {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -834,10 +914,16 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
             </div>
             {effectiveCompiledContent && (
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="font-mono text-[10px] uppercase">{wordCount} words</Badge>
-                <Badge variant="outline" className="font-mono text-[10px] uppercase">{pageEstimate} pg</Badge>
+                <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                  {wordCount} words
+                </Badge>
+                <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                  {pageEstimate} pg
+                </Badge>
                 {humanizedCompiledContent && (
-                  <Badge variant="secondary" className="font-mono text-[10px] uppercase">Humanized</Badge>
+                  <Badge variant="secondary" className="font-mono text-[10px] uppercase">
+                    Humanized
+                  </Badge>
                 )}
               </div>
             )}
@@ -902,452 +988,616 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
           )}
 
           {(!activeDocument || showControlsWhenDocument) && (
-            <div className={`${activeDocument ? "min-h-0 flex-[1_1_45%]" : "h-full"} overflow-auto space-y-4`}>
-          {/* Settings Card */}
-          <Card className="border-border bg-background/80">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Select value={writingModel} onValueChange={(v) => handleSettingChange("writingModel", v)}>
-                <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="precision">Precision (Opus)</SelectItem>
-                  <SelectItem value="extended">Extended (Sonnet)</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="grid grid-cols-[1fr_auto] gap-2">
-                <Select
-                  value={selectedWritingStyleId}
-                  onValueChange={(v) => handleSettingChange("writingStyleId", v)}
-                  disabled={writingStylesLoading}
-                >
-                  <SelectTrigger className="text-xs h-8">
-                    <SelectValue placeholder="Writing style" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_STYLE_VALUE}>No saved style</SelectItem>
-                    {writingStyles.map((style) => (
-                      <SelectItem key={style.id} value={style.id}>{style.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Link href="/writing-styles">
-                  <Button variant="outline" size="icon" className="h-8 w-8" title="Manage writing styles">
-                    <PenLine className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Select value={tone} onValueChange={(v) => handleSettingChange("tone", v)}>
-                  <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="academic">Academic</SelectItem>
-                    <SelectItem value="casual">Casual</SelectItem>
-                    <SelectItem value="ap_style">AP Style</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={citationStyle} onValueChange={(v) => handleSettingChange("citationStyle", v)}>
-                  <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="chicago">Chicago</SelectItem>
-                    <SelectItem value="mla">MLA</SelectItem>
-                    <SelectItem value="apa">APA</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <label className="flex items-center gap-2 text-xs">
-                <Checkbox checked={humanize} onCheckedChange={(v) => handleSettingChange("humanize", Boolean(v))} />
-                Humanize prose
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <Checkbox checked={noEnDashes} onCheckedChange={(v) => handleSettingChange("noEnDashes", Boolean(v))} />
-                No en-dashes
-              </label>
-            </CardContent>
-          </Card>
-
-          {/* Sources Card */}
-          <Card className="border-border bg-background/80">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">
-                  {hasSelectedProject ? "Project Sources" : "Web Clips"}
-                </CardTitle>
-                <button type="button" className="text-xs text-muted-foreground" onClick={() => setSourcesExpanded((v) => !v)}>
-                  {sourcesExpanded ? "Hide" : "Show"}
-                </button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {sourcesExpanded && (
-                <>
-                  <div className="flex justify-end mb-2">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={toggleAllSources} disabled={sourceIds.length === 0}>
-                      {localSelectedSourceIds.length === sourceIds.length ? "Deselect all" : "Select all"}
-                    </Button>
+            <div
+              className={`${activeDocument ? "min-h-0 flex-[1_1_45%]" : "h-full"} overflow-auto space-y-4`}
+            >
+              {/* Settings Card */}
+              <Card className="border-border bg-background/80">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Settings</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Select
+                    value={writingModel}
+                    onValueChange={(v) => handleSettingChange("writingModel", v)}
+                  >
+                    <SelectTrigger className="text-xs h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="precision">Precision (Opus)</SelectItem>
+                      <SelectItem value="extended">Extended (Sonnet)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <Select
+                      value={selectedWritingStyleId}
+                      onValueChange={(v) => handleSettingChange("writingStyleId", v)}
+                      disabled={writingStylesLoading}
+                    >
+                      <SelectTrigger className="text-xs h-8">
+                        <SelectValue placeholder="Writing style" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_STYLE_VALUE}>No saved style</SelectItem>
+                        {writingStyles.map((style) => (
+                          <SelectItem key={style.id} value={style.id}>
+                            {style.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Link href="/writing-styles">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Manage writing styles"
+                      >
+                        <PenLine className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
-                  <ScrollArea className="h-48">
-                    {sourcesLoading ? (
-                      <p className="text-xs text-muted-foreground">Loading...</p>
-                    ) : hasSelectedProject && projectSources.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No source documents in this project.</p>
-                    ) : !hasSelectedProject && standaloneWebClips.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        No web clips yet. You can still write in standalone mode without sources.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {hasSelectedProject
-                          ? projectSources.map((source) => (
-                            <div key={source.id} className="flex items-start gap-2 rounded-md p-2 hover:bg-muted/40">
-                              <Checkbox checked={localSelectedSourceIds.includes(source.id)} onCheckedChange={() => toggleSource(source.id)} className="mt-0.5" />
-                              <button
-                                type="button"
-                                className="min-w-0 flex-1 text-left"
-                                onClick={() => toggleSource(source.id)}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-medium truncate">{source.document.filename}</span>
-                                  <Badge variant="outline" className="text-[10px]">{getDocTypeLabel(source.document.filename)}</Badge>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                                  {source.document.summary || "No summary available."}
-                                </p>
-                              </button>
-                              <SourceRoleSelector
-                                sourceId={source.id}
-                                currentRole={normalizeSourceRole(source.sourceRole)}
-                                onRoleChange={(role) => handleSourceRoleChange(source.id, role)}
-                              />
-                            </div>
-                          ))
-                          : standaloneWebClips.map((clip) => (
-                            <label key={clip.id} className="flex gap-2 rounded-md p-2 hover:bg-muted/40 cursor-pointer">
-                              <Checkbox checked={localSelectedSourceIds.includes(clip.id)} onCheckedChange={() => toggleSource(clip.id)} className="mt-0.5" />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-medium truncate">{clip.pageTitle}</span>
-                                  <Badge variant="outline" className="text-[10px]">WEB</Badge>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                                  {clip.note || clip.highlightedText || clip.sourceUrl}
-                                </p>
-                              </div>
-                            </label>
-                          ))}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select value={tone} onValueChange={(v) => handleSettingChange("tone", v)}>
+                      <SelectTrigger className="text-xs h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="academic">Academic</SelectItem>
+                        <SelectItem value="casual">Casual</SelectItem>
+                        <SelectItem value="ap_style">AP Style</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={citationStyle}
+                      onValueChange={(v) => handleSettingChange("citationStyle", v)}
+                    >
+                      <SelectTrigger className="text-xs h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="chicago">Chicago</SelectItem>
+                        <SelectItem value="mla">MLA</SelectItem>
+                        <SelectItem value="apa">APA</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs">
+                    <Checkbox
+                      checked={humanize}
+                      onCheckedChange={(v) => handleSettingChange("humanize", Boolean(v))}
+                    />
+                    Humanize prose
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <Checkbox
+                      checked={noEnDashes}
+                      onCheckedChange={(v) => handleSettingChange("noEnDashes", Boolean(v))}
+                    />
+                    No en-dashes
+                  </label>
+                </CardContent>
+              </Card>
+
+              {/* Sources Card */}
+              <Card className="border-border bg-background/80">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">
+                      {hasSelectedProject ? "Project Sources" : "Web Clips"}
+                    </CardTitle>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground"
+                      onClick={() => setSourcesExpanded((v) => !v)}
+                    >
+                      {sourcesExpanded ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {sourcesExpanded && (
+                    <>
+                      <div className="flex justify-end mb-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={toggleAllSources}
+                          disabled={sourceIds.length === 0}
+                        >
+                          {localSelectedSourceIds.length === sourceIds.length
+                            ? "Deselect all"
+                            : "Select all"}
+                        </Button>
                       </div>
-                    )}
-                  </ScrollArea>
-                </>
-              )}
-            </CardContent>
-          </Card>
+                      <ScrollArea className="h-48">
+                        {sourcesLoading ? (
+                          <p className="text-xs text-muted-foreground">Loading...</p>
+                        ) : hasSelectedProject && projectSources.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            No source documents in this project.
+                          </p>
+                        ) : !hasSelectedProject && standaloneWebClips.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            No web clips yet. You can still write in standalone mode without
+                            sources.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {hasSelectedProject
+                              ? projectSources.map((source) => (
+                                  <div
+                                    key={source.id}
+                                    className="flex items-start gap-2 rounded-md p-2 hover:bg-muted/40"
+                                  >
+                                    <Checkbox
+                                      checked={localSelectedSourceIds.includes(source.id)}
+                                      onCheckedChange={() => toggleSource(source.id)}
+                                      className="mt-0.5"
+                                    />
+                                    <button
+                                      type="button"
+                                      className="min-w-0 flex-1 text-left"
+                                      onClick={() => toggleSource(source.id)}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-medium truncate">
+                                          {source.document.filename}
+                                        </span>
+                                        <Badge variant="outline" className="text-[10px]">
+                                          {getDocTypeLabel(source.document.filename)}
+                                        </Badge>
+                                      </div>
+                                      <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                                        {source.document.summary || "No summary available."}
+                                      </p>
+                                    </button>
+                                    <SourceRoleSelector
+                                      sourceId={source.id}
+                                      currentRole={normalizeSourceRole(source.sourceRole)}
+                                      onRoleChange={(role) =>
+                                        handleSourceRoleChange(source.id, role)
+                                      }
+                                    />
+                                  </div>
+                                ))
+                              : standaloneWebClips.map((clip) => (
+                                  <label
+                                    key={clip.id}
+                                    className="flex gap-2 rounded-md p-2 hover:bg-muted/40 cursor-pointer"
+                                  >
+                                    <Checkbox
+                                      checked={localSelectedSourceIds.includes(clip.id)}
+                                      onCheckedChange={() => toggleSource(clip.id)}
+                                      className="mt-0.5"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-medium truncate">
+                                          {clip.pageTitle}
+                                        </span>
+                                        <Badge variant="outline" className="text-[10px]">
+                                          WEB
+                                        </Badge>
+                                      </div>
+                                      <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                                        {clip.note || clip.highlightedText || clip.sourceUrl}
+                                      </p>
+                                    </div>
+                                  </label>
+                                ))}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
 
-          {/* Actions Card */}
-          <Card className="border-border bg-background/80">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {/* Compile */}
-              {!isCompiling ? (
-                <Button
-                  onClick={handleCompile}
-                  className="w-full"
-                  disabled={messages.length === 0}
-                  title="Formats the drafted chat sections into a clean paper with citations and bibliography."
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Format Your Paper
-                </Button>
-              ) : (
-                <Button variant="destructive" onClick={cancelCompile} className="w-full">
-                  <StopCircle className="h-4 w-4 mr-2" />
-                  Stop Formatting
-                </Button>
-              )}
-              {isCompiling && (
-                <div className="space-y-1 rounded-md border bg-muted/30 p-2">
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>Formatting paper...</span>
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  </div>
-                  <Progress value={effectiveCompiledContent ? 75 : 25} className="h-1.5" />
-                </div>
-              )}
+              {/* Actions Card */}
+              <Card className="border-border bg-background/80">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {/* Compile */}
+                  {!isCompiling ? (
+                    <Button
+                      onClick={handleCompile}
+                      className="w-full"
+                      disabled={messages.length === 0}
+                      title="Formats the drafted chat sections into a clean paper with citations and bibliography."
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Format Your Paper
+                    </Button>
+                  ) : (
+                    <Button variant="destructive" onClick={cancelCompile} className="w-full">
+                      <StopCircle className="h-4 w-4 mr-2" />
+                      Stop Formatting
+                    </Button>
+                  )}
+                  {isCompiling && (
+                    <div className="space-y-1 rounded-md border bg-muted/30 p-2">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Formatting paper...</span>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      </div>
+                      <Progress value={effectiveCompiledContent ? 75 : 25} className="h-1.5" />
+                    </div>
+                  )}
 
-              {/* Verify */}
-              <Button variant="outline" onClick={handleVerify} className="w-full" disabled={!effectiveCompiledContent || isVerifying}>
-                {isVerifying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
-                {isVerifying ? "Verifying..." : "Verify Paper"}
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={handleHumanize}
-                className="w-full"
-                disabled={!effectiveCompiledContent || humanizeText.isPending}
-              >
-                {humanizeText.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4 mr-2" />
-                )}
-                {humanizedCompiledContent ? "Re-humanize Paper" : "Humanize Compiled Paper"}
-              </Button>
-
-              {humanizedCompiledContent && (
-                <Button variant="ghost" onClick={handleRevertHumanized} className="w-full">
-                  Revert to Original
-                </Button>
-              )}
-
-              {/* Quick Generate */}
-              <Dialog open={quickGenerateOpen} onOpenChange={setQuickGenerateOpen}>
-                <DialogTrigger asChild>
+                  {/* Verify */}
                   <Button
                     variant="outline"
-                    className="w-full text-xs"
-                    disabled={!hasSelectedProject}
-                    title={!hasSelectedProject ? "Select a project to use Quick Generate" : undefined}
+                    onClick={handleVerify}
+                    className="w-full"
+                    disabled={!effectiveCompiledContent || isVerifying}
                   >
-                    <Zap className="h-4 w-4 mr-2" />
-                    Quick Generate (Full Paper)
+                    {isVerifying ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="h-4 w-4 mr-2" />
+                    )}
+                    {isVerifying ? "Verifying..." : "Verify Paper"}
                   </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Quick Generate Paper</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Topic / Prompt</Label>
-                      <Textarea
-                        value={quickTopic}
-                        onChange={(e) => setQuickTopic(e.target.value)}
-                        placeholder="Enter your topic..."
-                        className="min-h-[80px]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Assignment Instructions</Label>
-                      <Textarea
-                        value={quickAssignmentInstructions}
-                        onChange={(e) => setQuickAssignmentInstructions(e.target.value)}
-                        placeholder="Paste the full assignment prompt, rubric, citation requirements, professor notes, or structure constraints..."
-                        className="min-h-[140px]"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Select value={quickTargetLength} onValueChange={(v) => setQuickTargetLength(v as any)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="short">Short (~1500w)</SelectItem>
-                          <SelectItem value="medium">Medium (~2500w)</SelectItem>
-                          <SelectItem value="long">Long (~4000w)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <label className="flex items-center gap-2 text-xs px-2">
-                        <Checkbox checked={quickDeepWrite} onCheckedChange={(v) => setQuickDeepWrite(Boolean(v))} />
-                        Deep Write
-                      </label>
-                    </div>
-                    <Button onClick={handleQuickGenerate} className="w-full" disabled={quickGenerate.isGenerating}>
-                      {quickGenerate.isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                      {quickGenerate.isGenerating ? "Generating..." : quickGenerate.fullText ? "Generate Again" : "Generate Paper"}
+
+                  <Button
+                    variant="outline"
+                    onClick={handleHumanize}
+                    className="w-full"
+                    disabled={!effectiveCompiledContent || humanizeText.isPending}
+                  >
+                    {humanizeText.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 mr-2" />
+                    )}
+                    {humanizedCompiledContent ? "Re-humanize Paper" : "Humanize Compiled Paper"}
+                  </Button>
+
+                  {humanizedCompiledContent && (
+                    <Button variant="ghost" onClick={handleRevertHumanized} className="w-full">
+                      Revert to Original
                     </Button>
-                    {(quickGenerate.isGenerating || quickGenerate.fullText || quickGenerate.error) && (
-                      <div className="space-y-2 rounded-md border bg-muted/30 p-2">
-                        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                          <span>
-                            {quickGenerate.error
-                              ? quickGenerate.error
-                              : quickGenerateIsPartial
-                                ? "Partial draft recovered in the document panel."
-                              : quickGenerate.fullText
-                                ? "Paper ready in the document panel."
-                                : quickGenerate.status || "Generating paper..."}
-                          </span>
-                          {quickGenerate.isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+                  )}
+
+                  {/* Quick Generate */}
+                  <Dialog open={quickGenerateOpen} onOpenChange={setQuickGenerateOpen}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full text-xs"
+                        disabled={!hasSelectedProject}
+                        title={
+                          !hasSelectedProject ? "Select a project to use Quick Generate" : undefined
+                        }
+                      >
+                        <Zap className="h-4 w-4 mr-2" />
+                        Quick Generate (Full Paper)
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Quick Generate Paper</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Topic / Prompt</Label>
+                          <Textarea
+                            value={quickTopic}
+                            onChange={(e) => setQuickTopic(e.target.value)}
+                            placeholder="Enter your topic..."
+                            className="min-h-[80px]"
+                          />
                         </div>
-                        {!quickGenerate.error && (
-                          <Progress value={quickGenerateProgress} className="h-1.5" />
-                        )}
-                        {quickGenerate.fullText && !quickGenerate.isGenerating && (
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="text-xs"
-                              onClick={() => setQuickGenerateOpen(false)}
-                            >
-                              View
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="text-xs"
-                              disabled={isPreparingDocx}
-                              onClick={() => handleDownloadGeneratedDocx(
-                                quickGenerateTitle,
-                                quickGenerate.fullText,
+                        <div className="space-y-1">
+                          <Label className="text-xs">Assignment Instructions</Label>
+                          <Textarea
+                            value={quickAssignmentInstructions}
+                            onChange={(e) => setQuickAssignmentInstructions(e.target.value)}
+                            placeholder="Paste the full assignment prompt, rubric, citation requirements, professor notes, or structure constraints..."
+                            className="min-h-[140px]"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Select
+                            value={quickTargetLength}
+                            onValueChange={(v) => setQuickTargetLength(v as any)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="short">Short (~1500w)</SelectItem>
+                              <SelectItem value="medium">Medium (~2500w)</SelectItem>
+                              <SelectItem value="long">Long (~4000w)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <label className="flex items-center gap-2 text-xs px-2">
+                            <Checkbox
+                              checked={quickDeepWrite}
+                              onCheckedChange={(v) => setQuickDeepWrite(Boolean(v))}
+                            />
+                            Deep Write
+                          </label>
+                        </div>
+                        <Button
+                          onClick={handleQuickGenerate}
+                          className="w-full"
+                          disabled={quickGenerate.isGenerating}
+                        >
+                          {quickGenerate.isGenerating ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4 mr-2" />
+                          )}
+                          {quickGenerate.isGenerating
+                            ? "Generating..."
+                            : quickGenerate.fullText
+                              ? "Generate Again"
+                              : "Generate Paper"}
+                        </Button>
+                        {(quickGenerate.isGenerating ||
+                          quickGenerate.fullText ||
+                          quickGenerate.error) && (
+                          <div className="space-y-2 rounded-md border bg-muted/30 p-2">
+                            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                              <span>
+                                {quickGenerate.error
+                                  ? quickGenerate.error
+                                  : quickGenerateIsPartial
+                                    ? "Partial draft recovered in the document panel."
+                                    : quickGenerate.fullText
+                                      ? "Paper ready in the document panel."
+                                      : quickGenerate.status || "Generating paper..."}
+                              </span>
+                              {quickGenerate.isGenerating && (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
                               )}
-                            >
-                              DOCX
-                            </Button>
+                            </div>
+                            {!quickGenerate.error && (
+                              <Progress value={quickGenerateProgress} className="h-1.5" />
+                            )}
+                            {quickGenerate.fullText && !quickGenerate.isGenerating && (
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs"
+                                  onClick={() => setQuickGenerateOpen(false)}
+                                >
+                                  View
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs"
+                                  disabled={isPreparingDocx}
+                                  onClick={() =>
+                                    handleDownloadGeneratedDocx(
+                                      quickGenerateTitle,
+                                      quickGenerate.fullText,
+                                    )
+                                  }
+                                >
+                                  DOCX
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </CardContent>
-          </Card>
+                    </DialogContent>
+                  </Dialog>
+                </CardContent>
+              </Card>
 
-          {/* Compiled Paper Card */}
-          {(effectiveCompiledContent || isCompiling) && (
-            <Card className="border-border bg-background/80">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    {isCompiling ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                    Formatted Paper
-                  </CardTitle>
-                  {effectiveCompiledContent && (
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={handleCopy}><Copy className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="sm" onClick={handleDownloadDocx} disabled={isPreparingDocx}>
-                        {isPreparingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={handleTogglePdfPreview} disabled={isPreparingPdf}>
-                        {showPdfPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
+              {/* Compiled Paper Card */}
+              {(effectiveCompiledContent || isCompiling) && (
+                <Card className="border-border bg-background/80">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        {isCompiling ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        )}
+                        Formatted Paper
+                      </CardTitle>
+                      {effectiveCompiledContent && (
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={handleCopy}>
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleDownloadDocx}
+                            disabled={isPreparingDocx}
+                          >
+                            {isPreparingDocx ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleTogglePdfPreview}
+                            disabled={isPreparingPdf}
+                          >
+                            {showPdfPreview ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-64">
-                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
-                      {effectiveCompiledContent}
-                    </ReactMarkdown>
-                    {isCompiling && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          )}
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-64">
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <ReactMarkdown
+                          remarkPlugins={remarkPlugins}
+                          components={markdownComponents}
+                        >
+                          {effectiveCompiledContent}
+                        </ReactMarkdown>
+                        {isCompiling && (
+                          <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
 
-          {/* PDF Preview */}
-          {showPdfPreview && pdfPreviewUrl && (
-            <Card className="border-border bg-white">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">PDF Preview</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[320px] overflow-hidden rounded border">
-                  <iframe src={pdfPreviewUrl} title="PDF Preview" className="w-full h-full" />
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Verify Report */}
-          {(verifyReport || isVerifying) && (
-            <Card className="border-border bg-background/80">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  {isVerifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4 text-blue-600" />}
-                  Verification Report
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-48">
-                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
-                      {verifyReport}
-                    </ReactMarkdown>
-                    {isVerifying && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Quick Generate Result (shown in right panel too) */}
-          {quickGenerate.fullText && (
-            <Card className="border-border bg-background/80">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Quick Generate Result</CardTitle>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(quickGenerate.fullText);
-                        toast({ title: "Copied" });
-                      } catch { /* ignore */ }
-                    }}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={isPreparingDocx}
-                      onClick={() => handleDownloadGeneratedDocx(quickGenerateTitle, quickGenerate.fullText)}
-                    >
-                      {isPreparingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-48">
-                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
-                      {quickGenerate.fullText}
-                    </ReactMarkdown>
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          )}
-
-          {generatedProjectDrafts.length > 0 && (
-            <Card className="border-border bg-background/80">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Saved Generated Papers</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {generatedProjectDrafts.slice(0, 5).map((draft) => (
-                  <div
-                    key={draft.id}
-                    className="flex items-center justify-between gap-2 rounded-md border bg-background px-2 py-2"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-xs font-medium">{draft.document.filename}</div>
-                      <div className="text-[11px] text-muted-foreground">Saved in this project</div>
+              {/* PDF Preview */}
+              {showPdfPreview && pdfPreviewUrl && (
+                <Card className="border-border bg-white">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">PDF Preview</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[320px] overflow-hidden rounded border">
+                      <iframe src={pdfPreviewUrl} title="PDF Preview" className="w-full h-full" />
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={isPreparingDocx}
-                        onClick={() => handleDownloadSavedGeneratedDraftDocx(draft)}
-                        title="Download DOCX"
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Verify Report */}
+              {(verifyReport || isVerifying) && (
+                <Card className="border-border bg-background/80">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      {isVerifying ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="h-4 w-4 text-blue-600" />
+                      )}
+                      Verification Report
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-48">
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <ReactMarkdown
+                          remarkPlugins={remarkPlugins}
+                          components={markdownComponents}
+                        >
+                          {verifyReport}
+                        </ReactMarkdown>
+                        {isVerifying && (
+                          <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Quick Generate Result (shown in right panel too) */}
+              {quickGenerate.fullText && (
+                <Card className="border-border bg-background/80">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">Quick Generate Result</CardTitle>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(quickGenerate.fullText);
+                              toast({ title: "Copied" });
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isPreparingDocx}
+                          onClick={() =>
+                            handleDownloadGeneratedDocx(quickGenerateTitle, quickGenerate.fullText)
+                          }
+                        >
+                          {isPreparingDocx ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-48">
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <ReactMarkdown
+                          remarkPlugins={remarkPlugins}
+                          components={markdownComponents}
+                        >
+                          {quickGenerate.fullText}
+                        </ReactMarkdown>
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
+
+              {generatedProjectDrafts.length > 0 && (
+                <Card className="border-border bg-background/80">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Saved Generated Papers</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {generatedProjectDrafts.slice(0, 5).map((draft) => (
+                      <div
+                        key={draft.id}
+                        className="flex items-center justify-between gap-2 rounded-md border bg-background px-2 py-2"
                       >
-                        {isPreparingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-medium">
+                            {draft.document.filename}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            Saved in this project
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isPreparingDocx}
+                            onClick={() => handleDownloadSavedGeneratedDraftDocx(draft)}
+                            title="Download DOCX"
+                          >
+                            {isPreparingDocx ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </div>

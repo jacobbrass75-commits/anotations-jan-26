@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
@@ -153,8 +153,16 @@ export function useDeleteWritingConversation() {
 
 export function useUpdateSources() {
   return useMutation({
-    mutationFn: async ({ conversationId, selectedSourceIds }: { conversationId: string; selectedSourceIds: string[] }) => {
-      const res = await apiRequest("PUT", `/api/chat/conversations/${conversationId}/sources`, { selectedSourceIds });
+    mutationFn: async ({
+      conversationId,
+      selectedSourceIds,
+    }: {
+      conversationId: string;
+      selectedSourceIds: string[];
+    }) => {
+      const res = await apiRequest("PUT", `/api/chat/conversations/${conversationId}/sources`, {
+        selectedSourceIds,
+      });
       return res.json() as Promise<Conversation>;
     },
     onSuccess: (data) => {
@@ -212,8 +220,15 @@ export function useWritingSendMessage(conversationId: string | null) {
   const [isDocumentStreaming, setIsDocumentStreaming] = useState(false);
   const [isDocumentComplete, setIsDocumentComplete] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [contextLoading, setContextLoading] = useState<{ level: number; documentId?: string } | null>(null);
-  const [contextWarning, setContextWarning] = useState<{ id: number; message: string; available?: number } | null>(null);
+  const [contextLoading, setContextLoading] = useState<{
+    level: number;
+    documentId?: string;
+  } | null>(null);
+  const [contextWarning, setContextWarning] = useState<{
+    id: number;
+    message: string;
+    available?: number;
+  } | null>(null);
   const [streamError, setStreamError] = useState<{ id: number; message: string } | null>(null);
   const [streamStatus, setStreamStatus] = useState<WritingStreamStatus | null>(null);
 
@@ -234,15 +249,12 @@ export function useWritingSendMessage(conversationId: string | null) {
       setStreamStatus({ phase: "starting", message: "Starting writing request...", progress: 2 });
 
       try {
-        const response = await fetch(
-          `/api/chat/conversations/${targetConversationId}/messages`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-            body: JSON.stringify({ content }),
-            credentials: "include",
-          }
-        );
+        const response = await fetch(`/api/chat/conversations/${targetConversationId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          body: JSON.stringify({ content }),
+          credentials: "include",
+        });
 
         if (!response.ok) {
           const errorText = await response.text().catch(() => "");
@@ -289,14 +301,22 @@ export function useWritingSendMessage(conversationId: string | null) {
                   setStreamingDocumentText("");
                   setIsDocumentStreaming(true);
                   setIsDocumentComplete(false);
-                  setStreamStatus({ phase: "drafting", message: "Writing the draft...", progress: 55 });
+                  setStreamStatus({
+                    phase: "drafting",
+                    message: "Writing the draft...",
+                    progress: 55,
+                  });
                 } else if (data.type === "document_text") {
                   accumulatedDocument += String(data.text || "");
                   setStreamingDocumentText(accumulatedDocument);
                 } else if (data.type === "document_end") {
                   setIsDocumentStreaming(false);
                   setIsDocumentComplete(true);
-                  setStreamStatus({ phase: "saving", message: "Saving the generated draft...", progress: 88 });
+                  setStreamStatus({
+                    phase: "saving",
+                    message: "Saving the generated draft...",
+                    progress: 88,
+                  });
                 } else if (data.type === "writing_status") {
                   setStreamStatus({
                     phase: String(data.phase || "working"),
@@ -328,7 +348,11 @@ export function useWritingSendMessage(conversationId: string | null) {
                   });
                 } else if (data.type === "done") {
                   setContextLoading(null);
-                  setStreamStatus({ phase: "complete", message: "Writing complete.", progress: 100 });
+                  setStreamStatus({
+                    phase: "complete",
+                    message: "Writing complete.",
+                    progress: 100,
+                  });
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations", targetConversationId],
                   });
@@ -385,7 +409,7 @@ export function useWritingSendMessage(conversationId: string | null) {
         setContextLoading(null);
       }
     },
-    [conversationId]
+    [conversationId],
   );
 
   return {
@@ -422,16 +446,13 @@ export function useCompilePaper(conversationId: string | null) {
       abortRef.current = controller;
 
       try {
-        const response = await fetch(
-          `/api/chat/conversations/${conversationId}/compile`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-            body: JSON.stringify(options || {}),
-            credentials: "include",
-            signal: controller.signal,
-          }
-        );
+        const response = await fetch(`/api/chat/conversations/${conversationId}/compile`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          body: JSON.stringify(options || {}),
+          credentials: "include",
+          signal: controller.signal,
+        });
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -472,7 +493,7 @@ export function useCompilePaper(conversationId: string | null) {
         abortRef.current = null;
       }
     },
-    [conversationId]
+    [conversationId],
   );
 
   const cancelCompile = useCallback(() => {
@@ -501,15 +522,12 @@ export function useVerifyPaper(conversationId: string | null) {
       setVerifyReport("");
 
       try {
-        const response = await fetch(
-          `/api/chat/conversations/${conversationId}/verify`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-            body: JSON.stringify({ compiledContent }),
-            credentials: "include",
-          }
-        );
+        const response = await fetch(`/api/chat/conversations/${conversationId}/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          body: JSON.stringify({ compiledContent }),
+          credentials: "include",
+        });
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -547,7 +565,7 @@ export function useVerifyPaper(conversationId: string | null) {
         setIsVerifying(false);
       }
     },
-    [conversationId]
+    [conversationId],
   );
 
   return { verify, verifyReport, isVerifying };

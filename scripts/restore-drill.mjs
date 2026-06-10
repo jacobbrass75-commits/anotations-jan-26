@@ -8,7 +8,9 @@ import { tmpdir } from "os";
 import { fileURLToPath, pathToFileURL } from "url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const backupDir = resolve(process.env.BACKUP_DIR || process.env.RESTORE_BACKUP_DIR || "/opt/backups/scholarmark/latest");
+const backupDir = resolve(
+  process.env.BACKUP_DIR || process.env.RESTORE_BACKUP_DIR || "/opt/backups/scholarmark/latest",
+);
 const keepWorkdir = process.env.KEEP_RESTORE_DRILL_WORKDIR === "1";
 const skipAppBoot = process.env.SKIP_RESTORE_DRILL_BOOT === "1";
 const workDir = process.env.RESTORE_WORK_DIR
@@ -36,11 +38,7 @@ function run(command, args, options = {}) {
 
   if ((result.status ?? 1) !== 0) {
     fail(
-      [
-        `Command failed: ${command} ${args.join(" ")}`,
-        result.stdout,
-        result.stderr,
-      ]
+      [`Command failed: ${command} ${args.join(" ")}`, result.stdout, result.stderr]
         .filter(Boolean)
         .join("\n"),
     );
@@ -148,8 +146,8 @@ async function runRestoredAppSmoke() {
   const appBaseUrl = `http://127.0.0.1:${port}`;
   const productionEntry = join(repoRoot, "dist", "index.cjs");
   const useProductionEntry =
-    process.env.RESTORE_DRILL_APP_MODE === "production"
-    || (process.env.RESTORE_DRILL_APP_MODE !== "development" && await fileExists(productionEntry));
+    process.env.RESTORE_DRILL_APP_MODE === "production" ||
+    (process.env.RESTORE_DRILL_APP_MODE !== "development" && (await fileExists(productionEntry)));
   const tsxEntrypoint = join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
   const appImport = useProductionEntry
     ? pathToFileURL(productionEntry).href

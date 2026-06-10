@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
-import type { Document, Annotation, SearchResult, AnnotationCategory, InsertAnnotation } from "@shared/schema";
+import type {
+  Document,
+  Annotation,
+  SearchResult,
+  AnnotationCategory,
+  InsertAnnotation,
+} from "@shared/schema";
 
 export function useDocuments() {
   return useQuery<Document[]>({
@@ -106,13 +112,7 @@ export function useUploadTextDocument() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      title,
-      text,
-    }: {
-      title?: string;
-      text: string;
-    }) => {
+    mutationFn: async ({ title, text }: { title?: string; text: string }) => {
       const formData = new FormData();
       if (title) {
         formData.append("title", title);
@@ -190,17 +190,22 @@ export function useSetIntent() {
     mutationFn: async ({
       documentId,
       intent,
-      thoroughness = 'standard'
+      thoroughness = "standard",
     }: {
       documentId: string;
       intent: string;
-      thoroughness?: 'quick' | 'standard' | 'thorough' | 'exhaustive';
+      thoroughness?: "quick" | "standard" | "thorough" | "exhaustive";
     }) => {
-      return apiRequest("POST", `/api/documents/${documentId}/set-intent`, { intent, thoroughness });
+      return apiRequest("POST", `/api/documents/${documentId}/set-intent`, {
+        intent,
+        thoroughness,
+      });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents", variables.documentId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/documents", variables.documentId, "annotations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/documents", variables.documentId, "annotations"],
+      });
     },
   });
 }
@@ -213,7 +218,9 @@ export function useAddAnnotation() {
       return apiRequest("POST", `/api/documents/${annotation.documentId}/annotate`, annotation);
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/documents", variables.documentId, "annotations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/documents", variables.documentId, "annotations"],
+      });
     },
   });
 }
@@ -224,7 +231,6 @@ export function useUpdateAnnotation() {
   return useMutation({
     mutationFn: async ({
       annotationId,
-      documentId,
       note,
       category,
     }: {
@@ -236,7 +242,9 @@ export function useUpdateAnnotation() {
       return apiRequest("PUT", `/api/annotations/${annotationId}`, { note, category });
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/documents", variables.documentId, "annotations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/documents", variables.documentId, "annotations"],
+      });
     },
   });
 }
@@ -245,11 +253,13 @@ export function useDeleteAnnotation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ annotationId, documentId }: { annotationId: string; documentId: string }) => {
+    mutationFn: async ({ annotationId }: { annotationId: string; documentId: string }) => {
       return apiRequest("DELETE", `/api/annotations/${annotationId}`);
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/documents", variables.documentId, "annotations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/documents", variables.documentId, "annotations"],
+      });
     },
   });
 }

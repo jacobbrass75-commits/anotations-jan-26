@@ -25,17 +25,14 @@ function getStepLabel(step: ToolStep): string {
 export function ToolStepsIndicator({ steps, isToolPhaseActive }: ToolStepsIndicatorProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const sortedSteps = useMemo(
-    () => [...steps].sort((a, b) => a.startedAt - b.startedAt),
-    [steps]
-  );
+  const sortedSteps = useMemo(() => [...steps].sort((a, b) => a.startedAt - b.startedAt), [steps]);
   const allDone = sortedSteps.length > 0 && sortedSteps.every((step) => step.status === "done");
   const canCollapse = !isToolPhaseActive && allDone;
   const uniqueSourceCount = useMemo(() => {
     const titles = new Set(
       sortedSteps
         .map((step) => (step.sourceTitle || "").trim())
-        .filter((title) => title.length > 0)
+        .filter((title) => title.length > 0),
     );
     return titles.size > 0 ? titles.size : sortedSteps.length;
   }, [sortedSteps]);

@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
-import { CheckCircle, XCircle, AlertTriangle, Gauge } from "lucide-react";
+import { CheckCircle, XCircle, Gauge } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +15,9 @@ interface ConversationTimelineProps {
 function ToolCallCard({ event }: { event: TimelineEvent }) {
   const success = event.success !== false;
   return (
-    <div className={`border rounded-md p-3 text-xs font-mono space-y-1 ${success ? "border-chart-2/30 bg-chart-2/5" : "border-destructive/30 bg-destructive/5"}`}>
+    <div
+      className={`border rounded-md p-3 text-xs font-mono space-y-1 ${success ? "border-chart-2/30 bg-chart-2/5" : "border-destructive/30 bg-destructive/5"}`}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           {success ? (
@@ -32,18 +34,23 @@ function ToolCallCard({ event }: { event: TimelineEvent }) {
         </Badge>
       </div>
       {event.documentId && (
-        <div className="text-muted-foreground truncate">doc: {event.documentId.slice(0, 16)}...</div>
+        <div className="text-muted-foreground truncate">
+          doc: {event.documentId.slice(0, 16)}...
+        </div>
       )}
-      <div className="text-muted-foreground">
-        {event.resultSizeChars?.toLocaleString()} chars
-      </div>
+      <div className="text-muted-foreground">{event.resultSizeChars?.toLocaleString()} chars</div>
     </div>
   );
 }
 
 function ContextSnapshotCard({ event }: { event: TimelineEvent }) {
   const level = event.warningLevel ?? "ok";
-  const color = level === "critical" ? "text-destructive" : level === "caution" ? "text-yellow-500" : "text-chart-2";
+  const color =
+    level === "critical"
+      ? "text-destructive"
+      : level === "caution"
+        ? "text-yellow-500"
+        : "text-chart-2";
   return (
     <div className="border border-border/50 rounded-md p-3 text-xs font-mono space-y-1 bg-card/50">
       <div className="flex items-center justify-between">
@@ -61,11 +68,7 @@ function ContextSnapshotCard({ event }: { event: TimelineEvent }) {
       <div className={`text-lg font-bold ${color}`}>
         {((event.estimatedTokens ?? 0) / 1000).toFixed(1)}k tokens
       </div>
-      {event.trigger && (
-        <div className="text-muted-foreground">
-          triggered by: {event.trigger}
-        </div>
-      )}
+      {event.trigger && <div className="text-muted-foreground">triggered by: {event.trigger}</div>}
     </div>
   );
 }
@@ -73,25 +76,22 @@ function ContextSnapshotCard({ event }: { event: TimelineEvent }) {
 export function ConversationTimeline({ conversationId, onClose }: ConversationTimelineProps) {
   const { data, isLoading } = useConversationTimeline(conversationId);
 
-  const tokenGrowthData = data?.timeline
-    .filter((e) => e.type === "context_snapshot")
-    .map((e, i) => ({
-      index: i + 1,
-      tokens: e.estimatedTokens ?? 0,
-      level: e.warningLevel ?? "ok",
-    })) ?? [];
+  const tokenGrowthData =
+    data?.timeline
+      .filter((e) => e.type === "context_snapshot")
+      .map((e, i) => ({
+        index: i + 1,
+        tokens: e.estimatedTokens ?? 0,
+        level: e.warningLevel ?? "ok",
+      })) ?? [];
 
   return (
     <Sheet open={!!conversationId} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-[500px] sm:w-[540px] p-0 flex flex-col">
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border">
-          <SheetTitle className="eva-section-title">
-            Conversation Timeline
-          </SheetTitle>
+          <SheetTitle className="eva-section-title">Conversation Timeline</SheetTitle>
           {conversationId && (
-            <div className="text-xs font-mono text-muted-foreground truncate">
-              {conversationId}
-            </div>
+            <div className="text-xs font-mono text-muted-foreground truncate">{conversationId}</div>
           )}
         </SheetHeader>
 
@@ -113,7 +113,10 @@ export function ConversationTimeline({ conversationId, onClose }: ConversationTi
                       Token Growth
                     </div>
                     <ResponsiveContainer width="100%" height={100}>
-                      <AreaChart data={tokenGrowthData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                      <AreaChart
+                        data={tokenGrowthData}
+                        margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+                      >
                         <defs>
                           <linearGradient id="tokenGrad" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.4} />

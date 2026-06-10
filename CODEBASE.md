@@ -16,18 +16,18 @@ This repo is not a thin frontend shell. Most business logic, AI orchestration, s
 
 ## Repository Map
 
-| Path | Role |
-| --- | --- |
-| `client/` | Vite + React SPA |
-| `server/` | Express API, AI integrations, storage, OAuth, OCR, analytics |
-| `shared/` | Drizzle schema and shared Zod types |
-| `chrome-extension/` | Web clipper extension |
-| `mcp-server/` | Standalone MCP service that proxies to the backend |
-| `scripts/` | build and maintenance scripts |
-| `prompts/` | prompt templates such as the humanizer prompt |
-| `data/` | runtime SQLite DB and uploaded source files |
-| `.claude-docs/` | older internal docs and snapshots |
-| `.claude/agents/` | reusable Claude subagent definitions |
+| Path                | Role                                                         |
+| ------------------- | ------------------------------------------------------------ |
+| `client/`           | Vite + React SPA                                             |
+| `server/`           | Express API, AI integrations, storage, OAuth, OCR, analytics |
+| `shared/`           | Drizzle schema and shared Zod types                          |
+| `chrome-extension/` | Web clipper extension                                        |
+| `mcp-server/`       | Standalone MCP service that proxies to the backend           |
+| `scripts/`          | build and maintenance scripts                                |
+| `prompts/`          | prompt templates such as the humanizer prompt                |
+| `data/`             | runtime SQLite DB and uploaded source files                  |
+| `.claude-docs/`     | older internal docs and snapshots                            |
+| `.claude/agents/`   | reusable Claude subagent definitions                         |
 
 ## Frontend Surface
 
@@ -35,19 +35,19 @@ This repo is not a thin frontend shell. Most business logic, AI orchestration, s
 
 `client/src/App.tsx` is the route switch and lazy-load boundary.
 
-| Route | Page | Purpose |
-| --- | --- | --- |
-| `/` | `Home.tsx` | Dashboard and system health |
-| `/projects` | `Projects.tsx` | Project list and creation |
-| `/projects/:id` | `ProjectWorkspace.tsx` | Project hub with folders, search, and writing |
-| `/projects/:projectId/documents/:docId` | `ProjectDocument.tsx` | Project-scoped document reading and analysis |
-| `/chat` and `/chat/:conversationId` | `Chat.tsx` | Conversation UI |
-| `/write` and `/writing` | `WritingPage.tsx` | Writing workspace shell |
-| `/web-clips` | `WebClips.tsx` | Web clip management |
-| `/extension-auth` | `ExtensionAuth.tsx` | Extension API-key handshake |
-| `/admin/analytics` | `AdminAnalytics.tsx` | Admin analytics dashboard |
-| `/pricing` | `Pricing.tsx` | Tier comparison |
-| `/sign-in`, `/sign-up` | `Login.tsx`, `Register.tsx` | Clerk auth views |
+| Route                                   | Page                        | Purpose                                       |
+| --------------------------------------- | --------------------------- | --------------------------------------------- |
+| `/`                                     | `Home.tsx`                  | Dashboard and system health                   |
+| `/projects`                             | `Projects.tsx`              | Project list and creation                     |
+| `/projects/:id`                         | `ProjectWorkspace.tsx`      | Project hub with folders, search, and writing |
+| `/projects/:projectId/documents/:docId` | `ProjectDocument.tsx`       | Project-scoped document reading and analysis  |
+| `/chat` and `/chat/:conversationId`     | `Chat.tsx`                  | Conversation UI                               |
+| `/write` and `/writing`                 | `WritingPage.tsx`           | Writing workspace shell                       |
+| `/web-clips`                            | `WebClips.tsx`              | Web clip management                           |
+| `/extension-auth`                       | `ExtensionAuth.tsx`         | Extension API-key handshake                   |
+| `/admin/analytics`                      | `AdminAnalytics.tsx`        | Admin analytics dashboard                     |
+| `/pricing`                              | `Pricing.tsx`               | Tier comparison                               |
+| `/sign-in`, `/sign-up`                  | `Login.tsx`, `Register.tsx` | Clerk auth views                              |
 
 ### Frontend building blocks
 
@@ -74,37 +74,37 @@ High-value components:
 
 ### Route modules
 
-| File | Domain |
-| --- | --- |
-| `server/routes.ts` | document ingest, OCR, single-document APIs |
-| `server/projectRoutes.ts` | projects, folders, prompt templates, project docs, project annotations, project search, citations |
-| `server/chatRoutes.ts` | conversations, streaming messages, compile, verify |
-| `server/writingRoutes.ts` | one-shot writing pipeline |
-| `server/webClipRoutes.ts` | clip CRUD and promotion |
-| `server/extensionRoutes.ts` | legacy extension save path |
-| `server/authRoutes.ts` | current user and API-key management |
-| `server/analyticsRoutes.ts` | admin analytics export and timeline |
-| `server/humanizerRoutes.ts` | paid rewrite endpoint |
-| `server/oauthRoutes.ts` | OAuth discovery, authorize, token, revoke |
+| File                        | Domain                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| `server/routes.ts`          | document ingest, OCR, single-document APIs                                                        |
+| `server/projectRoutes.ts`   | projects, folders, prompt templates, project docs, project annotations, project search, citations |
+| `server/chatRoutes.ts`      | conversations, streaming messages, compile, verify                                                |
+| `server/writingRoutes.ts`   | one-shot writing pipeline                                                                         |
+| `server/webClipRoutes.ts`   | clip CRUD and promotion                                                                           |
+| `server/extensionRoutes.ts` | legacy extension save path                                                                        |
+| `server/authRoutes.ts`      | current user and API-key management                                                               |
+| `server/analyticsRoutes.ts` | admin analytics export and timeline                                                               |
+| `server/humanizerRoutes.ts` | paid rewrite endpoint                                                                             |
+| `server/oauthRoutes.ts`     | OAuth discovery, authorize, token, revoke                                                         |
 
 ### Support modules by concern
 
-| Concern | Files |
-| --- | --- |
-| Auth and user resolution | `server/auth.ts`, `server/authStorage.ts` |
-| Database bootstrap | `server/db.ts` |
-| Legacy document storage | `server/storage.ts` |
-| Project storage | `server/projectStorage.ts` |
-| Chat storage | `server/chatStorage.ts` |
-| Project search | `server/projectSearch.ts` |
-| Citation formatting | `server/citationGenerator.ts` |
-| Context generation | `server/contextGenerator.ts` |
-| Annotation pipeline | `server/openai.ts`, `server/pipelineV2.ts` |
-| OCR processing and jobs | `server/ocrProcessor.ts`, `server/ocrQueue.ts` |
-| File persistence | `server/sourceFiles.ts` |
-| Writing logic | `server/writingPipeline.ts`, `server/researchAgent.ts` |
-| Analytics logging | `server/analyticsLogger.ts` |
-| Markdown quote jumps | `server/quoteJumpLinks.ts` |
+| Concern                  | Files                                                  |
+| ------------------------ | ------------------------------------------------------ |
+| Auth and user resolution | `server/auth.ts`, `server/authStorage.ts`              |
+| Database bootstrap       | `server/db.ts`                                         |
+| Legacy document storage  | `server/storage.ts`                                    |
+| Project storage          | `server/projectStorage.ts`                             |
+| Chat storage             | `server/chatStorage.ts`                                |
+| Project search           | `server/projectSearch.ts`                              |
+| Citation formatting      | `server/citationGenerator.ts`                          |
+| Context generation       | `server/contextGenerator.ts`                           |
+| Annotation pipeline      | `server/openai.ts`, `server/pipelineV2.ts`             |
+| OCR processing and jobs  | `server/ocrProcessor.ts`, `server/ocrQueue.ts`         |
+| File persistence         | `server/sourceFiles.ts`                                |
+| Writing logic            | `server/writingPipeline.ts`, `server/researchAgent.ts` |
+| Analytics logging        | `server/analyticsLogger.ts`                            |
+| Markdown quote jumps     | `server/quoteJumpLinks.ts`                             |
 
 ## Data Model
 
@@ -170,24 +170,24 @@ The MCP service exposes:
 
 ### NPM scripts
 
-| Script | Purpose |
-| --- | --- |
-| `npm run dev` | start the Express app in development with Vite attached |
-| `npm run build` | build SPA and bundled server |
-| `npm run start` | run the production bundle |
-| `npm run check` | TypeScript check |
-| `npm run db:push` | Drizzle schema push |
-| `npm run db:generate` | Drizzle migration generation |
-| `npm run setup` | install deps and push DB schema |
+| Script                | Purpose                                                 |
+| --------------------- | ------------------------------------------------------- |
+| `npm run dev`         | start the Express app in development with Vite attached |
+| `npm run build`       | build SPA and bundled server                            |
+| `npm run start`       | run the production bundle                               |
+| `npm run check`       | TypeScript check                                        |
+| `npm run db:push`     | Drizzle schema push                                     |
+| `npm run db:generate` | Drizzle migration generation                            |
+| `npm run setup`       | install deps and push DB schema                         |
 
 ### Scripts folder
 
-| File | Purpose |
-| --- | --- |
-| `scripts/build.ts` | production client/server build orchestration |
-| `scripts/migrate.cjs` | migration helper |
-| `scripts/backfill-chat-quote-links.ts` | one-off quote-link backfill script |
-| `scripts/sql/add-humanize-column.sql` | manual SQL patch |
+| File                                   | Purpose                                      |
+| -------------------------------------- | -------------------------------------------- |
+| `scripts/build.ts`                     | production client/server build orchestration |
+| `scripts/migrate.cjs`                  | migration helper                             |
+| `scripts/backfill-chat-quote-links.ts` | one-off quote-link backfill script           |
+| `scripts/sql/add-humanize-column.sql`  | manual SQL patch                             |
 
 ## Environment Variables
 
@@ -276,4 +276,3 @@ They are large, feature-dense, and tie together multiple subsystems.
 8. `client/src/pages/ProjectWorkspace.tsx`
 9. `client/src/pages/ProjectDocument.tsx`
 10. `TEST_STRATEGY.md`
-

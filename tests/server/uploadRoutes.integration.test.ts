@@ -13,12 +13,13 @@ const { clerkGetAuth, clerkMiddleware, clerkGetUser } = vi.hoisted(() => ({
   clerkMiddleware: vi.fn(() => (_req: unknown, _res: unknown, next: () => void) => next()),
   clerkGetUser: vi.fn(),
 }));
-const { enqueuePdfOcrJob, enqueueImageOcrJob, enqueueImageBundleOcrJob, initializeOcrQueue } = vi.hoisted(() => ({
-  enqueuePdfOcrJob: vi.fn(async () => undefined),
-  enqueueImageOcrJob: vi.fn(async () => undefined),
-  enqueueImageBundleOcrJob: vi.fn(async () => undefined),
-  initializeOcrQueue: vi.fn(async () => undefined),
-}));
+const { enqueuePdfOcrJob, enqueueImageOcrJob, enqueueImageBundleOcrJob, initializeOcrQueue } =
+  vi.hoisted(() => ({
+    enqueuePdfOcrJob: vi.fn(async () => undefined),
+    enqueueImageOcrJob: vi.fn(async () => undefined),
+    enqueueImageBundleOcrJob: vi.fn(async () => undefined),
+    initializeOcrQueue: vi.fn(async () => undefined),
+  }));
 
 vi.mock("@clerk/express", () => ({
   clerkMiddleware,
@@ -104,7 +105,8 @@ describe("upload route hardening", () => {
         return;
       }
       if (err instanceof multer.MulterError) {
-        const status = err.code === "LIMIT_FILE_SIZE" || err.code === "LIMIT_FIELD_VALUE" ? 413 : 400;
+        const status =
+          err.code === "LIMIT_FILE_SIZE" || err.code === "LIMIT_FIELD_VALUE" ? 413 : 400;
         res.status(status).json({ message: err.message, code: err.code });
         return;
       }

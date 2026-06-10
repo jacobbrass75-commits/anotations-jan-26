@@ -16,7 +16,11 @@ interface HumanizeResponse {
 
 export function useHumanizeText() {
   return useMutation({
-    mutationFn: async ({ text, model, temperature }: HumanizeRequest): Promise<HumanizeResponse> => {
+    mutationFn: async ({
+      text,
+      model,
+      temperature,
+    }: HumanizeRequest): Promise<HumanizeResponse> => {
       const response = await apiRequest("POST", "/api/humanize", { text, model, temperature });
       return response.json();
     },

@@ -31,6 +31,7 @@ Either a PR ready for merge resolving the issue, or a well-explained triage deci
 If no issue number provided, extract from current branch name using `git branch --show-current`.
 
 Match patterns in order (extract first capture group):
+
 - `do-issue-(\d+)`
 - `fix-issue-(\d+)`
 - `issue-(\d+)`

@@ -56,7 +56,7 @@ const selectNextQueuedJob = sqlite.prepare(
    FROM ocr_jobs
    WHERE status = 'queued'
    ORDER BY created_at ASC
-   LIMIT 1`
+   LIMIT 1`,
 );
 
 const markJobRunning = sqlite.prepare(
@@ -65,7 +65,7 @@ const markJobRunning = sqlite.prepare(
        attempt_count = attempt_count + 1,
        started_at = ?,
        updated_at = ?
-   WHERE id = ? AND status = 'queued'`
+   WHERE id = ? AND status = 'queued'`,
 );
 
 const markJobCompleted = sqlite.prepare(
@@ -73,7 +73,7 @@ const markJobCompleted = sqlite.prepare(
    SET status = 'completed',
        updated_at = ?,
        finished_at = ?
-   WHERE id = ?`
+   WHERE id = ?`,
 );
 
 const markJobQueued = sqlite.prepare(
@@ -81,7 +81,7 @@ const markJobQueued = sqlite.prepare(
    SET status = 'queued',
        updated_at = ?,
        last_error = ?
-   WHERE id = ?`
+   WHERE id = ?`,
 );
 
 const markJobFailed = sqlite.prepare(
@@ -90,14 +90,14 @@ const markJobFailed = sqlite.prepare(
        updated_at = ?,
        finished_at = ?,
        last_error = ?
-   WHERE id = ?`
+   WHERE id = ?`,
 );
 
 const selectJobPageResults = sqlite.prepare(
   `SELECT page_number, text
    FROM ocr_page_results
    WHERE job_id = ?
-   ORDER BY page_number ASC`
+   ORDER BY page_number ASC`,
 );
 
 const updateJobPageResult = sqlite.prepare(
@@ -105,7 +105,7 @@ const updateJobPageResult = sqlite.prepare(
    SET text = ?,
        updated_at = ?
    WHERE job_id = ?
-     AND page_number = ?`
+     AND page_number = ?`,
 );
 
 const insertJobPageResult = sqlite.prepare(
@@ -117,12 +117,10 @@ const insertJobPageResult = sqlite.prepare(
      text,
      created_at,
      updated_at
-   ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+   ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 );
 
-const deleteJobPageResults = sqlite.prepare(
-  `DELETE FROM ocr_page_results WHERE job_id = ?`
-);
+const deleteJobPageResults = sqlite.prepare(`DELETE FROM ocr_page_results WHERE job_id = ?`);
 
 function getUnixSeconds(): number {
   return Math.floor(Date.now() / 1000);
@@ -156,33 +154,24 @@ function persistPageCheckpoint(
   jobId: string,
   documentId: string,
   pageNumber: number,
-  text: string
+  text: string,
 ): void {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) return;
   const now = getUnixSeconds();
   const normalizedPageNumber = Math.floor(pageNumber);
-  const updated = updateJobPageResult.run(
-    text,
-    now,
-    jobId,
-    normalizedPageNumber
-  );
+  const updated = updateJobPageResult.run(text, now, jobId, normalizedPageNumber);
   if (updated.changes > 0) return;
 
-  insertJobPageResult.run(
-    randomUUID(),
-    jobId,
-    documentId,
-    normalizedPageNumber,
-    text,
-    now,
-    now
-  );
+  insertJobPageResult.run(randomUUID(), jobId, documentId, normalizedPageNumber, text, now, now);
 }
 
 function validatePayload(jobType: OcrJobType, payload: unknown): OcrJobPayload {
   const candidate = payload as Partial<OcrJobPayload> | undefined;
-  if (!candidate || typeof candidate.sourceFilename !== "string" || !candidate.sourceFilename.trim()) {
+  if (
+    !candidate ||
+    typeof candidate.sourceFilename !== "string" ||
+    !candidate.sourceFilename.trim()
+  ) {
     throw new Error("Missing source filename in OCR job payload.");
   }
 
@@ -234,20 +223,15 @@ async function runJob(job: OcrJobRow): Promise<void> {
 
   if (job.job_type === "image_bundle") {
     const uploads = await extractImageUploadsFromZip(sourceBuffer);
-    await processImageGroupWithVisionOcr(
-      job.document_id,
-      uploads,
-      payload.sourceFilename,
-      {
-        batchMode: payload.ocrMode === "vision_batch",
-        model: normalizeVisionModel(payload.ocrModel),
-        existingPageTexts: checkpointedPageTexts,
-        onPageProcessed: async (pageNumber, text) => {
-          persistPageCheckpoint(job.id, job.document_id, pageNumber, text);
-        },
-        skipSourceSave: true,
-      }
-    );
+    await processImageGroupWithVisionOcr(job.document_id, uploads, payload.sourceFilename, {
+      batchMode: payload.ocrMode === "vision_batch",
+      model: normalizeVisionModel(payload.ocrModel),
+      existingPageTexts: checkpointedPageTexts,
+      onPageProcessed: async (pageNumber, text) => {
+        persistPageCheckpoint(job.id, job.document_id, pageNumber, text);
+      },
+      skipSourceSave: true,
+    });
   } else {
     const tempSourcePath = await saveTempUpload(sourceBuffer, payload.sourceFilename);
     if (job.job_type === "pdf") {
@@ -337,7 +321,7 @@ async function recoverQueueStateOnStartup(): Promise<void> {
       `UPDATE ocr_jobs
        SET status = 'queued',
            updated_at = ?
-       WHERE status = 'running'`
+       WHERE status = 'running'`,
     )
     .run(now);
 
@@ -350,7 +334,7 @@ async function recoverQueueStateOnStartup(): Promise<void> {
          ON j.document_id = d.id
         AND j.status IN ('queued', 'running')
        WHERE d.status = 'processing'
-         AND j.id IS NULL`
+         AND j.id IS NULL`,
     )
     .all() as Array<{ id: string }>;
 
@@ -391,21 +375,13 @@ function enqueueJob(jobType: OcrJobType, input: EnqueueOcrJobInput): void {
            max_attempts,
            created_at,
            updated_at
-         ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)`
+         ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)`,
       )
-      .run(
-        randomUUID(),
-        input.documentId,
-        jobType,
-        JSON.stringify(payload),
-        maxAttempts,
-        now,
-        now
-      );
+      .run(randomUUID(), input.documentId, jobType, JSON.stringify(payload), maxAttempts, now, now);
   } catch (error) {
     const message = toErrorMessage(error);
     if (message.includes("idx_ocr_jobs_document_active")) {
-      throw new Error("An OCR job is already running for this document.");
+      throw new Error("An OCR job is already running for this document.", { cause: error });
     }
     throw error;
   }

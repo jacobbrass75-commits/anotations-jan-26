@@ -16,6 +16,7 @@ Extend `server/citationGenerator.ts` to support MLA 9th Edition and APA 7th Edit
 ## Current State
 
 `server/citationGenerator.ts` exports:
+
 - `generateChicagoFootnote(citation, pageNumber?, isSubsequent?): string`
 - `generateFootnoteWithQuote(citation, quote, pageNumber?): string`
 - `generateInlineCitation(citation, pageNumber?): string`
@@ -43,7 +44,7 @@ Keep all existing Chicago functions unchanged. Add new exports:
  *   (Smith et al. 78)
  *   ("Article Title" 23)  — no author
  */
-export function generateMLAInText(citation: CitationData, pageNumber?: string): string
+export function generateMLAInText(citation: CitationData, pageNumber?: string): string;
 
 /**
  * MLA Works Cited entry
@@ -56,15 +57,16 @@ export function generateMLAInText(citation: CitationData, pageNumber?: string): 
  *   Website: "Page Title." Site Name, Publisher, 15 Mar. 2024, www.example.com.
  *   Chapter: Smith, John. "Chapter Title." Book Title, edited by Jane Doe, Publisher, 2024, pp. 10-30.
  */
-export function generateMLAWorksCited(citation: CitationData): string
+export function generateMLAWorksCited(citation: CitationData): string;
 ```
 
 **MLA Rules:**
+
 - Authors: Last, First. / Last, First, and First Last. / Last, First, et al. (3+)
-- Book titles: *Italicized* (use markdown `_Title_` or just plain for text output)
+- Book titles: _Italicized_ (use markdown `_Title_` or just plain for text output)
 - Article/chapter titles: "In Quotes."
-- Journal: "Title." *Journal*, vol. X, no. Y, Year, pp. X-Y.
-- Website: "Title." *Site Name*, Day Month Year, URL.
+- Journal: "Title." _Journal_, vol. X, no. Y, Year, pp. X-Y.
+- Website: "Title." _Site Name_, Day Month Year, URL.
 - No "accessed" date unless source may change
 - DOI preferred over URL if available: doi:10.xxxx
 - Months abbreviated (Jan., Feb., Mar., etc.) except May, June, July
@@ -80,7 +82,7 @@ export function generateMLAWorksCited(citation: CitationData): string
  *   (Smith & Jones, 2024, p. 45)
  *   (Smith et al., 2024)
  */
-export function generateAPAInText(citation: CitationData, pageNumber?: string): string
+export function generateAPAInText(citation: CitationData, pageNumber?: string): string;
 
 /**
  * APA Reference List entry
@@ -92,15 +94,16 @@ export function generateAPAInText(citation: CitationData, pageNumber?: string): 
  *   Website: Smith, J. A. (2024, March 15). Page title. Site Name. https://www.example.com
  *   Chapter: Smith, J. A. (2024). Chapter title. In J. Doe (Ed.), Book title (pp. 10-30). Publisher.
  */
-export function generateAPAReference(citation: CitationData): string
+export function generateAPAReference(citation: CitationData): string;
 ```
 
 **APA Rules:**
+
 - Authors: Last, F. M. / Last, F. M., & Last, F. M. / Last, F. M., ... & Last, F. M. (up to 20)
 - 21+ authors: first 19 ... last author
-- Book titles: *Italicized*, sentence case (only capitalize first word + proper nouns)
+- Book titles: _Italicized_, sentence case (only capitalize first word + proper nouns)
 - Article titles: No quotes, sentence case
-- Journal names: *Italicized*, title case
+- Journal names: _Italicized_, title case
 - Always include DOI if available (as https://doi.org/10.xxxx)
 - URL without "Retrieved from" unless content may change
 - Use "&" not "and" between authors in reference list
@@ -117,23 +120,26 @@ type CitationStyle = "chicago" | "mla" | "apa";
 export function generateInTextCitation(
   citation: CitationData,
   style: CitationStyle,
-  pageNumber?: string
+  pageNumber?: string,
 ): string {
   switch (style) {
-    case "mla": return generateMLAInText(citation, pageNumber);
-    case "apa": return generateAPAInText(citation, pageNumber);
-    case "chicago": return generateInlineCitation(citation, pageNumber);
+    case "mla":
+      return generateMLAInText(citation, pageNumber);
+    case "apa":
+      return generateAPAInText(citation, pageNumber);
+    case "chicago":
+      return generateInlineCitation(citation, pageNumber);
   }
 }
 
-export function generateBibliographyEntry(
-  citation: CitationData,
-  style: CitationStyle
-): string {
+export function generateBibliographyEntry(citation: CitationData, style: CitationStyle): string {
   switch (style) {
-    case "mla": return generateMLAWorksCited(citation);
-    case "apa": return generateAPAReference(citation);
-    case "chicago": return generateChicagoBibliography(citation);
+    case "mla":
+      return generateMLAWorksCited(citation);
+    case "apa":
+      return generateAPAReference(citation);
+    case "chicago":
+      return generateChicagoBibliography(citation);
   }
 }
 
@@ -141,7 +147,7 @@ export function generateFootnote(
   citation: CitationData,
   style: CitationStyle,
   pageNumber?: string,
-  isSubsequent?: boolean
+  isSubsequent?: boolean,
 ): string {
   // Only Chicago uses footnotes. MLA and APA use in-text citations.
   if (style === "chicago") {
@@ -157,6 +163,7 @@ export function generateFootnote(
 In `server/projectRoutes.ts`, find the citation endpoints and update them to accept a `style` parameter:
 
 **`POST /api/citations/generate`** — Add `style` field to request body:
+
 ```typescript
 // Before:
 const { citationData, pageNumber, isSubsequent } = req.body;
@@ -165,6 +172,7 @@ const { citationData, style = "chicago", pageNumber, isSubsequent } = req.body;
 ```
 
 **`POST /api/project-annotations/:id/footnote`** — Add `style` field:
+
 ```typescript
 const { quote, pageNumber, style = "chicago" } = req.body;
 ```
@@ -172,9 +180,10 @@ const { quote, pageNumber, style = "chicago" } = req.body;
 ### 4. Export `CitationStyle` Type from Schema
 
 Add to `shared/schema.ts`:
+
 ```typescript
 export const citationStyles = ["chicago", "mla", "apa"] as const;
-export type CitationStyle = typeof citationStyles[number];
+export type CitationStyle = (typeof citationStyles)[number];
 ```
 
 ### 5. Frontend: Citation Style Selector
@@ -182,6 +191,7 @@ export type CitationStyle = typeof citationStyles[number];
 Find the UI where citations are generated/displayed (likely in `AnnotationSidebar.tsx` or a citation modal).
 
 Add a dropdown/select:
+
 ```tsx
 <Select value={citationStyle} onValueChange={setCitationStyle}>
   <SelectTrigger>
@@ -206,32 +216,39 @@ Write these tests mentally and verify each output format:
 ### MLA Tests
 
 **Book, single author:**
+
 - In-text: `(Smith 45)`
 - Works Cited: `Smith, John. The Great Book. Oxford UP, 2024.`
 
 **Journal article, two authors:**
+
 - In-text: `(Smith and Jones 12)`
 - Works Cited: `Smith, John, and Jane Jones. "Article Title." Journal of Studies, vol. 12, no. 3, 2024, pp. 45-67.`
 
 **Website, no author:**
+
 - In-text: `("Page Title")`
 - Works Cited: `"Page Title." Site Name, 15 Mar. 2024, www.example.com.`
 
 **Book, 3+ authors:**
+
 - In-text: `(Smith et al. 78)`
 - Works Cited: `Smith, John, et al. The Group Book. Publisher, 2024.`
 
 ### APA Tests
 
 **Book, single author:**
+
 - In-text: `(Smith, 2024, p. 45)`
 - Reference: `Smith, J. A. (2024). The great book. Oxford University Press.`
 
 **Journal, two authors:**
+
 - In-text: `(Smith & Jones, 2024)`
 - Reference: `Smith, J. A., & Jones, J. B. (2024). Article title. Journal of Studies, 12(3), 45-67. https://doi.org/10.xxxx`
 
 **Website:**
+
 - In-text: `(Smith, 2024)`
 - Reference: `Smith, J. A. (2024, March 15). Page title. Site Name. https://www.example.com`
 
@@ -251,6 +268,7 @@ npm run dev
 ```
 
 Test:
+
 1. Open a project with documents that have citation data
 2. Switch citation style dropdown to MLA
 3. Generate a footnote — verify MLA in-text format

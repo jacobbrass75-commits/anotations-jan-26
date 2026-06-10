@@ -30,7 +30,7 @@ PID="${PID:-cf547e4d-712b-42a1-a33d-6cb67e68e670}"
 - Auth: none
 - Responses: JSON
 - Prefer project-level endpoints for thesis work
-</runtime-config>
+  </runtime-config>
 
 <contract-preflight>
 Run before major research/writing jobs:
@@ -40,6 +40,7 @@ bash scripts/preflight.sh
 ```
 
 Preflight validates:
+
 - Read/search endpoints
 - Project create/delete
 - Upload endpoints
@@ -58,32 +59,38 @@ GET  "$SM/api/projects/$PID"
 PUT  "$SM/api/projects/$PID"
 
 # Uploads
+
 POST "$SM/api/upload"                             # single PDF/TXT/image/HEIC
-POST "$SM/api/upload-group"                       # multi-image => one combined document
+POST "$SM/api/upload-group" # multi-image => one combined document
 
 # Attach uploaded docs to project
-POST "$SM/api/projects/$PID/documents"            # {documentId, folderId?}
-POST "$SM/api/projects/$PID/documents/batch"      # {documentIds[], folderId?}
-GET  "$SM/api/projects/$PID/documents"
+
+POST "$SM/api/projects/$PID/documents" # {documentId, folderId?}
+POST "$SM/api/projects/$PID/documents/batch" # {documentIds[], folderId?}
+GET "$SM/api/projects/$PID/documents"
 
 # Search and analysis
-POST "$SM/api/projects/$PID/search"               # lexical global search
-POST "$SM/api/project-documents/$PDID/search"     # semantic per-document search
-POST "$SM/api/project-documents/$PDID/analyze"    # single intent
+
+POST "$SM/api/projects/$PID/search" # lexical global search
+POST "$SM/api/project-documents/$PDID/search" # semantic per-document search
+POST "$SM/api/project-documents/$PDID/analyze" # single intent
 POST "$SM/api/project-documents/$PDID/analyze-multi" # multi-prompt
 
 # Prompt templates (Claude-generated research prompt sets)
+
 POST "$SM/api/projects/$PID/prompt-templates"
-GET  "$SM/api/projects/$PID/prompt-templates"
-PUT  "$SM/api/prompt-templates/$TEMPLATE_ID"
+GET "$SM/api/projects/$PID/prompt-templates"
+PUT "$SM/api/prompt-templates/$TEMPLATE_ID"
 DELETE "$SM/api/prompt-templates/$TEMPLATE_ID"
 
 # Annotations / citations
-GET  "$SM/api/project-documents/$PDID/annotations"
+
+GET "$SM/api/project-documents/$PDID/annotations"
 POST "$SM/api/project-documents/$PDID/annotations"
 POST "$SM/api/project-annotations/$ANN_ID/footnote"
 POST "$SM/api/citations/generate"
-```
+
+````
 </core-endpoints>
 
 <prompt-generation>
@@ -97,7 +104,8 @@ python3 scripts/generate_prompt_set.py \
   --template-name "Section 4 Prompt Set" \
   --save-template \
   --out-json /tmp/prompt_set.json
-```
+````
+
 </prompt-generation>
 
 <academic-controller>
@@ -118,12 +126,13 @@ python3 scripts/research_controller.py \
 ```
 
 Artifacts produced:
+
 - `planner_brief.md`
 - `evidence.json`
 - `evidence.md`
 - `writer_packet.md`
 - optional QA reports when `--draft` is provided
-</academic-controller>
+  </academic-controller>
 
 <evidence-first-retrieval>
 Build the evidence table first. Do not draft argument prose until this exists.
@@ -139,11 +148,12 @@ python3 scripts/build_evidence_table.py \
 ```
 
 Retrieval behavior:
+
 - runs multiple lexical project searches
 - optionally expands with semantic per-document snippets
 - re-ranks by similarity + thesis relevance + citation availability + category
 - flags potential OCR artifacts
-</evidence-first-retrieval>
+  </evidence-first-retrieval>
 
 <quote-fidelity-gate>
 Never quote from memory. Use only annotation-backed quote text.
@@ -159,10 +169,12 @@ python3 scripts/quote_gate.py \
 ```
 
 Pass statuses:
+
 - `EXACT_MATCH`
 - `TRUNCATED_OK` (must use explicit omission markers)
 
 Fail statuses:
+
 - `MISMATCH`
 - `EXPANDED_ERROR`
 - `SOURCE_MISMATCH`
@@ -182,10 +194,11 @@ python3 scripts/audit_draft.py \
 ```
 
 Audit checks:
+
 - missing citation markers
 - weak/no matching evidence
 - potential contradiction risk for absolute claims
-</claim-evidence-audit>
+  </claim-evidence-audit>
 
 <project-memory>
 Maintain rolling context so multi-day writing remains coherent.
@@ -200,6 +213,7 @@ python3 scripts/project_memory.py update --input-json /tmp/memory_update.json --
 # View current memory summary
 python3 scripts/project_memory.py show --memory-file ./memory/project-memory.json
 ```
+
 </project-memory>
 
 <evaluation-harness>
@@ -213,11 +227,12 @@ python3 scripts/evaluate_pipeline.py \
 ```
 
 Track over time:
+
 - evidence count per case
 - required-term recall
 - average rerank score
 - pass/fail per benchmark case
-</evaluation-harness>
+  </evaluation-harness>
 
 <writing-rules>
 1. Evidence first, draft second.

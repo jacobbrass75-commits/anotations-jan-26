@@ -17,7 +17,7 @@ const insertToolCall = sqlite.prepare(
      success,
      metadata,
      timestamp
-   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const insertContextSnapshot = sqlite.prepare(
@@ -31,7 +31,7 @@ const insertContextSnapshot = sqlite.prepare(
      trigger,
      metadata,
      timestamp
-   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 function toMetadataJson(metadata?: Record<string, unknown> | null): string | null {
@@ -69,42 +69,46 @@ export interface ContextSnapshotEvent {
 }
 
 export function logToolCall(event: ToolCallEvent): Promise<void> {
-  return Promise.resolve().then(() => {
-    insertToolCall.run(
-      randomUUID(),
-      event.conversationId,
-      event.userId,
-      event.projectId,
-      event.toolName,
-      event.documentId,
-      event.escalationRound,
-      event.turnNumber,
-      event.resultSizeChars,
-      event.success ? 1 : 0,
-      toMetadataJson(event.metadata),
-      event.timestamp
-    );
-  }).catch((err) => {
-    console.warn("[analytics] logToolCall failed:", err);
-  });
+  return Promise.resolve()
+    .then(() => {
+      insertToolCall.run(
+        randomUUID(),
+        event.conversationId,
+        event.userId,
+        event.projectId,
+        event.toolName,
+        event.documentId,
+        event.escalationRound,
+        event.turnNumber,
+        event.resultSizeChars,
+        event.success ? 1 : 0,
+        toMetadataJson(event.metadata),
+        event.timestamp,
+      );
+    })
+    .catch((err) => {
+      console.warn("[analytics] logToolCall failed:", err);
+    });
 }
 
 export function logContextSnapshot(event: ContextSnapshotEvent): Promise<void> {
-  return Promise.resolve().then(() => {
-    insertContextSnapshot.run(
-      randomUUID(),
-      event.conversationId,
-      event.turnNumber,
-      event.escalationRound,
-      event.estimatedTokens,
-      event.warningLevel,
-      event.trigger,
-      toMetadataJson(event.metadata),
-      event.timestamp
-    );
-  }).catch((err) => {
-    console.warn("[analytics] logContextSnapshot failed:", err);
-  });
+  return Promise.resolve()
+    .then(() => {
+      insertContextSnapshot.run(
+        randomUUID(),
+        event.conversationId,
+        event.turnNumber,
+        event.escalationRound,
+        event.estimatedTokens,
+        event.warningLevel,
+        event.trigger,
+        toMetadataJson(event.metadata),
+        event.timestamp,
+      );
+    })
+    .catch((err) => {
+      console.warn("[analytics] logContextSnapshot failed:", err);
+    });
 }
 
 export function initAnalytics(): void {

@@ -31,21 +31,21 @@ interface SearchResponse {
 function textMatchScore(query: string, text: string): number {
   const queryLower = query.toLowerCase();
   const textLower = text.toLowerCase();
-  
+
   if (textLower.includes(queryLower)) {
     return TEXT_MATCH_SCORE + 0.3;
   }
-  
-  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
+
+  const queryWords = queryLower.split(/\s+/).filter((w) => w.length > 2);
   if (queryWords.length === 0) return 0;
-  
+
   let matchedWords = 0;
   for (const word of queryWords) {
     if (textLower.includes(word)) {
       matchedWords++;
     }
   }
-  
+
   const matchRatio = matchedWords / queryWords.length;
   return matchRatio >= 0.5 ? TEXT_MATCH_SCORE * matchRatio : 0;
 }
@@ -54,7 +54,7 @@ export async function globalSearch(
   projectId: string,
   query: string,
   filters?: SearchFilters,
-  limit: number = 20
+  limit: number = 20,
 ): Promise<SearchResponse> {
   const startTime = Date.now();
   const results: GlobalSearchResult[] = [];
@@ -65,11 +65,13 @@ export async function globalSearch(
   }
 
   if (project.contextSummary || project.thesis) {
-    const textToMatch = [project.contextSummary, project.thesis, project.name].filter(Boolean).join(' ');
+    const textToMatch = [project.contextSummary, project.thesis, project.name]
+      .filter(Boolean)
+      .join(" ");
     const score = textMatchScore(query, textToMatch);
     if (score > 0) {
       results.push({
-        type: 'folder_context',
+        type: "folder_context",
         matchedText: project.contextSummary || project.thesis || project.name,
         similarityScore: score,
         relevanceLevel: getRelevanceLevel(score),
@@ -77,19 +79,18 @@ export async function globalSearch(
     }
   }
 
-  const projectFolders = await db
-    .select()
-    .from(folders)
-    .where(eq(folders.projectId, projectId));
+  const projectFolders = await db.select().from(folders).where(eq(folders.projectId, projectId));
 
   for (const folder of projectFolders) {
     if (filters?.folderIds && !filters.folderIds.includes(folder.id)) continue;
-    
-    const textToMatch = [folder.contextSummary, folder.description, folder.name].filter(Boolean).join(' ');
+
+    const textToMatch = [folder.contextSummary, folder.description, folder.name]
+      .filter(Boolean)
+      .join(" ");
     const score = textMatchScore(query, textToMatch);
     if (score > 0) {
       results.push({
-        type: 'folder_context',
+        type: "folder_context",
         folderId: folder.id,
         folderName: folder.name,
         matchedText: folder.contextSummary || folder.description || folder.name,
@@ -110,13 +111,20 @@ export async function globalSearch(
 
   for (const { projectDoc, doc } of projectDocs) {
     if (filters?.documentIds && !filters.documentIds.includes(projectDoc.id)) continue;
-    if (filters?.folderIds && projectDoc.folderId && !filters.folderIds.includes(projectDoc.folderId)) continue;
+    if (
+      filters?.folderIds &&
+      projectDoc.folderId &&
+      !filters.folderIds.includes(projectDoc.folderId)
+    )
+      continue;
 
-    const textToMatch = [projectDoc.retrievalContext, doc.summary, doc.filename].filter(Boolean).join(' ');
+    const textToMatch = [projectDoc.retrievalContext, doc.summary, doc.filename]
+      .filter(Boolean)
+      .join(" ");
     const score = textMatchScore(query, textToMatch);
     if (score > 0) {
       results.push({
-        type: 'document_context',
+        type: "document_context",
         documentId: projectDoc.id,
         documentFilename: doc.filename,
         folderId: projectDoc.folderId || undefined,
@@ -140,15 +148,26 @@ export async function globalSearch(
     .where(eq(projectDocuments.projectId, projectId));
 
   for (const { annotation, projectDoc, doc } of allAnnotations) {
-    if (filters?.categories && !filters.categories.includes(annotation.category as AnnotationCategory)) continue;
+    if (
+      filters?.categories &&
+      !filters.categories.includes(annotation.category as AnnotationCategory)
+    )
+      continue;
     if (filters?.documentIds && !filters.documentIds.includes(projectDoc.id)) continue;
-    if (filters?.folderIds && projectDoc.folderId && !filters.folderIds.includes(projectDoc.folderId)) continue;
+    if (
+      filters?.folderIds &&
+      projectDoc.folderId &&
+      !filters.folderIds.includes(projectDoc.folderId)
+    )
+      continue;
 
-    const textToMatch = [annotation.searchableContent, annotation.highlightedText, annotation.note].filter(Boolean).join(' ');
+    const textToMatch = [annotation.searchableContent, annotation.highlightedText, annotation.note]
+      .filter(Boolean)
+      .join(" ");
     const score = textMatchScore(query, textToMatch);
     if (score > 0) {
       results.push({
-        type: 'annotation',
+        type: "annotation",
         documentId: projectDoc.id,
         documentFilename: doc.filename,
         folderId: projectDoc.folderId || undefined,
@@ -175,10 +194,10 @@ export async function globalSearch(
   };
 }
 
-function getRelevanceLevel(similarity: number): 'high' | 'medium' | 'low' {
-  if (similarity >= 0.7) return 'high';
-  if (similarity >= 0.5) return 'medium';
-  return 'low';
+function getRelevanceLevel(similarity: number): "high" | "medium" | "low" {
+  if (similarity >= 0.7) return "high";
+  if (similarity >= 0.5) return "medium";
+  return "low";
 }
 
 /**
@@ -200,20 +219,14 @@ export async function searchProjectDocument(
   }
 
   // Get the underlying document
-  const [doc] = await db
-    .select()
-    .from(documents)
-    .where(eq(documents.id, projectDoc.documentId));
+  const [doc] = await db.select().from(documents).where(eq(documents.id, projectDoc.documentId));
 
   if (!doc) {
     throw new Error("Document not found");
   }
 
   // Get project for context
-  const [project] = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, projectDoc.projectId));
+  const [project] = await db.select().from(projects).where(eq(projects.id, projectDoc.projectId));
 
   // Get chunks for this document
   const docChunks = await storage.getChunksForDocument(doc.id);

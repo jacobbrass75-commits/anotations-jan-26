@@ -8,7 +8,7 @@ export function startSseHeartbeat(
   options: {
     isClosed?: () => boolean;
     intervalMs?: number;
-  } = {}
+  } = {},
 ): () => void {
   const isClosed = options.isClosed || (() => false);
   const intervalMs = options.intervalMs || DEFAULT_HEARTBEAT_MS;
@@ -40,7 +40,10 @@ export function sanitizeSseError(error: unknown, fallback = "Request failed"): s
     return "The configured writing model is unavailable. Please retry; the server will use the supported model fallback.";
   }
 
-  if (/<(?:!doctype|html|head|body|div|span|a)\b/i.test(compact) || /cloudflare|cf-error|errorcode_5\d\d/i.test(compact)) {
+  if (
+    /<(?:!doctype|html|head|body|div|span|a)\b/i.test(compact) ||
+    /cloudflare|cf-error|errorcode_5\d\d/i.test(compact)
+  ) {
     if (/504|gateway|timeout|timed out/i.test(compact)) {
       return "The request timed out while generating. Any completed sections were kept when available. Please try again.";
     }

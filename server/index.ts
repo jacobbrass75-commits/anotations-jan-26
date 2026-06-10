@@ -35,17 +35,11 @@ const allowedChromeExtensionIds = (process.env.CHROME_EXTENSION_IDS ?? "")
   .filter(Boolean);
 const extensionCorsEnabled = process.env.EXTENSION_CORS_MODE !== "disabled";
 
-const ALWAYS_ALLOWED_ORIGINS = new Set([
-  "https://claude.ai",
-  "https://claude.com",
-]);
-const DEFAULT_ALLOWED_ORIGINS = [
-  "https://mcp.scholarmark.ai",
-  "https://app.scholarmark.ai",
-];
+const ALWAYS_ALLOWED_ORIGINS = new Set(["https://claude.ai", "https://claude.com"]);
+const DEFAULT_ALLOWED_ORIGINS = ["https://mcp.scholarmark.ai", "https://app.scholarmark.ai"];
 const ALLOWED_ORIGIN_SET = new Set(
   [...DEFAULT_ALLOWED_ORIGINS, ...allowedOrigins, ...extraAllowedOrigins].map((origin) =>
-    normalizeOrigin(origin)
+    normalizeOrigin(origin),
   ),
 );
 const EXTRA_ALLOWED_PROTOCOL_HOST_SET = new Set(
@@ -181,8 +175,7 @@ app.use((req, res, next) => {
     }
 
     if (err instanceof multer.MulterError) {
-      const status =
-        err.code === "LIMIT_FILE_SIZE" || err.code === "LIMIT_FIELD_VALUE" ? 413 : 400;
+      const status = err.code === "LIMIT_FILE_SIZE" || err.code === "LIMIT_FIELD_VALUE" ? 413 : 400;
       return res.status(status).json({ message: err.message, code: err.code });
     }
 

@@ -3,10 +3,7 @@ import { checkTokenBudget, requireAuth, requireTier } from "./auth";
 import { aiLimiter } from "./rateLimits";
 import { createTokenUsageAccumulator } from "./aiUsage";
 import { writingStyleStorage } from "./writingStyleStorage";
-import {
-  analyzeVoiceProfileSamples,
-  validateWritingSamples,
-} from "./voiceProfileAnalysis";
+import { analyzeVoiceProfileSamples, validateWritingSamples } from "./voiceProfileAnalysis";
 import { voiceProfileSchema, type VoiceProfile, type WritingStyle } from "@shared/schema";
 
 function normalizeName(value: unknown): string | null {
@@ -31,7 +28,8 @@ function parseStoredVoiceProfile(value: string): VoiceProfile | null {
 }
 
 function normalizeStoredSamples(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((sample): sample is string => typeof sample === "string");
+  if (Array.isArray(value))
+    return value.filter((sample): sample is string => typeof sample === "string");
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
@@ -53,7 +51,10 @@ export function toWritingStyleResponse(style: WritingStyle) {
   };
 }
 
-async function getOwnedWritingStyleOr404(req: Request, res: Response): Promise<WritingStyle | null> {
+async function getOwnedWritingStyleOr404(
+  req: Request,
+  res: Response,
+): Promise<WritingStyle | null> {
   const style = await writingStyleStorage.getWritingStyleForUser(req.params.id, req.user!.userId);
   if (!style) {
     res.status(404).json({ message: "Writing style not found" });
@@ -63,129 +64,174 @@ async function getOwnedWritingStyleOr404(req: Request, res: Response): Promise<W
 }
 
 export function registerWritingStyleRoutes(app: Express): void {
-  app.get("/api/writing-styles", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const styles = await writingStyleStorage.getWritingStylesForUser(req.user!.userId);
-      res.json(styles.map(toWritingStyleResponse));
-    } catch (error) {
-      console.error("Error listing writing styles:", error);
-      res.status(500).json({ message: "Failed to list writing styles" });
-    }
-  });
-
-  app.post("/api/writing-styles", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const name = normalizeName(req.body?.name);
-      if (!name) {
-        return res.status(400).json({ message: "Name is required and must be 80 characters or less" });
+  app.get(
+    "/api/writing-styles",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const styles = await writingStyleStorage.getWritingStylesForUser(req.user!.userId);
+        res.json(styles.map(toWritingStyleResponse));
+      } catch (error) {
+        console.error("Error listing writing styles:", error);
+        res.status(500).json({ message: "Failed to list writing styles" });
       }
+    },
+  );
 
-      const existing = await writingStyleStorage.getWritingStyleByNameForUser(name, req.user!.userId);
-      if (existing) {
-        return res.status(409).json({ message: "A writing style with this name already exists" });
-      }
-
-      const validation = validateWritingSamples(req.body?.samples);
-      if (!validation.ok || !validation.samples) {
-        return res.status(400).json({ message: validation.error || "Provide 2-10 writing samples" });
-      }
-
-      const voiceProfile = await analyzeVoiceProfileSamples(validation.samples, tokenUsage.add);
-      const created = await writingStyleStorage.createWritingStyle({
-        userId: req.user!.userId,
-        name,
-        description: normalizeDescription(req.body?.description),
-        voiceProfile: JSON.stringify(voiceProfile),
-        samples: validation.samples,
-      });
-
-      await tokenUsage.flush(req.user!.userId, "writing_style_analysis");
-      res.status(201).json(toWritingStyleResponse(created));
-    } catch (error) {
-      console.error("Error creating writing style:", error);
-      res.status(500).json({ message: "Failed to create writing style" });
-    }
-  });
-
-  app.get("/api/writing-styles/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const style = await getOwnedWritingStyleOr404(req, res);
-      if (!style) return;
-      res.json(toWritingStyleResponse(style));
-    } catch (error) {
-      console.error("Error fetching writing style:", error);
-      res.status(500).json({ message: "Failed to fetch writing style" });
-    }
-  });
-
-  app.put("/api/writing-styles/:id", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
-    const tokenUsage = createTokenUsageAccumulator();
-    try {
-      const existing = await getOwnedWritingStyleOr404(req, res);
-      if (!existing) return;
-
-      const updates: Partial<{
-        name: string;
-        description: string | null;
-        voiceProfile: string;
-        samples: string[];
-      }> = {};
-
-      if (req.body?.name !== undefined) {
-        const name = normalizeName(req.body.name);
+  app.post(
+    "/api/writing-styles",
+    requireAuth,
+    aiLimiter,
+    requireTier("pro"),
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
+      try {
+        const name = normalizeName(req.body?.name);
         if (!name) {
-          return res.status(400).json({ message: "Name is required and must be 80 characters or less" });
+          return res
+            .status(400)
+            .json({ message: "Name is required and must be 80 characters or less" });
         }
-        if (name !== existing.name) {
-          const duplicate = await writingStyleStorage.getWritingStyleByNameForUser(name, req.user!.userId);
-          if (duplicate) {
-            return res.status(409).json({ message: "A writing style with this name already exists" });
-          }
+
+        const existing = await writingStyleStorage.getWritingStyleByNameForUser(
+          name,
+          req.user!.userId,
+        );
+        if (existing) {
+          return res.status(409).json({ message: "A writing style with this name already exists" });
         }
-        updates.name = name;
-      }
 
-      if (req.body?.description !== undefined) {
-        updates.description = normalizeDescription(req.body.description);
-      }
-
-      if (req.body?.voiceProfile !== undefined) {
-        const parsed = voiceProfileSchema.safeParse(req.body.voiceProfile);
-        if (!parsed.success) {
-          return res.status(400).json({ message: "Invalid voice profile" });
-        }
-        updates.voiceProfile = JSON.stringify(parsed.data);
-      }
-
-      if (req.body?.reanalyze === true) {
         const validation = validateWritingSamples(req.body?.samples);
         if (!validation.ok || !validation.samples) {
-          return res.status(400).json({ message: validation.error || "Provide 2-10 writing samples" });
+          return res
+            .status(400)
+            .json({ message: validation.error || "Provide 2-10 writing samples" });
         }
+
         const voiceProfile = await analyzeVoiceProfileSamples(validation.samples, tokenUsage.add);
-        updates.voiceProfile = JSON.stringify(voiceProfile);
-        updates.samples = validation.samples;
+        const created = await writingStyleStorage.createWritingStyle({
+          userId: req.user!.userId,
+          name,
+          description: normalizeDescription(req.body?.description),
+          voiceProfile: JSON.stringify(voiceProfile),
+          samples: validation.samples,
+        });
+
+        await tokenUsage.flush(req.user!.userId, "writing_style_analysis");
+        res.status(201).json(toWritingStyleResponse(created));
+      } catch (error) {
+        console.error("Error creating writing style:", error);
+        res.status(500).json({ message: "Failed to create writing style" });
       }
+    },
+  );
 
-      const updated = await writingStyleStorage.updateWritingStyle(existing.id, updates);
-      await tokenUsage.flush(req.user!.userId, "writing_style_update");
-      res.json(toWritingStyleResponse(updated || existing));
-    } catch (error) {
-      console.error("Error updating writing style:", error);
-      res.status(500).json({ message: "Failed to update writing style" });
-    }
-  });
+  app.get(
+    "/api/writing-styles/:id",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const style = await getOwnedWritingStyleOr404(req, res);
+        if (!style) return;
+        res.json(toWritingStyleResponse(style));
+      } catch (error) {
+        console.error("Error fetching writing style:", error);
+        res.status(500).json({ message: "Failed to fetch writing style" });
+      }
+    },
+  );
 
-  app.delete("/api/writing-styles/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const style = await getOwnedWritingStyleOr404(req, res);
-      if (!style) return;
-      await writingStyleStorage.deleteWritingStyle(style.id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting writing style:", error);
-      res.status(500).json({ message: "Failed to delete writing style" });
-    }
-  });
+  app.put(
+    "/api/writing-styles/:id",
+    requireAuth,
+    aiLimiter,
+    requireTier("pro"),
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      const tokenUsage = createTokenUsageAccumulator();
+      try {
+        const existing = await getOwnedWritingStyleOr404(req, res);
+        if (!existing) return;
+
+        const updates: Partial<{
+          name: string;
+          description: string | null;
+          voiceProfile: string;
+          samples: string[];
+        }> = {};
+
+        if (req.body?.name !== undefined) {
+          const name = normalizeName(req.body.name);
+          if (!name) {
+            return res
+              .status(400)
+              .json({ message: "Name is required and must be 80 characters or less" });
+          }
+          if (name !== existing.name) {
+            const duplicate = await writingStyleStorage.getWritingStyleByNameForUser(
+              name,
+              req.user!.userId,
+            );
+            if (duplicate) {
+              return res
+                .status(409)
+                .json({ message: "A writing style with this name already exists" });
+            }
+          }
+          updates.name = name;
+        }
+
+        if (req.body?.description !== undefined) {
+          updates.description = normalizeDescription(req.body.description);
+        }
+
+        if (req.body?.voiceProfile !== undefined) {
+          const parsed = voiceProfileSchema.safeParse(req.body.voiceProfile);
+          if (!parsed.success) {
+            return res.status(400).json({ message: "Invalid voice profile" });
+          }
+          updates.voiceProfile = JSON.stringify(parsed.data);
+        }
+
+        if (req.body?.reanalyze === true) {
+          const validation = validateWritingSamples(req.body?.samples);
+          if (!validation.ok || !validation.samples) {
+            return res
+              .status(400)
+              .json({ message: validation.error || "Provide 2-10 writing samples" });
+          }
+          const voiceProfile = await analyzeVoiceProfileSamples(validation.samples, tokenUsage.add);
+          updates.voiceProfile = JSON.stringify(voiceProfile);
+          updates.samples = validation.samples;
+        }
+
+        const updated = await writingStyleStorage.updateWritingStyle(existing.id, updates);
+        await tokenUsage.flush(req.user!.userId, "writing_style_update");
+        res.json(toWritingStyleResponse(updated || existing));
+      } catch (error) {
+        console.error("Error updating writing style:", error);
+        res.status(500).json({ message: "Failed to update writing style" });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/writing-styles/:id",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const style = await getOwnedWritingStyleOr404(req, res);
+        if (!style) return;
+        await writingStyleStorage.deleteWritingStyle(style.id);
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error deleting writing style:", error);
+        res.status(500).json({ message: "Failed to delete writing style" });
+      }
+    },
+  );
 }

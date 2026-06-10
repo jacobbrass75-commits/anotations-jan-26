@@ -112,11 +112,7 @@ Progress entries should be actionable:
 
 ```json
 {
-  "completed": [
-    "Set up database schema",
-    "Implement user model",
-    "Add authentication middleware"
-  ],
+  "completed": ["Set up database schema", "Implement user model", "Add authentication middleware"],
   "current": "Writing login endpoint tests",
   "blockers": ["Need to decide on rate limiting strategy"],
   "next": ["Implement password reset flow", "Add email verification"]

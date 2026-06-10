@@ -16,10 +16,14 @@ type TimeRange = "24h" | "7d" | "30d" | "all";
 function getFromTimestamp(range: TimeRange): number {
   const now = Date.now();
   switch (range) {
-    case "24h": return now - 24 * 60 * 60 * 1000;
-    case "7d": return now - 7 * 24 * 60 * 60 * 1000;
-    case "30d": return now - 30 * 24 * 60 * 60 * 1000;
-    case "all": return 0;
+    case "24h":
+      return now - 24 * 60 * 60 * 1000;
+    case "7d":
+      return now - 7 * 24 * 60 * 60 * 1000;
+    case "30d":
+      return now - 30 * 24 * 60 * 60 * 1000;
+    case "all":
+      return 0;
   }
 }
 
@@ -111,9 +115,7 @@ export default function AdminAnalytics() {
                           <td className="py-1.5 px-2 text-muted-foreground">
                             {src.toolName.replace("get_", "")}
                           </td>
-                          <td className="py-1.5 px-2 text-right text-chart-3">
-                            {src.pullCount}
-                          </td>
+                          <td className="py-1.5 px-2 text-right text-chart-3">{src.pullCount}</td>
                         </tr>
                       ))}
                     </tbody>

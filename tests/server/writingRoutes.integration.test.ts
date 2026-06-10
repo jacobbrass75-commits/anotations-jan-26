@@ -147,7 +147,7 @@ describe("writing route integration", () => {
         content: [
           {
             type: "text",
-            text: "{\"thesis\":\"Long prompts need resilient planning.\",\"sections\":[{\"title\":\"Introduction\",\"description\":\"This string never closes",
+            text: '{"thesis":"Long prompts need resilient planning.","sections":[{"title":"Introduction","description":"This string never closes',
           },
         ],
         usage: { input_tokens: 5, output_tokens: 6 },
@@ -304,12 +304,14 @@ describe("writing route integration", () => {
       const text = await response.text();
       const firstCall = anthropicCreate.mock.calls[0]?.[0] as { system?: string };
       const savedDraft = sqlite
-        .prepare(`
+        .prepare(
+          `
           SELECT d.user_id, d.filename, pd.role_in_project
           FROM documents d
           INNER JOIN project_documents pd ON pd.document_id = d.id
           WHERE pd.project_id = ? AND pd.role_in_project = ?
-        `)
+        `,
+        )
         .get("project-with-voice", "AI-generated draft") as
         | { user_id: string | null; filename: string; role_in_project: string | null }
         | undefined;

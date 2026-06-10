@@ -56,10 +56,7 @@ export interface Prompt {
 interface MultiPromptPanelProps {
   documentId: string | null;
   projectId?: string;
-  onAnalyze: (
-    prompts: Prompt[],
-    thoroughness: ThoroughnessLevel
-  ) => Promise<void>;
+  onAnalyze: (prompts: Prompt[], thoroughness: ThoroughnessLevel) => Promise<void>;
   isAnalyzing: boolean;
   hasAnalyzed: boolean;
   annotationCount: number;
@@ -86,8 +83,7 @@ export function MultiPromptPanel({
   const [prompts, setPrompts] = useState<Prompt[]>([
     { id: Math.random().toString(36).slice(2), text: "", color: getPromptColor(0) },
   ]);
-  const [thoroughness, setThoroughness] =
-    useState<ThoroughnessLevel>("standard");
+  const [thoroughness, setThoroughness] = useState<ThoroughnessLevel>("standard");
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
 
@@ -115,9 +111,7 @@ export function MultiPromptPanel({
   }, []);
 
   const updatePromptText = useCallback((id: string, text: string) => {
-    setPrompts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, text } : p))
-    );
+    setPrompts((prev) => prev.map((p) => (p.id === id ? { ...p, text } : p)));
   }, []);
 
   const handleAnalyze = useCallback(async () => {
@@ -145,7 +139,7 @@ export function MultiPromptPanel({
       setPrompts(loadedPrompts);
       onLoadTemplate?.(template);
     },
-    [onLoadTemplate]
+    [onLoadTemplate],
   );
 
   const validPromptCount = prompts.filter((p) => p.text.trim()).length;
@@ -160,9 +154,7 @@ export function MultiPromptPanel({
               <Sparkles className="h-5 w-5 text-primary" />
               <h2 className="eva-section-title text-sm">MULTI-PROMPT ANALYSIS</h2>
             </div>
-            {hasAnalyzed && (
-              <Badge variant="secondary">{annotationCount} annotations</Badge>
-            )}
+            {hasAnalyzed && <Badge variant="secondary">{annotationCount} annotations</Badge>}
           </div>
         </CardHeader>
 
@@ -239,7 +231,12 @@ export function MultiPromptPanel({
             {projectId && onSaveTemplate && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={isAnalyzing} className="eva-focus-glow uppercase tracking-wider text-xs">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isAnalyzing}
+                    className="eva-focus-glow uppercase tracking-wider text-xs"
+                  >
                     <FolderOpen className="h-4 w-4 mr-1" />
                     Templates
                   </Button>
@@ -256,10 +253,7 @@ export function MultiPromptPanel({
                     <>
                       <DropdownMenuSeparator />
                       {templates.map((t) => (
-                        <DropdownMenuItem
-                          key={t.id}
-                          onClick={() => handleLoadTemplate(t)}
-                        >
+                        <DropdownMenuItem key={t.id} onClick={() => handleLoadTemplate(t)}>
                           {t.name} ({t.prompts.length} prompts)
                         </DropdownMenuItem>
                       ))}
@@ -290,8 +284,8 @@ export function MultiPromptPanel({
 
           {/* Help Text */}
           <p className="text-xs text-muted-foreground">
-            Each prompt runs a full analysis in parallel. Add multiple focused
-            prompts for comprehensive annotation coverage.
+            Each prompt runs a full analysis in parallel. Add multiple focused prompts for
+            comprehensive annotation coverage.
           </p>
         </CardContent>
       </Card>

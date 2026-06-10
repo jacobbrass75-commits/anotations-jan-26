@@ -36,7 +36,7 @@ export function getDocumentSourcePath(documentId: string, filename: string): str
 export async function saveDocumentSource(
   documentId: string,
   filename: string,
-  fileBuffer: Buffer
+  fileBuffer: Buffer,
 ): Promise<string> {
   await mkdir(UPLOADS_DIR, { recursive: true });
   const filePath = getDocumentSourcePath(documentId, filename);

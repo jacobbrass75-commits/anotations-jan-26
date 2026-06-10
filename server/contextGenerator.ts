@@ -33,9 +33,9 @@ export async function generateRetrievalContext(
 Document Summary: ${documentSummary}
 
 Main Arguments:
-${mainArguments.map((a, i) => `${i + 1}. ${a}`).join('\n')}
+${mainArguments.map((a, i) => `${i + 1}. ${a}`).join("\n")}
 
-Key Concepts: ${keyConcepts.join(', ')}
+Key Concepts: ${keyConcepts.join(", ")}
 
 Project Thesis: ${projectThesis}
 
@@ -46,7 +46,11 @@ Generate a search-optimized context paragraph:`;
     const response = await getOpenAI().chat.completions.create({
       model: CONTEXT_MODEL,
       messages: [
-        { role: "system", content: "You generate concise, search-optimized document contexts for academic research." },
+        {
+          role: "system",
+          content:
+            "You generate concise, search-optimized document contexts for academic research.",
+        },
         { role: "user", content: prompt },
       ],
       max_tokens: 500,
@@ -57,7 +61,7 @@ Generate a search-optimized context paragraph:`;
     return response.choices[0]?.message?.content || "";
   } catch (error) {
     console.error("Error generating retrieval context:", error);
-    return `${documentSummary} ${mainArguments.join(' ')} ${keyConcepts.join(' ')}`;
+    return `${documentSummary} ${mainArguments.join(" ")} ${keyConcepts.join(" ")}`;
   }
 }
 
@@ -75,14 +79,20 @@ Project Thesis: ${thesis}
 Project Scope: ${scope}
 
 Document Contexts (${documentContexts.length} documents):
-${documentContexts.slice(0, 5).map((c, i) => `[Doc ${i + 1}]: ${c.slice(0, 200)}...`).join('\n\n')}
+${documentContexts
+  .slice(0, 5)
+  .map((c, i) => `[Doc ${i + 1}]: ${c.slice(0, 200)}...`)
+  .join("\n\n")}
 
 Generate a search-optimized project summary:`;
 
     const response = await getOpenAI().chat.completions.create({
       model: CONTEXT_MODEL,
       messages: [
-        { role: "system", content: "You generate concise project summaries for academic research retrieval." },
+        {
+          role: "system",
+          content: "You generate concise project summaries for academic research retrieval.",
+        },
         { role: "user", content: prompt },
       ],
       max_tokens: 400,
@@ -105,20 +115,26 @@ export async function generateFolderContextSummary(
 ): Promise<string> {
   try {
     const parentInfo = parentFolderContext ? `\nParent Folder Context: ${parentFolderContext}` : "";
-    
+
     const prompt = `Generate a folder context summary (100-150 words) for semantic search.
 
 Folder Description: ${folderDescription}${parentInfo}
 
 Documents in Folder (${documentContexts.length}):
-${documentContexts.slice(0, 3).map((c, i) => `[Doc ${i + 1}]: ${c.slice(0, 150)}...`).join('\n\n')}
+${documentContexts
+  .slice(0, 3)
+  .map((c, i) => `[Doc ${i + 1}]: ${c.slice(0, 150)}...`)
+  .join("\n\n")}
 
 Generate a search-optimized folder summary:`;
 
     const response = await getOpenAI().chat.completions.create({
       model: CONTEXT_MODEL,
       messages: [
-        { role: "system", content: "You generate concise folder summaries for research organization." },
+        {
+          role: "system",
+          content: "You generate concise folder summaries for research organization.",
+        },
         { role: "user", content: prompt },
       ],
       max_tokens: 300,
@@ -137,11 +153,14 @@ export async function generateSearchableContent(
   highlightedText: string,
   note: string | null,
   category: string,
-  documentContext?: string
+  documentContext?: string,
 ): Promise<string> {
-  return `[${category}] ${highlightedText} ${note || ''} ${documentContext?.slice(0, 100) || ''}`.trim();
+  return `[${category}] ${highlightedText} ${note || ""} ${documentContext?.slice(0, 100) || ""}`.trim();
 }
 
-export async function embedText(text: string, onTokenUsage?: TokenUsageReporter): Promise<number[]> {
+export async function embedText(
+  text: string,
+  onTokenUsage?: TokenUsageReporter,
+): Promise<number[]> {
   return getEmbeddingWithUsage(text, onTokenUsage);
 }

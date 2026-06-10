@@ -84,9 +84,13 @@ describe("analytics admin route hardening", () => {
     const { server, token } = await createAnalyticsApp();
 
     try {
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/admin/analytics/export", {
-        headers: { authorization: `Bearer ${token}` },
-      });
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/admin/analytics/export",
+        {
+          headers: { authorization: `Bearer ${token}` },
+        },
+      );
 
       expect(response.status).toBe(403);
       expect(response.body).toEqual({

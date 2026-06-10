@@ -90,7 +90,7 @@ ${text}
 async function humanizeWithGemini(
   text: string,
   promptTemplate: string,
-  options: HumanizeOptions
+  options: HumanizeOptions,
 ): Promise<HumanizeResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -114,12 +114,14 @@ async function humanizeWithGemini(
           temperature,
         },
       }),
-    }
+    },
   );
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    throw new Error(`Gemini request failed (${response.status}): ${errorText || "Unknown provider error"}`);
+    throw new Error(
+      `Gemini request failed (${response.status}): ${errorText || "Unknown provider error"}`,
+    );
   }
 
   const data = (await response.json()) as GeminiGenerateResponse;
@@ -147,7 +149,7 @@ async function humanizeWithGemini(
 async function humanizeWithAnthropic(
   text: string,
   promptTemplate: string,
-  options: HumanizeOptions
+  options: HumanizeOptions,
 ): Promise<HumanizeResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -182,7 +184,8 @@ async function humanizeWithAnthropic(
     throw new Error("Anthropic returned empty output");
   }
 
-  const tokensUsed = (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0) || undefined;
+  const tokensUsed =
+    (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0) || undefined;
 
   return {
     humanizedText,
@@ -192,7 +195,10 @@ async function humanizeWithAnthropic(
   };
 }
 
-export async function humanizeText(text: string, options: HumanizeOptions = {}): Promise<HumanizeResult> {
+export async function humanizeText(
+  text: string,
+  options: HumanizeOptions = {},
+): Promise<HumanizeResult> {
   const normalizedText = text.trim();
   if (!normalizedText) {
     throw new Error("Text is required");
@@ -206,7 +212,9 @@ export async function humanizeText(text: string, options: HumanizeOptions = {}):
   const hasAnthropic = Boolean(process.env.ANTHROPIC_API_KEY);
 
   if (!hasGemini && !hasAnthropic) {
-    throw new Error("No humanizer provider key configured. Set GEMINI_API_KEY or ANTHROPIC_API_KEY.");
+    throw new Error(
+      "No humanizer provider key configured. Set GEMINI_API_KEY or ANTHROPIC_API_KEY.",
+    );
   }
 
   if (hasGemini) {

@@ -4,17 +4,14 @@ import {
   toPdfSafeText,
   toSafeFilename,
 } from "../../client/src/lib/documentExportUtils";
-import {
-  buildDocxBlob,
-  buildPdfBlob,
-} from "../../client/src/lib/documentExport";
+import { buildDocxBlob, buildPdfBlob } from "../../client/src/lib/documentExport";
 
 describe("document export utilities", () => {
   it("strips markdown formatting to plain text", () => {
     expect(
       stripMarkdown(
-        "# Title\nSome **bold** text with [a link](https://example.com), `inline code`, and ![img](x.png)."
-      )
+        "# Title\nSome **bold** text with [a link](https://example.com), `inline code`, and ![img](x.png).",
+      ),
     ).toBe("Title Some bold text with a link, inline code, and .");
   });
 
@@ -32,14 +29,14 @@ describe("document export utilities", () => {
 
   it("normalizes unsupported PDF punctuation for standard fonts", () => {
     expect(toPdfSafeText("non‑breaking – dash — quote “test” café ≥ 2")).toBe(
-      "non-breaking - dash - quote \"test\" cafe >= 2"
+      'non-breaking - dash - quote "test" cafe >= 2',
     );
   });
 
   it("builds PDFs with punctuation that pdf-lib standard fonts cannot encode directly", async () => {
     const blob = await buildPdfBlob(
       "Export Test",
-      "# Export Test\n\nFuture research must address non‑breaking hyphens, en dashes – and curly “quotes.”"
+      "# Export Test\n\nFuture research must address non‑breaking hyphens, en dashes – and curly “quotes.”",
     );
 
     expect(blob.type).toBe("application/pdf");
@@ -49,7 +46,9 @@ describe("document export utilities", () => {
   it("builds DOCX blobs without requiring Node buffers", async () => {
     const blob = await buildDocxBlob("Export Test", "# Export Test\n\nRegular document text.");
 
-    expect(blob.type).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    expect(blob.type).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
     expect(blob.size).toBeGreaterThan(0);
   });
 });

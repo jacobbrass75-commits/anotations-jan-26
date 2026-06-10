@@ -9,7 +9,10 @@ import type { Annotation, Document } from "@shared/schema";
 import type { DocumentSourceMeta } from "@/hooks/useDocument";
 
 // Extended annotation type with prompt fields
-interface AnnotationWithPrompt extends Omit<Annotation, 'promptText' | 'promptIndex' | 'promptColor'> {
+interface AnnotationWithPrompt extends Omit<
+  Annotation,
+  "promptText" | "promptIndex" | "promptColor"
+> {
   promptText?: string | null;
   promptIndex?: number | null;
   promptColor?: string | null;
@@ -46,7 +49,7 @@ export function DocumentViewer({
   useEffect(() => {
     if (selectedAnnotationId && scrollRef.current) {
       const element = scrollRef.current.querySelector(
-        `[data-testid="highlight-${selectedAnnotationId}"]`
+        `[data-testid="highlight-${selectedAnnotationId}"]`,
       );
       if (element) {
         requestAnimationFrame(() => {
@@ -91,7 +94,8 @@ export function DocumentViewer({
           </div>
           <h3 className="text-lg font-semibold text-foreground mb-2">No Document Loaded</h3>
           <p className="text-sm text-muted-foreground">
-            Upload a PDF, TXT, or image file to start annotating and analyzing your research materials.
+            Upload a PDF, TXT, or image file to start annotating and analyzing your research
+            materials.
           </p>
         </div>
       </Card>
@@ -161,7 +165,12 @@ export function DocumentViewer({
           </Button>
           {sourceAvailable && sourceMeta?.sourceUrl && (
             <Button variant="ghost" size="icon" asChild data-testid="button-open-source-new-tab">
-              <a href={sourceMeta.sourceUrl} target="_blank" rel="noreferrer" title="Open original source">
+              <a
+                href={sourceMeta.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                title="Open original source"
+              >
                 <ExternalLink className="h-4 w-4" />
               </a>
             </Button>
@@ -200,7 +209,8 @@ export function DocumentViewer({
               <div className="max-w-sm space-y-3">
                 <h3 className="text-sm font-semibold">Original Source Is a ZIP Archive</h3>
                 <p className="text-sm text-muted-foreground">
-                  Combined image sources are stored as ZIP to reduce server storage. Download and open locally when needed.
+                  Combined image sources are stored as ZIP to reduce server storage. Download and
+                  open locally when needed.
                 </p>
                 <Button asChild>
                   <a href={sourceMeta.sourceUrl} download={sourceMeta.filename}>
@@ -224,7 +234,8 @@ export function DocumentViewer({
               </div>
               <h3 className="text-sm font-semibold mb-1">Original Source Unavailable</h3>
               <p className="text-sm text-muted-foreground">
-                This document does not have a saved source file yet. The transcript view is still available.
+                This document does not have a saved source file yet. The transcript view is still
+                available.
               </p>
             </div>
           </div>

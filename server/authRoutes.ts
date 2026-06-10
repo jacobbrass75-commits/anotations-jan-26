@@ -52,7 +52,7 @@ function isExtensionApiKeyRequest(body: unknown): boolean {
     body &&
     typeof body === "object" &&
     "purpose" in body &&
-    (body as { purpose?: unknown }).purpose === "chrome_extension"
+    (body as { purpose?: unknown }).purpose === "chrome_extension",
   );
 }
 
@@ -81,12 +81,10 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const tokenPercent = user.tokenLimit > 0
-        ? Math.round((user.tokensUsed / user.tokenLimit) * 100)
-        : 0;
-      const storagePercent = user.storageLimit > 0
-        ? Math.round((user.storageUsed / user.storageLimit) * 100)
-        : 0;
+      const tokenPercent =
+        user.tokenLimit > 0 ? Math.round((user.tokensUsed / user.tokenLimit) * 100) : 0;
+      const storagePercent =
+        user.storageLimit > 0 ? Math.round((user.storageUsed / user.storageLimit) * 100) : 0;
 
       return res.json({
         tokensUsed: user.tokensUsed,
@@ -97,7 +95,7 @@ export function registerAuthRoutes(app: Express): void {
         storagePercent,
         tier: user.tier,
         billingCycleStart: user.billingCycleStart
-          ? (user.billingCycleStart as any).toISOString?.() ?? user.billingCycleStart
+          ? ((user.billingCycleStart as any).toISOString?.() ?? user.billingCycleStart)
           : null,
       });
     } catch (error) {
@@ -106,63 +104,73 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/auth/api-keys", requireAuth, requireFirstPartyAccountAuth, async (req: Request, res: Response) => {
-    try {
-      const keys = await db
-        .select({
-          id: apiKeys.id,
-          label: apiKeys.label,
-          keyPrefix: apiKeys.keyPrefix,
-          scope: apiKeys.scope,
-          lastUsedAt: apiKeys.lastUsedAt,
-          createdAt: apiKeys.createdAt,
-        })
-        .from(apiKeys)
-        .where(and(eq(apiKeys.userId, req.user!.userId), isNull(apiKeys.revokedAt)))
-        .orderBy(desc(apiKeys.createdAt));
+  app.get(
+    "/api/auth/api-keys",
+    requireAuth,
+    requireFirstPartyAccountAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const keys = await db
+          .select({
+            id: apiKeys.id,
+            label: apiKeys.label,
+            keyPrefix: apiKeys.keyPrefix,
+            scope: apiKeys.scope,
+            lastUsedAt: apiKeys.lastUsedAt,
+            createdAt: apiKeys.createdAt,
+          })
+          .from(apiKeys)
+          .where(and(eq(apiKeys.userId, req.user!.userId), isNull(apiKeys.revokedAt)))
+          .orderBy(desc(apiKeys.createdAt));
 
-      return res.json({ apiKeys: keys });
-    } catch (error) {
-      console.error("API key list error:", error);
-      return res.status(500).json({ message: "Failed to fetch API keys" });
-    }
-  });
+        return res.json({ apiKeys: keys });
+      } catch (error) {
+        console.error("API key list error:", error);
+        return res.status(500).json({ message: "Failed to fetch API keys" });
+      }
+    },
+  );
 
-  app.post("/api/auth/api-keys", requireAuth, requireFirstPartyAccountAuth, async (req: Request, res: Response) => {
-    try {
-      const rawKey = generateApiKey();
-      const now = Math.floor(Date.now() / 1000);
-      const label = normalizeApiKeyLabel(req.body?.label) ?? "API Key";
-      const scope = isExtensionApiKeyRequest(req.body) ? EXTENSION_API_KEY_SCOPE : null;
+  app.post(
+    "/api/auth/api-keys",
+    requireAuth,
+    requireFirstPartyAccountAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const rawKey = generateApiKey();
+        const now = Math.floor(Date.now() / 1000);
+        const label = normalizeApiKeyLabel(req.body?.label) ?? "API Key";
+        const scope = isExtensionApiKeyRequest(req.body) ? EXTENSION_API_KEY_SCOPE : null;
 
-      const [createdKey] = await db
-        .insert(apiKeys)
-        .values({
-          id: randomUUID(),
-          userId: req.user!.userId,
-          label,
-          keyHash: hashApiKey(rawKey),
-          keyPrefix: rawKey.slice(0, 12),
-          scope,
-          createdAt: now,
-        })
-        .returning({
-          id: apiKeys.id,
-          label: apiKeys.label,
-          keyPrefix: apiKeys.keyPrefix,
-          scope: apiKeys.scope,
-          createdAt: apiKeys.createdAt,
+        const [createdKey] = await db
+          .insert(apiKeys)
+          .values({
+            id: randomUUID(),
+            userId: req.user!.userId,
+            label,
+            keyHash: hashApiKey(rawKey),
+            keyPrefix: rawKey.slice(0, 12),
+            scope,
+            createdAt: now,
+          })
+          .returning({
+            id: apiKeys.id,
+            label: apiKeys.label,
+            keyPrefix: apiKeys.keyPrefix,
+            scope: apiKeys.scope,
+            createdAt: apiKeys.createdAt,
+          });
+
+        return res.status(201).json({
+          ...createdKey,
+          key: rawKey,
         });
-
-      return res.status(201).json({
-        ...createdKey,
-        key: rawKey,
-      });
-    } catch (error) {
-      console.error("API key create error:", error);
-      return res.status(500).json({ message: "Failed to create API key" });
-    }
-  });
+      } catch (error) {
+        console.error("API key create error:", error);
+        return res.status(500).json({ message: "Failed to create API key" });
+      }
+    },
+  );
 
   app.delete("/api/auth/api-keys/:id", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -178,7 +186,13 @@ export function registerAuthRoutes(app: Express): void {
           id: apiKeys.id,
         })
         .from(apiKeys)
-        .where(and(eq(apiKeys.id, req.params.id), eq(apiKeys.userId, req.user!.userId), isNull(apiKeys.revokedAt)))
+        .where(
+          and(
+            eq(apiKeys.id, req.params.id),
+            eq(apiKeys.userId, req.user!.userId),
+            isNull(apiKeys.revokedAt),
+          ),
+        )
         .limit(1);
 
       if (!existingKey) {

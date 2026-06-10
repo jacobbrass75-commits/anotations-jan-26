@@ -1,4 +1,13 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AnalyticsOverview } from "@/hooks/useAnalytics";
 
@@ -30,7 +39,10 @@ export function TokenUsageChart({ data }: TokenUsageChartProps) {
             <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="turn" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-              <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+              <YAxis
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+              />
               <Tooltip
                 contentStyle={{
                   background: "hsl(var(--card))",
@@ -41,9 +53,30 @@ export function TokenUsageChart({ data }: TokenUsageChartProps) {
                 formatter={(value: number) => value.toLocaleString()}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="avg" stroke="hsl(var(--chart-2))" strokeWidth={2} name="Avg Tokens" dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="min" stroke="hsl(var(--chart-3))" strokeDasharray="5 5" name="Min" dot={false} />
-              <Line type="monotone" dataKey="max" stroke="hsl(var(--destructive))" strokeDasharray="5 5" name="Max" dot={false} />
+              <Line
+                type="monotone"
+                dataKey="avg"
+                stroke="hsl(var(--chart-2))"
+                strokeWidth={2}
+                name="Avg Tokens"
+                dot={{ r: 3 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="min"
+                stroke="hsl(var(--chart-3))"
+                strokeDasharray="5 5"
+                name="Min"
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="max"
+                stroke="hsl(var(--destructive))"
+                strokeDasharray="5 5"
+                name="Max"
+                dot={false}
+              />
             </LineChart>
           </ResponsiveContainer>
         )}

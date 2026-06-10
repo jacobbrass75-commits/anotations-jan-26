@@ -10,7 +10,9 @@ interface ProviderUsage {
   output_tokens?: number | null;
 }
 
-export function getProviderUsageTokenTotal(response: { usage?: ProviderUsage | null } | null | undefined): number {
+export function getProviderUsageTokenTotal(
+  response: { usage?: ProviderUsage | null } | null | undefined,
+): number {
   const usage = response?.usage;
   if (!usage) return 0;
 
@@ -52,7 +54,11 @@ export function createTokenUsageAccumulator() {
   };
 }
 
-export async function recordUserTokenUsage(userId: string, tokens: number, source: string): Promise<void> {
+export async function recordUserTokenUsage(
+  userId: string,
+  tokens: number,
+  source: string,
+): Promise<void> {
   if (!Number.isFinite(tokens) || tokens <= 0) return;
 
   try {

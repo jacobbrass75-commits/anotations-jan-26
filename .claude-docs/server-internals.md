@@ -32,29 +32,32 @@ All server code lives in `/server/`.
 Class `DatabaseStorage` implementing `IStorage` interface.
 
 ### Document Operations
-| Method | Description |
-|--------|-------------|
-| `getDocument(id)` | Fetch by ID |
-| `getAllDocuments()` | List all documents |
-| `createDocument(doc)` | Insert new with filename + fullText |
+
+| Method                        | Description                                                        |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `getDocument(id)`             | Fetch by ID                                                        |
+| `getAllDocuments()`           | List all documents                                                 |
+| `createDocument(doc)`         | Insert new with filename + fullText                                |
 | `updateDocument(id, updates)` | Update summary, mainArguments, keyConcepts, chunkCount, userIntent |
-| `deleteDocument(id)` | Delete by ID |
+| `deleteDocument(id)`          | Delete by ID                                                       |
 
 ### Chunk Operations
-| Method | Description |
-|--------|-------------|
-| `getChunksForDocument(documentId)` | All chunks for a document |
-| `createChunk(chunk)` | Create with text, startPosition, endPosition |
-| `updateChunkEmbedding(chunkId, embedding)` | Store vector embedding |
+
+| Method                                     | Description                                  |
+| ------------------------------------------ | -------------------------------------------- |
+| `getChunksForDocument(documentId)`         | All chunks for a document                    |
+| `createChunk(chunk)`                       | Create with text, startPosition, endPosition |
+| `updateChunkEmbedding(chunkId, embedding)` | Store vector embedding                       |
 
 ### Annotation Operations
-| Method | Description |
-|--------|-------------|
-| `getAnnotationsForDocument(documentId)` | All annotations for document |
-| `getAnnotation(id)` | Single annotation |
-| `createAnnotation(annotation)` | Create full annotation |
-| `updateAnnotation(id, note, category)` | Update note + category |
-| `deleteAnnotation(id)` | Delete single |
+
+| Method                                     | Description                  |
+| ------------------------------------------ | ---------------------------- |
+| `getAnnotationsForDocument(documentId)`    | All annotations for document |
+| `getAnnotation(id)`                        | Single annotation            |
+| `createAnnotation(annotation)`             | Create full annotation       |
+| `updateAnnotation(id, note, category)`     | Update note + category       |
+| `deleteAnnotation(id)`                     | Delete single                |
 | `deleteAnnotationsForDocument(documentId)` | Bulk delete all for document |
 
 **Exported as**: `storage` singleton
@@ -66,18 +69,23 @@ Class `DatabaseStorage` implementing `IStorage` interface.
 Class `ProjectDatabaseStorage` implementing `IProjectStorage`.
 
 ### Project CRUD
+
 - `createProject`, `getProject`, `getAllProjects` (newest first), `updateProject`, `deleteProject`
 
 ### Folder CRUD
+
 - `createFolder`, `getFolder`, `getFoldersByProject` (sorted by sortOrder + name), `updateFolder`, `deleteFolder`, `moveFolder`
 
 ### Project Document CRUD
+
 - `addDocumentToProject`, `getProjectDocument`, `getProjectDocumentsByProject` (with joined document data), `getProjectDocumentsByFolder`, `updateProjectDocument`, `removeDocumentFromProject`
 
 ### Project Annotation CRUD
+
 - `createProjectAnnotation`, `getProjectAnnotation`, `getProjectAnnotationsByDocument` (sorted by position), `updateProjectAnnotation`, `deleteProjectAnnotation`
 
 ### Prompt Template CRUD
+
 - `createPromptTemplate`, `getPromptTemplate`, `getPromptTemplatesByProject`, `updatePromptTemplate`, `deletePromptTemplate`
 
 **Exported as**: `projectStorage` singleton
@@ -87,27 +95,30 @@ Class `ProjectDatabaseStorage` implementing `IProjectStorage`.
 ## openai.ts - OpenAI Integration
 
 ### Configuration
+
 - **Models**: `gpt-4o-mini` (analysis), `text-embedding-3-small` (embeddings)
 - Client initialized with `OPENAI_API_KEY` env var (crashes if missing)
 
 ### Core Functions
 
-| Function | Purpose |
-|----------|---------|
-| `getEmbedding(text)` | Generate vector embedding |
-| `cosineSimilarity(a, b)` | Compute similarity between vectors |
-| `analyzeChunkForIntent(chunk, chunkStart, intent)` | V1 single-chunk analysis |
-| `generateDocumentSummary(fullText)` | Generate summary + arguments + concepts |
-| `searchDocument(query, intent, chunks)` | LLM-based quote extraction |
-| `findHighlightPosition(fullText, text, chunkStart)` | Locate text in document |
-| `extractCitationMetadata(text, highlight?)` | AI-extract bibliographic data |
+| Function                                            | Purpose                                 |
+| --------------------------------------------------- | --------------------------------------- |
+| `getEmbedding(text)`                                | Generate vector embedding               |
+| `cosineSimilarity(a, b)`                            | Compute similarity between vectors      |
+| `analyzeChunkForIntent(chunk, chunkStart, intent)`  | V1 single-chunk analysis                |
+| `generateDocumentSummary(fullText)`                 | Generate summary + arguments + concepts |
+| `searchDocument(query, intent, chunks)`             | LLM-based quote extraction              |
+| `findHighlightPosition(fullText, text, chunkStart)` | Locate text in document                 |
+| `extractCitationMetadata(text, highlight?)`         | AI-extract bibliographic data           |
 
 ### V1 Pipeline Functions (legacy, superseded by V2)
+
 - `generateCandidates()`, `softVerifyCandidates()`, `verifyCandidates()`
 - `refineAnnotations()`, `analyzeChunkWithPipeline()`, `processChunksWithPipeline()`
 - `getDocumentContext()`, `clearDocumentContextCache()`
 
 ### Pipeline Configuration
+
 ```
 CANDIDATES_PER_CHUNK: 3    VERIFIER_THRESHOLD: 0.7    LLM_CONCURRENCY: 5
 MIN_HIGHLIGHT_LENGTH: 10   MAX_HIGHLIGHT_LENGTH: 500  OVERLAP_THRESHOLD: 0.5
@@ -115,6 +126,7 @@ Thoroughness chunks: quick=10, standard=30, thorough=100, exhaustive=999
 ```
 
 ### Helper Functions
+
 - `calculateOverlap(start1, end1, start2, end2)` - Overlap ratio between spans
 - `isDuplicateAnnotation(start, end, confidence, existing)` - Check duplicate at 50% overlap
 - `hardVerifyCandidate(candidate, chunk)` - Grounding check + offset correction
@@ -127,6 +139,7 @@ Thoroughness chunks: quick=10, standard=30, thorough=100, exhaustive=999
 The main annotation system used for all analysis. Improvements over V1: better noise filtering, enhanced prompts, stricter verification.
 
 ### Configuration
+
 ```
 MODEL: "gpt-4o-mini"
 CHUNK_SIZE: 1000         CHUNK_OVERLAP: 100
@@ -138,12 +151,14 @@ MIN_HIGHLIGHT_LENGTH: 15  MAX_HIGHLIGHT_LENGTH: 600
 ### Pre-Processing
 
 **`filterTextNoise(text)`**
+
 - Removes references/bibliography sections
 - Strips DOIs, copyright notices, page numbers, journal headers
 - Removes footnote clusters
 - Returns `{cleanText, removedSections[]}`
 
 **`chunkTextV2(text)`**
+
 - Filters noise first, then chunks at 1000 chars with 100 overlap
 - Seeks natural boundaries (paragraphs > sentences > clauses)
 - Tracks original positions in full text
@@ -160,17 +175,20 @@ MIN_HIGHLIGHT_LENGTH: 15  MAX_HIGHLIGHT_LENGTH: 600
 ### Phase 2: Verifier
 
 **Hard Verification (`hardVerifyCandidateV2`)**:
+
 - Text must exist verbatim in chunk (grounding check)
 - Length: 15-600 chars
 - Pattern rejection: references, DOIs, figure captions, metadata
 - Auto-corrects offsets if text found at different position
 
 **Soft Verification (`softVerifyCandidatesV2`)**:
+
 - LLM evaluates relevance, content quality, category accuracy, note quality
 - Returns verdicts with approval + qualityScore
 - Only passes candidates with qualityScore >= 0.7
 
 **Combined (`verifyCandidatesV2`)**:
+
 - Hard verify first, then soft verify survivors
 - Deduplicates against existing annotations (50% overlap threshold)
 
@@ -184,18 +202,21 @@ MIN_HIGHLIGHT_LENGTH: 15  MAX_HIGHLIGHT_LENGTH: 600
 ### Pipeline Execution
 
 **`analyzeChunkWithPipelineV2(chunk, chunkStart, intent, docId, fullText, existing)`**
+
 1. Get/cache document context
 2. Generate candidates -> Verify -> Refine
 3. Convert to absolute positions
 4. Returns `PipelineAnnotation[]`
 
 **`processChunksWithPipelineV2(chunks, intent, docId, fullText, existing)`**
+
 - Batches by LLM_CONCURRENCY (5)
 - Parallel within batch, sequential across batches
 - Running deduplication list
 - Returns all unique annotations
 
 **`processChunksWithMultiplePrompts(chunks, prompts, docId, fullText, existing)`**
+
 - Each prompt runs independently through full pipeline
 - All prompts processed in parallel
 - Returns `Map<promptIndex, PipelineAnnotation[]>`
@@ -205,6 +226,7 @@ MIN_HIGHLIGHT_LENGTH: 15  MAX_HIGHLIGHT_LENGTH: 600
 ## chunker.ts - Text Segmentation (V1)
 
 Simple chunking utility (used by V1 pipeline):
+
 - `chunkText(text, chunkSize=500, overlap=50)` - Fixed-size with overlap, sentence boundary seeking
 - `findSentenceEnd(text, targetLength)` - Find sentence ending near target
 - `extractTextFromTxt(content)` - Normalize whitespace
@@ -215,13 +237,13 @@ Simple chunking utility (used by V1 pipeline):
 
 Uses OpenAI to generate search-optimized context strings.
 
-| Function | Purpose | Output |
-|----------|---------|--------|
-| `generateRetrievalContext(summary, args, concepts, thesis, role)` | Document retrieval context | 200-300 word string |
-| `generateProjectContextSummary(thesis, scope, docContexts[])` | Project context | 150-200 word string |
-| `generateFolderContextSummary(desc, docContexts[], parentContext?)` | Folder context | 100-150 word string |
-| `generateSearchableContent(highlight, note, category, docContext?)` | Annotation search text | Formatted string |
-| `embedText(text)` | Wrapper for getEmbedding() | number[] |
+| Function                                                            | Purpose                    | Output              |
+| ------------------------------------------------------------------- | -------------------------- | ------------------- |
+| `generateRetrievalContext(summary, args, concepts, thesis, role)`   | Document retrieval context | 200-300 word string |
+| `generateProjectContextSummary(thesis, scope, docContexts[])`       | Project context            | 150-200 word string |
+| `generateFolderContextSummary(desc, docContexts[], parentContext?)` | Folder context             | 100-150 word string |
+| `generateSearchableContent(highlight, note, category, docContext?)` | Annotation search text     | Formatted string    |
+| `embedText(text)`                                                   | Wrapper for getEmbedding() | number[]            |
 
 Note: Uses `AI_INTEGRATIONS_OPENAI_API_KEY` / `AI_INTEGRATIONS_OPENAI_BASE_URL` if available (Replit integration), falls back to main OpenAI client.
 
@@ -231,12 +253,12 @@ Note: Uses `AI_INTEGRATIONS_OPENAI_API_KEY` / `AI_INTEGRATIONS_OPENAI_BASE_URL` 
 
 Formats citations according to Chicago Manual of Style.
 
-| Function | Purpose |
-|----------|---------|
-| `generateChicagoFootnote(citation, page?, isSubsequent?)` | Full or short footnote |
-| `generateFootnoteWithQuote(citation, quote, page?)` | Footnote with embedded quote |
-| `generateInlineCitation(citation, page?)` | Parenthetical `(Author, "Title", page)` |
-| `generateChicagoBibliography(citation)` | Bibliography entry |
+| Function                                                  | Purpose                                 |
+| --------------------------------------------------------- | --------------------------------------- |
+| `generateChicagoFootnote(citation, page?, isSubsequent?)` | Full or short footnote                  |
+| `generateFootnoteWithQuote(citation, quote, page?)`       | Footnote with embedded quote            |
+| `generateInlineCitation(citation, page?)`                 | Parenthetical `(Author, "Title", page)` |
+| `generateChicagoBibliography(citation)`                   | Bibliography entry                      |
 
 Handles source types: book, journal, chapter, website, newspaper, thesis, other.
 
@@ -245,7 +267,9 @@ Handles source types: book, journal, chapter, website, newspaper, thesis, other.
 ## projectSearch.ts - Search Implementation
 
 ### `globalSearch(projectId, query, filters?, limit=20)`
+
 Text-based search across entire project:
+
 1. Searches project context (thesis, contextSummary)
 2. Searches folders (name, description, contextSummary)
 3. Searches documents (filename, summary, retrievalContext)
@@ -255,7 +279,9 @@ Text-based search across entire project:
 7. Returns ranked results with relevance levels
 
 ### `searchProjectDocument(projectDocId, query)`
+
 Semantic search within single document:
+
 1. Generates query embedding
 2. Ranks chunks by cosine similarity
 3. Uses LLM to extract relevant quotes from top 5 chunks
@@ -280,14 +306,17 @@ Semantic search within single document:
 ## replit_integrations/
 
 ### batch/utils.ts
+
 - `batchProcess(items, processor, options)` - Generic batch with rate limiting + retries (p-limit, p-retry)
 - `batchProcessWithSSE(items, processor, sendEvent, options)` - Sequential batch with Server-Sent Events
 - `isRateLimitError(error)` - Detect rate limit / quota errors
 - Default: concurrency=2, retries=7, backoff 2s-128s
 
 ### image/client.ts
+
 - `generateImageBuffer(prompt, size?)` - Generate image via `gpt-image-1`
 - `editImages(imageFiles[], prompt, outputPath?)` - Combine/edit images
 
 ### image/routes.ts
+
 - `POST /api/generate-image` - Generate and return image

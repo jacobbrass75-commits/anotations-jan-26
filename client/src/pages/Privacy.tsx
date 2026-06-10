@@ -46,9 +46,7 @@ const sections = [
   },
   {
     title: "Contact",
-    body: [
-      "For privacy, support, or account deletion requests, contact support@scholarmark.ai.",
-    ],
+    body: ["For privacy, support, or account deletion requests, contact support@scholarmark.ai."],
   },
 ];
 
@@ -76,8 +74,8 @@ export default function Privacy() {
             ScholarMark Privacy Policy
           </h1>
           <p className="text-sm text-muted-foreground">
-            Last updated May 16, 2026. This policy explains how ScholarMark handles data for
-            the web app and Chrome extension.
+            Last updated May 16, 2026. This policy explains how ScholarMark handles data for the web
+            app and Chrome extension.
           </p>
         </div>
 

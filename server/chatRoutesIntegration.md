@@ -7,7 +7,12 @@ This patch document targets the current `dev` version of `server/chatRoutes.ts`.
 At the top of [`server/chatRoutes.ts`](/Users/Jacob/Documents/Playground/anotations-jan-26/server/chatRoutes.ts), add these new module imports alongside the existing route imports:
 
 ```ts
-import { gatherEvidence, formatEvidenceBrief, type SourceStub, type EvidenceBrief } from "./gatherer";
+import {
+  gatherEvidence,
+  formatEvidenceBrief,
+  type SourceStub,
+  type EvidenceBrief,
+} from "./gatherer";
 import {
   type EvidenceClipboard,
   createEmptyClipboard,
@@ -17,7 +22,12 @@ import {
   extractUsedEvidence,
 } from "./evidenceClipboard";
 import { compactConversation, buildCompactedHistory } from "./contextCompaction";
-import { formatSourceStubByRole, buildStyleSection, analyzeWritingStyle, type SourceRole } from "./sourceRoles";
+import {
+  formatSourceStubByRole,
+  buildStyleSection,
+  analyzeWritingStyle,
+  type SourceRole,
+} from "./sourceRoles";
 ```
 
 Also extend the existing `chatStorage` import so the chat handler can load and save the new conversation state:
@@ -69,11 +79,14 @@ Inside `buildWritingSystemPrompt()` around `server/chatRoutes.ts:534`:
 ```ts
 const styleSection = buildStyleSection(
   sources
-    .filter((source): source is TieredSource => isTieredSource(source) && source.sourceRole === "style_reference")
+    .filter(
+      (source): source is TieredSource =>
+        isTieredSource(source) && source.sourceRole === "style_reference",
+    )
     .map((source) => ({
       title: source.title,
       styleAnalysis: source.styleAnalysis ? JSON.parse(source.styleAnalysis) : null,
-    }))
+    })),
 );
 ```
 
@@ -100,7 +113,9 @@ add:
 
 ```ts
 const rawClipboard = await getConversationClipboard(conv.id);
-const clipboard = rawClipboard ? deserializeClipboard(rawClipboard) : createEmptyClipboard(project?.thesis || "");
+const clipboard = rawClipboard
+  ? deserializeClipboard(rawClipboard)
+  : createEmptyClipboard(project?.thesis || "");
 const { compactionSummary, compactedAtTurn } = await getConversationCompaction(conv.id);
 ```
 
@@ -180,7 +195,10 @@ For precision mode:
 const writerMessages = [
   ...compactedHistory,
   { role: "user", content: `[EVIDENCE GATHERED THIS TURN]\n${evidenceBriefText}` },
-  { role: "assistant", content: "I have the evidence gathered for this turn and will use it selectively." },
+  {
+    role: "assistant",
+    content: "I have the evidence gathered for this turn and will use it selectively.",
+  },
   anthropicMessages[anthropicMessages.length - 1],
 ];
 ```
@@ -197,9 +215,9 @@ The gatherer expects the same underlying source tools you already use, but route
 const toolExecutor = async (name: string, input: unknown): Promise<string> => {
   switch (name) {
     case "get_source_summary":
-      // call existing source-summary loader
+    // call existing source-summary loader
     case "get_source_chunks":
-      // call existing chunk/context loader
+    // call existing chunk/context loader
     default:
       return `[TOOL ERROR] Unknown tool: ${name}`;
   }

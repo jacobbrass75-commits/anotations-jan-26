@@ -89,7 +89,11 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                   />
                 )}
               </div>
-              <Button type="submit" disabled={!documentId || !query.trim() || isSearching} data-testid="button-search">
+              <Button
+                type="submit"
+                disabled={!documentId || !query.trim() || isSearching}
+                data-testid="button-search"
+              >
                 <Sparkles className="h-4 w-4 mr-2 text-primary" />
                 Search
               </Button>
@@ -164,9 +168,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
             {results.length === 0 && query && !isSearching && (
               <div className="text-center py-6">
                 <Search className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-                <p className="text-sm text-muted-foreground">
-                  No results found for your query
-                </p>
+                <p className="text-sm text-muted-foreground">No results found for your query</p>
               </div>
             )}
           </CardContent>

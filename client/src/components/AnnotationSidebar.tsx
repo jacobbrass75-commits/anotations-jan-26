@@ -25,7 +25,10 @@ import { Label } from "@/components/ui/label";
 import type { Annotation, AnnotationCategory } from "@shared/schema";
 
 // Extended annotation type with prompt fields
-interface AnnotationWithPrompt extends Omit<Annotation, 'promptText' | 'promptIndex' | 'promptColor'> {
+interface AnnotationWithPrompt extends Omit<
+  Annotation,
+  "promptText" | "promptIndex" | "promptColor"
+> {
   promptText?: string | null;
   promptIndex?: number | null;
   promptColor?: string | null;
@@ -179,7 +182,10 @@ export function AnnotationSidebar({
 
           <div className="flex items-center gap-2">
             <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
-              <SelectTrigger className="flex-1 eva-focus-glow" data-testid="select-annotation-filter">
+              <SelectTrigger
+                className="flex-1 eva-focus-glow"
+                data-testid="select-annotation-filter"
+              >
                 <Filter className="h-3.5 w-3.5 mr-2" />
                 <SelectValue />
               </SelectTrigger>
@@ -246,9 +252,7 @@ export function AnnotationSidebar({
                     <MessageSquare className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {annotations.length === 0
-                      ? "No annotations yet"
-                      : "No matching annotations"}
+                    {annotations.length === 0 ? "No annotations yet" : "No matching annotations"}
                   </p>
                 </div>
               ) : (
@@ -270,8 +274,14 @@ export function AnnotationSidebar({
                       {/* Show prompt color if available, otherwise category color */}
                       <div
                         className="w-2.5 h-2.5 rounded-full mt-1 shrink-0"
-                        style={annotation.promptColor ? { backgroundColor: annotation.promptColor } : undefined}
-                        {...(!annotation.promptColor && { className: `w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${categoryColors[annotation.category]}` })}
+                        style={
+                          annotation.promptColor
+                            ? { backgroundColor: annotation.promptColor }
+                            : undefined
+                        }
+                        {...(!annotation.promptColor && {
+                          className: `w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${categoryColors[annotation.category]}`,
+                        })}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -305,7 +315,9 @@ export function AnnotationSidebar({
 
                     <p className="text-sm text-foreground line-clamp-2">{annotation.note}</p>
 
-                    <div className={`flex items-center justify-end gap-1 mt-2 transition-opacity ${selectedAnnotationId === annotation.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                    <div
+                      className={`flex items-center justify-end gap-1 mt-2 transition-opacity ${selectedAnnotationId === annotation.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                    >
                       {onCopyQuote && (
                         <Button
                           variant="ghost"
@@ -379,7 +391,10 @@ export function AnnotationSidebar({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Category</Label>
-              <Select value={editCategory} onValueChange={(v) => setEditCategory(v as AnnotationCategory)}>
+              <Select
+                value={editCategory}
+                onValueChange={(v) => setEditCategory(v as AnnotationCategory)}
+              >
                 <SelectTrigger data-testid="select-edit-category">
                   <SelectValue />
                 </SelectTrigger>
@@ -427,7 +442,11 @@ export function AnnotationSidebar({
             <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm} data-testid="button-confirm-delete">
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              data-testid="button-confirm-delete"
+            >
               Delete
             </Button>
           </DialogFooter>

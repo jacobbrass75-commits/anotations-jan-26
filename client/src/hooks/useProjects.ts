@@ -1,7 +1,19 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
-import type { Project, Folder, ProjectDocument, ProjectAnnotation, InsertProject, InsertFolder, InsertProjectDocument, InsertProjectAnnotation, CitationData, SearchResult, PromptTemplate } from "@shared/schema";
+import type {
+  Project,
+  Folder,
+  ProjectDocument,
+  ProjectAnnotation,
+  InsertProject,
+  InsertFolder,
+  InsertProjectDocument,
+  InsertProjectAnnotation,
+  CitationData,
+  SearchResult,
+  PromptTemplate,
+} from "@shared/schema";
 
 export function useProjects() {
   return useQuery<Project[]>({
@@ -69,7 +81,13 @@ export function useFolders(projectId: string) {
 
 export function useCreateFolder() {
   return useMutation({
-    mutationFn: async ({ projectId, data }: { projectId: string; data: Omit<InsertFolder, "projectId"> }) => {
+    mutationFn: async ({
+      projectId,
+      data,
+    }: {
+      projectId: string;
+      data: Omit<InsertFolder, "projectId">;
+    }) => {
       const res = await apiRequest("POST", `/api/projects/${projectId}/folders`, data);
       return res.json();
     },
@@ -92,7 +110,18 @@ export function useDeleteFolder() {
 }
 
 export function useProjectDocuments(projectId: string) {
-  return useQuery<(ProjectDocument & { document: { id: string; filename: string; summary: string | null; chunkCount: number; status: string; processingError: string | null } })[]>({
+  return useQuery<
+    (ProjectDocument & {
+      document: {
+        id: string;
+        filename: string;
+        summary: string | null;
+        chunkCount: number;
+        status: string;
+        processingError: string | null;
+      };
+    })[]
+  >({
     queryKey: ["/api/projects", projectId, "documents"],
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/documents`, {
@@ -108,7 +137,13 @@ export function useProjectDocuments(projectId: string) {
 
 export function useAddDocumentToProject() {
   return useMutation({
-    mutationFn: async ({ projectId, data }: { projectId: string; data: Omit<InsertProjectDocument, "projectId"> }) => {
+    mutationFn: async ({
+      projectId,
+      data,
+    }: {
+      projectId: string;
+      data: Omit<InsertProjectDocument, "projectId">;
+    }) => {
       const res = await apiRequest("POST", `/api/projects/${projectId}/documents`, data);
       return res.json();
     },
@@ -132,7 +167,20 @@ export function useRemoveDocumentFromProject() {
 
 export function useUpdateProjectDocument() {
   return useMutation({
-    mutationFn: async ({ id, projectId, data }: { id: string; projectId: string; data: Partial<{ projectContext: string; roleInProject: string; citationData: CitationData; folderId: string | null }> }) => {
+    mutationFn: async ({
+      id,
+      projectId,
+      data,
+    }: {
+      id: string;
+      projectId: string;
+      data: Partial<{
+        projectContext: string;
+        roleInProject: string;
+        citationData: CitationData;
+        folderId: string | null;
+      }>;
+    }) => {
       const res = await apiRequest("PUT", `/api/project-documents/${id}`, data);
       return { result: await res.json(), projectId };
     },
@@ -161,12 +209,24 @@ export function useProjectAnnotations(projectDocumentId: string) {
 
 export function useCreateProjectAnnotation() {
   return useMutation({
-    mutationFn: async ({ projectDocumentId, data }: { projectDocumentId: string; data: Omit<InsertProjectAnnotation, "projectDocumentId"> }) => {
-      const res = await apiRequest("POST", `/api/project-documents/${projectDocumentId}/annotations`, data);
+    mutationFn: async ({
+      projectDocumentId,
+      data,
+    }: {
+      projectDocumentId: string;
+      data: Omit<InsertProjectAnnotation, "projectDocumentId">;
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/project-documents/${projectDocumentId}/annotations`,
+        data,
+      );
       return res.json();
     },
     onSuccess: (_, { projectDocumentId }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/project-documents", projectDocumentId, "annotations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/project-documents", projectDocumentId, "annotations"],
+      });
     },
   });
 }
@@ -178,7 +238,9 @@ export function useDeleteProjectAnnotation() {
       return projectDocumentId;
     },
     onSuccess: (projectDocumentId) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/project-documents", projectDocumentId, "annotations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/project-documents", projectDocumentId, "annotations"],
+      });
     },
   });
 }
@@ -188,21 +250,23 @@ export function useAnalyzeProjectDocument() {
     mutationFn: async ({
       projectDocumentId,
       intent,
-      thoroughness = 'standard'
+      thoroughness = "standard",
     }: {
       projectDocumentId: string;
       intent: string;
-      thoroughness?: 'quick' | 'standard' | 'thorough' | 'exhaustive';
+      thoroughness?: "quick" | "standard" | "thorough" | "exhaustive";
     }) => {
       const res = await apiRequest("POST", `/api/project-documents/${projectDocumentId}/analyze`, {
         intent,
-        thoroughness
+        thoroughness,
       });
       const data = await res.json();
       return { ...data, projectDocumentId };
     },
     onSuccess: ({ projectDocumentId }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/project-documents", projectDocumentId, "annotations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/project-documents", projectDocumentId, "annotations"],
+      });
     },
   });
 }
@@ -210,12 +274,18 @@ export function useAnalyzeProjectDocument() {
 export function useAutoAnalyzeProjectDocument() {
   return useMutation({
     mutationFn: async ({ projectDocumentId }: { projectDocumentId: string }) => {
-      const res = await apiRequest("POST", `/api/project-documents/${projectDocumentId}/auto-analyze`, {});
+      const res = await apiRequest(
+        "POST",
+        `/api/project-documents/${projectDocumentId}/auto-analyze`,
+        {},
+      );
       const data = await res.json();
       return { ...data, projectDocumentId };
     },
     onSuccess: ({ projectDocumentId }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/project-documents", projectDocumentId, "annotations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/project-documents", projectDocumentId, "annotations"],
+      });
     },
   });
 }
@@ -229,7 +299,9 @@ export function useSearchProjectDocument() {
       projectDocumentId: string;
       query: string;
     }): Promise<SearchResult[]> => {
-      const res = await apiRequest("POST", `/api/project-documents/${projectDocumentId}/search`, { query });
+      const res = await apiRequest("POST", `/api/project-documents/${projectDocumentId}/search`, {
+        query,
+      });
       return res.json();
     },
   });
@@ -241,13 +313,13 @@ export function useBatchAnalyze() {
       projectId,
       projectDocumentIds,
       intent,
-      thoroughness = 'standard',
+      thoroughness = "standard",
       constraints,
     }: {
       projectId: string;
       projectDocumentIds: string[];
       intent: string;
-      thoroughness?: 'quick' | 'standard' | 'thorough' | 'exhaustive';
+      thoroughness?: "quick" | "standard" | "thorough" | "exhaustive";
       constraints?: {
         categories?: string[];
         maxAnnotationsPerDoc?: number;
@@ -263,9 +335,9 @@ export function useBatchAnalyze() {
       return res.json();
     },
     onSuccess: (data, { projectDocumentIds }) => {
-      projectDocumentIds.forEach(id => {
+      projectDocumentIds.forEach((id) => {
         queryClient.invalidateQueries({
-          queryKey: ["/api/project-documents", id, "annotations"]
+          queryKey: ["/api/project-documents", id, "annotations"],
         });
       });
     },
@@ -310,7 +382,7 @@ export function useAnalyzeMultiPrompt() {
       const res = await apiRequest(
         "POST",
         `/api/project-documents/${projectDocumentId}/analyze-multi`,
-        { prompts, thoroughness }
+        { prompts, thoroughness },
       );
       const data = await res.json();
       return { ...data, projectDocumentId };
@@ -350,11 +422,10 @@ export function useCreatePromptTemplate() {
       name: string;
       prompts: Array<{ text: string; color: string }>;
     }) => {
-      const res = await apiRequest(
-        "POST",
-        `/api/projects/${projectId}/prompt-templates`,
-        { name, prompts }
-      );
+      const res = await apiRequest("POST", `/api/projects/${projectId}/prompt-templates`, {
+        name,
+        prompts,
+      });
       return res.json();
     },
     onSuccess: (_, { projectId }) => {

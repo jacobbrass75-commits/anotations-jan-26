@@ -60,14 +60,20 @@ function safeJsonParse<T>(value: string): T | null {
 
 function extractTextBlock(response: AnthropicResponse): string {
   return response.content
-    .filter((block): block is AnthropicContentBlock & { text: string } => block.type === "text" && typeof block.text === "string")
+    .filter(
+      (block): block is AnthropicContentBlock & { text: string } =>
+        block.type === "text" && typeof block.text === "string",
+    )
     .map((block) => block.text)
     .join("\n")
     .trim();
 }
 
 function normalizeFindingType(value: unknown): EvidenceFinding["type"] | null {
-  return value === "quote" || value === "paraphrase" || value === "data_point" || value === "concept"
+  return value === "quote" ||
+    value === "paraphrase" ||
+    value === "data_point" ||
+    value === "concept"
     ? value
     : null;
 }
@@ -88,8 +94,10 @@ function normalizeEvidenceBrief(value: Partial<EvidenceBrief> | null): EvidenceB
                 .map((finding) => {
                   const type = normalizeFindingType(finding?.type);
                   const text = typeof finding?.text === "string" ? finding.text.trim() : "";
-                  const relevance = typeof finding?.relevance === "string" ? finding.relevance.trim() : "";
-                  const location = typeof finding?.location === "string" ? finding.location.trim() : "";
+                  const relevance =
+                    typeof finding?.relevance === "string" ? finding.relevance.trim() : "";
+                  const location =
+                    typeof finding?.location === "string" ? finding.location.trim() : "";
 
                   if (!type || !text || !relevance) {
                     return null;

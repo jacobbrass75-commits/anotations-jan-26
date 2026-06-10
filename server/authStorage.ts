@@ -100,7 +100,11 @@ export function isValidUserTier(tier: string): boolean {
   return tier in TIER_LIMITS;
 }
 
-async function syncUserFromClerk(user: User, tier: string | null, emailVerified: boolean): Promise<User> {
+async function syncUserFromClerk(
+  user: User,
+  tier: string | null,
+  emailVerified: boolean,
+): Promise<User> {
   const updates: Partial<User> = {};
   const resolvedTier = tier ?? user.tier;
   const tierLimits = getTierLimits(resolvedTier);
@@ -191,7 +195,10 @@ async function claimLegacyUserData(userId: string, emailVerified: boolean): Prom
   const isSingleUserInstall = await hasExactlyOneUser();
 
   if (isSingleUserInstall) {
-    await db.update(documents).set({ userId } as any).where(isNull(documents.userId));
+    await db
+      .update(documents)
+      .set({ userId } as any)
+      .where(isNull(documents.userId));
     await db
       .update(projects)
       .set({ userId, updatedAt: now } as any)
@@ -200,7 +207,10 @@ async function claimLegacyUserData(userId: string, emailVerified: boolean): Prom
       .update(conversations)
       .set({ userId, updatedAt: now } as any)
       .where(isNull(conversations.userId));
-    await db.update(webClips).set({ userId } as any).where(isNull(webClips.userId));
+    await db
+      .update(webClips)
+      .set({ userId } as any)
+      .where(isNull(webClips.userId));
     return;
   }
 
@@ -208,10 +218,7 @@ async function claimLegacyUserData(userId: string, emailVerified: boolean): Prom
   // relationship proves the target user. Otherwise the safe action is to leave
   // the orphan for explicit admin migration instead of exposing it to the next
   // verified account that signs in.
-  await db
-    .update(documents)
-    .set({ userId } as any)
-    .where(sql`
+  await db.update(documents).set({ userId } as any).where(sql`
       ${documents.userId} IS NULL
       AND ${documents.id} IN (
         SELECT ${projectDocuments.documentId}
@@ -220,10 +227,7 @@ async function claimLegacyUserData(userId: string, emailVerified: boolean): Prom
         WHERE ${projects.userId} = ${userId}
       )
     `);
-  await db
-    .update(conversations)
-    .set({ userId, updatedAt: now } as any)
-    .where(sql`
+  await db.update(conversations).set({ userId, updatedAt: now } as any).where(sql`
       ${conversations.userId} IS NULL
       AND ${conversations.projectId} IN (
         SELECT ${projects.id}
@@ -231,10 +235,7 @@ async function claimLegacyUserData(userId: string, emailVerified: boolean): Prom
         WHERE ${projects.userId} = ${userId}
       )
     `);
-  await db
-    .update(webClips)
-    .set({ userId } as any)
-    .where(sql`
+  await db.update(webClips).set({ userId } as any).where(sql`
       ${webClips.userId} IS NULL
       AND (
         ${webClips.projectId} IN (
@@ -287,13 +288,15 @@ export async function reserveStorageUsage(
       storageUsed: sql`${users.storageUsed} + ${requestedBytes}`,
       updatedAt: new Date(),
     } as any)
-    .where(sql`
+    .where(
+      sql`
       ${users.id} = ${id}
       AND (
         ${users.storageLimit} <= 0
         OR ${users.storageUsed} + ${requestedBytes} <= ${users.storageLimit}
       )
-    `)
+    `,
+    )
     .returning({ id: users.id });
 
   if (updated) {

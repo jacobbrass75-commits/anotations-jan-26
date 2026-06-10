@@ -17,7 +17,16 @@ export interface IStorage {
   // Documents
   getDocument(id: string): Promise<Document | undefined>;
   getAllDocuments(userId?: string): Promise<Document[]>;
-  getAllDocumentMeta(userId?: string): Promise<Array<Pick<Document, "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError">>>;
+  getAllDocumentMeta(
+    userId?: string,
+  ): Promise<
+    Array<
+      Pick<
+        Document,
+        "id" | "filename" | "uploadDate" | "summary" | "chunkCount" | "status" | "processingError"
+      >
+    >
+  >;
   createDocument(doc: InsertDocument & { userId?: string }): Promise<Document>;
   updateDocument(id: string, updates: Partial<Document>): Promise<Document | undefined>;
   deleteDocument(id: string): Promise<void>;
@@ -31,7 +40,11 @@ export interface IStorage {
   getAnnotationsForDocument(documentId: string): Promise<Annotation[]>;
   getAnnotation(id: string): Promise<Annotation | undefined>;
   createAnnotation(annotation: InsertAnnotation): Promise<Annotation>;
-  updateAnnotation(id: string, note: string, category: AnnotationCategory): Promise<Annotation | undefined>;
+  updateAnnotation(
+    id: string,
+    note: string,
+    category: AnnotationCategory,
+  ): Promise<Annotation | undefined>;
   deleteAnnotation(id: string): Promise<void>;
   deleteAnnotationsForDocument(documentId: string): Promise<void>;
 }
@@ -50,7 +63,9 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(documents);
   }
 
-  async getAllDocumentMeta(userId?: string): Promise<
+  async getAllDocumentMeta(
+    userId?: string,
+  ): Promise<
     Array<
       Pick<
         Document,
@@ -76,7 +91,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDocument(doc: InsertDocument): Promise<Document> {
-    const [created] = await db.insert(documents).values(doc as any).returning();
+    const [created] = await db
+      .insert(documents)
+      .values(doc as any)
+      .returning();
     return created;
   }
 
@@ -99,7 +117,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createChunk(chunk: InsertTextChunk): Promise<TextChunk> {
-    const [created] = await db.insert(textChunks).values(chunk as any).returning();
+    const [created] = await db
+      .insert(textChunks)
+      .values(chunk as any)
+      .returning();
     return created;
   }
 
@@ -118,11 +139,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAnnotation(annotation: InsertAnnotation): Promise<Annotation> {
-    const [created] = await db.insert(annotations).values(annotation as any).returning();
+    const [created] = await db
+      .insert(annotations)
+      .values(annotation as any)
+      .returning();
     return created;
   }
 
-  async updateAnnotation(id: string, note: string, category: AnnotationCategory): Promise<Annotation | undefined> {
+  async updateAnnotation(
+    id: string,
+    note: string,
+    category: AnnotationCategory,
+  ): Promise<Annotation | undefined> {
     const [updated] = await db
       .update(annotations)
       .set({ note, category })

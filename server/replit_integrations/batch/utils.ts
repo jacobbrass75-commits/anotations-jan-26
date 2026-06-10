@@ -1,4 +1,4 @@
-type PLimitFn = typeof import("p-limit")["default"];
+type PLimitFn = (typeof import("p-limit"))["default"];
 type PRetryModule = typeof import("p-retry");
 
 let pLimitPromise: Promise<PLimitFn> | null = null;
@@ -97,7 +97,7 @@ export function isRateLimitError(error: unknown): boolean {
 export async function batchProcess<T, R>(
   items: T[],
   processor: (item: T, index: number) => Promise<R>,
-  options: BatchOptions = {}
+  options: BatchOptions = {},
 ): Promise<R[]> {
   const {
     concurrency = 2,
@@ -126,14 +126,12 @@ export async function batchProcess<T, R>(
               throw error; // Rethrow to trigger p-retry
             }
             // For non-rate-limit errors, abort immediately
-            throw new AbortError(
-              error instanceof Error ? error : new Error(String(error))
-            );
+            throw new AbortError(error instanceof Error ? error : new Error(String(error)));
           }
         },
-        { retries, minTimeout, maxTimeout, factor: 2 }
-      )
-    )
+        { retries, minTimeout, maxTimeout, factor: 2 },
+      ),
+    ),
   );
 
   return Promise.all(promises);
@@ -152,7 +150,7 @@ export async function batchProcessWithSSE<T, R>(
   items: T[],
   processor: (item: T, index: number) => Promise<R>,
   sendEvent: (event: { type: string; [key: string]: unknown }) => void,
-  options: Omit<BatchOptions, "concurrency" | "onProgress"> = {}
+  options: Omit<BatchOptions, "concurrency" | "onProgress"> = {},
 ): Promise<R[]> {
   const { retries = 5, minTimeout = 1000, maxTimeout = 15000 } = options;
   const { default: pRetry, AbortError } = await getPRetry();
@@ -167,22 +165,17 @@ export async function batchProcessWithSSE<T, R>(
     sendEvent({ type: "processing", index, item });
 
     try {
-      const result = await pRetry(
-        () => processor(item, index),
-        {
-          retries,
-          minTimeout,
-          maxTimeout,
-          factor: 2,
-          onFailedAttempt: (error) => {
-            if (!isRateLimitError(error)) {
-              throw new AbortError(
-                error instanceof Error ? error : new Error(String(error))
-              );
-            }
-          },
-        }
-      );
+      const result = await pRetry(() => processor(item, index), {
+        retries,
+        minTimeout,
+        maxTimeout,
+        factor: 2,
+        onFailedAttempt: (error) => {
+          if (!isRateLimitError(error)) {
+            throw new AbortError(error instanceof Error ? error : new Error(String(error)));
+          }
+        },
+      });
       results.push(result);
       sendEvent({ type: "progress", index, result });
     } catch (error) {
@@ -199,4 +192,3 @@ export async function batchProcessWithSSE<T, R>(
   sendEvent({ type: "complete", processed: items.length, errors });
   return results;
 }
-

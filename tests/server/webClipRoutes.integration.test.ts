@@ -145,11 +145,15 @@ describe("web clip route integration", () => {
   }
 
   async function createApiKey(server: TestApp["server"], token: string) {
-    const response = await requestJson<{ id: string; key: string }>(server.baseUrl, "/api/auth/api-keys", {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}` },
-      body: { label: "Chrome Extension" },
-    });
+    const response = await requestJson<{ id: string; key: string }>(
+      server.baseUrl,
+      "/api/auth/api-keys",
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: { label: "Chrome Extension" },
+      },
+    );
 
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({
@@ -192,15 +196,19 @@ describe("web clip route integration", () => {
         bibliography: expect.any(String),
       });
 
-      const userTwoClip = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
-        method: "POST",
-        headers: { authorization: `Bearer ${userTwoKey.key}` },
-        body: clipPayload({
-          highlightedText: "A second user's quote.",
-          sourceUrl: "https://example.net/other",
-          projectId: "project-2",
-        }),
-      });
+      const userTwoClip = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/web-clips",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${userTwoKey.key}` },
+          body: clipPayload({
+            highlightedText: "A second user's quote.",
+            sourceUrl: "https://example.net/other",
+            projectId: "project-2",
+          }),
+        },
+      );
       expect(userTwoClip.status).toBe(201);
 
       const list = await requestJson<Array<Record<string, unknown>>>(
@@ -273,14 +281,18 @@ describe("web clip route integration", () => {
       expect(listed.status).toBe(200);
       expect(listed.body?.map((clip) => clip.id)).toContain(created.body?.id);
 
-      const unattached = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
-        method: "POST",
-        headers: { authorization: `Bearer ${userOneToken}` },
-        body: clipPayload({
-          highlightedText: "A second useful quote.",
-          sourceUrl: "https://example.com/second",
-        }),
-      });
+      const unattached = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/web-clips",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${userOneToken}` },
+          body: clipPayload({
+            highlightedText: "A second useful quote.",
+            sourceUrl: "https://example.com/second",
+          }),
+        },
+      );
       expect(unattached.status).toBe(201);
 
       const updated = await requestJson<Record<string, unknown>>(
@@ -323,11 +335,15 @@ describe("web clip route integration", () => {
     const { server, userOneToken, userTwoToken } = await createApp();
 
     try {
-      const crossProjectCreate = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
-        method: "POST",
-        headers: { authorization: `Bearer ${userOneToken}` },
-        body: clipPayload({ projectId: "project-2" }),
-      });
+      const crossProjectCreate = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/web-clips",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${userOneToken}` },
+          body: clipPayload({ projectId: "project-2" }),
+        },
+      );
       expect(crossProjectCreate.status).toBe(404);
       expect(crossProjectCreate.body).toEqual({ error: "Project not found" });
 
@@ -362,9 +378,13 @@ describe("web clip route integration", () => {
       expect(crossDelete.status).toBe(404);
       expect(crossPromote.status).toBe(404);
 
-      const ownerRead = await requestJson<Record<string, unknown>>(server.baseUrl, `/api/web-clips/${clipId}`, {
-        headers: { authorization: `Bearer ${userOneToken}` },
-      });
+      const ownerRead = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        `/api/web-clips/${clipId}`,
+        {
+          headers: { authorization: `Bearer ${userOneToken}` },
+        },
+      );
       expect(ownerRead.status).toBe(200);
       expect(ownerRead.body).toMatchObject({ id: clipId, userId: "user-1", note: null });
     } finally {
@@ -425,11 +445,15 @@ describe("web clip route integration", () => {
     const { webClips } = await import("../../shared/schema");
 
     try {
-      const invalidKeyResponse = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
-        method: "POST",
-        headers: { authorization: "Bearer sk_sm_invalid_api_key" },
-        body: clipPayload({ projectId: "project-1" }),
-      });
+      const invalidKeyResponse = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/web-clips",
+        {
+          method: "POST",
+          headers: { authorization: "Bearer sk_sm_invalid_api_key" },
+          body: clipPayload({ projectId: "project-1" }),
+        },
+      );
       expect(invalidKeyResponse.status).toBe(401);
       expect(invalidKeyResponse.body).toEqual({ message: "Invalid API key" });
 
@@ -440,11 +464,15 @@ describe("web clip route integration", () => {
       });
       expect(revoke.status).toBe(204);
 
-      const revokedKeyResponse = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
-        method: "POST",
-        headers: { authorization: `Bearer ${apiKey.key}` },
-        body: clipPayload({ projectId: "project-1" }),
-      });
+      const revokedKeyResponse = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/web-clips",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${apiKey.key}` },
+          body: clipPayload({ projectId: "project-1" }),
+        },
+      );
       expect(revokedKeyResponse.status).toBe(401);
       expect(revokedKeyResponse.body).toEqual({ message: "Invalid API key" });
 
@@ -460,11 +488,15 @@ describe("web clip route integration", () => {
 
     try {
       const freeKey = await createApiKey(server, freeUserToken);
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
-        method: "POST",
-        headers: { authorization: `Bearer ${freeKey.key}` },
-        body: clipPayload({ projectId: "project-free" }),
-      });
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/web-clips",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${freeKey.key}` },
+          body: clipPayload({ projectId: "project-free" }),
+        },
+      );
 
       expect(response.status).toBe(403);
       expect(response.body).toEqual({

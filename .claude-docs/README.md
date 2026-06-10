@@ -4,15 +4,15 @@ This folder contains comprehensive documentation of the SourceAnnotator codebase
 
 ## Document Index
 
-| File | Description |
-|------|-------------|
-| [milestone-reference-2026-02-17.md](milestone-reference-2026-02-17.md) | Consolidated milestone snapshot + quick operational/runbook reference |
-| [overview.md](overview.md) | High-level project overview, tech stack, and architecture |
-| [database-schema.md](database-schema.md) | Complete database schema with all tables, columns, types, and relationships |
-| [server-api.md](server-api.md) | All API endpoints with request/response shapes |
-| [server-internals.md](server-internals.md) | Server file-by-file breakdown, AI pipeline, storage layers |
-| [client-architecture.md](client-architecture.md) | Frontend pages, components, hooks, routing, and data flow |
-| [config-and-setup.md](config-and-setup.md) | Configuration files, build setup, environment variables, npm scripts |
+| File                                                                   | Description                                                                 |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [milestone-reference-2026-02-17.md](milestone-reference-2026-02-17.md) | Consolidated milestone snapshot + quick operational/runbook reference       |
+| [overview.md](overview.md)                                             | High-level project overview, tech stack, and architecture                   |
+| [database-schema.md](database-schema.md)                               | Complete database schema with all tables, columns, types, and relationships |
+| [server-api.md](server-api.md)                                         | All API endpoints with request/response shapes                              |
+| [server-internals.md](server-internals.md)                             | Server file-by-file breakdown, AI pipeline, storage layers                  |
+| [client-architecture.md](client-architecture.md)                       | Frontend pages, components, hooks, routing, and data flow                   |
+| [config-and-setup.md](config-and-setup.md)                             | Configuration files, build setup, environment variables, npm scripts        |
 
 ## Quick Reference
 

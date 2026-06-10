@@ -1,6 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { GlobalSearchResult, AnnotationCategory, CitationData, CitationStyle } from "@shared/schema";
+import type {
+  GlobalSearchResult,
+  AnnotationCategory,
+  CitationData,
+  CitationStyle,
+} from "@shared/schema";
 
 interface SearchFilters {
   categories?: AnnotationCategory[];
@@ -23,13 +28,22 @@ interface CitationResponse {
 
 export function useGlobalSearch() {
   return useMutation({
-    mutationFn: async ({ projectId, query, filters, limit }: {
+    mutationFn: async ({
+      projectId,
+      query,
+      filters,
+      limit,
+    }: {
       projectId: string;
       query: string;
       filters?: SearchFilters;
-      limit?: number
+      limit?: number;
     }): Promise<SearchResponse> => {
-      const res = await apiRequest("POST", `/api/projects/${projectId}/search`, { query, filters, limit });
+      const res = await apiRequest("POST", `/api/projects/${projectId}/search`, {
+        query,
+        filters,
+        limit,
+      });
       return res.json();
     },
   });
@@ -37,13 +51,23 @@ export function useGlobalSearch() {
 
 export function useGenerateCitation() {
   return useMutation({
-    mutationFn: async ({ citationData, style = "chicago", pageNumber, isSubsequent }: {
+    mutationFn: async ({
+      citationData,
+      style = "chicago",
+      pageNumber,
+      isSubsequent,
+    }: {
       citationData: CitationData;
       style?: CitationStyle;
       pageNumber?: string;
-      isSubsequent?: boolean
+      isSubsequent?: boolean;
     }): Promise<CitationResponse> => {
-      const res = await apiRequest("POST", "/api/citations/generate", { citationData, style, pageNumber, isSubsequent });
+      const res = await apiRequest("POST", "/api/citations/generate", {
+        citationData,
+        style,
+        pageNumber,
+        isSubsequent,
+      });
       return res.json();
     },
   });

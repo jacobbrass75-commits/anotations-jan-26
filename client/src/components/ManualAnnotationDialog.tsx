@@ -59,9 +59,7 @@ export function ManualAnnotationDialog({
             <Highlighter className="h-5 w-5 text-primary" />
             MANUAL ANNOTATION
           </DialogTitle>
-          <DialogDescription>
-            Create a note for the selected text passage.
-          </DialogDescription>
+          <DialogDescription>Create a note for the selected text passage.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -75,7 +73,11 @@ export function ManualAnnotationDialog({
           <div className="space-y-2">
             <Label htmlFor="category">Category</Label>
             <Select value={category} onValueChange={(v) => setCategory(v as AnnotationCategory)}>
-              <SelectTrigger id="category" className="eva-focus-glow" data-testid="select-manual-category">
+              <SelectTrigger
+                id="category"
+                className="eva-focus-glow"
+                data-testid="select-manual-category"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -130,7 +132,12 @@ export function ManualAnnotationDialog({
           <Button variant="outline" className="uppercase tracking-wider" onClick={handleClose}>
             Cancel
           </Button>
-          <Button className="uppercase tracking-wider" onClick={handleSave} disabled={!note.trim()} data-testid="button-save-manual-annotation">
+          <Button
+            className="uppercase tracking-wider"
+            onClick={handleSave}
+            disabled={!note.trim()}
+            data-testid="button-save-manual-annotation"
+          >
             Save Annotation
           </Button>
         </DialogFooter>

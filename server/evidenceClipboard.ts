@@ -245,7 +245,9 @@ export function mergeEvidence(
     existingSource.sourceTitle = sourceTitle;
 
     for (const item of incomingItems) {
-      const duplicate = existingSource.items.find((existingItem) => isDuplicateItem(existingItem, item));
+      const duplicate = existingSource.items.find((existingItem) =>
+        isDuplicateItem(existingItem, item),
+      );
       if (!duplicate) {
         existingSource.items.push(item);
         continue;
@@ -320,7 +322,10 @@ export function formatClipboardForPrompt(clipboard: EvidenceClipboard): string {
 function extractText(response: { content?: Array<{ type: string; text?: string }> }): string {
   if (!Array.isArray(response.content)) return "";
   return response.content
-    .filter((block): block is { type: string; text: string } => block.type === "text" && typeof block.text === "string")
+    .filter(
+      (block): block is { type: string; text: string } =>
+        block.type === "text" && typeof block.text === "string",
+    )
     .map((block) => block.text)
     .join("\n")
     .trim();
@@ -350,11 +355,14 @@ Only include evidence that was clearly cited or referenced. Be precise.`,
     ],
   });
 
-  const text = extractText(response).replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
-  const parsed = safeJsonParse<{
-    newEvidence?: Array<{ sourceId: string; sourceTitle: string; items: EvidenceItem[] }>;
-    sectionsWorkedOn?: Array<{ section: string; status: "drafted" | "revised" | "final" }>;
-  }>(text) || {};
+  const text = extractText(response)
+    .replace(/^```json\s*/i, "")
+    .replace(/\s*```$/i, "");
+  const parsed =
+    safeJsonParse<{
+      newEvidence?: Array<{ sourceId: string; sourceTitle: string; items: EvidenceItem[] }>;
+      sectionsWorkedOn?: Array<{ section: string; status: "drafted" | "revised" | "final" }>;
+    }>(text) || {};
 
   let updated = mergeEvidence(currentClipboard, parsed.newEvidence || [], turnNumber);
   if (parsed.sectionsWorkedOn?.length) {

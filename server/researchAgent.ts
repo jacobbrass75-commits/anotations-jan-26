@@ -89,18 +89,15 @@ function coerceFinding(raw: unknown, startOffset: number): ResearchFinding | nul
   const quote = typeof row.quote === "string" ? row.quote.trim() : "";
   if (!quote) return null;
 
-  const relevance = typeof row.relevance === "string"
-    ? row.relevance.trim()
-    : "Relevance not provided.";
+  const relevance =
+    typeof row.relevance === "string" ? row.relevance.trim() : "Relevance not provided.";
 
   let startPosition =
     typeof row.startPosition === "number" && Number.isFinite(row.startPosition)
       ? row.startPosition
       : -1;
   let endPosition =
-    typeof row.endPosition === "number" && Number.isFinite(row.endPosition)
-      ? row.endPosition
-      : -1;
+    typeof row.endPosition === "number" && Number.isFinite(row.endPosition) ? row.endPosition : -1;
 
   // If the model returned chunk-relative positions for a non-zero chunk, lift to absolute.
   if (startOffset > 0 && startPosition >= 0 && startPosition < startOffset) {
@@ -140,21 +137,15 @@ async function runResearchChunk(
       scope: string | null;
       recentWritingTopic: string;
     };
-  }
+  },
 ): Promise<{ findings: ResearchFinding[]; tokensUsed: number }> {
-  const {
-    filename,
-    chunk,
-    chunkIndex,
-    chunkCount,
-    fullTextLength,
-    reason,
-    projectContext,
-  } = params;
+  const { filename, chunk, chunkIndex, chunkCount, fullTextLength, reason, projectContext } =
+    params;
 
-  const chunkDescriptor = chunkCount > 1
-    ? `Document chunk ${chunkIndex + 1} of ${chunkCount}, chars ${chunk.startOffset}-${chunk.startOffset + chunk.text.length}.`
-    : "Full document provided in this request.";
+  const chunkDescriptor =
+    chunkCount > 1
+      ? `Document chunk ${chunkIndex + 1} of ${chunkCount}, chars ${chunk.startOffset}-${chunk.startOffset + chunk.text.length}.`
+      : "Full document provided in this request.";
 
   const researchPrompt = `You are a research agent analyzing a source document for an academic writing project.
 
@@ -240,7 +231,7 @@ export function verifyQuote(finding: ResearchFinding, fullText: string): Researc
     finding.endPosition <= fullText.length
   ) {
     const atPosition = normalizeWhitespace(
-      fullText.slice(finding.startPosition, finding.endPosition)
+      fullText.slice(finding.startPosition, finding.endPosition),
     );
 
     if (atPosition === normalizedQuote) {
@@ -279,7 +270,7 @@ export function verifyQuote(finding: ResearchFinding, fullText: string): Researc
     if (prefixIndex !== -1) {
       const correctedQuote = normalizedFullText.slice(
         prefixIndex,
-        prefixIndex + normalizedQuote.length
+        prefixIndex + normalizedQuote.length,
       );
       return {
         ...finding,
@@ -323,7 +314,7 @@ export async function runResearchAgent(
     thesis: string | null;
     scope: string | null;
     recentWritingTopic: string;
-  }
+  },
 ): Promise<ResearchResult> {
   const document = await storage.getDocument(documentId);
   if (!document) {
@@ -364,8 +355,8 @@ export async function runResearchAgent(
       collected.map((finding) => [
         `${finding.startPosition}:${finding.endPosition}:${normalizeWhitespace(finding.quote)}`,
         finding,
-      ])
-    ).values()
+      ]),
+    ).values(),
   );
 
   const verified = deduped.map((finding) => verifyQuote(finding, fullText));

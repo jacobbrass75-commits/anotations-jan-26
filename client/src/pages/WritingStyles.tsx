@@ -24,7 +24,6 @@ import {
   useDeleteWritingStyle,
   useUpdateWritingStyle,
   useWritingStyles,
-  type WritingStyle,
 } from "@/hooks/useWritingStyles";
 import type { VoiceProfile } from "@shared/schema";
 
@@ -98,7 +97,9 @@ export default function WritingStyles() {
   const updateSample = (index: number, value: string) => {
     setDraft((current) => ({
       ...current,
-      samples: current.samples.map((sample, sampleIndex) => sampleIndex === index ? value : sample),
+      samples: current.samples.map((sample, sampleIndex) =>
+        sampleIndex === index ? value : sample,
+      ),
     }));
   };
 
@@ -112,7 +113,10 @@ export default function WritingStyles() {
   const removeSample = (index: number) => {
     setDraft((current) => {
       if (current.samples.length <= 2) return current;
-      return { ...current, samples: current.samples.filter((_, sampleIndex) => sampleIndex !== index) };
+      return {
+        ...current,
+        samples: current.samples.filter((_, sampleIndex) => sampleIndex !== index),
+      };
     });
   };
 
@@ -211,13 +215,21 @@ export default function WritingStyles() {
           </div>
           <div className="flex items-center gap-2">
             <Link href="/">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+              >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Home
               </Button>
             </Link>
             <Link href="/write">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+              >
                 Write
               </Button>
             </Link>
@@ -270,7 +282,9 @@ export default function WritingStyles() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium truncate">{style.name}</span>
-                        {style.voiceProfile && <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />}
+                        {style.voiceProfile && (
+                          <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
                         {style.description || style.voiceProfile?.voiceSummary || "No description"}
@@ -291,7 +305,9 @@ export default function WritingStyles() {
             <div className="p-5 border-b border-border flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold">
-                  {isCreating ? "New Writing Style" : selectedStyle?.name || "Select a Writing Style"}
+                  {isCreating
+                    ? "New Writing Style"
+                    : selectedStyle?.name || "Select a Writing Style"}
                 </h2>
                 <p className="text-xs text-muted-foreground">
                   {totalWords} words across {draft.samples.length} samples
@@ -317,21 +333,38 @@ export default function WritingStyles() {
                         </CardHeader>
                         <CardContent className="space-y-3">
                           <div className="space-y-1">
-                            <Label htmlFor="style-name" className="text-xs uppercase tracking-wider">Name</Label>
+                            <Label
+                              htmlFor="style-name"
+                              className="text-xs uppercase tracking-wider"
+                            >
+                              Name
+                            </Label>
                             <Input
                               id="style-name"
                               value={draft.name}
-                              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+                              onChange={(event) =>
+                                setDraft((current) => ({ ...current, name: event.target.value }))
+                              }
                               placeholder="Academic essays"
                               maxLength={80}
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label htmlFor="style-description" className="text-xs uppercase tracking-wider">Description</Label>
+                            <Label
+                              htmlFor="style-description"
+                              className="text-xs uppercase tracking-wider"
+                            >
+                              Description
+                            </Label>
                             <Textarea
                               id="style-description"
                               value={draft.description}
-                              onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  description: event.target.value,
+                                }))
+                              }
                               placeholder="Short label for when this style should be used"
                               className="min-h-[88px]"
                             />
@@ -339,16 +372,28 @@ export default function WritingStyles() {
                           <div className="flex items-center gap-2">
                             {isCreating ? (
                               <Button onClick={saveNewStyle} disabled={isBusy}>
-                                {createStyle.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                                {createStyle.isPending ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Save className="h-4 w-4 mr-2" />
+                                )}
                                 Analyze and Save
                               </Button>
                             ) : (
                               <>
                                 <Button onClick={saveDetails} disabled={!selectedStyle || isBusy}>
-                                  {updateStyle.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                                  {updateStyle.isPending ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Save className="h-4 w-4 mr-2" />
+                                  )}
                                   Save Details
                                 </Button>
-                                <Button variant="outline" onClick={reanalyzeStyle} disabled={!selectedStyle || isBusy}>
+                                <Button
+                                  variant="outline"
+                                  onClick={reanalyzeStyle}
+                                  disabled={!selectedStyle || isBusy}
+                                >
                                   <RotateCcw className="h-4 w-4 mr-2" />
                                   Re-analyze Samples
                                 </Button>
@@ -366,20 +411,37 @@ export default function WritingStyles() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold uppercase tracking-wider">Samples</h3>
-                        <Button variant="outline" size="sm" onClick={addSample} disabled={draft.samples.length >= 10 || isBusy}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={addSample}
+                          disabled={draft.samples.length >= 10 || isBusy}
+                        >
                           <Plus className="h-4 w-4 mr-2" />
                           Sample
                         </Button>
                       </div>
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
                         {draft.samples.map((sample, index) => (
-                          <div key={index} className="rounded-lg border border-border bg-background/80 p-3 space-y-2">
+                          <div
+                            key={index}
+                            className="rounded-lg border border-border bg-background/80 p-3 space-y-2"
+                          >
                             <div className="flex items-center justify-between">
-                              <Label className="text-xs uppercase tracking-wider">Sample {index + 1}</Label>
+                              <Label className="text-xs uppercase tracking-wider">
+                                Sample {index + 1}
+                              </Label>
                               <div className="flex items-center gap-2">
-                                <span className="text-[11px] text-muted-foreground">{sampleWordCount(sample)} words</span>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {sampleWordCount(sample)} words
+                                </span>
                                 {draft.samples.length > 2 && (
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeSample(index)}>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => removeSample(index)}
+                                  >
                                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
                                   </Button>
                                 )}

@@ -37,7 +37,7 @@ const drizzleResult = spawnSync(
     cwd: process.cwd(),
     env: process.env,
     stdio: "inherit",
-  }
+  },
 );
 
 if ((drizzleResult.status ?? 1) !== 0) {
@@ -61,10 +61,11 @@ const requiredTables = [
 ];
 
 const existingTables = new Set(
-  (sqlite
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
-    .all() as Array<{ name: string }>)
-    .map((row) => row.name)
+  (
+    sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+      name: string;
+    }>
+  ).map((row) => row.name),
 );
 
 const missingTables = requiredTables.filter((table) => !existingTables.has(table));

@@ -61,19 +61,25 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return fallback;
 }
 
-const DEFAULT_VISION_PAGE_CONCURRENCY = parsePositiveInt(process.env.VISION_OCR_PAGE_CONCURRENCY, 5);
+const DEFAULT_VISION_PAGE_CONCURRENCY = parsePositiveInt(
+  process.env.VISION_OCR_PAGE_CONCURRENCY,
+  5,
+);
 const DEFAULT_VISION_BATCH_SIZE = parsePositiveInt(process.env.VISION_OCR_BATCH_SIZE, 2);
-const DEFAULT_VISION_BATCH_CONCURRENCY = parsePositiveInt(process.env.VISION_OCR_BATCH_CONCURRENCY, 2);
+const DEFAULT_VISION_BATCH_CONCURRENCY = parsePositiveInt(
+  process.env.VISION_OCR_BATCH_CONCURRENCY,
+  2,
+);
 const DEFAULT_VISION_AUTO_BATCH_THRESHOLD = parsePositiveInt(
   process.env.VISION_OCR_AUTO_BATCH_THRESHOLD,
-  8
+  8,
 );
 const DEFAULT_HEIC_PAGE_CHUNK_SIZE = parsePositiveInt(process.env.VISION_HEIC_PAGE_CHUNK_SIZE, 30);
 const DEFAULT_HEIC_MAX_DIMENSION = parsePositiveInt(process.env.VISION_HEIC_MAX_DIMENSION, 2200);
 const DEFAULT_HEIC_JPEG_QUALITY = parsePositiveInt(process.env.VISION_HEIC_JPEG_QUALITY, 80);
 const DEFAULT_HEIC_ROTATE_THRESHOLD_PCT = parsePositiveInt(
   process.env.VISION_HEIC_ROTATE_THRESHOLD_PCT,
-  130
+  130,
 );
 const DEFAULT_HEIC_CONTRAST_GAIN = Number(process.env.VISION_HEIC_CONTRAST_GAIN || "1.08");
 const DEFAULT_HEIC_CONTRAST_BIAS = Number(process.env.VISION_HEIC_CONTRAST_BIAS || "-6");
@@ -82,11 +88,11 @@ const VISION_DEFAULT_RETRY_DELAY_MS = parsePositiveInt(process.env.VISION_OCR_RE
 const VISION_TPM_LIMIT = parsePositiveInt(process.env.VISION_OCR_TPM_LIMIT, 30000);
 const VISION_ESTIMATED_TOKENS_PER_REQUEST = parsePositiveInt(
   process.env.VISION_OCR_ESTIMATED_TOKENS_PER_REQUEST,
-  900
+  900,
 );
 const VISION_MIN_REQUEST_GAP_MS = parsePositiveInt(
   process.env.VISION_OCR_MIN_REQUEST_GAP_MS,
-  Math.ceil((60_000 * VISION_ESTIMATED_TOKENS_PER_REQUEST) / VISION_TPM_LIMIT)
+  Math.ceil((60_000 * VISION_ESTIMATED_TOKENS_PER_REQUEST) / VISION_TPM_LIMIT),
 );
 const DEFAULT_VISION_MODEL = resolveVisionOcrModel(process.env.VISION_OCR_MODEL);
 
@@ -124,7 +130,9 @@ function getHeaderValue(headers: unknown, key: string): string | null {
   }
 
   if (typeof headers === "object" && headers !== null) {
-    const value = (headers as Record<string, unknown>)[key] ?? (headers as Record<string, unknown>)[key.toLowerCase()];
+    const value =
+      (headers as Record<string, unknown>)[key] ??
+      (headers as Record<string, unknown>)[key.toLowerCase()];
     if (typeof value === "string") return value;
   }
 
@@ -204,7 +212,9 @@ function getRateLimitDelayMs(error: unknown, attempt: number): number {
     return retryAfterHeader;
   }
 
-  const resetTokensHeader = parseDurationMs(getHeaderValue(candidate?.headers, "x-ratelimit-reset-tokens"));
+  const resetTokensHeader = parseDurationMs(
+    getHeaderValue(candidate?.headers, "x-ratelimit-reset-tokens"),
+  );
   if (resetTokensHeader) return resetTokensHeader;
 
   const messageDelay =
@@ -216,10 +226,7 @@ function getRateLimitDelayMs(error: unknown, attempt: number): number {
   return Math.min(exponential, 30_000);
 }
 
-async function runVisionRequestWithRetry<T>(
-  label: string,
-  task: () => Promise<T>
-): Promise<T> {
+async function runVisionRequestWithRetry<T>(label: string, task: () => Promise<T>): Promise<T> {
   for (let attempt = 1; attempt <= VISION_MAX_RETRIES; attempt++) {
     await waitForVisionRequestSlot();
 
@@ -232,7 +239,7 @@ async function runVisionRequestWithRetry<T>(
 
       const delayMs = getRateLimitDelayMs(error, attempt) + Math.floor(Math.random() * 250);
       console.warn(
-        `[Vision OCR] Rate-limited during ${label} (attempt ${attempt}/${VISION_MAX_RETRIES}). Retrying in ${delayMs}ms`
+        `[Vision OCR] Rate-limited during ${label} (attempt ${attempt}/${VISION_MAX_RETRIES}). Retrying in ${delayMs}ms`,
       );
       await sleep(delayMs);
     }
@@ -329,7 +336,7 @@ async function extractVisionTextForPage(
   imagePath: string,
   pageNumber: number,
   totalPages: number,
-  model: VisionOcrModel
+  model: VisionOcrModel,
 ): Promise<string> {
   console.log(`[Vision OCR] Processing page ${pageNumber}/${totalPages} with model=${model}`);
   const imageUrl = await readImageAsDataUrl(imagePath);
@@ -356,7 +363,7 @@ async function extractVisionTextForPage(
         },
       ],
       max_tokens: 4096,
-    })
+    }),
   );
 
   return normalizeOcrText(response.choices[0]?.message?.content || "");
@@ -366,11 +373,13 @@ async function extractVisionTextForBatch(
   imagePaths: string[],
   startPageIndex: number,
   totalPages: number,
-  model: VisionOcrModel
+  model: VisionOcrModel,
 ): Promise<string[]> {
   const startPage = startPageIndex + 1;
   const endPage = startPageIndex + imagePaths.length;
-  console.log(`[Vision OCR] Processing pages ${startPage}-${endPage}/${totalPages} in batch with model=${model}`);
+  console.log(
+    `[Vision OCR] Processing pages ${startPage}-${endPage}/${totalPages} in batch with model=${model}`,
+  );
 
   const imageUrls = await Promise.all(imagePaths.map((imagePath) => readImageAsDataUrl(imagePath)));
 
@@ -388,13 +397,15 @@ async function extractVisionTextForBatch(
     })),
   ];
 
-  const response = await runVisionRequestWithRetry(`batch ${startPage}-${endPage}/${totalPages}`, () =>
-    getOpenAI().chat.completions.create({
-      model,
-      messages: [{ role: "user", content }],
-      response_format: { type: "json_object" },
-      max_tokens: 8192,
-    })
+  const response = await runVisionRequestWithRetry(
+    `batch ${startPage}-${endPage}/${totalPages}`,
+    () =>
+      getOpenAI().chat.completions.create({
+        model,
+        messages: [{ role: "user", content }],
+        response_format: { type: "json_object" },
+        max_tokens: 8192,
+      }),
   );
 
   const raw = response.choices[0]?.message?.content || "";
@@ -419,7 +430,7 @@ function chunkBySize<T>(items: T[], size: number): T[][] {
 async function preprocessImageForVision(
   inputPath: string,
   outputDir: string,
-  outputName: string
+  outputName: string,
 ): Promise<string> {
   try {
     const sharpModule = await import("sharp");
@@ -432,11 +443,7 @@ async function preprocessImageForVision(
     let pipeline = sharpFactory(inputPath, { failOnError: false }).rotate();
 
     // Phone captures often arrive landscape even for portrait documents.
-    if (
-      width > 0 &&
-      height > 0 &&
-      width * 100 >= height * DEFAULT_HEIC_ROTATE_THRESHOLD_PCT
-    ) {
+    if (width > 0 && height > 0 && width * 100 >= height * DEFAULT_HEIC_ROTATE_THRESHOLD_PCT) {
       pipeline = pipeline.rotate(90);
     }
 
@@ -467,7 +474,10 @@ async function preprocessImageForVision(
     await writeFile(outputPath, outputBuffer);
     return outputPath;
   } catch (error) {
-    console.warn(`[Vision OCR] HEIC preprocessing failed for ${inputPath}, using original image`, error);
+    console.warn(
+      `[Vision OCR] HEIC preprocessing failed for ${inputPath}, using original image`,
+      error,
+    );
     return inputPath;
   }
 }
@@ -475,7 +485,7 @@ async function preprocessImageForVision(
 async function extractVisionTextsWithChunking(
   docId: string,
   imagePaths: string[],
-  options: VisionOcrOptions = {}
+  options: VisionOcrOptions = {},
 ): Promise<string[]> {
   const checkpointedPageTexts = options.existingPageTexts ?? [];
 
@@ -496,7 +506,7 @@ async function extractVisionTextsWithChunking(
     const startPage = chunkStartIndex + 1;
     const endPage = startPage + chunk.length - 1;
     console.log(
-      `[Vision OCR] Processing chunk ${chunkIndex + 1}/${chunks.length} pages ${startPage}-${endPage} for doc ${docId}`
+      `[Vision OCR] Processing chunk ${chunkIndex + 1}/${chunks.length} pages ${startPage}-${endPage} for doc ${docId}`,
     );
     await extractVisionTextsFromImagePaths(docId, chunk, {
       ...options,
@@ -507,7 +517,7 @@ async function extractVisionTextsWithChunking(
   }
 
   return imagePaths.map((_, index) =>
-    hasPageCheckpoint(checkpointedPageTexts, index) ? checkpointedPageTexts[index] ?? "" : ""
+    hasPageCheckpoint(checkpointedPageTexts, index) ? (checkpointedPageTexts[index] ?? "") : "",
   );
 }
 
@@ -525,10 +535,7 @@ export async function saveTempPdf(buffer: Buffer): Promise<string> {
 /**
  * Save an uploaded file buffer to a temp file with matching extension.
  */
-export async function saveTempUpload(
-  buffer: Buffer,
-  originalFilename: string
-): Promise<string> {
+export async function saveTempUpload(buffer: Buffer, originalFilename: string): Promise<string> {
   const tempDir = await mkdtemp(join(tmpdir(), "ocr-upload-"));
   const extension = extname(originalFilename).toLowerCase();
   const safeExtension = extension && extension.length <= 10 ? extension : ".bin";
@@ -594,10 +601,7 @@ function runPython(scriptPath: string, args: string[]): Promise<string> {
  * Process a PDF with PaddleOCR (background, async).
  * Updates the document record when done.
  */
-export async function processWithPaddleOcr(
-  docId: string,
-  tempPdfPath: string
-): Promise<void> {
+export async function processWithPaddleOcr(docId: string, tempPdfPath: string): Promise<void> {
   try {
     const scriptPath = join(PYTHON_SCRIPTS_DIR, "pdf_pipeline.py");
     const stdout = await runPython(scriptPath, [
@@ -645,7 +649,9 @@ export async function processWithPaddleOcr(
       });
     });
 
-    console.log(`[OCR] PaddleOCR complete for doc ${docId}: ${fullText.length} chars, ${chunks.length} chunks`);
+    console.log(
+      `[OCR] PaddleOCR complete for doc ${docId}: ${fullText.length} chars, ${chunks.length} chunks`,
+    );
   } catch (error) {
     console.error(`[OCR] PaddleOCR failed for doc ${docId}:`, error);
     await storage.updateDocument(docId, {
@@ -660,7 +666,7 @@ export async function processWithPaddleOcr(
 async function extractVisionTextsFromImagePaths(
   docId: string,
   imagePaths: string[],
-  options: VisionOcrOptions = {}
+  options: VisionOcrOptions = {},
 ): Promise<string[]> {
   const localPageCount = imagePaths.length;
   if (localPageCount === 0) {
@@ -714,7 +720,7 @@ async function extractVisionTextsFromImagePaths(
   const model = options.model ?? DEFAULT_VISION_MODEL;
 
   console.log(
-    `[Vision OCR] Mode=${useBatchMode ? "batch" : "page"} pages=${localPageCount} pending=${pendingImages.length} batchSize=${batchSize} model=${model} minGapMs=${VISION_MIN_REQUEST_GAP_MS} doc=${docId}`
+    `[Vision OCR] Mode=${useBatchMode ? "batch" : "page"} pages=${localPageCount} pending=${pendingImages.length} batchSize=${batchSize} model=${model} minGapMs=${VISION_MIN_REQUEST_GAP_MS} doc=${docId}`,
   );
 
   if (useBatchMode) {
@@ -732,7 +738,7 @@ async function extractVisionTextsFromImagePaths(
               batchImagePaths,
               batchStartPageZeroBased,
               totalPageCount,
-              model
+              model,
             );
             for (let offset = 0; offset < batch.length; offset++) {
               const item = batch[offset];
@@ -741,7 +747,7 @@ async function extractVisionTextsFromImagePaths(
           } catch (batchError) {
             console.warn(
               `[Vision OCR] Batch ${startPageNumber + batchStartIndex}-${startPageNumber + batchStartIndex + batch.length - 1} failed, retrying per-page`,
-              batchError
+              batchError,
             );
 
             for (const item of batch) {
@@ -749,13 +755,13 @@ async function extractVisionTextsFromImagePaths(
                 item.imagePath,
                 startPageNumber + item.index,
                 totalPageCount,
-                model
+                model,
               );
               await applyPageText(item.index, pageText);
             }
           }
-        })
-      )
+        }),
+      ),
     );
 
     return pageTexts;
@@ -769,11 +775,11 @@ async function extractVisionTextsFromImagePaths(
           item.imagePath,
           startPageNumber + item.index,
           totalPageCount,
-          model
+          model,
         );
         await applyPageText(item.index, pageText);
-      })
-    )
+      }),
+    ),
   );
 
   return pageTexts;
@@ -782,7 +788,7 @@ async function extractVisionTextsFromImagePaths(
 async function saveVisionOcrResult(
   docId: string,
   pageTexts: string[],
-  noTextErrorMessage: string
+  noTextErrorMessage: string,
 ): Promise<{ fullText: string; chunkCount: number }> {
   const fullText = pageTexts.join("\n\n").replace(/\s+/g, " ").trim();
 
@@ -836,8 +842,8 @@ async function createPdfFromImagePaths(imagePaths: string[]): Promise<Buffer> {
       extension === ".png"
         ? await pdf.embedPng(imageBytes)
         : extension === ".jpg" || extension === ".jpeg"
-        ? await pdf.embedJpg(imageBytes)
-        : null;
+          ? await pdf.embedJpg(imageBytes)
+          : null;
 
     if (!embedded) {
       throw new Error(`Unsupported image format for PDF export: ${extension || "(none)"}`);
@@ -872,9 +878,10 @@ function sanitizeZipEntryName(filename: string): string {
   return filename.replace(/[\\/:*?"<>|]/g, "_");
 }
 
-async function expandUploadToPdfFrames(
-  upload: { buffer: Buffer; originalFilename: string }
-): Promise<UploadFrame[]> {
+async function expandUploadToPdfFrames(upload: {
+  buffer: Buffer;
+  originalFilename: string;
+}): Promise<UploadFrame[]> {
   const extension = extname(upload.originalFilename).toLowerCase();
 
   if (extension === ".png") {
@@ -912,12 +919,12 @@ async function expandUploadToPdfFrames(
   }
 
   throw new Error(
-    `Unsupported image format for combined upload: ${upload.originalFilename}. Please convert to PNG/JPG or upload separately.`
+    `Unsupported image format for combined upload: ${upload.originalFilename}. Please convert to PNG/JPG or upload separately.`,
   );
 }
 
 export async function createCombinedPdfFromImageUploads(
-  uploads: Array<{ buffer: Buffer; originalFilename: string }>
+  uploads: Array<{ buffer: Buffer; originalFilename: string }>,
 ): Promise<Buffer> {
   const pdf = await PDFDocument.create();
 
@@ -926,7 +933,9 @@ export async function createCombinedPdfFromImageUploads(
 
     for (const frame of frames) {
       const embedded =
-        frame.format === "png" ? await pdf.embedPng(frame.buffer) : await pdf.embedJpg(frame.buffer);
+        frame.format === "png"
+          ? await pdf.embedPng(frame.buffer)
+          : await pdf.embedJpg(frame.buffer);
       const { width, height } = embedded.scale(1);
       const page = pdf.addPage([width, height]);
       page.drawImage(embedded, { x: 0, y: 0, width, height });
@@ -938,7 +947,7 @@ export async function createCombinedPdfFromImageUploads(
 }
 
 export async function createZipFromImageUploads(
-  uploads: Array<{ buffer: Buffer; originalFilename: string }>
+  uploads: Array<{ buffer: Buffer; originalFilename: string }>,
 ): Promise<Buffer> {
   const zip = new JSZip();
   const manifestEntries: ZipManifestEntry[] = [];
@@ -966,7 +975,7 @@ export async function createZipFromImageUploads(
 }
 
 export async function extractImageUploadsFromZip(
-  zipBuffer: Buffer
+  zipBuffer: Buffer,
 ): Promise<Array<{ buffer: Buffer; originalFilename: string }>> {
   const zip = await JSZip.loadAsync(zipBuffer);
   const manifestEntry = zip.file("manifest.json");
@@ -991,12 +1000,15 @@ export async function extractImageUploadsFromZip(
             (entry): entry is ZipManifestEntry =>
               typeof entry?.storedFilename === "string" &&
               typeof entry?.originalFilename === "string" &&
-              typeof entry?.order === "number"
+              typeof entry?.order === "number",
           )
           .sort((a, b) => a.order - b.order);
       }
     } catch (error) {
-      console.warn("[Vision OCR] Failed to parse ZIP manifest, falling back to filename order", error);
+      console.warn(
+        "[Vision OCR] Failed to parse ZIP manifest, falling back to filename order",
+        error,
+      );
     }
   }
 
@@ -1025,7 +1037,7 @@ export async function extractImageUploadsFromZip(
 export async function processWithVisionOcr(
   docId: string,
   tempPdfPath: string,
-  options: VisionOcrOptions = {}
+  options: VisionOcrOptions = {},
 ): Promise<void> {
   let imageDir: string | null = null;
 
@@ -1049,11 +1061,13 @@ export async function processWithVisionOcr(
     const { fullText, chunkCount } = await saveVisionOcrResult(
       docId,
       pageTexts,
-      "Vision OCR could not extract readable text from this PDF."
+      "Vision OCR could not extract readable text from this PDF.",
     );
     if (!fullText) return;
 
-    console.log(`[Vision OCR] Complete for doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`);
+    console.log(
+      `[Vision OCR] Complete for doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`,
+    );
   } catch (error) {
     console.error(`[Vision OCR] Failed for doc ${docId}:`, error);
     await storage.updateDocument(docId, {
@@ -1076,7 +1090,7 @@ export async function processImageWithVisionOcr(
   docId: string,
   tempImagePath: string,
   originalFilename: string,
-  options: VisionOcrOptions = {}
+  options: VisionOcrOptions = {},
 ): Promise<void> {
   let extractedImageDir: string | null = null;
   let preprocessedImageDir: string | null = null;
@@ -1113,12 +1127,14 @@ export async function processImageWithVisionOcr(
         const preprocessedPath = await preprocessImageForVision(
           outputPath,
           preprocessedImageDir,
-          `image_${index + 1}`
+          `image_${index + 1}`,
         );
         imagePaths.push(preprocessedPath);
       }
 
-      console.log(`[Vision OCR] Extracted ${imagePaths.length} image(s) from ${extension} for doc ${docId}`);
+      console.log(
+        `[Vision OCR] Extracted ${imagePaths.length} image(s) from ${extension} for doc ${docId}`,
+      );
     }
 
     if (imagePaths.length === 0) {
@@ -1139,11 +1155,13 @@ export async function processImageWithVisionOcr(
     const { fullText, chunkCount } = await saveVisionOcrResult(
       docId,
       pageTexts,
-      "Vision OCR could not extract readable text from this image file."
+      "Vision OCR could not extract readable text from this image file.",
     );
     if (!fullText) return;
 
-    console.log(`[Vision OCR] Complete for image doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`);
+    console.log(
+      `[Vision OCR] Complete for image doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`,
+    );
   } catch (error) {
     console.error(`[Vision OCR] Image processing failed for doc ${docId}:`, error);
     await storage.updateDocument(docId, {
@@ -1169,7 +1187,7 @@ export async function processImageGroupWithVisionOcr(
   docId: string,
   uploads: Array<{ buffer: Buffer; originalFilename: string }>,
   combinedSourceFilename: string,
-  options: VisionOcrOptions = {}
+  options: VisionOcrOptions = {},
 ): Promise<void> {
   const tempUploadPaths: string[] = [];
   const extractedImageDirs: string[] = [];
@@ -1222,7 +1240,7 @@ export async function processImageGroupWithVisionOcr(
           const preprocessedPath = await preprocessImageForVision(
             outputPath,
             preprocessedDir,
-            `page_${index + 1}_${frame + 1}`
+            `page_${index + 1}_${frame + 1}`,
           );
           pageImagePaths.push(preprocessedPath);
         }
@@ -1230,7 +1248,7 @@ export async function processImageGroupWithVisionOcr(
         pageImagePaths.push(uploadPath);
       } else {
         throw new Error(
-          `Unsupported image format for combined upload: ${originalFilename}. Please convert to PNG/JPG or upload as separate documents.`
+          `Unsupported image format for combined upload: ${originalFilename}. Please convert to PNG/JPG or upload as separate documents.`,
         );
       }
     }
@@ -1245,7 +1263,10 @@ export async function processImageGroupWithVisionOcr(
         const pdfBuffer = await createPdfFromImagePaths(pageImagePaths);
         await saveDocumentSource(docId, combinedSourceFilename, pdfBuffer);
       } catch (sourceError) {
-        console.warn(`[Vision OCR] Failed to save combined PDF source for doc ${docId}:`, sourceError);
+        console.warn(
+          `[Vision OCR] Failed to save combined PDF source for doc ${docId}:`,
+          sourceError,
+        );
       }
     }
 
@@ -1254,23 +1275,26 @@ export async function processImageGroupWithVisionOcr(
       batchMode: options.batchMode ?? pageImagePaths.length > 1,
     };
 
-    console.log(`[Vision OCR] Processing ${pageImagePaths.length} page(s) for combined doc ${docId}`);
+    console.log(
+      `[Vision OCR] Processing ${pageImagePaths.length} page(s) for combined doc ${docId}`,
+    );
     const pageTexts = await extractVisionTextsWithChunking(docId, pageImagePaths, groupOptions);
     const { fullText, chunkCount } = await saveVisionOcrResult(
       docId,
       pageTexts,
-      "Vision OCR could not extract readable text from these image files."
+      "Vision OCR could not extract readable text from these image files.",
     );
     if (!fullText) return;
 
     console.log(
-      `[Vision OCR] Complete for combined image doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`
+      `[Vision OCR] Complete for combined image doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`,
     );
   } catch (error) {
     console.error(`[Vision OCR] Combined image processing failed for doc ${docId}:`, error);
     await storage.updateDocument(docId, {
       status: "error",
-      processingError: error instanceof Error ? error.message : "Combined image OCR processing failed",
+      processingError:
+        error instanceof Error ? error.message : "Combined image OCR processing failed",
     });
   } finally {
     // Cleanup temp uploads and any extracted HEIC frames.

@@ -154,7 +154,12 @@ export default function Account() {
 
           <div className="flex items-center gap-2">
             <Link href="/pricing">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-manage-plan">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-manage-plan"
+              >
                 Manage Plan
               </Button>
             </Link>
@@ -179,9 +184,7 @@ export default function Account() {
                   <CardTitle className="mt-2 text-3xl font-sans uppercase tracking-[0.12em] text-primary">
                     {displayName}
                   </CardTitle>
-                  <CardDescription className="mt-2 text-sm font-mono">
-                    {user.email}
-                  </CardDescription>
+                  <CardDescription className="mt-2 text-sm font-mono">{user.email}</CardDescription>
                 </div>
                 <Badge variant="outline">{formatAccountTier(tier)} Plan</Badge>
               </div>
@@ -209,19 +212,31 @@ export default function Account() {
                 </div>
                 <div className="grid gap-2">
                   <Link href="/projects">
-                    <Button variant="outline" className="w-full justify-start uppercase tracking-wider text-xs font-mono" data-testid="button-open-projects">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start uppercase tracking-wider text-xs font-mono"
+                      data-testid="button-open-projects"
+                    >
                       <UserRound className="mr-2 h-4 w-4" />
                       Open Projects
                     </Button>
                   </Link>
                   <Link href="/write">
-                    <Button variant="outline" className="w-full justify-start uppercase tracking-wider text-xs font-mono" data-testid="button-open-writing">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start uppercase tracking-wider text-xs font-mono"
+                      data-testid="button-open-writing"
+                    >
                       <PenTool className="mr-2 h-4 w-4" />
                       Writing Studio
                     </Button>
                   </Link>
                   <Link href="/web-clips">
-                    <Button variant="outline" className="w-full justify-start uppercase tracking-wider text-xs font-mono" data-testid="button-open-web-clips">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start uppercase tracking-wider text-xs font-mono"
+                      data-testid="button-open-web-clips"
+                    >
                       <Link2 className="mr-2 h-4 w-4" />
                       Web Clips
                     </Button>
@@ -268,7 +283,8 @@ export default function Account() {
                 Token Budget
               </CardTitle>
               <CardDescription>
-                {tokensUsed.toLocaleString()} of {tokenLimit.toLocaleString()} output tokens used this cycle.
+                {tokensUsed.toLocaleString()} of {tokenLimit.toLocaleString()} output tokens used
+                this cycle.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -290,7 +306,8 @@ export default function Account() {
                 Document Capacity
               </CardTitle>
               <CardDescription>
-                {formatAccountBytes(storageUsed)} of {formatAccountBytes(storageLimit)} currently in use.
+                {formatAccountBytes(storageUsed)} of {formatAccountBytes(storageLimit)} currently in
+                use.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -310,22 +327,34 @@ export default function Account() {
               Account Controls
             </CardTitle>
             <CardDescription>
-              Use pricing for plan changes, the extension auth flow for browser access, and chat for active research work.
+              Use pricing for plan changes, the extension auth flow for browser access, and chat for
+              active research work.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
             <Link href="/pricing">
-              <Button className="uppercase tracking-wider text-xs font-mono" data-testid="button-go-pricing">
+              <Button
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-go-pricing"
+              >
                 Manage Pricing
               </Button>
             </Link>
             <Link href="/extension-auth">
-              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-go-extension-auth">
+              <Button
+                variant="outline"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-go-extension-auth"
+              >
                 Extension Access
               </Button>
             </Link>
             <Link href="/chat">
-              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-go-chat">
+              <Button
+                variant="outline"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-go-chat"
+              >
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Open Chat
               </Button>

@@ -1,21 +1,48 @@
 import { useState, useEffect, useCallback } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Card } from "@/components/ui/card";
-import { FileText, CheckCircle, XCircle, AlertCircle, Plus, Upload, X, Library } from "lucide-react";
+import {
+  FileText,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Plus,
+  Upload,
+  X,
+  Library,
+} from "lucide-react";
 import { useBatchAddDocuments } from "@/hooks/useProjects";
 import { useUploadDocument } from "@/hooks/useDocument";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
-import type { Document, Folder, BatchAddDocumentsResponse, BatchAddDocumentResult } from "@shared/schema";
+import type {
+  Document,
+  Folder,
+  BatchAddDocumentsResponse,
+  BatchAddDocumentResult,
+} from "@shared/schema";
 
 type DocumentLibraryItem = Pick<Document, "id" | "filename">;
 
@@ -83,12 +110,12 @@ export function BatchUploadModal({
   const { toast } = useToast();
   const batchAdd = useBatchAddDocuments();
   const uploadMutation = useUploadDocument();
-  
+
   const [activeTab, setActiveTab] = useState<"library" | "upload">("library");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
   const [response, setResponse] = useState<BatchAddDocumentsResponse | null>(null);
-  
+
   const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -100,7 +127,8 @@ export function BatchUploadModal({
   const hasPdfFiles = filesToUpload.some((file) => isPdfFile(file));
   const hasImageFiles = filesToUpload.some((file) => isImageFile(file));
   const shouldShowOcrModelSelector =
-    hasImageFiles || (hasPdfFiles && (batchOcrMode === "vision" || batchOcrMode === "vision_batch"));
+    hasImageFiles ||
+    (hasPdfFiles && (batchOcrMode === "vision" || batchOcrMode === "vision_batch"));
 
   useEffect(() => {
     if (open) {
@@ -124,7 +152,7 @@ export function BatchUploadModal({
   }, [open]);
 
   const handleSelectAll = () => {
-    setSelectedIds(new Set(availableDocuments.map(d => d.id)));
+    setSelectedIds(new Set(availableDocuments.map((d) => d.id)));
   };
 
   const handleDeselectAll = () => {
@@ -150,7 +178,7 @@ export function BatchUploadModal({
         documentIds: Array.from(selectedIds),
         folderId: targetFolderId,
       });
-      
+
       setResponse(result);
       toast({
         title: "Documents Added",
@@ -186,20 +214,20 @@ export function BatchUploadModal({
 
     if (e.dataTransfer.files) {
       const validFiles = Array.from(e.dataTransfer.files).filter(isValidFile);
-      setFilesToUpload(prev => [...prev, ...validFiles]);
+      setFilesToUpload((prev) => [...prev, ...validFiles]);
     }
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const validFiles = Array.from(e.target.files).filter(isValidFile);
-      setFilesToUpload(prev => [...prev, ...validFiles]);
+      setFilesToUpload((prev) => [...prev, ...validFiles]);
     }
     e.target.value = "";
   };
 
   const removeFile = (index: number) => {
-    setFilesToUpload(prev => prev.filter((_, i) => i !== index));
+    setFilesToUpload((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleUploadAndAdd = async () => {
@@ -214,12 +242,12 @@ export function BatchUploadModal({
     setUploadedFiles(uploadResults);
 
     const uploadedDocIds: string[] = [];
-    
+
     for (let i = 0; i < filesToUpload.length; i++) {
       const file = filesToUpload[i];
-      setUploadedFiles(prev => prev.map((f, idx) => 
-        idx === i ? { ...f, status: "uploading" } : f
-      ));
+      setUploadedFiles((prev) =>
+        prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" } : f)),
+      );
       setUploadProgress(Math.round((i / filesToUpload.length) * 100));
 
       try {
@@ -229,17 +257,21 @@ export function BatchUploadModal({
           ocrModel: batchOcrModel,
         });
         uploadedDocIds.push(doc.id);
-        setUploadedFiles(prev => prev.map((f, idx) => 
-          idx === i ? { ...f, status: "success", documentId: doc.id } : f
-        ));
+        setUploadedFiles((prev) =>
+          prev.map((f, idx) => (idx === i ? { ...f, status: "success", documentId: doc.id } : f)),
+        );
       } catch (error) {
-        setUploadedFiles(prev => prev.map((f, idx) => 
-          idx === i ? { 
-            ...f, 
-            status: "error", 
-            error: error instanceof Error ? error.message : "Upload failed" 
-          } : f
-        ));
+        setUploadedFiles((prev) =>
+          prev.map((f, idx) =>
+            idx === i
+              ? {
+                  ...f,
+                  status: "error",
+                  error: error instanceof Error ? error.message : "Upload failed",
+                }
+              : f,
+          ),
+        );
       }
     }
 
@@ -253,14 +285,14 @@ export function BatchUploadModal({
           documentIds: uploadedDocIds,
           folderId: targetFolderId,
         });
-        
+
         queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
         queryClient.invalidateQueries({ queryKey: ["/api/documents/meta"] });
         queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "documents"] });
-        
+
         setResponse(result);
         setFilesToUpload([]);
-        
+
         toast({
           title: "Upload Complete",
           description: `Uploaded ${uploadedDocIds.length} files and added ${result.added} to project`,
@@ -328,19 +360,25 @@ export function BatchUploadModal({
             <Plus className="h-5 w-5" />
             <span className="eva-section-title text-sm">BATCH DOCUMENT INSERTION</span>
           </DialogTitle>
-          <DialogDescription>
-            Select from your library or upload new files
-          </DialogDescription>
+          <DialogDescription>Select from your library or upload new files</DialogDescription>
         </DialogHeader>
 
         {!isComplete ? (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "library" | "upload")}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="library" className="uppercase tracking-wider" data-testid="tab-library">
+              <TabsTrigger
+                value="library"
+                className="uppercase tracking-wider"
+                data-testid="tab-library"
+              >
                 <Library className="h-4 w-4 mr-2" />
                 From Library
               </TabsTrigger>
-              <TabsTrigger value="upload" className="uppercase tracking-wider" data-testid="tab-upload">
+              <TabsTrigger
+                value="upload"
+                className="uppercase tracking-wider"
+                data-testid="tab-upload"
+              >
                 <Upload className="h-4 w-4 mr-2" />
                 Upload New
               </TabsTrigger>
@@ -351,19 +389,32 @@ export function BatchUploadModal({
                 <Alert>
                   <AlertTitle>No Documents Available</AlertTitle>
                   <AlertDescription>
-                    All documents have been added, or you haven't uploaded any yet. Use the "Upload New" tab to add files.
+                    All documents have been added, or you haven't uploaded any yet. Use the "Upload
+                    New" tab to add files.
                   </AlertDescription>
                 </Alert>
               ) : (
                 <>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label>Select Documents ({selectedIds.size}/{availableDocuments.length})</Label>
+                      <Label>
+                        Select Documents ({selectedIds.size}/{availableDocuments.length})
+                      </Label>
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={handleSelectAll} data-testid="button-select-all-upload">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleSelectAll}
+                          data-testid="button-select-all-upload"
+                        >
                           Select All
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={handleDeselectAll} data-testid="button-deselect-all-upload">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleDeselectAll}
+                          data-testid="button-deselect-all-upload"
+                        >
                           Deselect All
                         </Button>
                       </div>
@@ -391,8 +442,8 @@ export function BatchUploadModal({
 
                   <div className="space-y-2">
                     <Label>Target Folder (optional)</Label>
-                    <Select 
-                      value={targetFolderId || "__root__"} 
+                    <Select
+                      value={targetFolderId || "__root__"}
                       onValueChange={(v) => setTargetFolderId(v === "__root__" ? null : v)}
                     >
                       <SelectTrigger data-testid="select-target-folder">
@@ -422,17 +473,15 @@ export function BatchUploadModal({
                   <Progress value={uploadProgress} />
                   <ScrollArea className="h-48 border rounded-md p-2">
                     <div className="space-y-2">
-                          {uploadedFiles.map((file) => (
-                            <div
-                              key={file.id}
-                              className="flex items-center gap-3 p-2 rounded-md font-mono text-sm"
-                              data-testid={`upload-status-${file.id}`}
-                            >
+                      {uploadedFiles.map((file) => (
+                        <div
+                          key={file.id}
+                          className="flex items-center gap-3 p-2 rounded-md font-mono text-sm"
+                          data-testid={`upload-status-${file.id}`}
+                        >
                           {getUploadStatusIcon(file.status)}
                           <span className="text-sm flex-1 truncate">{file.filename}</span>
-                          {file.status === "success" && (
-                            <Badge variant="secondary">Uploaded</Badge>
-                          )}
+                          {file.status === "success" && <Badge variant="secondary">Uploaded</Badge>}
                           {file.error && (
                             <span className="text-xs text-destructive">{file.error}</span>
                           )}
@@ -445,7 +494,9 @@ export function BatchUploadModal({
                 <>
                   <Card
                     className={`p-6 border-2 border-dashed eva-clip-panel transition-colors ${
-                      dragActive ? "border-primary bg-primary/5" : "border-primary/30 hover:border-primary/60"
+                      dragActive
+                        ? "border-primary bg-primary/5"
+                        : "border-primary/30 hover:border-primary/60"
                     }`}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
@@ -467,7 +518,9 @@ export function BatchUploadModal({
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-medium">Drop files here or click to browse</p>
-                          <p className="text-xs text-muted-foreground mt-1">PDF, TXT, and image files, max 50MB each</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            PDF, TXT, and image files, max 50MB each
+                          </p>
                         </div>
                         <div className="flex gap-2">
                           <Badge variant="secondary">PDF</Badge>
@@ -520,16 +573,24 @@ export function BatchUploadModal({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
-                          <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
+                          <SelectItem value="advanced">
+                            Advanced OCR (scanned PDFs, PaddleOCR)
+                          </SelectItem>
                           <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
-                          <SelectItem value="vision_batch">Vision OCR Batch (long scanned PDFs, faster)</SelectItem>
+                          <SelectItem value="vision_batch">
+                            Vision OCR Batch (long scanned PDFs, faster)
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
-                        {batchOcrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
-                        {batchOcrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
-                        {batchOcrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
-                        {batchOcrMode === "vision_batch" && "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
+                        {batchOcrMode === "standard" &&
+                          "Best for PDFs with selectable text. Fastest option."}
+                        {batchOcrMode === "advanced" &&
+                          "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
+                        {batchOcrMode === "vision" &&
+                          "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+                        {batchOcrMode === "vision_batch" &&
+                          "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
                       </p>
                     </div>
                   )}
@@ -542,7 +603,9 @@ export function BatchUploadModal({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="gpt-4o">GPT-4o (best OCR quality)</SelectItem>
-                          <SelectItem value="gpt-4o-mini">GPT-4o mini (faster, lower cost)</SelectItem>
+                          <SelectItem value="gpt-4o-mini">
+                            GPT-4o mini (faster, lower cost)
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
@@ -553,8 +616,8 @@ export function BatchUploadModal({
 
                   <div className="space-y-2">
                     <Label>Target Folder (optional)</Label>
-                    <Select 
-                      value={targetFolderId || "__root__"} 
+                    <Select
+                      value={targetFolderId || "__root__"}
                       onValueChange={(v) => setTargetFolderId(v === "__root__" ? null : v)}
                     >
                       <SelectTrigger data-testid="select-upload-folder">
@@ -599,7 +662,9 @@ export function BatchUploadModal({
                     <span className="text-sm flex-1 truncate">{result.filename}</span>
                     <Badge variant="secondary">{getStatusLabel(result.status)}</Badge>
                     {result.error && (
-                      <span className="text-xs text-destructive truncate max-w-[150px]">{result.error}</span>
+                      <span className="text-xs text-destructive truncate max-w-[150px]">
+                        {result.error}
+                      </span>
                     )}
                   </div>
                 ))}
@@ -609,7 +674,11 @@ export function BatchUploadModal({
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-close-upload">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            data-testid="button-close-upload"
+          >
             {isComplete ? "Close" : "Cancel"}
           </Button>
           {!isComplete && activeTab === "library" && availableDocuments.length > 0 && (

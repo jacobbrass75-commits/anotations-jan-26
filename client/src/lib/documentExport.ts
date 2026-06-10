@@ -87,18 +87,22 @@ function ensureFootnoteId(context: FootnoteContext, identifier: string): number 
   return id;
 }
 
-function inlineToSegments(node: MdNode, context: FootnoteContext, style: TextStyle = {}): TextSegment[] {
+function inlineToSegments(
+  node: MdNode,
+  context: FootnoteContext,
+  style: TextStyle = {},
+): TextSegment[] {
   switch (node.type) {
     case "text":
     case "inlineCode":
       return [{ text: node.value || "", style }];
     case "strong":
       return (node.children || []).flatMap((child) =>
-        inlineToSegments(child, context, { ...style, bold: true })
+        inlineToSegments(child, context, { ...style, bold: true }),
       );
     case "emphasis":
       return (node.children || []).flatMap((child) =>
-        inlineToSegments(child, context, { ...style, italics: true })
+        inlineToSegments(child, context, { ...style, italics: true }),
       );
     case "delete":
       return (node.children || []).flatMap((child) => inlineToSegments(child, context, style));
@@ -232,7 +236,9 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
   };
 
   const renderParagraphNode = (node: MdNode, size: number, prefix?: string) => {
-    const segments = (node.children || []).flatMap((child) => inlineToSegments(child, footnoteContext));
+    const segments = (node.children || []).flatMap((child) =>
+      inlineToSegments(child, footnoteContext),
+    );
     const prefixed = prefix ? [{ text: prefix, style: {} as TextStyle }, ...segments] : segments;
     wrapAndDrawSegments(prefixed, size);
     y -= 6;
@@ -243,7 +249,7 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
       case "heading": {
         const size = node.depth === 1 ? 14 : node.depth === 2 ? 13 : 12;
         const headingSegments = (node.children || []).flatMap((child) =>
-          inlineToSegments(child, footnoteContext, { bold: true })
+          inlineToSegments(child, footnoteContext, { bold: true }),
         );
         wrapAndDrawSegments(headingSegments, size);
         y -= 8;
@@ -255,7 +261,11 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
       case "blockquote": {
         const text = flattenText(node).trim();
         if (text) {
-          renderParagraphNode({ type: "paragraph", children: [{ type: "text", value: text }] }, 12, "> ");
+          renderParagraphNode(
+            { type: "paragraph", children: [{ type: "text", value: text }] },
+            12,
+            "> ",
+          );
         }
         return;
       }
@@ -267,7 +277,11 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
             renderParagraphNode(paragraphChild, 12, prefix);
           } else {
             const text = flattenText(item);
-            renderParagraphNode({ type: "paragraph", children: [{ type: "text", value: text }] }, 12, prefix);
+            renderParagraphNode(
+              { type: "paragraph", children: [{ type: "text", value: text }] },
+              12,
+              prefix,
+            );
           }
         });
         return;
@@ -304,7 +318,10 @@ export async function buildPdfBlob(title: string, markdownContent: string): Prom
       const id = footnoteContext.footnoteIdsByIdentifier.get(identifier)!;
       const definition = footnoteContext.footnoteDefinitions.get(identifier);
       const definitionText = definition
-        ? (definition.children || []).map((child) => flattenText(child)).join(" ").trim()
+        ? (definition.children || [])
+            .map((child) => flattenText(child))
+            .join(" ")
+            .trim()
         : "";
       const line = definitionText ? `[${id}] ${definitionText}` : `[${id}]`;
       wrapAndDrawSegments([{ text: line, style: {} }], 10);

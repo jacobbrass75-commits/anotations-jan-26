@@ -57,20 +57,31 @@ async function runAppSmoke() {
   assert(ready.json?.database === "ok", "app /readyz did not report database ok");
 
   const root = await expectStatus("app root static", "/", 200);
-  assert(root.response.headers.get("content-type")?.includes("text/html"), "root did not return HTML");
+  assert(
+    root.response.headers.get("content-type")?.includes("text/html"),
+    "root did not return HTML",
+  );
   assert(root.text.includes('<div id="root"></div>'), "root HTML is missing React mount point");
 
   const staticFallback = await expectStatus("app static fallback", "/pricing", 200);
-  assert(staticFallback.text.includes('<div id="root"></div>'), "static fallback is missing React mount point");
+  assert(
+    staticFallback.text.includes('<div id="root"></div>'),
+    "static fallback is missing React mount point",
+  );
 
   const protectedApi = await expectStatus("auth-required API", "/api/auth/me", 401);
   assert(protectedApi.json?.message, "auth-required API did not return a JSON error");
 
   if (chromeExtensionId && extensionCorsEnabled) {
     const extensionOrigin = `chrome-extension://${chromeExtensionId}`;
-    const extensionCors = await expectStatus("extension CORS auth-required API", "/api/auth/me", 401, {
-      headers: { origin: extensionOrigin },
-    });
+    const extensionCors = await expectStatus(
+      "extension CORS auth-required API",
+      "/api/auth/me",
+      401,
+      {
+        headers: { origin: extensionOrigin },
+      },
+    );
     assert(
       extensionCors.response.headers.get("access-control-allow-origin") === extensionOrigin,
       "extension CORS response did not allow the configured Chrome extension origin",
@@ -84,10 +95,18 @@ async function runMcpSmoke() {
   const health = await expectStatus("MCP health", "/healthz", 200, { baseUrl: mcpBaseUrl });
   assert(health.json?.ok === true, "MCP /healthz did not return ok=true");
 
-  const metadata = await expectStatus("MCP protected-resource metadata", "/.well-known/oauth-protected-resource", 200, {
-    baseUrl: mcpBaseUrl,
-  });
-  assert(metadata.json?.resource || metadata.json?.authorization_servers, "MCP metadata response is missing OAuth metadata");
+  const metadata = await expectStatus(
+    "MCP protected-resource metadata",
+    "/.well-known/oauth-protected-resource",
+    200,
+    {
+      baseUrl: mcpBaseUrl,
+    },
+  );
+  assert(
+    metadata.json?.resource || metadata.json?.authorization_servers,
+    "MCP metadata response is missing OAuth metadata",
+  );
 
   const initialize = await expectStatus("MCP initialize probe", "/mcp", 200, {
     baseUrl: mcpBaseUrl,

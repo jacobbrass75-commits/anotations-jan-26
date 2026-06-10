@@ -34,7 +34,7 @@ try {
       {
         stdio: "inherit",
         env: process.env,
-      }
+      },
     );
 
     if (result.status !== 0) {
@@ -42,7 +42,7 @@ try {
     }
 
     const rawCoverage = JSON.parse(
-      await readFile(path.join(reportDir, "coverage-final.json"), "utf8")
+      await readFile(path.join(reportDir, "coverage-final.json"), "utf8"),
     );
     coverageMap.merge(rawCoverage);
   }
@@ -51,7 +51,7 @@ try {
   await mkdir(finalCoverageDir, { recursive: true });
   await writeFile(
     path.join(finalCoverageDir, "coverage-final.json"),
-    JSON.stringify(coverageMap.toJSON(), null, 2)
+    JSON.stringify(coverageMap.toJSON(), null, 2),
   );
 
   const context = createContext({

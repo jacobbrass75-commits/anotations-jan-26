@@ -29,20 +29,24 @@ const createWebClipRequestSchema = insertWebClipSchema.extend({
   tags: z.array(z.string().trim().min(1)).optional(),
 });
 
-const updateWebClipRequestSchema = z.object({
-  note: z.string().trim().max(5000).nullable().optional(),
-  category: z.string().optional(),
-  tags: z.array(z.string().trim().min(1)).optional(),
-  projectId: z.string().nullable().optional(),
-  projectDocumentId: z.string().nullable().optional(),
-}).strict();
+const updateWebClipRequestSchema = z
+  .object({
+    note: z.string().trim().max(5000).nullable().optional(),
+    category: z.string().optional(),
+    tags: z.array(z.string().trim().min(1)).optional(),
+    projectId: z.string().nullable().optional(),
+    projectDocumentId: z.string().nullable().optional(),
+  })
+  .strict();
 
-const promoteWebClipRequestSchema = z.object({
-  projectId: z.string().optional(),
-  projectDocumentId: z.string().optional(),
-  category: z.string().optional(),
-  note: z.string().trim().max(5000).optional(),
-}).strict();
+const promoteWebClipRequestSchema = z
+  .object({
+    projectId: z.string().optional(),
+    projectDocumentId: z.string().optional(),
+    category: z.string().optional(),
+    note: z.string().trim().max(5000).optional(),
+  })
+  .strict();
 
 function normalizeWebClipCategory(category?: string | null): string {
   if (category && webClipCategorySet.has(category)) {
@@ -92,7 +96,10 @@ function normalizeDate(input?: string | null): string | undefined {
 function parseAuthorName(name?: string | null): Array<{ firstName: string; lastName: string }> {
   if (!name) return [];
 
-  const normalized = name.replace(/^by\s+/i, "").replace(/\s+/g, " ").trim();
+  const normalized = name
+    .replace(/^by\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!normalized) return [];
 
   const byAnd = normalized.includes(" and ")
@@ -104,7 +111,10 @@ function parseAuthorName(name?: string | null): Array<{ firstName: string; lastN
     .filter(Boolean)
     .map((author) => {
       if (author.includes(",")) {
-        const [lastNameRaw, ...firstParts] = author.split(",").map((part) => part.trim()).filter(Boolean);
+        const [lastNameRaw, ...firstParts] = author
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean);
         if (lastNameRaw && firstParts.length > 0) {
           return {
             firstName: firstParts.join(" "),
@@ -159,7 +169,11 @@ function buildClipDocumentFilename(pageTitle: string): string {
   return `${sanitized || "Web Clip"}.txt`;
 }
 
-function buildClipDocumentText(clip: WebClip): { fullText: string; startPosition: number; endPosition: number } {
+function buildClipDocumentText(clip: WebClip): {
+  fullText: string;
+  startPosition: number;
+  endPosition: number;
+} {
   const parts = [
     `Title: ${clip.pageTitle}`,
     `URL: ${clip.sourceUrl}`,
@@ -182,7 +196,10 @@ function buildClipDocumentText(clip: WebClip): { fullText: string; startPosition
   return { fullText, startPosition, endPosition };
 }
 
-function findHighlightRangeInText(fullText: string, highlightedText: string): { startPosition: number; endPosition: number } {
+function findHighlightRangeInText(
+  fullText: string,
+  highlightedText: string,
+): { startPosition: number; endPosition: number } {
   if (!fullText || !highlightedText) {
     return { startPosition: 0, endPosition: Math.max(1, highlightedText.length) };
   }
@@ -253,7 +270,11 @@ async function validateClipProjectTargets(input: {
     }
 
     if (resolvedProjectId && projectDocument.projectId !== resolvedProjectId) {
-      return { ok: false, status: 400, error: "Project document does not belong to the selected project" };
+      return {
+        ok: false,
+        status: 400,
+        error: "Project document does not belong to the selected project",
+      };
     }
 
     resolvedProjectId = projectDocument.projectId;
@@ -263,56 +284,66 @@ async function validateClipProjectTargets(input: {
 }
 
 export function registerWebClipRoutes(app: Express): void {
-  app.post("/api/web-clips", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const parsed = createWebClipRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid web clip payload", details: parsed.error.flatten() });
-      }
+  app.post(
+    "/api/web-clips",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const parsed = createWebClipRequestSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res
+            .status(400)
+            .json({ error: "Invalid web clip payload", details: parsed.error.flatten() });
+        }
 
-      const payload: InsertWebClip = {
-        ...parsed.data,
-        sourceUrl: normalizeUrl(parsed.data.sourceUrl),
-        category: normalizeWebClipCategory(parsed.data.category),
-        tags: parsed.data.tags ?? [],
-      };
+        const payload: InsertWebClip = {
+          ...parsed.data,
+          sourceUrl: normalizeUrl(parsed.data.sourceUrl),
+          category: normalizeWebClipCategory(parsed.data.category),
+          tags: parsed.data.tags ?? [],
+        };
 
-      const targetValidation = await validateClipProjectTargets({
-        userId: req.user!.userId,
-        projectId: payload.projectId,
-        projectDocumentId: payload.projectDocumentId,
-      });
-      if (!targetValidation.ok) {
-        return res.status(targetValidation.status).json({ error: targetValidation.error });
-      }
-
-      const citationData = buildCitationData(payload);
-      const footnote = generateChicagoFootnote(citationData);
-      const bibliography = generateChicagoBibliography(citationData);
-
-      const [created] = await db
-        .insert(webClips)
-        .values({
-          ...payload,
-          projectId: targetValidation.projectId,
+        const targetValidation = await validateClipProjectTargets({
           userId: req.user!.userId,
-          citationData,
-          footnote,
-          bibliography,
-        })
-        .returning();
+          projectId: payload.projectId,
+          projectDocumentId: payload.projectDocumentId,
+        });
+        if (!targetValidation.ok) {
+          return res.status(targetValidation.status).json({ error: targetValidation.error });
+        }
 
-      return res.status(201).json(created);
-    } catch (error) {
-      console.error("Error creating web clip:", error);
-      return res.status(500).json({ error: error instanceof Error ? error.message : "Failed to create web clip" });
-    }
-  });
+        const citationData = buildCitationData(payload);
+        const footnote = generateChicagoFootnote(citationData);
+        const bibliography = generateChicagoBibliography(citationData);
+
+        const [created] = await db
+          .insert(webClips)
+          .values({
+            ...payload,
+            projectId: targetValidation.projectId,
+            userId: req.user!.userId,
+            citationData,
+            footnote,
+            bibliography,
+          })
+          .returning();
+
+        return res.status(201).json(created);
+      } catch (error) {
+        console.error("Error creating web clip:", error);
+        return res
+          .status(500)
+          .json({ error: error instanceof Error ? error.message : "Failed to create web clip" });
+      }
+    },
+  );
 
   app.get("/api/web-clips", requireAuth, async (req: Request, res: Response) => {
     try {
       const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
-      const sourceUrlRaw = typeof req.query.sourceUrl === "string" ? req.query.sourceUrl : undefined;
+      const sourceUrlRaw =
+        typeof req.query.sourceUrl === "string" ? req.query.sourceUrl : undefined;
       const category = typeof req.query.category === "string" ? req.query.category : undefined;
       const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
       const limit = parsePositiveInt(req.query.limit, 50, 200);
@@ -341,8 +372,8 @@ export function registerWebClipRoutes(app: Express): void {
         sort === "oldest"
           ? [asc(webClips.createdAt)]
           : sort === "site"
-          ? [asc(webClips.siteName), desc(webClips.createdAt)]
-          : [desc(webClips.createdAt)];
+            ? [asc(webClips.siteName), desc(webClips.createdAt)]
+            : [desc(webClips.createdAt)];
 
       const rows = whereClause
         ? await db
@@ -368,11 +399,12 @@ export function registerWebClipRoutes(app: Express): void {
 
   app.get("/api/web-clips/by-url", requireAuth, async (req: Request, res: Response) => {
     try {
-      const sourceUrlRaw = typeof req.query.sourceUrl === "string"
-        ? req.query.sourceUrl
-        : typeof req.query.url === "string"
-        ? req.query.url
-        : "";
+      const sourceUrlRaw =
+        typeof req.query.sourceUrl === "string"
+          ? req.query.sourceUrl
+          : typeof req.query.url === "string"
+            ? req.query.url
+            : "";
 
       if (!sourceUrlRaw) {
         return res.status(400).json({ error: "sourceUrl (or url) query parameter is required" });
@@ -382,7 +414,9 @@ export function registerWebClipRoutes(app: Express): void {
       const rows = await db
         .select()
         .from(webClips)
-        .where(and(eq(webClips.userId, req.user!.userId), eq(webClips.sourceUrl, normalizedSourceUrl)))
+        .where(
+          and(eq(webClips.userId, req.user!.userId), eq(webClips.sourceUrl, normalizedSourceUrl)),
+        )
         .orderBy(desc(webClips.createdAt));
 
       return res.json(rows);
@@ -410,7 +444,9 @@ export function registerWebClipRoutes(app: Express): void {
     try {
       const parsed = updateWebClipRequestSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid update payload", details: parsed.error.flatten() });
+        return res
+          .status(400)
+          .json({ error: "Invalid update payload", details: parsed.error.flatten() });
       }
 
       const existing = await getWebClipForUser(req.params.id, req.user!.userId);
@@ -419,11 +455,16 @@ export function registerWebClipRoutes(app: Express): void {
       }
 
       const hasProjectId = Object.prototype.hasOwnProperty.call(parsed.data, "projectId");
-      const hasProjectDocumentId = Object.prototype.hasOwnProperty.call(parsed.data, "projectDocumentId");
+      const hasProjectDocumentId = Object.prototype.hasOwnProperty.call(
+        parsed.data,
+        "projectDocumentId",
+      );
       const targetValidation = await validateClipProjectTargets({
         userId: req.user!.userId,
         projectId: hasProjectId ? parsed.data.projectId : existing.projectId,
-        projectDocumentId: hasProjectDocumentId ? parsed.data.projectDocumentId : existing.projectDocumentId,
+        projectDocumentId: hasProjectDocumentId
+          ? parsed.data.projectDocumentId
+          : existing.projectDocumentId,
       });
       if (!targetValidation.ok) {
         return res.status(targetValidation.status).json({ error: targetValidation.error });
@@ -475,7 +516,9 @@ export function registerWebClipRoutes(app: Express): void {
         return res.status(404).json({ error: "Web clip not found" });
       }
 
-      await db.delete(webClips).where(and(eq(webClips.id, req.params.id), eq(webClips.userId, req.user!.userId)));
+      await db
+        .delete(webClips)
+        .where(and(eq(webClips.id, req.params.id), eq(webClips.userId, req.user!.userId)));
       return res.json({ success: true });
     } catch (error) {
       console.error("Error deleting web clip:", error);
@@ -492,13 +535,19 @@ export function registerWebClipRoutes(app: Express): void {
 
       const parsed = promoteWebClipRequestSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid promote payload", details: parsed.error.flatten() });
+        return res
+          .status(400)
+          .json({ error: "Invalid promote payload", details: parsed.error.flatten() });
       }
 
       let resolvedProjectId = parsed.data.projectId || clip.projectId || null;
-      const initialProjectDocumentId = parsed.data.projectDocumentId || clip.projectDocumentId || null;
+      const initialProjectDocumentId =
+        parsed.data.projectDocumentId || clip.projectDocumentId || null;
       if (!resolvedProjectId && initialProjectDocumentId) {
-        const targetProjectDoc = await getOwnedProjectDocument(initialProjectDocumentId, req.user!.userId);
+        const targetProjectDoc = await getOwnedProjectDocument(
+          initialProjectDocumentId,
+          req.user!.userId,
+        );
         if (!targetProjectDoc) {
           return res.status(404).json({ error: "Target project document not found" });
         }
@@ -517,13 +566,18 @@ export function registerWebClipRoutes(app: Express): void {
       let targetDocumentText = "";
 
       if (targetProjectDocumentId) {
-        const targetProjectDoc = await getOwnedProjectDocument(targetProjectDocumentId, req.user!.userId);
+        const targetProjectDoc = await getOwnedProjectDocument(
+          targetProjectDocumentId,
+          req.user!.userId,
+        );
         if (!targetProjectDoc) {
           return res.status(404).json({ error: "Target project document not found" });
         }
 
         if (targetProjectDoc.projectId !== resolvedProjectId) {
-          return res.status(400).json({ error: "Target project document does not belong to the selected project" });
+          return res
+            .status(400)
+            .json({ error: "Target project document does not belong to the selected project" });
         }
 
         const sourceDocument = await storage.getDocument(targetProjectDoc.documentId);
@@ -611,7 +665,9 @@ export function registerWebClipRoutes(app: Express): void {
       return res.status(201).json({ annotation, projectDocumentId: targetProjectDocumentId });
     } catch (error) {
       console.error("Error promoting web clip:", error);
-      return res.status(500).json({ error: error instanceof Error ? error.message : "Failed to promote web clip" });
+      return res
+        .status(500)
+        .json({ error: error instanceof Error ? error.message : "Failed to promote web clip" });
     }
   });
 }

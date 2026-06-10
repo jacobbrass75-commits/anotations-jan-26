@@ -12,16 +12,17 @@ const backendBaseUrl = process.env.SCHOLARMARK_BACKEND_URL ?? "http://127.0.0.1:
 const mcpSessions = new Map();
 const sseSessions = new Map();
 
-setInterval(() => {
-  if (mcpSessions.size > 0 || sseSessions.size > 0) {
-    console.log(`[SESSION] Active: streamable=${mcpSessions.size}, sse=${sseSessions.size}`);
-  }
-}, 10 * 60 * 1000);
+setInterval(
+  () => {
+    if (mcpSessions.size > 0 || sseSessions.size > 0) {
+      console.log(`[SESSION] Active: streamable=${mcpSessions.size}, sse=${sseSessions.size}`);
+    }
+  },
+  10 * 60 * 1000,
+);
 
 function attachAuthInfo(req) {
-  const authHeader = typeof req.headers.authorization === "string"
-    ? req.headers.authorization
-    : "";
+  const authHeader = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
   const match = authHeader.match(/^bearer\s+(.+)$/i);
   if (!match) {
     return;
@@ -65,9 +66,7 @@ app.use((error, req, res, next) => {
     return;
   }
 
-  const isJsonParseError =
-    error instanceof SyntaxError
-    || error?.type === "entity.parse.failed";
+  const isJsonParseError = error instanceof SyntaxError || error?.type === "entity.parse.failed";
 
   if (!isJsonParseError) {
     next(error);
@@ -75,10 +74,7 @@ app.use((error, req, res, next) => {
   }
 
   const isMcpRoute =
-    req.path === "/mcp"
-    || req.path === "/mcp."
-    || req.path === "/messages"
-    || req.path === "/sse";
+    req.path === "/mcp" || req.path === "/mcp." || req.path === "/messages" || req.path === "/sse";
   if (isMcpRoute) {
     res.status(400).json({
       jsonrpc: "2.0",
@@ -146,7 +142,8 @@ function getResourceMetadataUrl(req) {
 async function handleStreamableMcpRequest(req, res) {
   try {
     if (req.method === "OPTIONS") {
-      res.status(204)
+      res
+        .status(204)
         .set("Allow", "GET, POST, DELETE, OPTIONS, HEAD")
         .set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS, HEAD")
         .set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, Mcp-Session-Id")
@@ -174,12 +171,12 @@ async function handleStreamableMcpRequest(req, res) {
     const bodyMethod = req.body?.method;
 
     console.log(
-      `[MCP] ${req.method} ${req.path}`
-      + ` | auth=${!!req.headers.authorization}`
-      + ` | session=${(sessionHeader ?? "none").substring(0, 8)}`
-      + ` | method=${bodyMethod ?? "-"}`
-      + ` | accept=${(req.headers.accept ?? "").substring(0, 60)}`
-      + ` | ua=${(req.headers["user-agent"] ?? "").substring(0, 50)}`
+      `[MCP] ${req.method} ${req.path}` +
+        ` | auth=${!!req.headers.authorization}` +
+        ` | session=${(sessionHeader ?? "none").substring(0, 8)}` +
+        ` | method=${bodyMethod ?? "-"}` +
+        ` | accept=${(req.headers.accept ?? "").substring(0, 60)}` +
+        ` | ua=${(req.headers["user-agent"] ?? "").substring(0, 50)}`,
     );
 
     attachAuthInfo(req);
@@ -206,13 +203,16 @@ async function handleStreamableMcpRequest(req, res) {
       if (needsAuth && !req.auth) {
         const resourceUrl = getResourceMetadataUrl(req);
         console.log("[AUTH] 401 for method:", bodyMethod, "(session exists but no auth)");
-        res.status(401)
+        res
+          .status(401)
           .set("WWW-Authenticate", `Bearer resource_metadata="${resourceUrl}"`)
           .json({ error: "unauthorized", message: "Bearer token required." });
         return;
       }
       const session = mcpSessions.get(sessionHeader);
-      console.log(`[SESSION] Reuse ${sessionHeader.substring(0, 8)} for ${bodyMethod ?? req.method}`);
+      console.log(
+        `[SESSION] Reuse ${sessionHeader.substring(0, 8)} for ${bodyMethod ?? req.method}`,
+      );
       await session.transport.handleRequest(req, res, req.body);
       return;
     }
@@ -232,7 +232,8 @@ async function handleStreamableMcpRequest(req, res) {
     if (req.method === "POST" && !req.auth && !isInitialize) {
       const resourceUrl = getResourceMetadataUrl(req);
       console.log("[AUTH] 401 for method:", bodyMethod);
-      res.status(401)
+      res
+        .status(401)
         .set("WWW-Authenticate", `Bearer resource_metadata="${resourceUrl}"`)
         .json({ error: "unauthorized", message: "Bearer token required." });
       return;
@@ -335,7 +336,8 @@ app.all("/mcp", handleStreamableMcpRequest);
 app.all("/mcp.", handleStreamableMcpRequest);
 app.post("/", (_req, res) => sendServiceInfo(res));
 app.options("/", (_req, res) => {
-  res.status(204)
+  res
+    .status(204)
     .set("Allow", "GET, POST, OPTIONS, HEAD")
     .set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
     .set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, Mcp-Session-Id")

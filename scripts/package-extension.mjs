@@ -38,7 +38,7 @@ async function walk(dir) {
     const path = join(dir, entry.name);
     if (entry.name === ".DS_Store") continue;
     if (entry.isDirectory()) {
-      files.push(...await walk(path));
+      files.push(...(await walk(path)));
     } else if (entry.isFile()) {
       files.push(path);
     }
@@ -47,12 +47,14 @@ async function walk(dir) {
 }
 
 async function validateIcon(path, expectedSize) {
-  if (!await fileExists(path)) {
+  if (!(await fileExists(path))) {
     fail(`Missing icon: ${path}`);
   }
   const metadata = await sharp(path).metadata();
   if (metadata.width !== expectedSize || metadata.height !== expectedSize) {
-    fail(`Icon ${path} must be ${expectedSize}x${expectedSize}, got ${metadata.width}x${metadata.height}`);
+    fail(
+      `Icon ${path} must be ${expectedSize}x${expectedSize}, got ${metadata.width}x${metadata.height}`,
+    );
   }
 }
 
@@ -64,25 +66,36 @@ async function validateManifest(manifest) {
     await validateIcon(join(extensionDir, iconPath), Number(size));
   }
 
-  for (const script of manifest.background?.service_worker ? [manifest.background.service_worker] : []) {
-    if (!await fileExists(join(extensionDir, script))) fail(`Missing background service worker: ${script}`);
+  for (const script of manifest.background?.service_worker
+    ? [manifest.background.service_worker]
+    : []) {
+    if (!(await fileExists(join(extensionDir, script))))
+      fail(`Missing background service worker: ${script}`);
   }
 
   for (const contentScript of manifest.content_scripts || []) {
     for (const jsPath of contentScript.js || []) {
-      if (!await fileExists(join(extensionDir, jsPath))) fail(`Missing content script: ${jsPath}`);
+      if (!(await fileExists(join(extensionDir, jsPath))))
+        fail(`Missing content script: ${jsPath}`);
     }
   }
 
-  if (production && (manifest.host_permissions || []).some((value) => value.startsWith("http://localhost"))) {
-    manifest.host_permissions = manifest.host_permissions.filter((value) => !value.startsWith("http://localhost"));
+  if (
+    production &&
+    (manifest.host_permissions || []).some((value) => value.startsWith("http://localhost"))
+  ) {
+    manifest.host_permissions = manifest.host_permissions.filter(
+      (value) => !value.startsWith("http://localhost"),
+    );
   }
 
   if (production) {
     manifest.content_scripts = (manifest.content_scripts || [])
       .map((contentScript) => ({
         ...contentScript,
-        matches: (contentScript.matches || []).filter((value) => !value.startsWith("http://localhost")),
+        matches: (contentScript.matches || []).filter(
+          (value) => !value.startsWith("http://localhost"),
+        ),
       }))
       .filter((contentScript) => (contentScript.matches || []).length > 0);
     delete manifest.options_page;
@@ -123,7 +136,10 @@ async function packageExtension() {
 
   await mkdir(outputDir, { recursive: true });
   const outputPath = join(outputDir, `scholarmark-extension-v${manifest.version}.zip`);
-  await writeFile(outputPath, await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
+  await writeFile(
+    outputPath,
+    await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }),
+  );
   console.log(`[extension] packaged ${outputPath}`);
 }
 

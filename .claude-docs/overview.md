@@ -6,20 +6,20 @@ A full-stack, AI-powered document annotation and research management tool. Resea
 
 ## Tech Stack
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| Language | TypeScript (strict mode) | 5.6.3 |
-| Frontend | React + Vite | 18.3.1 / 7.3.0 |
-| Backend | Express.js | 4.21.2 |
-| Database | SQLite via Drizzle ORM | better-sqlite3 12.6.2 / drizzle-orm 0.39.3 |
-| AI | OpenAI API | openai 6.16.0 |
-| Styling | Tailwind CSS + shadcn/ui (New York) | 3.4.17 |
-| State | TanStack React Query | 5.60.5 |
-| Routing | wouter (frontend), Express (backend) | 3.3.5 |
-| Validation | Zod | 3.25.76 |
-| Forms | react-hook-form | 7.55.0 |
-| PDF | pdf-parse | 2.4.5 |
-| Uploads | Multer | 2.0.2 |
+| Layer      | Technology                           | Version                                    |
+| ---------- | ------------------------------------ | ------------------------------------------ |
+| Language   | TypeScript (strict mode)             | 5.6.3                                      |
+| Frontend   | React + Vite                         | 18.3.1 / 7.3.0                             |
+| Backend    | Express.js                           | 4.21.2                                     |
+| Database   | SQLite via Drizzle ORM               | better-sqlite3 12.6.2 / drizzle-orm 0.39.3 |
+| AI         | OpenAI API                           | openai 6.16.0                              |
+| Styling    | Tailwind CSS + shadcn/ui (New York)  | 3.4.17                                     |
+| State      | TanStack React Query                 | 5.60.5                                     |
+| Routing    | wouter (frontend), Express (backend) | 3.3.5                                      |
+| Validation | Zod                                  | 3.25.76                                    |
+| Forms      | react-hook-form                      | 7.55.0                                     |
+| PDF        | pdf-parse                            | 2.4.5                                      |
+| Uploads    | Multer                               | 2.0.2                                      |
 
 ## Architecture
 

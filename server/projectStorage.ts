@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, isNull, desc, asc } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 import {
   projects,
   folders,
@@ -26,46 +26,76 @@ export interface IProjectStorage {
   createProject(data: InsertProject): Promise<Project>;
   getProject(id: string): Promise<Project | undefined>;
   getAllProjects(userId?: string): Promise<Project[]>;
-  updateProject(id: string, data: Partial<InsertProject & { contextSummary?: string; contextEmbedding?: number[] }>): Promise<Project | undefined>;
+  updateProject(
+    id: string,
+    data: Partial<InsertProject & { contextSummary?: string; contextEmbedding?: number[] }>,
+  ): Promise<Project | undefined>;
   deleteProject(id: string): Promise<void>;
 
   // Folders
   createFolder(data: InsertFolder): Promise<Folder>;
   getFolder(id: string): Promise<Folder | undefined>;
   getFoldersByProject(projectId: string): Promise<Folder[]>;
-  updateFolder(id: string, data: Partial<InsertFolder & { contextSummary?: string; contextEmbedding?: number[] }>): Promise<Folder | undefined>;
+  updateFolder(
+    id: string,
+    data: Partial<InsertFolder & { contextSummary?: string; contextEmbedding?: number[] }>,
+  ): Promise<Folder | undefined>;
   deleteFolder(id: string): Promise<void>;
   moveFolder(id: string, newParentId: string | null): Promise<Folder | undefined>;
 
   // Project Documents
   addDocumentToProject(data: InsertProjectDocument): Promise<ProjectDocument>;
   getProjectDocument(id: string): Promise<ProjectDocument | undefined>;
-  getProjectDocumentsByProject(projectId: string): Promise<(ProjectDocument & { document: { id: string; filename: string; summary: string | null; chunkCount: number; status: string; processingError: string | null } })[]>;
+  getProjectDocumentsByProject(
+    projectId: string,
+  ): Promise<
+    (ProjectDocument & {
+      document: {
+        id: string;
+        filename: string;
+        summary: string | null;
+        chunkCount: number;
+        status: string;
+        processingError: string | null;
+      };
+    })[]
+  >;
   getProjectDocumentsByFolder(folderId: string): Promise<ProjectDocument[]>;
-  updateProjectDocument(id: string, data: Partial<{
-    projectContext: string;
-    roleInProject: string;
-    retrievalContext: string;
-    retrievalEmbedding: number[];
-    citationData: CitationData;
-    folderId: string | null;
-    lastViewedAt: Date;
-    scrollPosition: number;
-  }>): Promise<ProjectDocument | undefined>;
+  updateProjectDocument(
+    id: string,
+    data: Partial<{
+      projectContext: string;
+      roleInProject: string;
+      retrievalContext: string;
+      retrievalEmbedding: number[];
+      citationData: CitationData;
+      folderId: string | null;
+      lastViewedAt: Date;
+      scrollPosition: number;
+    }>,
+  ): Promise<ProjectDocument | undefined>;
   removeDocumentFromProject(id: string): Promise<void>;
 
   // Project Annotations
   createProjectAnnotation(data: InsertProjectAnnotation): Promise<ProjectAnnotation>;
   getProjectAnnotation(id: string): Promise<ProjectAnnotation | undefined>;
   getProjectAnnotationsByDocument(projectDocumentId: string): Promise<ProjectAnnotation[]>;
-  updateProjectAnnotation(id: string, data: Partial<InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] }>): Promise<ProjectAnnotation | undefined>;
+  updateProjectAnnotation(
+    id: string,
+    data: Partial<
+      InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] }
+    >,
+  ): Promise<ProjectAnnotation | undefined>;
   deleteProjectAnnotation(id: string): Promise<void>;
 
   // Prompt Templates
   createPromptTemplate(data: InsertPromptTemplate): Promise<PromptTemplate>;
   getPromptTemplate(id: string): Promise<PromptTemplate | undefined>;
   getPromptTemplatesByProject(projectId: string): Promise<PromptTemplate[]>;
-  updatePromptTemplate(id: string, data: Partial<InsertPromptTemplate>): Promise<PromptTemplate | undefined>;
+  updatePromptTemplate(
+    id: string,
+    data: Partial<InsertPromptTemplate>,
+  ): Promise<PromptTemplate | undefined>;
   deletePromptTemplate(id: string): Promise<void>;
 }
 
@@ -83,12 +113,19 @@ export const projectStorage: IProjectStorage = {
 
   async getAllProjects(userId?: string): Promise<Project[]> {
     if (userId) {
-      return db.select().from(projects).where(eq(projects.userId, userId)).orderBy(desc(projects.createdAt));
+      return db
+        .select()
+        .from(projects)
+        .where(eq(projects.userId, userId))
+        .orderBy(desc(projects.createdAt));
     }
     return db.select().from(projects).orderBy(desc(projects.createdAt));
   },
 
-  async updateProject(id: string, data: Partial<InsertProject & { contextSummary?: string; contextEmbedding?: number[] }>): Promise<Project | undefined> {
+  async updateProject(
+    id: string,
+    data: Partial<InsertProject & { contextSummary?: string; contextEmbedding?: number[] }>,
+  ): Promise<Project | undefined> {
     const [updated] = await db
       .update(projects)
       .set({ ...data, updatedAt: new Date() })
@@ -120,12 +157,11 @@ export const projectStorage: IProjectStorage = {
       .orderBy(asc(folders.sortOrder), asc(folders.name));
   },
 
-  async updateFolder(id: string, data: Partial<InsertFolder & { contextSummary?: string; contextEmbedding?: number[] }>): Promise<Folder | undefined> {
-    const [updated] = await db
-      .update(folders)
-      .set(data)
-      .where(eq(folders.id, id))
-      .returning();
+  async updateFolder(
+    id: string,
+    data: Partial<InsertFolder & { contextSummary?: string; contextEmbedding?: number[] }>,
+  ): Promise<Folder | undefined> {
+    const [updated] = await db.update(folders).set(data).where(eq(folders.id, id)).returning();
     return updated;
   },
 
@@ -156,7 +192,20 @@ export const projectStorage: IProjectStorage = {
     return projectDoc;
   },
 
-  async getProjectDocumentsByProject(projectId: string): Promise<(ProjectDocument & { document: { id: string; filename: string; summary: string | null; chunkCount: number; status: string; processingError: string | null } })[]> {
+  async getProjectDocumentsByProject(
+    projectId: string,
+  ): Promise<
+    (ProjectDocument & {
+      document: {
+        id: string;
+        filename: string;
+        summary: string | null;
+        chunkCount: number;
+        status: string;
+        processingError: string | null;
+      };
+    })[]
+  > {
     const results = await db
       .select({
         projectDocument: projectDocuments,
@@ -174,29 +223,29 @@ export const projectStorage: IProjectStorage = {
       .where(eq(projectDocuments.projectId, projectId))
       .orderBy(desc(projectDocuments.addedAt));
 
-    return results.map(r => ({
+    return results.map((r) => ({
       ...r.projectDocument,
       document: r.document,
     }));
   },
 
   async getProjectDocumentsByFolder(folderId: string): Promise<ProjectDocument[]> {
-    return db
-      .select()
-      .from(projectDocuments)
-      .where(eq(projectDocuments.folderId, folderId));
+    return db.select().from(projectDocuments).where(eq(projectDocuments.folderId, folderId));
   },
 
-  async updateProjectDocument(id: string, data: Partial<{
-    projectContext: string;
-    roleInProject: string;
-    retrievalContext: string;
-    retrievalEmbedding: number[];
-    citationData: CitationData;
-    folderId: string | null;
-    lastViewedAt: Date;
-    scrollPosition: number;
-  }>): Promise<ProjectDocument | undefined> {
+  async updateProjectDocument(
+    id: string,
+    data: Partial<{
+      projectContext: string;
+      roleInProject: string;
+      retrievalContext: string;
+      retrievalEmbedding: number[];
+      citationData: CitationData;
+      folderId: string | null;
+      lastViewedAt: Date;
+      scrollPosition: number;
+    }>,
+  ): Promise<ProjectDocument | undefined> {
     const [updated] = await db
       .update(projectDocuments)
       .set(data)
@@ -211,10 +260,13 @@ export const projectStorage: IProjectStorage = {
 
   // === PROJECT ANNOTATIONS ===
   async createProjectAnnotation(data: InsertProjectAnnotation): Promise<ProjectAnnotation> {
-    const [annotation] = await db.insert(projectAnnotations).values({
-      ...data,
-      category: data.category as AnnotationCategory,
-    }).returning();
+    const [annotation] = await db
+      .insert(projectAnnotations)
+      .values({
+        ...data,
+        category: data.category as AnnotationCategory,
+      })
+      .returning();
     return annotation;
   },
 
@@ -234,7 +286,12 @@ export const projectStorage: IProjectStorage = {
       .orderBy(asc(projectAnnotations.startPosition));
   },
 
-  async updateProjectAnnotation(id: string, data: Partial<InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] }>): Promise<ProjectAnnotation | undefined> {
+  async updateProjectAnnotation(
+    id: string,
+    data: Partial<
+      InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] }
+    >,
+  ): Promise<ProjectAnnotation | undefined> {
     const { category, ...rest } = data;
     const [updated] = await db
       .update(projectAnnotations)
@@ -258,10 +315,7 @@ export const projectStorage: IProjectStorage = {
   },
 
   async getPromptTemplate(id: string): Promise<PromptTemplate | undefined> {
-    const [template] = await db
-      .select()
-      .from(promptTemplates)
-      .where(eq(promptTemplates.id, id));
+    const [template] = await db.select().from(promptTemplates).where(eq(promptTemplates.id, id));
     return template;
   },
 
@@ -273,7 +327,10 @@ export const projectStorage: IProjectStorage = {
       .orderBy(desc(promptTemplates.createdAt));
   },
 
-  async updatePromptTemplate(id: string, data: Partial<InsertPromptTemplate>): Promise<PromptTemplate | undefined> {
+  async updatePromptTemplate(
+    id: string,
+    data: Partial<InsertPromptTemplate>,
+  ): Promise<PromptTemplate | undefined> {
     const [updated] = await db
       .update(promptTemplates)
       .set(data)

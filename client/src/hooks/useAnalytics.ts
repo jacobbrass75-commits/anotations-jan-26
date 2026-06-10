@@ -96,7 +96,9 @@ export function useAnalyticsConversations(from: number, to: number, limit = 50, 
   return useQuery<{ conversations: ConversationSummary[]; total: number }>({
     queryKey: ["analytics-conversations", from, to, limit, offset],
     queryFn: () =>
-      fetchJson(`/api/admin/analytics/conversations?from=${from}&to=${to}&limit=${limit}&offset=${offset}`),
+      fetchJson(
+        `/api/admin/analytics/conversations?from=${from}&to=${to}&limit=${limit}&offset=${offset}`,
+      ),
     refetchInterval: 30_000,
   });
 }

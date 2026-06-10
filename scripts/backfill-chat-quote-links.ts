@@ -20,7 +20,9 @@ type MessageRow = {
   content: string;
 };
 
-const db = new Database("C:/Users/Jacob/Desktop/DEV2/anotations-jan-26-local/data/sourceannotator.db");
+const db = new Database(
+  "C:/Users/Jacob/Desktop/DEV2/anotations-jan-26-local/data/sourceannotator.db",
+);
 
 const selectConversations = db.prepare<[string?], ConversationRow>(`
   SELECT id, project_id
@@ -111,8 +113,8 @@ function main() {
         updatedMessages,
       },
       null,
-      2
-    )
+      2,
+    ),
   );
 }
 

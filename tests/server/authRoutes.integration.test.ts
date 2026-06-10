@@ -200,13 +200,13 @@ describe("auth route integration", () => {
           "SELECT id, email, tier, tokens_used, token_limit, storage_limit FROM users ORDER BY email",
         )
         .all() as Array<{
-          id: string;
-          email: string;
-          tier: string;
-          tokens_used: number;
-          token_limit: number;
-          storage_limit: number;
-        }>;
+        id: string;
+        email: string;
+        tier: string;
+        tokens_used: number;
+        token_limit: number;
+        storage_limit: number;
+      }>;
 
       expect(profile.status).toBe(200);
       expect(profile.body).toMatchObject({
@@ -245,13 +245,19 @@ describe("auth route integration", () => {
     const { server, sqlite } = await createAuthApp();
     const nowMs = new Date("2026-03-01T00:00:00.000Z").getTime();
     sqlite
-      .prepare("INSERT INTO documents (id, filename, full_text, upload_date, user_id) VALUES (?, ?, ?, ?, NULL)")
+      .prepare(
+        "INSERT INTO documents (id, filename, full_text, upload_date, user_id) VALUES (?, ?, ?, ?, NULL)",
+      )
       .run("legacy-doc", "legacy.txt", "legacy source text", nowMs);
     sqlite
-      .prepare("INSERT INTO projects (id, name, user_id, created_at, updated_at) VALUES (?, ?, NULL, ?, ?)")
+      .prepare(
+        "INSERT INTO projects (id, name, user_id, created_at, updated_at) VALUES (?, ?, NULL, ?, ?)",
+      )
       .run("legacy-project", "Legacy Project", nowMs, nowMs);
     sqlite
-      .prepare("INSERT INTO conversations (id, title, model, user_id, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)")
+      .prepare(
+        "INSERT INTO conversations (id, title, model, user_id, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)",
+      )
       .run("legacy-conversation", "Legacy Chat", "claude-opus-4-6", nowMs, nowMs);
     sqlite
       .prepare(
@@ -279,7 +285,9 @@ describe("auth route integration", () => {
       const owners = {
         document: sqlite.prepare("SELECT user_id FROM documents WHERE id = ?").get("legacy-doc"),
         project: sqlite.prepare("SELECT user_id FROM projects WHERE id = ?").get("legacy-project"),
-        conversation: sqlite.prepare("SELECT user_id FROM conversations WHERE id = ?").get("legacy-conversation"),
+        conversation: sqlite
+          .prepare("SELECT user_id FROM conversations WHERE id = ?")
+          .get("legacy-conversation"),
         webClip: sqlite.prepare("SELECT user_id FROM web_clips WHERE id = ?").get("legacy-clip"),
       } as Record<string, { user_id: string }>;
 
@@ -321,16 +329,24 @@ describe("auth route integration", () => {
         nowMs,
       );
     sqlite
-      .prepare("INSERT INTO documents (id, filename, full_text, upload_date, user_id) VALUES (?, ?, ?, ?, NULL)")
+      .prepare(
+        "INSERT INTO documents (id, filename, full_text, upload_date, user_id) VALUES (?, ?, ?, ?, NULL)",
+      )
       .run("linked-doc", "linked.txt", "legacy linked source text", nowMs);
     sqlite
-      .prepare("INSERT INTO documents (id, filename, full_text, upload_date, user_id) VALUES (?, ?, ?, ?, NULL)")
+      .prepare(
+        "INSERT INTO documents (id, filename, full_text, upload_date, user_id) VALUES (?, ?, ?, ?, NULL)",
+      )
       .run("orphan-doc", "orphan.txt", "legacy orphan source text", nowMs);
     sqlite
-      .prepare("INSERT INTO projects (id, name, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+      .prepare(
+        "INSERT INTO projects (id, name, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      )
       .run("owned-project", "Owned Project", "user-1", nowMs, nowMs);
     sqlite
-      .prepare("INSERT INTO project_documents (id, project_id, document_id, added_at) VALUES (?, ?, ?, ?)")
+      .prepare(
+        "INSERT INTO project_documents (id, project_id, document_id, added_at) VALUES (?, ?, ?, ?)",
+      )
       .run("linked-project-doc", "owned-project", "linked-doc", nowMs);
     sqlite
       .prepare(
@@ -358,7 +374,14 @@ describe("auth route integration", () => {
           id, user_id, highlighted_text, category, source_url, page_title, created_at
         ) VALUES (?, NULL, ?, ?, ?, ?, ?)`,
       )
-      .run("orphan-clip", "orphan highlight", "key_quote", "https://example.com/orphan", "Orphan", nowMs);
+      .run(
+        "orphan-clip",
+        "orphan highlight",
+        "key_quote",
+        "https://example.com/orphan",
+        "Orphan",
+        nowMs,
+      );
 
     clerkGetAuth.mockReturnValue({ userId: "user_new_clerk_instance" });
     clerkGetUser.mockResolvedValue({
@@ -439,9 +462,7 @@ describe("auth route integration", () => {
 
   it("does not adopt an unverified local user from a verified Clerk email", async () => {
     const { server, sqlite } = await createAuthApp();
-    sqlite
-      .prepare("UPDATE users SET email_verified = ? WHERE id = ?")
-      .run(0, "user-1");
+    sqlite.prepare("UPDATE users SET email_verified = ? WHERE id = ?").run(0, "user-1");
     clerkGetAuth.mockReturnValue({ userId: "user_verified_clerk_instance" });
     clerkGetUser.mockResolvedValue({
       primaryEmailAddressId: "email_verified",
@@ -512,15 +533,18 @@ describe("auth route integration", () => {
         publicMetadata: { tier: "max" },
       });
 
-      const migratedMax = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me");
+      const migratedMax = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/me",
+      );
       const existingUser = sqlite
         .prepare("SELECT id, tier, token_limit, storage_limit FROM users WHERE id = ?")
         .get("user-1") as {
-          id: string;
-          tier: string;
-          token_limit: number;
-          storage_limit: number;
-        };
+        id: string;
+        tier: string;
+        token_limit: number;
+        storage_limit: number;
+      };
 
       expect(migratedMax.status).toBe(200);
       expect(migratedMax.body).toMatchObject({
@@ -556,9 +580,13 @@ describe("auth route integration", () => {
     } as any);
 
     try {
-      const validApiKeyProfile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
-        headers: { authorization: `Bearer ${rawApiKey}` },
-      });
+      const validApiKeyProfile = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/me",
+        {
+          headers: { authorization: `Bearer ${rawApiKey}` },
+        },
+      );
 
       expect(validApiKeyProfile.status).toBe(200);
       expect(validApiKeyProfile.body).toMatchObject({
@@ -566,9 +594,13 @@ describe("auth route integration", () => {
         email: "researcher@example.com",
       });
 
-      const invalidApiKeyProfile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
-        headers: { authorization: "Bearer sk_sm_invalid_api_key" },
-      });
+      const invalidApiKeyProfile = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/me",
+        {
+          headers: { authorization: "Bearer sk_sm_invalid_api_key" },
+        },
+      );
 
       expect(invalidApiKeyProfile.status).toBe(401);
       expect(invalidApiKeyProfile.body).toEqual({ message: "Invalid API key" });
@@ -581,11 +613,15 @@ describe("auth route integration", () => {
     const { server, token } = await createAuthApp();
 
     try {
-      const created = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/api-keys", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: { label: "Chrome Extension" },
-      });
+      const created = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/api-keys",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: { label: "Chrome Extension" },
+        },
+      );
 
       expect(created.status).toBe(201);
       expect(created.body).toMatchObject({
@@ -595,9 +631,13 @@ describe("auth route integration", () => {
         key: expect.stringMatching(/^sk_sm_/),
       });
 
-      const listBeforeRevoke = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/api-keys", {
-        headers: { authorization: `Bearer ${token}` },
-      });
+      const listBeforeRevoke = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/api-keys",
+        {
+          headers: { authorization: `Bearer ${token}` },
+        },
+      );
 
       expect(listBeforeRevoke.status).toBe(200);
       expect(listBeforeRevoke.body).toEqual({
@@ -610,9 +650,13 @@ describe("auth route integration", () => {
         ],
       });
 
-      const keyProfile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
-        headers: { authorization: `Bearer ${created.body?.key}` },
-      });
+      const keyProfile = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/me",
+        {
+          headers: { authorization: `Bearer ${created.body?.key}` },
+        },
+      );
 
       expect(keyProfile.status).toBe(200);
       expect(keyProfile.body).toMatchObject({
@@ -626,21 +670,29 @@ describe("auth route integration", () => {
         {
           method: "DELETE",
           headers: { authorization: `Bearer ${token}` },
-        }
+        },
       );
 
       expect(revoke.status).toBe(204);
 
-      const listAfterRevoke = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/api-keys", {
-        headers: { authorization: `Bearer ${token}` },
-      });
+      const listAfterRevoke = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/api-keys",
+        {
+          headers: { authorization: `Bearer ${token}` },
+        },
+      );
 
       expect(listAfterRevoke.status).toBe(200);
       expect(listAfterRevoke.body).toEqual({ apiKeys: [] });
 
-      const revokedKeyProfile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
-        headers: { authorization: `Bearer ${created.body?.key}` },
-      });
+      const revokedKeyProfile = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/me",
+        {
+          headers: { authorization: `Bearer ${created.body?.key}` },
+        },
+      );
 
       expect(revokedKeyProfile.status).toBe(401);
       expect(revokedKeyProfile.body).toEqual({ message: "Invalid API key" });
@@ -654,8 +706,9 @@ describe("auth route integration", () => {
     const rawMcpToken = "mcp_sm_test_read_only_token";
     const now = Math.floor(Date.now() / 1000);
 
-    sqlite.prepare(
-      `INSERT INTO mcp_oauth_clients (
+    sqlite
+      .prepare(
+        `INSERT INTO mcp_oauth_clients (
          client_id,
          client_secret_hash,
          client_name,
@@ -664,18 +717,20 @@ describe("auth route integration", () => {
          response_types,
          token_endpoint_auth_method,
          created_at
-       ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      "mcp-client-readonly",
-      "Read Only Client",
-      JSON.stringify(["http://localhost/callback"]),
-      JSON.stringify(["authorization_code"]),
-      JSON.stringify(["code"]),
-      "none",
-      now,
-    );
-    sqlite.prepare(
-      `INSERT INTO mcp_tokens (
+       ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "mcp-client-readonly",
+        "Read Only Client",
+        JSON.stringify(["http://localhost/callback"]),
+        JSON.stringify(["authorization_code"]),
+        JSON.stringify(["code"]),
+        "none",
+        now,
+      );
+    sqlite
+      .prepare(
+        `INSERT INTO mcp_tokens (
          id,
          user_id,
          client_id,
@@ -684,22 +739,27 @@ describe("auth route integration", () => {
          scope,
          expires_at,
          created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      "mcp-token-readonly",
-      "user-1",
-      "mcp-client-readonly",
-      createHash("sha256").update(rawMcpToken).digest("hex"),
-      rawMcpToken.slice(0, 14),
-      "read",
-      now + 3600,
-      now,
-    );
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "mcp-token-readonly",
+        "user-1",
+        "mcp-client-readonly",
+        createHash("sha256").update(rawMcpToken).digest("hex"),
+        rawMcpToken.slice(0, 14),
+        "read",
+        now + 3600,
+        now,
+      );
 
     try {
-      const readResponse = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me", {
-        headers: { authorization: `Bearer ${rawMcpToken}` },
-      });
+      const readResponse = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/me",
+        {
+          headers: { authorization: `Bearer ${rawMcpToken}` },
+        },
+      );
       const readPostSearchResponse = await requestJson<Record<string, unknown>>(
         server.baseUrl,
         "/api/project-documents/project-doc-1/search",
@@ -718,11 +778,15 @@ describe("auth route integration", () => {
           body: { query: "find this" },
         },
       );
-      const writeResponse = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/api-keys", {
-        method: "POST",
-        headers: { authorization: `Bearer ${rawMcpToken}` },
-        body: { label: "Should fail" },
-      });
+      const writeResponse = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/api-keys",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${rawMcpToken}` },
+          body: { label: "Should fail" },
+        },
+      );
 
       expect(readResponse.status).toBe(200);
       expect(readPostSearchResponse.status).toBe(200);
@@ -744,8 +808,9 @@ describe("auth route integration", () => {
     const rawMcpToken = "mcp_sm_test_write_scoped_token";
     const now = Math.floor(Date.now() / 1000);
 
-    sqlite.prepare(
-      `INSERT INTO mcp_oauth_clients (
+    sqlite
+      .prepare(
+        `INSERT INTO mcp_oauth_clients (
          client_id,
          client_secret_hash,
          client_name,
@@ -754,18 +819,20 @@ describe("auth route integration", () => {
          response_types,
          token_endpoint_auth_method,
          created_at
-       ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      "mcp-client-write",
-      "Write Client",
-      JSON.stringify(["http://localhost/callback"]),
-      JSON.stringify(["authorization_code"]),
-      JSON.stringify(["code"]),
-      "none",
-      now,
-    );
-    sqlite.prepare(
-      `INSERT INTO mcp_tokens (
+       ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "mcp-client-write",
+        "Write Client",
+        JSON.stringify(["http://localhost/callback"]),
+        JSON.stringify(["authorization_code"]),
+        JSON.stringify(["code"]),
+        "none",
+        now,
+      );
+    sqlite
+      .prepare(
+        `INSERT INTO mcp_tokens (
          id,
          user_id,
          client_id,
@@ -774,24 +841,29 @@ describe("auth route integration", () => {
          scope,
          expires_at,
          created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      "mcp-token-write",
-      "user-1",
-      "mcp-client-write",
-      createHash("sha256").update(rawMcpToken).digest("hex"),
-      rawMcpToken.slice(0, 14),
-      "read write",
-      now + 3600,
-      now,
-    );
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "mcp-token-write",
+        "user-1",
+        "mcp-client-write",
+        createHash("sha256").update(rawMcpToken).digest("hex"),
+        rawMcpToken.slice(0, 14),
+        "read write",
+        now + 3600,
+        now,
+      );
 
     try {
-      const createKeyResponse = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/api-keys", {
-        method: "POST",
-        headers: { authorization: `Bearer ${rawMcpToken}` },
-        body: { label: "Should fail" },
-      });
+      const createKeyResponse = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/api-keys",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${rawMcpToken}` },
+          body: { label: "Should fail" },
+        },
+      );
 
       expect(createKeyResponse.status).toBe(403);
       expect(createKeyResponse.body).toEqual({

@@ -52,11 +52,7 @@ import { clipText, buildAuthorLabel } from "./writingRoutes";
 import { applyJumpLinksToMarkdown, type QuoteJumpTarget } from "./quoteJumpLinks";
 import { wrapGeneratedDocumentIfNeeded } from "./chatDocumentFormatting";
 import { sanitizeSseError, startSseHeartbeat } from "./sseUtils";
-import {
-  extractRecentWritingTopic,
-  runResearchAgent,
-  type ResearchFinding,
-} from "./researchAgent";
+import { extractRecentWritingTopic, runResearchAgent, type ResearchFinding } from "./researchAgent";
 import {
   projectDocuments,
   webClips,
@@ -112,7 +108,10 @@ const STREAM_TAG_PREFIXES = [
   "</context_request",
 ];
 
-type WritingProjectContext = Pick<Project, "name" | "thesis" | "scope" | "contextSummary" | "voiceProfile">;
+type WritingProjectContext = Pick<
+  Project,
+  "name" | "thesis" | "scope" | "contextSummary" | "voiceProfile"
+>;
 type WritingStyleContext = Pick<WritingStyle, "name" | "description" | "voiceProfile">;
 type PromptSource = WritingSource | TieredSource;
 type WritingMode = "precision" | "extended";
@@ -136,7 +135,10 @@ interface ToolRequest {
   rawTag: string;
 }
 
-async function getOwnedConversationOr404(req: Request, res: Response): Promise<Conversation | null> {
+async function getOwnedConversationOr404(
+  req: Request,
+  res: Response,
+): Promise<Conversation | null> {
   const conv = await chatStorage.getConversation(req.params.id);
   if (!conv || conv.userId !== req.user!.userId) {
     res.status(404).json({ message: "Conversation not found" });
@@ -165,11 +167,17 @@ interface StreamTurnResult {
   toolRequests: ToolRequest[];
 }
 
-function getUsageTokenTotal(usage: { input_tokens?: number; output_tokens?: number } | null | undefined): number {
+function getUsageTokenTotal(
+  usage: { input_tokens?: number; output_tokens?: number } | null | undefined,
+): number {
   return (usage?.input_tokens || 0) + (usage?.output_tokens || 0);
 }
 
-async function recordUserTokenUsage(userId: string, tokensUsed: number, source: string): Promise<void> {
+async function recordUserTokenUsage(
+  userId: string,
+  tokensUsed: number,
+  source: string,
+): Promise<void> {
   if (!Number.isFinite(tokensUsed) || tokensUsed <= 0) return;
   try {
     await incrementTokenUsage(userId, tokensUsed);
@@ -182,8 +190,6 @@ async function recordUserTokenUsage(userId: string, tokensUsed: number, source: 
     });
   }
 }
-
-type SourceToolName = "get_source_summary" | "get_source_chunks";
 
 interface SourceToolInput {
   docId?: string;
@@ -264,7 +270,7 @@ function estimateTokens(text: string): number {
 function estimateContextUsage(
   systemPrompt: string,
   messages: AnthropicHistoryMessage[],
-  mode: WritingMode
+  mode: WritingMode,
 ): ContextUsageEstimate {
   const limit = TOKEN_LIMITS[mode];
   const systemTokens = estimateTokens(systemPrompt);
@@ -498,7 +504,7 @@ function looksLikeKnownTagPrefix(value: string): boolean {
 }
 
 function createDocumentStreamParser(
-  emit: (event: { type: WritingStreamEventType; [key: string]: unknown }) => void
+  emit: (event: { type: WritingStreamEventType; [key: string]: unknown }) => void,
 ) {
   let inDocument = false;
   let activeToolTag: ToolRequestType | null = null;
@@ -625,7 +631,7 @@ function createDocumentStreamParser(
 function parseToolRequestAttributes(attrText: string): Record<string, string> {
   const attrs: Record<string, string> = {};
   const attrRegex = /([a-zA-Z_]+)="([^"]*)"/g;
-  let match: RegExpExecArray | null = null;
+  let match: RegExpExecArray | null;
 
   while ((match = attrRegex.exec(attrText)) !== null) {
     attrs[match[1].toLowerCase()] = match[2];
@@ -636,7 +642,7 @@ function parseToolRequestAttributes(attrText: string): Record<string, string> {
 
 function extractToolRequestsFromText(text: string): ToolRequest[] {
   const requests: ToolRequest[] = [];
-  let match: RegExpExecArray | null = null;
+  let match: RegExpExecArray | null;
 
   while ((match = TOOL_REQUEST_REGEX.exec(text)) !== null) {
     const type = String(match[1] || "").toLowerCase() as ToolRequestType;
@@ -681,12 +687,13 @@ function createToolRequestParser(onToolRequest: (request: ToolRequest) => void) 
 
 async function loadProjectSourcesTiered(
   projectId: string,
-  selectedSourceIds?: string[] | null
+  selectedSourceIds?: string[] | null,
 ): Promise<TieredSource[]> {
   const projectDocs = await projectStorage.getProjectDocumentsByProject(projectId);
-  const filteredDocs = selectedSourceIds && selectedSourceIds.length > 0
-    ? projectDocs.filter((projectDoc) => selectedSourceIds.includes(projectDoc.id))
-    : projectDocs;
+  const filteredDocs =
+    selectedSourceIds && selectedSourceIds.length > 0
+      ? projectDocs.filter((projectDoc) => selectedSourceIds.includes(projectDoc.id))
+      : projectDocs;
 
   const sources: TieredSource[] = [];
 
@@ -696,7 +703,9 @@ async function loadProjectSourcesTiered(
 
     const annotations = await projectStorage.getProjectAnnotationsByDocument(projectDoc.id);
     const citationData = (projectDoc.citationData as CitationData | null) || null;
-    const sourceRole: SourceRole = isSourceRole(projectDoc.sourceRole) ? projectDoc.sourceRole : "evidence";
+    const sourceRole: SourceRole = isSourceRole(projectDoc.sourceRole)
+      ? projectDoc.sourceRole
+      : "evidence";
     let styleAnalysis = projectDoc.styleAnalysis || null;
 
     if (sourceRole === "style_reference" && !styleAnalysis) {
@@ -751,14 +760,14 @@ async function loadProjectSourcesTiered(
 
 async function loadStandaloneWebClipSources(
   userId: string,
-  selectedSourceIds?: string[] | null
+  selectedSourceIds?: string[] | null,
 ): Promise<WritingSource[]> {
   if (!selectedSourceIds || selectedSourceIds.length === 0) {
     return [];
   }
 
   const clipIds = Array.from(
-    new Set(selectedSourceIds.map((id) => id?.trim()).filter(Boolean))
+    new Set(selectedSourceIds.map((id) => id?.trim()).filter(Boolean)),
   ) as string[];
   if (clipIds.length === 0) {
     return [];
@@ -769,24 +778,26 @@ async function loadStandaloneWebClipSources(
     .from(webClips)
     .where(and(eq(webClips.userId, userId), inArray(webClips.id, clipIds)));
 
-  const perSourceFullTextLimit = clips.length > 0
-    ? Math.min(
-      MAX_SOURCE_FULLTEXT_CHARS,
-      Math.max(2000, Math.floor(MAX_SOURCE_TOTAL_FULLTEXT_CHARS / clips.length))
-    )
-    : MAX_SOURCE_FULLTEXT_CHARS;
+  const perSourceFullTextLimit =
+    clips.length > 0
+      ? Math.min(
+          MAX_SOURCE_FULLTEXT_CHARS,
+          Math.max(2000, Math.floor(MAX_SOURCE_TOTAL_FULLTEXT_CHARS / clips.length)),
+        )
+      : MAX_SOURCE_FULLTEXT_CHARS;
 
   const byId = new Map(clips.map((clip) => [clip.id, clip]));
   const orderedClips = clipIds
     .map((id) => byId.get(id))
-    .filter((clip): clip is typeof clips[number] => Boolean(clip));
+    .filter((clip): clip is (typeof clips)[number] => Boolean(clip));
 
   return orderedClips.map((clip) => {
     const citationData = (clip.citationData as CitationData | null) || null;
-    const excerpt = clipText(
-      clip.note || clip.highlightedText || clip.surroundingContext,
-      MAX_SOURCE_EXCERPT_CHARS
-    ) || "No summary available.";
+    const excerpt =
+      clipText(
+        clip.note || clip.highlightedText || clip.surroundingContext,
+        MAX_SOURCE_EXCERPT_CHARS,
+      ) || "No summary available.";
     const mergedText = [
       `Page: ${clip.pageTitle}`,
       `URL: ${clip.sourceUrl}`,
@@ -818,8 +829,12 @@ async function loadStandaloneWebClipSources(
 
 async function loadConversationContext(
   conv: Pick<Conversation, "projectId" | "selectedSourceIds" | "writingStyleId">,
-  userId: string
-): Promise<{ project: WritingProjectContext | null; sources: PromptSource[]; writingStyle: WritingStyleContext | null }> {
+  userId: string,
+): Promise<{
+  project: WritingProjectContext | null;
+  sources: PromptSource[];
+  writingStyle: WritingStyleContext | null;
+}> {
   const writingStylePromise = getOwnedWritingStyleOrNull(conv.writingStyleId, userId);
 
   if (conv.projectId) {
@@ -837,12 +852,12 @@ async function loadConversationContext(
     return {
       project: project
         ? {
-          name: project.name,
-          thesis: project.thesis,
-          scope: project.scope,
-          contextSummary: project.contextSummary,
-          voiceProfile: project.voiceProfile,
-        }
+            name: project.name,
+            thesis: project.thesis,
+            scope: project.scope,
+            contextSummary: project.contextSummary,
+            voiceProfile: project.voiceProfile,
+          }
         : null,
       sources,
       writingStyle,
@@ -878,7 +893,7 @@ function buildWritingSystemPrompt(
   citationStyle?: string,
   tone?: string,
   humanize?: boolean,
-  noEnDashes?: boolean
+  noEnDashes?: boolean,
 ): string {
   const styleSection = buildStyleSection(
     sources
@@ -988,7 +1003,10 @@ function toAnthropicMessages(history: Message[]): AnthropicHistoryMessage[] {
     }));
 }
 
-function buildQuoteJumpTargets(projectId: string | null, sources: PromptSource[]): QuoteJumpTarget[] {
+function buildQuoteJumpTargets(
+  projectId: string | null,
+  sources: PromptSource[],
+): QuoteJumpTarget[] {
   if (!projectId) return [];
 
   return sources
@@ -1005,13 +1023,13 @@ function buildQuoteJumpTargets(projectId: string | null, sources: PromptSource[]
             startPosition: annotation.startPosition,
             anchorFingerprint: buildTextFingerprint(annotation.highlightedText),
           }),
-        }))
+        })),
     );
 }
 
 function findNearestChunkIndex(
   chunks: Array<{ startPosition: number; endPosition: number }>,
-  targetStart: number
+  targetStart: number,
 ): number {
   let bestIndex = 0;
   let bestDistance = Number.POSITIVE_INFINITY;
@@ -1020,7 +1038,7 @@ function findNearestChunkIndex(
     const chunk = chunks[i];
     const distance = Math.min(
       Math.abs(chunk.startPosition - targetStart),
-      Math.abs(chunk.endPosition - targetStart)
+      Math.abs(chunk.endPosition - targetStart),
     );
     if (distance < bestDistance) {
       bestDistance = distance;
@@ -1036,7 +1054,7 @@ async function loadSurroundingChunks(
   annotationStartPosition: number,
   annotationEndPosition: number,
   chunksBefore = 4,
-  chunksAfter = 4
+  chunksAfter = 4,
 ): Promise<string> {
   const chunks = await storage.getChunksForDocument(documentId);
   if (chunks.length === 0) {
@@ -1044,10 +1062,14 @@ async function loadSurroundingChunks(
   }
 
   const ordered = [...chunks].sort((a, b) => a.startPosition - b.startPosition);
-  let annotationChunkIndex = ordered.findIndex((chunk) =>
-    (chunk.startPosition <= annotationStartPosition && chunk.endPosition >= annotationStartPosition) ||
-    (chunk.startPosition <= annotationEndPosition && chunk.endPosition >= annotationEndPosition) ||
-    (chunk.startPosition >= annotationStartPosition && chunk.endPosition <= annotationEndPosition)
+  let annotationChunkIndex = ordered.findIndex(
+    (chunk) =>
+      (chunk.startPosition <= annotationStartPosition &&
+        chunk.endPosition >= annotationStartPosition) ||
+      (chunk.startPosition <= annotationEndPosition &&
+        chunk.endPosition >= annotationEndPosition) ||
+      (chunk.startPosition >= annotationStartPosition &&
+        chunk.endPosition <= annotationEndPosition),
   );
 
   if (annotationChunkIndex === -1) {
@@ -1078,7 +1100,7 @@ function formatDeepDiveFindings(filename: string, findings: ResearchFinding[]): 
   findings.forEach((finding, index) => {
     const quoteText = clipText(finding.quote, 1800) || finding.quote;
     lines.push(
-      `[FINDING ${index + 1}] Position: chars ${finding.startPosition}-${finding.endPosition} | Verified: ${finding.verified ? "yes" : "no"}`
+      `[FINDING ${index + 1}] Position: chars ${finding.startPosition}-${finding.endPosition} | Verified: ${finding.verified ? "yes" : "no"}`,
     );
     lines.push(`"${quoteText}"`);
     lines.push(`Relevance: ${finding.relevance}`);
@@ -1092,475 +1114,534 @@ function formatDeepDiveFindings(filename: string, findings: ResearchFinding[]): 
 }
 
 export function registerChatRoutes(app: Express) {
-  app.get("/api/chat/conversations", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const rawProjectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
-      const projectId = rawProjectId && rawProjectId !== "null" ? rawProjectId : undefined;
-      const standaloneOnly = req.query.standalone === "true";
-      if (projectId) {
-        const project = await getOwnedProjectOr404(projectId, req.user!.userId);
-        if (!project) {
-          return res.status(404).json({ message: "Project not found" });
+  app.get(
+    "/api/chat/conversations",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const rawProjectId =
+          typeof req.query.projectId === "string" ? req.query.projectId : undefined;
+        const projectId = rawProjectId && rawProjectId !== "null" ? rawProjectId : undefined;
+        const standaloneOnly = req.query.standalone === "true";
+        if (projectId) {
+          const project = await getOwnedProjectOr404(projectId, req.user!.userId);
+          if (!project) {
+            return res.status(404).json({ message: "Project not found" });
+          }
         }
+        const conversations = standaloneOnly
+          ? await chatStorage.getStandaloneConversations(req.user!.userId)
+          : await chatStorage.getConversationsForUser(req.user!.userId, projectId);
+        res.json(conversations);
+      } catch (error) {
+        console.error("Error listing conversations:", error);
+        res.status(500).json({ message: "Failed to list conversations" });
       }
-      const conversations = standaloneOnly
-        ? await chatStorage.getStandaloneConversations(req.user!.userId)
-        : await chatStorage.getConversationsForUser(req.user!.userId, projectId);
-      res.json(conversations);
-    } catch (error) {
-      console.error("Error listing conversations:", error);
-      res.status(500).json({ message: "Failed to list conversations" });
-    }
-  });
+    },
+  );
 
-  app.post("/api/chat/conversations", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const {
-        title,
-        model,
-        projectId,
-        selectedSourceIds,
-        citationStyle,
-        tone,
-        humanize,
-        noEnDashes,
-        writingModel,
-        writingStyleId,
-      } = req.body || {};
+  app.post(
+    "/api/chat/conversations",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const {
+          title,
+          model,
+          projectId,
+          selectedSourceIds,
+          citationStyle,
+          tone,
+          humanize,
+          noEnDashes,
+          writingModel,
+          writingStyleId,
+        } = req.body || {};
 
-      const normalizedWritingModel = writingModel === "extended" ? "extended" : "precision";
-      if (projectId) {
-        const project = await getOwnedProjectOr404(projectId, req.user!.userId);
-        if (!project) {
-          return res.status(404).json({ message: "Project not found" });
+        const normalizedWritingModel = writingModel === "extended" ? "extended" : "precision";
+        if (projectId) {
+          const project = await getOwnedProjectOr404(projectId, req.user!.userId);
+          if (!project) {
+            return res.status(404).json({ message: "Project not found" });
+          }
         }
-      }
-      const normalizedWritingStyleId = await assertOwnedWritingStyle(writingStyleId, req.user!.userId, res);
-      if (writingStyleId !== undefined && normalizedWritingStyleId === undefined) return;
-
-      const conv = await chatStorage.createConversation({
-        title: title || "New Chat",
-        model: model || MODELS.precision.chat,
-        writingModel: normalizedWritingModel,
-        userId: req.user!.userId,
-        projectId: projectId || null,
-        selectedSourceIds: selectedSourceIds || null,
-        writingStyleId: normalizedWritingStyleId ?? null,
-        citationStyle: citationStyle || "chicago",
-        tone: tone || "academic",
-        humanize: humanize ?? true,
-        noEnDashes: noEnDashes ?? false,
-      });
-      res.json(conv);
-    } catch (error) {
-      console.error("Error creating conversation:", error);
-      res.status(500).json({ message: "Failed to create conversation" });
-    }
-  });
-
-  app.get("/api/chat/conversations/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const conv = await getOwnedConversationOr404(req, res);
-      if (!conv) return;
-      const messages = await chatStorage.getMessagesForConversation(conv.id);
-      res.json({ ...conv, messages });
-    } catch (error) {
-      console.error("Error fetching conversation:", error);
-      res.status(500).json({ message: "Failed to fetch conversation" });
-    }
-  });
-
-  app.delete("/api/chat/conversations/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const conv = await getOwnedConversationOr404(req, res);
-      if (!conv) return;
-      await chatStorage.deleteConversation(req.params.id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting conversation:", error);
-      res.status(500).json({ message: "Failed to delete conversation" });
-    }
-  });
-
-  app.put("/api/chat/conversations/:id", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const {
-        title,
-        model,
-        writingModel,
-        citationStyle,
-        tone,
-        humanize,
-        noEnDashes,
-        writingStyleId,
-      } = req.body;
-
-      const updates: Record<string, unknown> = {};
-      if (title !== undefined) updates.title = title;
-      if (model !== undefined) updates.model = model;
-      if (writingModel !== undefined) updates.writingModel = writingModel === "extended" ? "extended" : "precision";
-      if (citationStyle !== undefined) updates.citationStyle = citationStyle;
-      if (tone !== undefined) updates.tone = tone;
-      if (humanize !== undefined) updates.humanize = humanize;
-      if (noEnDashes !== undefined) updates.noEnDashes = noEnDashes;
-
-      const existing = await getOwnedConversationOr404(req, res);
-      if (!existing) return;
-
-      if (writingStyleId !== undefined) {
-        const normalizedWritingStyleId = await assertOwnedWritingStyle(writingStyleId, req.user!.userId, res);
-        if (normalizedWritingStyleId === undefined) return;
-        updates.writingStyleId = normalizedWritingStyleId;
-      }
-
-      const conv = await chatStorage.updateConversation(req.params.id, updates);
-      res.json(conv);
-    } catch (error) {
-      console.error("Error updating conversation:", error);
-      res.status(500).json({ message: "Failed to update conversation" });
-    }
-  });
-
-  app.put("/api/chat/conversations/:id/sources", requireAuth, requireTier("pro"), async (req: Request, res: Response) => {
-    try {
-      const { selectedSourceIds } = req.body;
-      if (!Array.isArray(selectedSourceIds)) {
-        return res.status(400).json({ message: "selectedSourceIds must be an array" });
-      }
-      const existing = await getOwnedConversationOr404(req, res);
-      if (!existing) return;
-      const conv = await chatStorage.updateSelectedSources(req.params.id, selectedSourceIds);
-      res.json(conv);
-    } catch (error) {
-      console.error("Error updating sources:", error);
-      res.status(500).json({ message: "Failed to update sources" });
-    }
-  });
-
-  app.post("/api/chat/conversations/:id/messages", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
-    let stopHeartbeat: (() => void) | null = null;
-
-    try {
-      const { content } = req.body;
-      if (!content || typeof content !== "string") {
-        return res.status(400).json({ message: "Content is required" });
-      }
-
-      const conv = await getOwnedConversationOr404(req, res);
-      if (!conv) return;
-
-      await chatStorage.createMessage({
-        conversationId: conv.id,
-        role: "user",
-        content,
-      });
-
-      let history = await chatStorage.getMessagesForConversation(conv.id);
-      let anthropicMessages = toAnthropicMessages(history);
-      const mode = getWritingMode(conv);
-      const models = getModelsForConversation(conv);
-
-      const { project, sources, writingStyle } = await loadConversationContext(conv, req.user!.userId);
-      const isWritingConversation = Boolean(conv.projectId || conv.selectedSourceIds !== null || conv.writingStyleId);
-      let systemPrompt = BASE_SYSTEM_PROMPT;
-      if (isWritingConversation) {
-        systemPrompt = buildWritingSystemPrompt(
-          sources,
-          project,
-          writingStyle,
-          conv.citationStyle || undefined,
-          conv.tone || undefined,
-          conv.humanize ?? true,
-          conv.noEnDashes || false
+        const normalizedWritingStyleId = await assertOwnedWritingStyle(
+          writingStyleId,
+          req.user!.userId,
+          res,
         );
-        if (mode === "precision") {
-          systemPrompt += `\n\nPRECISION MODE:
-A research gatherer has already collected the best evidence for this turn.
-Do NOT emit <chunk_request> or <context_request> tags.
-Use the gathered evidence, the accumulated clipboard, and the recent conversation context to answer directly.`;
-        }
-      }
+        if (writingStyleId !== undefined && normalizedWritingStyleId === undefined) return;
 
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no");
-
-      let closed = false;
-      let activeStream: { abort: () => void } | null = null;
-
-      req.on("close", () => {
-        closed = true;
-        stopHeartbeat?.();
-        stopHeartbeat = null;
-        activeStream?.abort();
-      });
-
-      stopHeartbeat = startSseHeartbeat(res, { isClosed: () => closed });
-
-      const sendEvent = (payload: Record<string, unknown>) => {
-        if (closed || res.writableEnded) return;
-        res.write(`data: ${JSON.stringify(payload)}\n\n`);
-      };
-
-      const sendWritingStatus = (message: string, phase: string, progress?: number) => {
-        sendEvent({
-          type: "writing_status",
-          phase,
-          message,
-          ...(typeof progress === "number" ? { progress } : {}),
+        const conv = await chatStorage.createConversation({
+          title: title || "New Chat",
+          model: model || MODELS.precision.chat,
+          writingModel: normalizedWritingModel,
+          userId: req.user!.userId,
+          projectId: projectId || null,
+          selectedSourceIds: selectedSourceIds || null,
+          writingStyleId: normalizedWritingStyleId ?? null,
+          citationStyle: citationStyle || "chicago",
+          tone: tone || "academic",
+          humanize: humanize ?? true,
+          noEnDashes: noEnDashes ?? false,
         });
-      };
-
-      const anthropic = getAnthropicClient();
-      const tieredSources = sources.filter((source): source is TieredSource => isTieredSource(source));
-      const allowedSourceDocumentIds = new Set(tieredSources.map((source) => source.documentId));
-      const allowedProjectDocumentIds = new Set(tieredSources.map((source) => source.id));
-      const sourceTools = buildSourceTools();
-      const executeSourceTool = createSourceToolExecutor(tieredSources);
-      const clipboard: EvidenceClipboard = conv.evidenceClipboard
-        ? deserializeClipboard(conv.evidenceClipboard)
-        : createEmptyClipboard(project?.thesis || "");
-      if (!clipboard.thesis && project?.thesis) {
-        clipboard.thesis = project.thesis;
+        res.json(conv);
+      } catch (error) {
+        console.error("Error creating conversation:", error);
+        res.status(500).json({ message: "Failed to create conversation" });
       }
+    },
+  );
 
-      let effectiveCompactionSummary = conv.compactionSummary || null;
-      let effectiveCompactedAtTurn = conv.compactedAtTurn || 0;
-      sendWritingStatus("Preparing selected project sources...", "preparing", 5);
-      if (mode === "precision") {
-        sendWritingStatus("Condensing earlier chat context...", "preparing", 12);
-        const compactionResult = await compactConversation(
-          anthropic,
-          history.map((message) => ({ role: message.role, content: message.content })),
-          effectiveCompactionSummary,
-          effectiveCompactedAtTurn,
-        );
-        if (compactionResult) {
-          effectiveCompactionSummary = compactionResult.summary;
-          effectiveCompactedAtTurn = compactionResult.compactedAtTurn;
-          await updateConversationCompaction(conv.id, {
-            compactionSummary: compactionResult.summary,
-            compactedAtTurn: compactionResult.compactedAtTurn,
-          });
-        }
+  app.get(
+    "/api/chat/conversations/:id",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const conv = await getOwnedConversationOr404(req, res);
+        if (!conv) return;
+        const messages = await chatStorage.getMessagesForConversation(conv.id);
+        res.json({ ...conv, messages });
+      } catch (error) {
+        console.error("Error fetching conversation:", error);
+        res.status(500).json({ message: "Failed to fetch conversation" });
       }
+    },
+  );
 
-      let evidenceBrief: EvidenceBrief | null = null;
-      let evidenceBriefText = "[No new evidence gathered for this turn]";
-      let messagesForTurn = anthropicMessages;
-      if (mode === "precision") {
-        const sourceStubs: SourceStub[] = tieredSources.map((source) => ({
-          docId: source.documentId,
-          title: source.title || source.documentFilename,
-          role: source.sourceRole || "evidence",
-          summary: source.summary || undefined,
-          annotationCount: source.annotations.length,
-          chunkCount: source.chunkCount || 0,
-        }));
-
-        sendWritingStatus(
-          sourceStubs.length > 0
-            ? "Finding the strongest evidence in the selected sources..."
-            : "Preparing the draft request...",
-          "evidence",
-          25,
-        );
-        evidenceBrief = await gatherEvidence(
-          anthropic,
-          content,
-          sourceStubs,
-          clipboard,
-          project?.thesis || "",
-          sourceTools,
-          executeSourceTool,
-        );
-        evidenceBriefText = formatEvidenceBrief(evidenceBrief);
-
-        const compactedHistory = buildCompactedHistory(
-          history.slice(0, -1).map((message) => ({ role: message.role, content: message.content })),
-          formatClipboardForPrompt(clipboard),
-          effectiveCompactionSummary,
-          effectiveCompactedAtTurn,
-        ).map((message) => ({
-          role: message.role === "system" ? "assistant" : message.role,
-          content: message.content,
-        })) as AnthropicHistoryMessage[];
-
-        const latestUserMessage = anthropicMessages[anthropicMessages.length - 1];
-        messagesForTurn = latestUserMessage
-          ? [
-              ...compactedHistory,
-              { role: "user", content: `[EVIDENCE GATHERED THIS TURN]\n${evidenceBriefText}` },
-              {
-                role: "assistant",
-                content: "I have the evidence gathered for this turn and will use it selectively.",
-              },
-              latestUserMessage,
-            ]
-          : compactedHistory;
+  app.delete(
+    "/api/chat/conversations/:id",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const conv = await getOwnedConversationOr404(req, res);
+        if (!conv) return;
+        await chatStorage.deleteConversation(req.params.id);
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error deleting conversation:", error);
+        res.status(500).json({ message: "Failed to delete conversation" });
       }
+    },
+  );
 
-      sendWritingStatus("Building the draft with project context...", "drafting", 40);
+  app.put(
+    "/api/chat/conversations/:id",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const {
+          title,
+          model,
+          writingModel,
+          citationStyle,
+          tone,
+          humanize,
+          noEnDashes,
+          writingStyleId,
+        } = req.body;
 
-      let sentWarningLevel: ContextWarningLevel = "ok";
+        const updates: Record<string, unknown> = {};
+        if (title !== undefined) updates.title = title;
+        if (model !== undefined) updates.model = model;
+        if (writingModel !== undefined)
+          updates.writingModel = writingModel === "extended" ? "extended" : "precision";
+        if (citationStyle !== undefined) updates.citationStyle = citationStyle;
+        if (tone !== undefined) updates.tone = tone;
+        if (humanize !== undefined) updates.humanize = humanize;
+        if (noEnDashes !== undefined) updates.noEnDashes = noEnDashes;
 
-      const sendContextWarningIfNeeded = (usage: ContextUsageEstimate) => {
-        if (usage.warningLevel === "ok") return;
-        if (usage.warningLevel === sentWarningLevel) return;
-        sentWarningLevel = usage.warningLevel;
+        const existing = await getOwnedConversationOr404(req, res);
+        if (!existing) return;
 
-        if (usage.warningLevel === "critical") {
-          sendEvent({
-            type: "context_warning",
-            message: "Context window is nearly full. Deep source analysis is disabled. Consider starting a new conversation.",
-            available: usage.available,
-          });
-          return;
+        if (writingStyleId !== undefined) {
+          const normalizedWritingStyleId = await assertOwnedWritingStyle(
+            writingStyleId,
+            req.user!.userId,
+            res,
+          );
+          if (normalizedWritingStyleId === undefined) return;
+          updates.writingStyleId = normalizedWritingStyleId;
         }
 
-        sendEvent({
-          type: "context_warning",
-          message: "Context is getting large. Source analysis may be limited.",
-          available: usage.available,
-        });
-      };
+        const conv = await chatStorage.updateConversation(req.params.id, updates);
+        res.json(conv);
+      } catch (error) {
+        console.error("Error updating conversation:", error);
+        res.status(500).json({ message: "Failed to update conversation" });
+      }
+    },
+  );
 
-      let usageEstimate = estimateContextUsage(systemPrompt, messagesForTurn, mode);
-      sendContextWarningIfNeeded(usageEstimate);
-      let deepDiveAllowed = usageEstimate.warningLevel !== "critical";
+  app.put(
+    "/api/chat/conversations/:id/sources",
+    requireAuth,
+    requireTier("pro"),
+    async (req: Request, res: Response) => {
+      try {
+        const { selectedSourceIds } = req.body;
+        if (!Array.isArray(selectedSourceIds)) {
+          return res.status(400).json({ message: "selectedSourceIds must be an array" });
+        }
+        const existing = await getOwnedConversationOr404(req, res);
+        if (!existing) return;
+        const conv = await chatStorage.updateSelectedSources(req.params.id, selectedSourceIds);
+        res.json(conv);
+      } catch (error) {
+        console.error("Error updating sources:", error);
+        res.status(500).json({ message: "Failed to update sources" });
+      }
+    },
+  );
 
-      const runTurn = async (messagesForTurn: AnthropicHistoryMessage[]): Promise<StreamTurnResult> => {
-        return new Promise<StreamTurnResult>((resolve, reject) => {
-          let fullText = "";
-          const detectedRequests: ToolRequest[] = [];
-          const parser = createDocumentStreamParser((event) => {
-            if (closed || res.writableEnded) return;
-            sendEvent(event as Record<string, unknown>);
-          });
-          const toolParser = createToolRequestParser((request) => {
-            detectedRequests.push(request);
-          });
+  app.post(
+    "/api/chat/conversations/:id/messages",
+    requireAuth,
+    aiLimiter,
+    requireTier("pro"),
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      let stopHeartbeat: (() => void) | null = null;
 
-          const stream = anthropic.messages.stream({
-            model: models.chat,
-            max_tokens: CHAT_MAX_TOKENS,
-            system: systemPrompt,
-            messages: messagesForTurn,
-          });
+      try {
+        const { content } = req.body;
+        if (!content || typeof content !== "string") {
+          return res.status(400).json({ message: "Content is required" });
+        }
 
-          activeStream = stream;
-
-          stream.on("text", (text) => {
-            fullText += text;
-            parser.pushText(text);
-            toolParser.pushText(text);
-          });
-
-          stream.on("message", (message) => {
-            parser.finish();
-            toolParser.finish();
-            activeStream = null;
-
-            resolve({
-              fullText,
-              usage: message.usage || {},
-              toolRequests: detectedRequests,
-            });
-          });
-
-          stream.on("error", (error) => {
-            parser.finish({ finalizeDocument: false });
-            toolParser.finish();
-            activeStream = null;
-
-            if (closed) {
-              resolve({
-                fullText,
-                usage: {},
-                toolRequests: detectedRequests,
-              });
-              return;
-            }
-            reject(error);
-          });
-        });
-      };
-
-      const isFirstExchange = history.filter((message) => message.role === "user").length === 1;
-      let hasAutoTitled = false;
-      let totalInputTokens = 0;
-      let totalOutputTokens = 0;
-      let escalationCount = 0;
-
-      while (!closed) {
-        sendWritingStatus(
-          escalationCount === 0
-            ? "Writing the draft..."
-            : "Continuing the draft with additional source context...",
-          "drafting",
-          escalationCount === 0 ? 50 : 70,
-        );
-        const turn = await runTurn(messagesForTurn);
-        const inputTokens = turn.usage.input_tokens || 0;
-        const outputTokens = turn.usage.output_tokens || 0;
-        totalInputTokens += inputTokens;
-        totalOutputTokens += outputTokens;
-
-        sendWritingStatus("Saving the generated draft...", "saving", 88);
-        const assistantContent = wrapGeneratedDocumentIfNeeded(
-          applyJumpLinksToMarkdown(
-            turn.fullText,
-            buildQuoteJumpTargets(conv.projectId, sources),
-          ),
-        );
+        const conv = await getOwnedConversationOr404(req, res);
+        if (!conv) return;
 
         await chatStorage.createMessage({
           conversationId: conv.id,
-          role: "assistant",
-          content: assistantContent,
-          tokensUsed: inputTokens + outputTokens,
+          role: "user",
+          content,
         });
-        await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_message");
 
-        if (!hasAutoTitled && isFirstExchange && conv.title === "New Chat") {
-          const autoTitle = content.length <= 50 ? content : `${content.slice(0, 47)}...`;
-          await chatStorage.updateConversation(conv.id, { title: autoTitle });
-          hasAutoTitled = true;
-        }
+        let history = await chatStorage.getMessagesForConversation(conv.id);
+        let anthropicMessages = toAnthropicMessages(history);
+        const mode = getWritingMode(conv);
+        const models = getModelsForConversation(conv);
 
-        if (mode === "precision") {
-          sendWritingStatus("Remembering which evidence was used...", "saving", 92);
-          const updatedClipboard = await extractUsedEvidence(
-            anthropic,
-            turn.fullText,
-            evidenceBriefText,
-            clipboard,
-            history.filter((message) => message.role === "user").length,
+        const { project, sources, writingStyle } = await loadConversationContext(
+          conv,
+          req.user!.userId,
+        );
+        const isWritingConversation = Boolean(
+          conv.projectId || conv.selectedSourceIds !== null || conv.writingStyleId,
+        );
+        let systemPrompt = BASE_SYSTEM_PROMPT;
+        if (isWritingConversation) {
+          systemPrompt = buildWritingSystemPrompt(
+            sources,
+            project,
+            writingStyle,
+            conv.citationStyle || undefined,
+            conv.tone || undefined,
+            conv.humanize ?? true,
+            conv.noEnDashes || false,
           );
-          await updateConversationClipboard(conv.id, serializeClipboard(updatedClipboard));
-          break;
+          if (mode === "precision") {
+            systemPrompt += `\n\nPRECISION MODE:
+A research gatherer has already collected the best evidence for this turn.
+Do NOT emit <chunk_request> or <context_request> tags.
+Use the gathered evidence, the accumulated clipboard, and the recent conversation context to answer directly.`;
+          }
         }
 
-        const request = turn.toolRequests[turn.toolRequests.length - 1];
-        if (!request || escalationCount >= MAX_CONTEXT_ESCALATIONS) {
-          break;
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("X-Accel-Buffering", "no");
+
+        let closed = false;
+        let activeStream: { abort: () => void } | null = null;
+
+        req.on("close", () => {
+          closed = true;
+          stopHeartbeat?.();
+          stopHeartbeat = null;
+          activeStream?.abort();
+        });
+
+        stopHeartbeat = startSseHeartbeat(res, { isClosed: () => closed });
+
+        const sendEvent = (payload: Record<string, unknown>) => {
+          if (closed || res.writableEnded) return;
+          res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        };
+
+        const sendWritingStatus = (message: string, phase: string, progress?: number) => {
+          sendEvent({
+            type: "writing_status",
+            phase,
+            message,
+            ...(typeof progress === "number" ? { progress } : {}),
+          });
+        };
+
+        const anthropic = getAnthropicClient();
+        const tieredSources = sources.filter((source): source is TieredSource =>
+          isTieredSource(source),
+        );
+        const allowedSourceDocumentIds = new Set(tieredSources.map((source) => source.documentId));
+        const allowedProjectDocumentIds = new Set(tieredSources.map((source) => source.id));
+        const sourceTools = buildSourceTools();
+        const executeSourceTool = createSourceToolExecutor(tieredSources);
+        const clipboard: EvidenceClipboard = conv.evidenceClipboard
+          ? deserializeClipboard(conv.evidenceClipboard)
+          : createEmptyClipboard(project?.thesis || "");
+        if (!clipboard.thesis && project?.thesis) {
+          clipboard.thesis = project.thesis;
         }
 
-        let contextMessage = "";
+        let effectiveCompactionSummary = conv.compactionSummary || null;
+        let effectiveCompactedAtTurn = conv.compactedAtTurn || 0;
+        sendWritingStatus("Preparing selected project sources...", "preparing", 5);
+        if (mode === "precision") {
+          sendWritingStatus("Condensing earlier chat context...", "preparing", 12);
+          const compactionResult = await compactConversation(
+            anthropic,
+            history.map((message) => ({ role: message.role, content: message.content })),
+            effectiveCompactionSummary,
+            effectiveCompactedAtTurn,
+          );
+          if (compactionResult) {
+            effectiveCompactionSummary = compactionResult.summary;
+            effectiveCompactedAtTurn = compactionResult.compactedAtTurn;
+            await updateConversationCompaction(conv.id, {
+              compactionSummary: compactionResult.summary,
+              compactedAtTurn: compactionResult.compactedAtTurn,
+            });
+          }
+        }
 
-        if (request.type === "chunk_request") {
-          sendWritingStatus("Loading nearby source text...", "retrieving", 62);
-          sendEvent({ type: "context_loading", level: 2, documentId: request.documentId });
+        let evidenceBrief: EvidenceBrief | null = null;
+        let evidenceBriefText = "[No new evidence gathered for this turn]";
+        let messagesForTurn = anthropicMessages;
+        if (mode === "precision") {
+          const sourceStubs: SourceStub[] = tieredSources.map((source) => ({
+            docId: source.documentId,
+            title: source.title || source.documentFilename,
+            role: source.sourceRole || "evidence",
+            summary: source.summary || undefined,
+            annotationCount: source.annotations.length,
+            chunkCount: source.chunkCount || 0,
+          }));
 
-          if (!request.annotationId) {
-            contextMessage = "[CONTEXT RETRIEVAL - ERROR]\nMissing annotation_id in chunk request.";
+          sendWritingStatus(
+            sourceStubs.length > 0
+              ? "Finding the strongest evidence in the selected sources..."
+              : "Preparing the draft request...",
+            "evidence",
+            25,
+          );
+          evidenceBrief = await gatherEvidence(
+            anthropic,
+            content,
+            sourceStubs,
+            clipboard,
+            project?.thesis || "",
+            sourceTools,
+            executeSourceTool,
+          );
+          evidenceBriefText = formatEvidenceBrief(evidenceBrief);
+
+          const compactedHistory = buildCompactedHistory(
+            history
+              .slice(0, -1)
+              .map((message) => ({ role: message.role, content: message.content })),
+            formatClipboardForPrompt(clipboard),
+            effectiveCompactionSummary,
+            effectiveCompactedAtTurn,
+          ).map((message) => ({
+            role: message.role === "system" ? "assistant" : message.role,
+            content: message.content,
+          })) as AnthropicHistoryMessage[];
+
+          const latestUserMessage = anthropicMessages[anthropicMessages.length - 1];
+          messagesForTurn = latestUserMessage
+            ? [
+                ...compactedHistory,
+                { role: "user", content: `[EVIDENCE GATHERED THIS TURN]\n${evidenceBriefText}` },
+                {
+                  role: "assistant",
+                  content:
+                    "I have the evidence gathered for this turn and will use it selectively.",
+                },
+                latestUserMessage,
+              ]
+            : compactedHistory;
+        }
+
+        sendWritingStatus("Building the draft with project context...", "drafting", 40);
+
+        let sentWarningLevel: ContextWarningLevel = "ok";
+
+        const sendContextWarningIfNeeded = (usage: ContextUsageEstimate) => {
+          if (usage.warningLevel === "ok") return;
+          if (usage.warningLevel === sentWarningLevel) return;
+          sentWarningLevel = usage.warningLevel;
+
+          if (usage.warningLevel === "critical") {
+            sendEvent({
+              type: "context_warning",
+              message:
+                "Context window is nearly full. Deep source analysis is disabled. Consider starting a new conversation.",
+              available: usage.available,
+            });
+            return;
+          }
+
+          sendEvent({
+            type: "context_warning",
+            message: "Context is getting large. Source analysis may be limited.",
+            available: usage.available,
+          });
+        };
+
+        let usageEstimate = estimateContextUsage(systemPrompt, messagesForTurn, mode);
+        sendContextWarningIfNeeded(usageEstimate);
+        let deepDiveAllowed = usageEstimate.warningLevel !== "critical";
+
+        const runTurn = async (
+          messagesForTurn: AnthropicHistoryMessage[],
+        ): Promise<StreamTurnResult> => {
+          return new Promise<StreamTurnResult>((resolve, reject) => {
+            let fullText = "";
+            const detectedRequests: ToolRequest[] = [];
+            const parser = createDocumentStreamParser((event) => {
+              if (closed || res.writableEnded) return;
+              sendEvent(event as Record<string, unknown>);
+            });
+            const toolParser = createToolRequestParser((request) => {
+              detectedRequests.push(request);
+            });
+
+            const stream = anthropic.messages.stream({
+              model: models.chat,
+              max_tokens: CHAT_MAX_TOKENS,
+              system: systemPrompt,
+              messages: messagesForTurn,
+            });
+
+            activeStream = stream;
+
+            stream.on("text", (text) => {
+              fullText += text;
+              parser.pushText(text);
+              toolParser.pushText(text);
+            });
+
+            stream.on("message", (message) => {
+              parser.finish();
+              toolParser.finish();
+              activeStream = null;
+
+              resolve({
+                fullText,
+                usage: message.usage || {},
+                toolRequests: detectedRequests,
+              });
+            });
+
+            stream.on("error", (error) => {
+              parser.finish({ finalizeDocument: false });
+              toolParser.finish();
+              activeStream = null;
+
+              if (closed) {
+                resolve({
+                  fullText,
+                  usage: {},
+                  toolRequests: detectedRequests,
+                });
+                return;
+              }
+              reject(error);
+            });
+          });
+        };
+
+        const isFirstExchange = history.filter((message) => message.role === "user").length === 1;
+        let hasAutoTitled = false;
+        let totalInputTokens = 0;
+        let totalOutputTokens = 0;
+        let escalationCount = 0;
+
+        while (!closed) {
+          sendWritingStatus(
+            escalationCount === 0
+              ? "Writing the draft..."
+              : "Continuing the draft with additional source context...",
+            "drafting",
+            escalationCount === 0 ? 50 : 70,
+          );
+          const turn = await runTurn(messagesForTurn);
+          const inputTokens = turn.usage.input_tokens || 0;
+          const outputTokens = turn.usage.output_tokens || 0;
+          totalInputTokens += inputTokens;
+          totalOutputTokens += outputTokens;
+
+          sendWritingStatus("Saving the generated draft...", "saving", 88);
+          const assistantContent = wrapGeneratedDocumentIfNeeded(
+            applyJumpLinksToMarkdown(turn.fullText, buildQuoteJumpTargets(conv.projectId, sources)),
+          );
+
+          await chatStorage.createMessage({
+            conversationId: conv.id,
+            role: "assistant",
+            content: assistantContent,
+            tokensUsed: inputTokens + outputTokens,
+          });
+          await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_message");
+
+          if (!hasAutoTitled && isFirstExchange && conv.title === "New Chat") {
+            const autoTitle = content.length <= 50 ? content : `${content.slice(0, 47)}...`;
+            await chatStorage.updateConversation(conv.id, { title: autoTitle });
+            hasAutoTitled = true;
+          }
+
+          if (mode === "precision") {
+            sendWritingStatus("Remembering which evidence was used...", "saving", 92);
+            const updatedClipboard = await extractUsedEvidence(
+              anthropic,
+              turn.fullText,
+              evidenceBriefText,
+              clipboard,
+              history.filter((message) => message.role === "user").length,
+            );
+            await updateConversationClipboard(conv.id, serializeClipboard(updatedClipboard));
+            break;
+          }
+
+          const request = turn.toolRequests[turn.toolRequests.length - 1];
+          if (!request || escalationCount >= MAX_CONTEXT_ESCALATIONS) {
+            break;
+          }
+
+          let contextMessage = "";
+
+          if (request.type === "chunk_request") {
+            sendWritingStatus("Loading nearby source text...", "retrieving", 62);
+            sendEvent({ type: "context_loading", level: 2, documentId: request.documentId });
+
+            if (!request.annotationId) {
+              contextMessage =
+                "[CONTEXT RETRIEVAL - ERROR]\nMissing annotation_id in chunk request.";
             } else {
               const annotation = await projectStorage.getProjectAnnotation(request.annotationId);
               if (!annotation) {
                 contextMessage = `[CONTEXT RETRIEVAL - ERROR]\nAnnotation "${request.annotationId}" was not found.`;
               } else {
-                const projectDocument = await projectStorage.getProjectDocument(annotation.projectDocumentId);
+                const projectDocument = await projectStorage.getProjectDocument(
+                  annotation.projectDocumentId,
+                );
                 if (!projectDocument || !allowedProjectDocumentIds.has(projectDocument.id)) {
                   contextMessage = `[CONTEXT RETRIEVAL - ERROR]\nAnnotation "${request.annotationId}" is not attached to this conversation.`;
                 } else {
@@ -1568,7 +1649,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
                   const chunkContext = await loadSurroundingChunks(
                     resolvedDocumentId,
                     annotation.startPosition,
-                    annotation.endPosition
+                    annotation.endPosition,
                   );
                   contextMessage = `[CONTEXT RETRIEVAL - Surrounding text for annotation ${request.annotationId}]
 Reason: ${request.reason || "No reason provided."}
@@ -1578,174 +1659,188 @@ ${chunkContext}`;
               }
             }
 
-          sendEvent({ type: "context_loaded", level: 2, documentId: request.documentId });
-          void logToolCall({
-            conversationId: conv.id,
-            userId: req.user!.userId,
-            projectId: conv.projectId ?? null,
-            toolName: "chunk_request",
-            documentId: request.documentId || null,
-            escalationRound: escalationCount + 1,
-            turnNumber: history.filter((m) => m.role === "user").length,
-            resultSizeChars: contextMessage.length,
-            success: !contextMessage.includes("ERROR"),
-            timestamp: Date.now(),
-          }).catch((err) => console.warn("[analytics] logToolCall error:", err));
-        } else if (request.type === "context_request") {
-          if (!deepDiveAllowed) {
-            sendEvent({
-              type: "context_warning",
-              message: "Deep source analysis is disabled because the context window is nearly full.",
-              available: usageEstimate.available,
-            });
+            sendEvent({ type: "context_loaded", level: 2, documentId: request.documentId });
+            void logToolCall({
+              conversationId: conv.id,
+              userId: req.user!.userId,
+              projectId: conv.projectId ?? null,
+              toolName: "chunk_request",
+              documentId: request.documentId || null,
+              escalationRound: escalationCount + 1,
+              turnNumber: history.filter((m) => m.role === "user").length,
+              resultSizeChars: contextMessage.length,
+              success: !contextMessage.includes("ERROR"),
+              timestamp: Date.now(),
+            }).catch((err) => console.warn("[analytics] logToolCall error:", err));
+          } else if (request.type === "context_request") {
+            if (!deepDiveAllowed) {
+              sendEvent({
+                type: "context_warning",
+                message:
+                  "Deep source analysis is disabled because the context window is nearly full.",
+                available: usageEstimate.available,
+              });
+              break;
+            }
+
+            sendWritingStatus("Running a deeper source check...", "retrieving", 62);
+            sendEvent({ type: "context_loading", level: 3, documentId: request.documentId });
+
+            try {
+              history = await chatStorage.getMessagesForConversation(conv.id);
+              const recentWritingTopic = extractRecentWritingTopic(history);
+              const sourceDocument = allowedSourceDocumentIds.has(request.documentId)
+                ? await storage.getDocument(request.documentId)
+                : null;
+
+              if (!sourceDocument) {
+                contextMessage = `[DEEP DIVE FINDINGS - ERROR]\nDocument "${request.documentId}" was not found.`;
+                sendEvent({ type: "context_loaded", level: 3, findingCount: 0 });
+              } else {
+                const researchResult = await runResearchAgent(
+                  request.documentId,
+                  request.reason || "Comprehensive source review requested.",
+                  {
+                    thesis: project?.thesis || null,
+                    scope: project?.scope || null,
+                    recentWritingTopic,
+                  },
+                );
+                contextMessage = formatDeepDiveFindings(
+                  sourceDocument.filename,
+                  researchResult.findings,
+                );
+                sendEvent({
+                  type: "context_loaded",
+                  level: 3,
+                  findingCount: researchResult.findings.length,
+                  tokensUsed: researchResult.tokensUsed,
+                });
+              }
+            } catch (researchError) {
+              console.error("Research agent error:", researchError);
+              contextMessage = `[DEEP DIVE FINDINGS - ERROR]\n${
+                researchError instanceof Error ? researchError.message : "Research agent failed."
+              }`;
+              sendEvent({ type: "context_loaded", level: 3, findingCount: 0 });
+            }
+            void logToolCall({
+              conversationId: conv.id,
+              userId: req.user!.userId,
+              projectId: conv.projectId ?? null,
+              toolName: "context_request",
+              documentId: request.documentId || null,
+              escalationRound: escalationCount + 1,
+              turnNumber: history.filter((m) => m.role === "user").length,
+              resultSizeChars: contextMessage.length,
+              success: !contextMessage.includes("ERROR"),
+              timestamp: Date.now(),
+            }).catch((err) => console.warn("[analytics] logToolCall error:", err));
+          }
+
+          if (!contextMessage.trim()) {
             break;
           }
 
-          sendWritingStatus("Running a deeper source check...", "retrieving", 62);
-          sendEvent({ type: "context_loading", level: 3, documentId: request.documentId });
-
-          try {
-            history = await chatStorage.getMessagesForConversation(conv.id);
-            const recentWritingTopic = extractRecentWritingTopic(history);
-            const sourceDocument = allowedSourceDocumentIds.has(request.documentId)
-              ? await storage.getDocument(request.documentId)
-              : null;
-
-            if (!sourceDocument) {
-              contextMessage = `[DEEP DIVE FINDINGS - ERROR]\nDocument "${request.documentId}" was not found.`;
-              sendEvent({ type: "context_loaded", level: 3, findingCount: 0 });
-            } else {
-              const researchResult = await runResearchAgent(
-                request.documentId,
-                request.reason || "Comprehensive source review requested.",
-                {
-                  thesis: project?.thesis || null,
-                  scope: project?.scope || null,
-                  recentWritingTopic,
-                }
-              );
-              contextMessage = formatDeepDiveFindings(
-                sourceDocument.filename,
-                researchResult.findings
-              );
-              sendEvent({
-                type: "context_loaded",
-                level: 3,
-                findingCount: researchResult.findings.length,
-                tokensUsed: researchResult.tokensUsed,
-              });
-            }
-          } catch (researchError) {
-            console.error("Research agent error:", researchError);
-            contextMessage = `[DEEP DIVE FINDINGS - ERROR]\n${
-              researchError instanceof Error ? researchError.message : "Research agent failed."
-            }`;
-            sendEvent({ type: "context_loaded", level: 3, findingCount: 0 });
-          }
-          void logToolCall({
+          await chatStorage.createMessage({
             conversationId: conv.id,
-            userId: req.user!.userId,
-            projectId: conv.projectId ?? null,
-            toolName: "context_request",
-            documentId: request.documentId || null,
-            escalationRound: escalationCount + 1,
+            role: "user",
+            content: contextMessage,
+          });
+
+          history = await chatStorage.getMessagesForConversation(conv.id);
+          anthropicMessages = toAnthropicMessages(history);
+          messagesForTurn = anthropicMessages;
+          usageEstimate = estimateContextUsage(systemPrompt, messagesForTurn, mode);
+          void logContextSnapshot({
+            conversationId: conv.id,
             turnNumber: history.filter((m) => m.role === "user").length,
-            resultSizeChars: contextMessage.length,
-            success: !contextMessage.includes("ERROR"),
+            escalationRound: escalationCount + 1,
+            estimatedTokens: usageEstimate.totalUsed,
+            warningLevel: usageEstimate.warningLevel,
+            trigger: request.type,
             timestamp: Date.now(),
-          }).catch((err) => console.warn("[analytics] logToolCall error:", err));
+            metadata: { documentId: request.documentId || null },
+          }).catch((err) => console.warn("[analytics] logContextSnapshot error:", err));
+          sendContextWarningIfNeeded(usageEstimate);
+          deepDiveAllowed = usageEstimate.warningLevel !== "critical";
+          escalationCount += 1;
         }
 
-        if (!contextMessage.trim()) {
-          break;
+        if (!closed && !res.writableEnded) {
+          sendWritingStatus("Writing complete.", "complete", 100);
+          sendEvent({
+            type: "done",
+            usage: {
+              input_tokens: totalInputTokens,
+              output_tokens: totalOutputTokens,
+            },
+          });
+          stopHeartbeat?.();
+          stopHeartbeat = null;
+          res.end();
         }
-
-        await chatStorage.createMessage({
-          conversationId: conv.id,
-          role: "user",
-          content: contextMessage,
-        });
-
-        history = await chatStorage.getMessagesForConversation(conv.id);
-        anthropicMessages = toAnthropicMessages(history);
-        messagesForTurn = anthropicMessages;
-        usageEstimate = estimateContextUsage(systemPrompt, messagesForTurn, mode);
-        void logContextSnapshot({
-          conversationId: conv.id,
-          turnNumber: history.filter((m) => m.role === "user").length,
-          escalationRound: escalationCount + 1,
-          estimatedTokens: usageEstimate.totalUsed,
-          warningLevel: usageEstimate.warningLevel,
-          trigger: request.type,
-          timestamp: Date.now(),
-          metadata: { documentId: request.documentId || null },
-        }).catch((err) => console.warn("[analytics] logContextSnapshot error:", err));
-        sendContextWarningIfNeeded(usageEstimate);
-        deepDiveAllowed = usageEstimate.warningLevel !== "critical";
-        escalationCount += 1;
-      }
-
-      if (!closed && !res.writableEnded) {
-        sendWritingStatus("Writing complete.", "complete", 100);
-        sendEvent({
-          type: "done",
-          usage: {
-            input_tokens: totalInputTokens,
-            output_tokens: totalOutputTokens,
-          },
-        });
+      } catch (error) {
+        console.error("Error sending message:", error);
         stopHeartbeat?.();
         stopHeartbeat = null;
-        res.end();
+        if (!res.headersSent) {
+          res.status(500).json({ message: sanitizeSseError(error, "Failed to send message") });
+        } else {
+          res.write(
+            `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Failed to send message") })}\n\n`,
+          );
+          res.end();
+        }
       }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      stopHeartbeat?.();
-      stopHeartbeat = null;
-      if (!res.headersSent) {
-        res.status(500).json({ message: sanitizeSseError(error, "Failed to send message") });
-      } else {
-        res.write(`data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Failed to send message") })}\n\n`);
-        res.end();
-      }
-    }
-  });
+    },
+  );
 
-  app.post("/api/chat/conversations/:id/compile", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
-    let stopHeartbeat: (() => void) | null = null;
+  app.post(
+    "/api/chat/conversations/:id/compile",
+    requireAuth,
+    aiLimiter,
+    requireTier("pro"),
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      let stopHeartbeat: (() => void) | null = null;
 
-    try {
-      const conv = await getOwnedConversationOr404(req, res);
-      if (!conv) return;
+      try {
+        const conv = await getOwnedConversationOr404(req, res);
+        if (!conv) return;
 
-      const { citationStyle, tone, noEnDashes } = req.body;
-      const style = citationStyle || conv.citationStyle || "chicago";
-      const writingTone = tone || conv.tone || "academic";
-      const avoidDashes = noEnDashes ?? conv.noEnDashes ?? false;
-      const models = getModelsForConversation(conv);
+        const { citationStyle, tone, noEnDashes } = req.body;
+        const style = citationStyle || conv.citationStyle || "chicago";
+        const writingTone = tone || conv.tone || "academic";
+        const avoidDashes = noEnDashes ?? conv.noEnDashes ?? false;
+        const models = getModelsForConversation(conv);
 
-      const history = await chatStorage.getMessagesForConversation(conv.id);
-      if (history.length === 0) {
-        return res.status(400).json({ message: "No conversation to compile" });
-      }
+        const history = await chatStorage.getMessagesForConversation(conv.id);
+        if (history.length === 0) {
+          return res.status(400).json({ message: "No conversation to compile" });
+        }
 
-      const transcript = history
-        .filter((message) => message.role === "user" || message.role === "assistant")
-        .map((message) => `[${message.role.toUpperCase()}]: ${message.content}`)
-        .join("\n\n---\n\n");
+        const transcript = history
+          .filter((message) => message.role === "user" || message.role === "assistant")
+          .map((message) => `[${message.role.toUpperCase()}]: ${message.content}`)
+          .join("\n\n---\n\n");
 
-      const { project, sources, writingStyle } = await loadConversationContext(conv, req.user!.userId);
-      const projectContextBlock = buildProjectContextBlock(project);
-      const writingStyleBlock = buildSelectedWritingStyleBlock(writingStyle) || buildVoiceProfileBlock(project?.voiceProfile);
-      const sourcesBlock = sources.length > 0
-        ? `\n\nSOURCE MATERIALS:\n${buildSourceBlock(sources)}`
-        : "";
+        const { project, sources, writingStyle } = await loadConversationContext(
+          conv,
+          req.user!.userId,
+        );
+        const projectContextBlock = buildProjectContextBlock(project);
+        const writingStyleBlock =
+          buildSelectedWritingStyleBlock(writingStyle) ||
+          buildVoiceProfileBlock(project?.voiceProfile);
+        const sourcesBlock =
+          sources.length > 0 ? `\n\nSOURCE MATERIALS:\n${buildSourceBlock(sources)}` : "";
 
-      const noEnDashesRule = avoidDashes
-        ? "\n11. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
-        : "";
+        const noEnDashesRule = avoidDashes
+          ? "\n11. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
+          : "";
 
-      const compilePrompt = `You are assembling a final academic paper from a writing conversation.
+        const compilePrompt = `You are assembling a final academic paper from a writing conversation.
 The student and AI have been collaboratively drafting sections.
 
 ${projectContextBlock}
@@ -1769,88 +1864,102 @@ RULES:
 CONVERSATION TRANSCRIPT:
 ${transcript}${sourcesBlock}`;
 
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no");
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("X-Accel-Buffering", "no");
 
-      const anthropic = getAnthropicClient();
-      let aborted = false;
+        const anthropic = getAnthropicClient();
+        let aborted = false;
 
-      req.on("close", () => {
-        aborted = true;
-        stopHeartbeat?.();
-        stopHeartbeat = null;
-      });
-
-      stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
-
-      const stream = anthropic.messages.stream({
-        model: models.compile,
-        max_tokens: COMPILE_MAX_TOKENS,
-        messages: [{ role: "user", content: compilePrompt }],
-      });
-
-      stream.on("text", (text) => {
-        if (!aborted) {
-          res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
-        }
-      });
-
-      stream.on("message", async (message) => {
-        await recordUserTokenUsage(req.user!.userId, getUsageTokenTotal(message?.usage), "chat_compile");
-        if (aborted) return;
-        stopHeartbeat?.();
-        stopHeartbeat = null;
-        res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-        res.end();
-      });
-
-      stream.on("error", (error) => {
-        console.error("Compile stream error:", error);
-        if (!aborted) {
+        req.on("close", () => {
+          aborted = true;
           stopHeartbeat?.();
           stopHeartbeat = null;
+        });
+
+        stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
+
+        const stream = anthropic.messages.stream({
+          model: models.compile,
+          max_tokens: COMPILE_MAX_TOKENS,
+          messages: [{ role: "user", content: compilePrompt }],
+        });
+
+        stream.on("text", (text) => {
+          if (!aborted) {
+            res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
+          }
+        });
+
+        stream.on("message", async (message) => {
+          await recordUserTokenUsage(
+            req.user!.userId,
+            getUsageTokenTotal(message?.usage),
+            "chat_compile",
+          );
+          if (aborted) return;
+          stopHeartbeat?.();
+          stopHeartbeat = null;
+          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+          res.end();
+        });
+
+        stream.on("error", (error) => {
+          console.error("Compile stream error:", error);
+          if (!aborted) {
+            stopHeartbeat?.();
+            stopHeartbeat = null;
+            res.write(
+              `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Compile failed") })}\n\n`,
+            );
+            res.end();
+          }
+        });
+      } catch (error) {
+        console.error("Compile error:", error);
+        stopHeartbeat?.();
+        stopHeartbeat = null;
+        if (!res.headersSent) {
+          res.status(500).json({ message: sanitizeSseError(error, "Failed to compile paper") });
+        } else {
           res.write(
-            `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Compile failed") })}\n\n`
+            `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Compile failed") })}\n\n`,
           );
           res.end();
         }
-      });
-    } catch (error) {
-      console.error("Compile error:", error);
-      stopHeartbeat?.();
-      stopHeartbeat = null;
-      if (!res.headersSent) {
-        res.status(500).json({ message: sanitizeSseError(error, "Failed to compile paper") });
-      } else {
-        res.write(`data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Compile failed") })}\n\n`);
-        res.end();
       }
-    }
-  });
+    },
+  );
 
-  app.post("/api/chat/conversations/:id/verify", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
-    let stopHeartbeat: (() => void) | null = null;
+  app.post(
+    "/api/chat/conversations/:id/verify",
+    requireAuth,
+    aiLimiter,
+    requireTier("pro"),
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      let stopHeartbeat: (() => void) | null = null;
 
-    try {
-      const conv = await getOwnedConversationOr404(req, res);
-      if (!conv) return;
+      try {
+        const conv = await getOwnedConversationOr404(req, res);
+        if (!conv) return;
 
-      const { compiledContent } = req.body;
-      if (!compiledContent || typeof compiledContent !== "string") {
-        return res.status(400).json({ message: "compiledContent is required" });
-      }
+        const { compiledContent } = req.body;
+        if (!compiledContent || typeof compiledContent !== "string") {
+          return res.status(400).json({ message: "compiledContent is required" });
+        }
 
-      const models = getModelsForConversation(conv);
-      const style = conv.citationStyle || "chicago";
-      const { project, sources } = await loadConversationContext(conv, req.user!.userId);
-      const projectContextBlock = buildProjectContextBlock(project);
-      const sourcesBlock = sources.length > 0
-        ? `\n\nSOURCE MATERIALS FOR VERIFICATION:\n${buildSourceBlock(sources)}`
-        : "\n\nSOURCE MATERIALS FOR VERIFICATION:\nNo attached source materials were provided.";
+        const models = getModelsForConversation(conv);
+        const style = conv.citationStyle || "chicago";
+        const { project, sources } = await loadConversationContext(conv, req.user!.userId);
+        const projectContextBlock = buildProjectContextBlock(project);
+        const sourcesBlock =
+          sources.length > 0
+            ? `\n\nSOURCE MATERIALS FOR VERIFICATION:\n${buildSourceBlock(sources)}`
+            : "\n\nSOURCE MATERIALS FOR VERIFICATION:\nNo attached source materials were provided.";
 
-      const verifyPrompt = `You are an academic paper reviewer performing strict source and citation verification.
+        const verifyPrompt = `You are an academic paper reviewer performing strict source and citation verification.
 
 ${projectContextBlock}
 Citation style to enforce: ${style.toUpperCase()}
@@ -1874,65 +1983,72 @@ Output format:
 PAPER TO REVIEW:
 ${compiledContent}${sourcesBlock}`;
 
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no");
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("X-Accel-Buffering", "no");
 
-      const anthropic = getAnthropicClient();
-      let aborted = false;
+        const anthropic = getAnthropicClient();
+        let aborted = false;
 
-      req.on("close", () => {
-        aborted = true;
+        req.on("close", () => {
+          aborted = true;
+          stopHeartbeat?.();
+          stopHeartbeat = null;
+        });
+
+        stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
+
+        const stream = anthropic.messages.stream({
+          model: models.verify,
+          max_tokens: VERIFY_MAX_TOKENS,
+          messages: [{ role: "user", content: verifyPrompt }],
+        });
+
+        stream.on("text", (text) => {
+          if (!aborted) {
+            res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
+          }
+        });
+
+        stream.on("message", async (message) => {
+          await recordUserTokenUsage(
+            req.user!.userId,
+            getUsageTokenTotal(message?.usage),
+            "chat_verify",
+          );
+          if (!aborted) {
+            stopHeartbeat?.();
+            stopHeartbeat = null;
+            res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+            res.end();
+          }
+        });
+
+        stream.on("error", (error) => {
+          console.error("Verify stream error:", error);
+          if (!aborted) {
+            stopHeartbeat?.();
+            stopHeartbeat = null;
+            res.write(
+              `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Verify failed") })}\n\n`,
+            );
+            res.end();
+          }
+        });
+      } catch (error) {
+        console.error("Verify error:", error);
         stopHeartbeat?.();
         stopHeartbeat = null;
-      });
-
-      stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
-
-      const stream = anthropic.messages.stream({
-        model: models.verify,
-        max_tokens: VERIFY_MAX_TOKENS,
-        messages: [{ role: "user", content: verifyPrompt }],
-      });
-
-      stream.on("text", (text) => {
-        if (!aborted) {
-          res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
-        }
-      });
-
-      stream.on("message", async (message) => {
-        await recordUserTokenUsage(req.user!.userId, getUsageTokenTotal(message?.usage), "chat_verify");
-        if (!aborted) {
-          stopHeartbeat?.();
-          stopHeartbeat = null;
-          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-          res.end();
-        }
-      });
-
-      stream.on("error", (error) => {
-        console.error("Verify stream error:", error);
-        if (!aborted) {
-          stopHeartbeat?.();
-          stopHeartbeat = null;
+        if (!res.headersSent) {
+          res.status(500).json({ message: sanitizeSseError(error, "Failed to verify paper") });
+        } else {
           res.write(
-            `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Verify failed") })}\n\n`
+            `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Verify failed") })}\n\n`,
           );
           res.end();
         }
-      });
-    } catch (error) {
-      console.error("Verify error:", error);
-      stopHeartbeat?.();
-      stopHeartbeat = null;
-      if (!res.headersSent) {
-        res.status(500).json({ message: sanitizeSseError(error, "Failed to verify paper") });
-      } else {
-        res.write(`data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Verify failed") })}\n\n`);
-        res.end();
       }
-    }
-  });
+    },
+  );
 }

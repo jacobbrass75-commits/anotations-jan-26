@@ -50,15 +50,8 @@ chrome-extension/
   "name": "ScholarMark",
   "version": "1.0.0",
   "description": "Highlight and annotate any webpage. Save to your ScholarMark research projects.",
-  "permissions": [
-    "activeTab",
-    "storage",
-    "contextMenus"
-  ],
-  "host_permissions": [
-    "http://localhost:5001/*",
-    "https://scholarmark.ai/*"
-  ],
+  "permissions": ["activeTab", "storage", "contextMenus"],
+  "host_permissions": ["http://localhost:5001/*", "https://scholarmark.ai/*"],
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
@@ -101,7 +94,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "save-to-scholarmark",
     title: "Save to ScholarMark",
-    contexts: ["selection"]
+    contexts: ["selection"],
   });
 });
 
@@ -120,19 +113,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const pageTitle = tab.title;
 
     // Send to content script to get more context
-    chrome.tabs.sendMessage(tab.id, {
-      type: "GET_SELECTION_CONTEXT",
-    }, async (response) => {
-      const annotation = {
-        highlightedText: info.selectionText,
-        pageUrl,
-        pageTitle,
-        context: response?.surroundingText || "",
-        timestamp: new Date().toISOString(),
-      };
+    chrome.tabs.sendMessage(
+      tab.id,
+      {
+        type: "GET_SELECTION_CONTEXT",
+      },
+      async (response) => {
+        const annotation = {
+          highlightedText: info.selectionText,
+          pageUrl,
+          pageTitle,
+          context: response?.surroundingText || "",
+          timestamp: new Date().toISOString(),
+        };
 
-      await saveAnnotation(annotation, token);
-    });
+        await saveAnnotation(annotation, token);
+      },
+    );
   }
 });
 
@@ -147,7 +144,7 @@ async function saveAnnotation(annotation, token) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(annotation),
     });
@@ -210,7 +207,7 @@ async function getProjects() {
   if (!token) return { success: false, error: "Not logged in" };
 
   const response = await fetch(`${API_BASE}/api/projects`, {
-    headers: { "Authorization": `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   if (response.ok) {
@@ -306,89 +303,97 @@ function showSaveIndicator() {
 ```html
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <link rel="stylesheet" href="popup.css">
-</head>
-<body>
-  <div id="app">
-    <!-- Login View -->
-    <div id="login-view" style="display: none;">
-      <div class="header">
-        <h1>ScholarMark</h1>
-        <p class="subtitle">Sign in to save highlights</p>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Login View -->
+      <div id="login-view" style="display: none;">
+        <div class="header">
+          <h1>ScholarMark</h1>
+          <p class="subtitle">Sign in to save highlights</p>
+        </div>
+        <form id="login-form">
+          <input type="email" id="email" placeholder="Email" required />
+          <input type="password" id="password" placeholder="Password" required />
+          <button type="submit" id="login-btn">Sign In</button>
+          <p id="login-error" class="error"></p>
+        </form>
       </div>
-      <form id="login-form">
-        <input type="email" id="email" placeholder="Email" required>
-        <input type="password" id="password" placeholder="Password" required>
-        <button type="submit" id="login-btn">Sign In</button>
-        <p id="login-error" class="error"></p>
-      </form>
+
+      <!-- Logged In View -->
+      <div id="main-view" style="display: none;">
+        <div class="header">
+          <h1>ScholarMark</h1>
+          <p class="user-info" id="user-info"></p>
+        </div>
+
+        <div class="section">
+          <label>Save to Project:</label>
+          <select id="project-select">
+            <option value="">Select project...</option>
+          </select>
+        </div>
+
+        <div class="section">
+          <p class="hint">Select text on any page, then right-click → "Save to ScholarMark"</p>
+          <p class="hint">Or use <kbd>Ctrl+Shift+S</kbd></p>
+        </div>
+
+        <div class="section">
+          <button id="open-app" class="secondary">Open ScholarMark</button>
+          <button id="logout-btn" class="danger">Sign Out</button>
+        </div>
+      </div>
     </div>
-
-    <!-- Logged In View -->
-    <div id="main-view" style="display: none;">
-      <div class="header">
-        <h1>ScholarMark</h1>
-        <p class="user-info" id="user-info"></p>
-      </div>
-
-      <div class="section">
-        <label>Save to Project:</label>
-        <select id="project-select">
-          <option value="">Select project...</option>
-        </select>
-      </div>
-
-      <div class="section">
-        <p class="hint">Select text on any page, then right-click → "Save to ScholarMark"</p>
-        <p class="hint">Or use <kbd>Ctrl+Shift+S</kbd></p>
-      </div>
-
-      <div class="section">
-        <button id="open-app" class="secondary">Open ScholarMark</button>
-        <button id="logout-btn" class="danger">Sign Out</button>
-      </div>
-    </div>
-  </div>
-  <script src="popup.js"></script>
-</body>
+    <script src="popup.js"></script>
+  </body>
 </html>
 ```
 
 ### 5. `chrome-extension/popup/popup.css`
 
 ```css
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
 body {
   width: 320px;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-size: 14px;
-  color: #2D2A26;
-  background: #FAFAF8;
+  color: #2d2a26;
+  background: #fafaf8;
 }
 
 .header {
   padding: 16px;
-  border-bottom: 1px solid #E8E4E0;
+  border-bottom: 1px solid #e8e4e0;
 }
 
 .header h1 {
   font-size: 18px;
   font-weight: 600;
-  color: #D4556B;
+  color: #d4556b;
 }
 
 .subtitle {
   font-size: 12px;
-  color: #8A8580;
+  color: #8a8580;
   margin-top: 4px;
 }
 
 .user-info {
   font-size: 12px;
-  color: #5B7FA5;
+  color: #5b7fa5;
   margin-top: 4px;
 }
 
@@ -401,16 +406,16 @@ input {
   width: 100%;
   padding: 10px 12px;
   margin-bottom: 8px;
-  border: 1px solid #E8E4E0;
+  border: 1px solid #e8e4e0;
   border-radius: 6px;
   font-size: 14px;
-  background: #F5F3F0;
-  color: #2D2A26;
+  background: #f5f3f0;
+  color: #2d2a26;
   outline: none;
 }
 
 input:focus {
-  border-color: #D4556B;
+  border-color: #d4556b;
 }
 
 button {
@@ -425,20 +430,21 @@ button {
   margin-bottom: 8px;
 }
 
-button[type="submit"], button.primary {
-  background: #D4556B;
+button[type="submit"],
+button.primary {
+  background: #d4556b;
   color: white;
 }
 
 button.secondary {
-  background: #5B7FA5;
+  background: #5b7fa5;
   color: white;
 }
 
 button.danger {
   background: transparent;
-  color: #C94454;
-  border: 1px solid #C94454;
+  color: #c94454;
+  border: 1px solid #c94454;
 }
 
 .section {
@@ -448,20 +454,20 @@ button.danger {
 select {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #E8E4E0;
+  border: 1px solid #e8e4e0;
   border-radius: 6px;
   font-size: 14px;
-  background: #F5F3F0;
+  background: #f5f3f0;
 }
 
 .hint {
   font-size: 12px;
-  color: #8A8580;
+  color: #8a8580;
   margin-bottom: 8px;
 }
 
 kbd {
-  background: #E8E4E0;
+  background: #e8e4e0;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
@@ -469,7 +475,7 @@ kbd {
 }
 
 .error {
-  color: #C94454;
+  color: #c94454;
   font-size: 12px;
   margin-top: 8px;
 }
@@ -515,7 +521,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const response = await chrome.runtime.sendMessage({ type: "GET_PROJECTS" });
     if (response.success) {
       projectSelect.innerHTML = '<option value="">Select project...</option>';
-      response.projects.forEach(p => {
+      response.projects.forEach((p) => {
         const option = document.createElement("option");
         option.value = p.id;
         option.textContent = p.name;
@@ -600,12 +606,18 @@ export function registerExtensionRoutes(app: Express) {
     };
 
     // Save and return
-    res.json({ success: true, annotation: { /* saved annotation */ } });
+    res.json({
+      success: true,
+      annotation: {
+        /* saved annotation */
+      },
+    });
   });
 }
 ```
 
 Register in `server/routes.ts`:
+
 ```typescript
 import { registerExtensionRoutes } from "./extensionRoutes";
 registerExtensionRoutes(app);
@@ -616,6 +628,7 @@ registerExtensionRoutes(app);
 Create simple placeholder icons. Use a rounded square with "SM" text in the Darling rose color (#D4556B) on white background.
 
 For now, create simple colored squares:
+
 - 16x16, 48x48, 128x128 PNG files
 - Can be generated programmatically or use a simple online tool
 
@@ -635,6 +648,7 @@ npm run dev
 ```
 
 Test the extension:
+
 1. Go to `chrome://extensions/` in Chrome
 2. Enable Developer Mode
 3. Click "Load unpacked" and select the `chrome-extension/` folder

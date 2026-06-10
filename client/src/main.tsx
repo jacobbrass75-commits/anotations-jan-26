@@ -26,7 +26,7 @@ async function renderApp() {
   root.render(
     <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
       {app}
-    </ClerkProvider>
+    </ClerkProvider>,
   );
 }
 

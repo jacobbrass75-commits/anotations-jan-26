@@ -63,9 +63,8 @@ function getPayPalConfig(): {
   const clientId = (process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || "").trim();
   const clientSecret = (process.env.PAYPAL_CLIENT_SECRET || "").trim();
   const webhookId = (process.env.PAYPAL_WEBHOOK_ID || "").trim();
-  const apiBaseUrl = environment === "sandbox"
-    ? "https://api-m.sandbox.paypal.com"
-    : "https://api-m.paypal.com";
+  const apiBaseUrl =
+    environment === "sandbox" ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com";
 
   return {
     configured: Boolean(clientId && clientSecret),
@@ -106,7 +105,7 @@ async function getPayPalAccessToken(): Promise<string> {
     throw new Error(`PayPal token request failed: ${response.status} ${await response.text()}`);
   }
 
-  const body = await response.json() as { access_token?: string };
+  const body = (await response.json()) as { access_token?: string };
   if (!body.access_token) {
     throw new Error("PayPal token response did not include an access token");
   }
@@ -136,7 +135,7 @@ async function paypalRequest<T>(
     throw new Error(`PayPal API request failed: ${response.status} ${await response.text()}`);
   }
 
-  return await response.json() as T;
+  return (await response.json()) as T;
 }
 
 function getCaptureDetails(order: any): {
@@ -151,11 +150,15 @@ function getCaptureDetails(order: any): {
     status,
     captureId: typeof capture?.id === "string" ? capture.id : null,
     amountCents: toCents(capture?.amount?.value),
-    currency: typeof capture?.amount?.currency_code === "string" ? capture.amount.currency_code : null,
+    currency:
+      typeof capture?.amount?.currency_code === "string" ? capture.amount.currency_code : null,
   };
 }
 
-async function grantTierIfPaymentCompleted(orderId: string, paypalOrder: any): Promise<{
+async function grantTierIfPaymentCompleted(
+  orderId: string,
+  paypalOrder: any,
+): Promise<{
   completed: boolean;
   tier?: BillingTier;
   status: string;
@@ -169,12 +172,24 @@ async function grantTierIfPaymentCompleted(orderId: string, paypalOrder: any): P
   const rawResponse = JSON.stringify(paypalOrder);
 
   if (capture.status !== "COMPLETED") {
-    updatePaymentStatus.run(capture.status, capture.captureId, rawResponse, capture.status, orderId);
+    updatePaymentStatus.run(
+      capture.status,
+      capture.captureId,
+      rawResponse,
+      capture.status,
+      orderId,
+    );
     return { completed: false, status: capture.status };
   }
 
   if (capture.currency !== row.currency || capture.amountCents !== row.amount_cents) {
-    updatePaymentStatus.run("AMOUNT_MISMATCH", capture.captureId, rawResponse, "AMOUNT_MISMATCH", orderId);
+    updatePaymentStatus.run(
+      "AMOUNT_MISMATCH",
+      capture.captureId,
+      rawResponse,
+      "AMOUNT_MISMATCH",
+      orderId,
+    );
     throw new Error("Captured PayPal amount does not match the requested ScholarMark plan");
   }
 
@@ -259,32 +274,29 @@ export function registerPayPalBillingRoutes(app: ExpressApp): void {
 
     const plan = PLAN_CONFIG[tier];
     try {
-      const order = await paypalRequest<{ id: string; status: string }>(
-        "/v2/checkout/orders",
-        {
-          method: "POST",
-          requestId: randomUUID(),
-          body: JSON.stringify({
-            intent: "CAPTURE",
-            purchase_units: [
-              {
-                reference_id: `scholarmark-${tier}`,
-                custom_id: req.user!.userId,
-                description: `ScholarMark ${plan.label} monthly access`,
-                amount: {
-                  currency_code: CURRENCY,
-                  value: plan.amount,
-                },
+      const order = await paypalRequest<{ id: string; status: string }>("/v2/checkout/orders", {
+        method: "POST",
+        requestId: randomUUID(),
+        body: JSON.stringify({
+          intent: "CAPTURE",
+          purchase_units: [
+            {
+              reference_id: `scholarmark-${tier}`,
+              custom_id: req.user!.userId,
+              description: `ScholarMark ${plan.label} monthly access`,
+              amount: {
+                currency_code: CURRENCY,
+                value: plan.amount,
               },
-            ],
-            application_context: {
-              brand_name: "ScholarMark",
-              shipping_preference: "NO_SHIPPING",
-              user_action: "PAY_NOW",
             },
-          }),
-        },
-      );
+          ],
+          application_context: {
+            brand_name: "ScholarMark",
+            shipping_preference: "NO_SHIPPING",
+            user_action: "PAY_NOW",
+          },
+        }),
+      });
 
       insertPayment.run(
         randomUUID(),
@@ -304,25 +316,29 @@ export function registerPayPalBillingRoutes(app: ExpressApp): void {
     }
   });
 
-  app.post("/api/billing/paypal/orders/:orderId/capture", requireAuth, async (req: Request, res: Response) => {
-    const row = selectPaymentByOrderId.get(req.params.orderId) as BillingPaymentRow | undefined;
-    if (!row || row.user_id !== req.user!.userId) {
-      return res.status(404).json({ message: "Payment order not found" });
-    }
+  app.post(
+    "/api/billing/paypal/orders/:orderId/capture",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      const row = selectPaymentByOrderId.get(req.params.orderId) as BillingPaymentRow | undefined;
+      if (!row || row.user_id !== req.user!.userId) {
+        return res.status(404).json({ message: "Payment order not found" });
+      }
 
-    if (row.status === "COMPLETED") {
-      return res.json({ completed: true, tier: row.tier, status: "COMPLETED" });
-    }
+      if (row.status === "COMPLETED") {
+        return res.json({ completed: true, tier: row.tier, status: "COMPLETED" });
+      }
 
-    try {
-      const capturedOrder = await captureOrReadCompletedOrder(req.params.orderId);
-      const result = await grantTierIfPaymentCompleted(req.params.orderId, capturedOrder);
-      return res.json(result);
-    } catch (error) {
-      console.error("[billing] failed to capture PayPal order", error);
-      return res.status(502).json({ message: "Failed to capture PayPal order" });
-    }
-  });
+      try {
+        const capturedOrder = await captureOrReadCompletedOrder(req.params.orderId);
+        const result = await grantTierIfPaymentCompleted(req.params.orderId, capturedOrder);
+        return res.json(result);
+      } catch (error) {
+        console.error("[billing] failed to capture PayPal order", error);
+        return res.status(502).json({ message: "Failed to capture PayPal order" });
+      }
+    },
+  );
 
   app.post("/api/billing/paypal/webhook", async (req: Request, res: Response) => {
     try {

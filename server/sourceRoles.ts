@@ -2,7 +2,7 @@ import { ANTHROPIC_MODELS } from "./aiModels";
 
 export const SOURCE_ROLES = ["evidence", "style_reference", "background"] as const;
 
-export type SourceRole = typeof SOURCE_ROLES[number];
+export type SourceRole = (typeof SOURCE_ROLES)[number];
 
 export interface StyleAnalysis {
   avgSentenceLength: string;
@@ -41,9 +41,7 @@ function normalizeStringList(value: unknown, maxItems: number): string[] {
 }
 
 function normalizeVocabularyLevel(value: unknown): StyleAnalysis["vocabularyLevel"] {
-  return value === "academic" || value === "conversational" || value === "mixed"
-    ? value
-    : "mixed";
+  return value === "academic" || value === "conversational" || value === "mixed" ? value : "mixed";
 }
 
 function normalizeStyleAnalysis(value: Partial<StyleAnalysis> | null): StyleAnalysis {
@@ -68,7 +66,10 @@ function formatStyleProfile(analysis: StyleAnalysis): string {
 function extractText(response: { content?: Array<{ type: string; text?: string }> }): string {
   if (!Array.isArray(response.content)) return "";
   return response.content
-    .filter((block): block is { type: string; text: string } => block.type === "text" && typeof block.text === "string")
+    .filter(
+      (block): block is { type: string; text: string } =>
+        block.type === "text" && typeof block.text === "string",
+    )
     .map((block) => block.text)
     .join("\n")
     .trim();
@@ -123,15 +124,19 @@ Return ONLY valid JSON, no markdown.`,
     ],
   });
 
-  const raw = extractText(response).replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
+  const raw = extractText(response)
+    .replace(/^```json\s*/i, "")
+    .replace(/\s*```$/i, "");
   const parsed = safeJsonParse<Partial<StyleAnalysis>>(raw);
   return normalizeStyleAnalysis(parsed);
 }
 
-export function buildStyleSection(styleSources: Array<{
-  title: string;
-  styleAnalysis: StyleAnalysis | null;
-}>): string {
+export function buildStyleSection(
+  styleSources: Array<{
+    title: string;
+    styleAnalysis: StyleAnalysis | null;
+  }>,
+): string {
   if (styleSources.length === 0) return "";
 
   return `\n## WRITING STYLE GUIDE

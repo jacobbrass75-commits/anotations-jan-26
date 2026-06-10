@@ -30,7 +30,9 @@ interface AuthContextType {
 
 const LOCAL_DEV_AUTH = import.meta.env.VITE_LOCAL_DEV_AUTH === "true";
 
-async function fetchServerAuthUser(options: { allowUnauthorized: boolean }): Promise<AuthUser | null> {
+async function fetchServerAuthUser(options: {
+  allowUnauthorized: boolean;
+}): Promise<AuthUser | null> {
   const response = await fetch("/api/auth/me", {
     credentials: "include",
   });
@@ -112,6 +114,8 @@ function useClerkBackedAuth(): AuthContextType {
 
 /** Drop-in replacement for the old useAuth() hook, now backed by Clerk or local dev auth */
 export function useAuth(): AuthContextType {
+  // TODO(lint): Split local-dev auth into a separate provider so hook selection is static.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   return LOCAL_DEV_AUTH ? useLocalDevAuth() : useClerkBackedAuth();
 }
 

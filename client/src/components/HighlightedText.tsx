@@ -5,7 +5,10 @@ import { Card } from "@/components/ui/card";
 import { Bot, User, X } from "lucide-react";
 
 // Extended annotation type with prompt fields
-interface AnnotationWithPrompt extends Omit<Annotation, 'promptText' | 'promptIndex' | 'promptColor'> {
+interface AnnotationWithPrompt extends Omit<
+  Annotation,
+  "promptText" | "promptIndex" | "promptColor"
+> {
   promptText?: string | null;
   promptIndex?: number | null;
   promptColor?: string | null;
@@ -70,7 +73,9 @@ export function HighlightedText({
   onTextSelect,
 }: HighlightedTextProps) {
   const [activePopover, setActivePopover] = useState<AnnotationWithPrompt | null>(null);
-  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
+  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(
+    null,
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -198,21 +203,24 @@ export function HighlightedText({
     }
   }, [onTextSelect, text.length]);
 
-  const handleHighlightClick = useCallback((e: React.MouseEvent, annotation: AnnotationWithPrompt) => {
-    e.stopPropagation();
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    
-    if (containerRect) {
-      setPopoverPosition({
-        top: rect.bottom - containerRect.top + 8,
-        left: rect.left - containerRect.left,
-      });
-    }
-    
-    setActivePopover(annotation);
-    onAnnotationClick(annotation);
-  }, [onAnnotationClick]);
+  const handleHighlightClick = useCallback(
+    (e: React.MouseEvent, annotation: AnnotationWithPrompt) => {
+      e.stopPropagation();
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      const containerRect = containerRef.current?.getBoundingClientRect();
+
+      if (containerRect) {
+        setPopoverPosition({
+          top: rect.bottom - containerRect.top + 8,
+          left: rect.left - containerRect.left,
+        });
+      }
+
+      setActivePopover(annotation);
+      onAnnotationClick(annotation);
+    },
+    [onAnnotationClick],
+  );
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -295,7 +303,11 @@ export function HighlightedText({
               <div className="flex items-center gap-2 flex-wrap">
                 <div
                   className="w-3 h-3 rounded-full"
-                  style={activePopover.promptColor ? { backgroundColor: activePopover.promptColor } : undefined}
+                  style={
+                    activePopover.promptColor
+                      ? { backgroundColor: activePopover.promptColor }
+                      : undefined
+                  }
                   {...(!activePopover.promptColor && {
                     className: `w-3 h-3 rounded-full ${categoryColors[activePopover.category].bg.replace("/20", "")}`,
                   })}
@@ -344,20 +356,21 @@ export function HighlightedText({
               </p>
             )}
 
-            {activePopover.confidenceScore !== null && activePopover.confidenceScore !== undefined && (
-              <div className="mt-3 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Confidence:</span>
-                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${Math.round(activePopover.confidenceScore * 100)}%` }}
-                  />
+            {activePopover.confidenceScore !== null &&
+              activePopover.confidenceScore !== undefined && (
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Confidence:</span>
+                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all"
+                      style={{ width: `${Math.round(activePopover.confidenceScore * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {Math.round(activePopover.confidenceScore * 100)}%
+                  </span>
                 </div>
-                <span className="text-xs font-medium text-muted-foreground">
-                  {Math.round(activePopover.confidenceScore * 100)}%
-                </span>
-              </div>
-            )}
+              )}
           </Card>
         </div>
       )}

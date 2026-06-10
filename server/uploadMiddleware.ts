@@ -31,7 +31,11 @@ export function getFileExtension(filename: string): string {
 }
 
 export function isImageFile(mimeType: string, extension: string): boolean {
-  return mimeType.startsWith("image/") || IMAGE_MIME_TYPES.has(mimeType) || IMAGE_EXTENSIONS.has(extension);
+  return (
+    mimeType.startsWith("image/") ||
+    IMAGE_MIME_TYPES.has(mimeType) ||
+    IMAGE_EXTENSIONS.has(extension)
+  );
 }
 
 function createMemoryStorage(options: { maxTotalFileSizeBytes?: number } = {}): StorageEngine {
@@ -85,12 +89,14 @@ function createMemoryStorage(options: { maxTotalFileSizeBytes?: number } = {}): 
   };
 }
 
-export function createUploadMiddleware(options: {
-  maxFileSizeBytes?: number;
-  maxFieldSizeBytes?: number;
-  maxFileCount?: number;
-  maxTotalFileSizeBytes?: number;
-} = {}) {
+export function createUploadMiddleware(
+  options: {
+    maxFileSizeBytes?: number;
+    maxFieldSizeBytes?: number;
+    maxFileCount?: number;
+    maxTotalFileSizeBytes?: number;
+  } = {},
+) {
   const maxFileSizeBytes = options.maxFileSizeBytes ?? DEFAULT_UPLOAD_FILE_SIZE_LIMIT_BYTES;
   const maxFieldSizeBytes = options.maxFieldSizeBytes ?? DEFAULT_UPLOAD_FIELD_SIZE_LIMIT_BYTES;
 

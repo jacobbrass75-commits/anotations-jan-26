@@ -51,12 +51,12 @@ The web app is served by the Express/Vite development server.
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Start the local development server. |
-| `npm run build` | Build the client, server, and deployable artifacts. |
-| `npm run check` | Run TypeScript type checking. |
-| `npm test` | Run the sequential Vitest suite. |
+| Command               | Purpose                                                   |
+| --------------------- | --------------------------------------------------------- |
+| `npm run dev`         | Start the local development server.                       |
+| `npm run build`       | Build the client, server, and deployable artifacts.       |
+| `npm run check`       | Run TypeScript type checking.                             |
+| `npm test`            | Run the sequential Vitest suite.                          |
 | `npm run smoke:local` | Smoke-check a running local app with MCP checks disabled. |
 
 ## Operations

@@ -4,8 +4,7 @@ export interface ProductionConfigOptions {
   phase?: ProductionConfigPhase;
 }
 
-const DEFAULT_JWT_SECRET =
-  "dev-jwt-secret-change-in-production-64chars-long-string-placeholder!!";
+const DEFAULT_JWT_SECRET = "dev-jwt-secret-change-in-production-64chars-long-string-placeholder!!";
 
 function hasValue(value: string | undefined): boolean {
   return typeof value === "string" && value.trim().length > 0;
@@ -70,7 +69,9 @@ export function getProductionConfigErrors(
 
   const jwtSecret = env.JWT_SECRET?.trim() ?? "";
   if (!hasValue(jwtSecret) || jwtSecret === DEFAULT_JWT_SECRET || jwtSecret.length < 32) {
-    errors.push("JWT_SECRET must be set to a unique production secret with at least 32 characters.");
+    errors.push(
+      "JWT_SECRET must be set to a unique production secret with at least 32 characters.",
+    );
   }
 
   const appBaseUrl = env.APP_BASE_URL || env.PUBLIC_BASE_URL;
@@ -95,7 +96,9 @@ export function getProductionConfigErrors(
 
   const chromeExtensionIds = splitCsv(env.CHROME_EXTENSION_IDS);
   if (extensionCorsMode !== "disabled" && chromeExtensionIds.length === 0) {
-    errors.push("CHROME_EXTENSION_IDS must list the production Chrome extension ID allowed to call the API.");
+    errors.push(
+      "CHROME_EXTENSION_IDS must list the production Chrome extension ID allowed to call the API.",
+    );
   }
   if (chromeExtensionIds.some((extensionId) => !isValidChromeExtensionId(extensionId))) {
     errors.push("CHROME_EXTENSION_IDS must contain only valid 32-character Chrome extension IDs.");
@@ -110,7 +113,9 @@ export function getProductionConfigErrors(
   }
 
   if (!hasValue(env.ANTHROPIC_API_KEY)) {
-    errors.push("ANTHROPIC_API_KEY must be set for chat, writing, compile, verify, and fallback humanizer.");
+    errors.push(
+      "ANTHROPIC_API_KEY must be set for chat, writing, compile, verify, and fallback humanizer.",
+    );
   }
   if (!hasValue(env.OPENAI_API_KEY)) {
     errors.push("OPENAI_API_KEY must be set for embeddings, analysis, summaries, and OCR vision.");

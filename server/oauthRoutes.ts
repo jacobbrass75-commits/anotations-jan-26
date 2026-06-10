@@ -29,9 +29,13 @@ const ALLOWED_RESPONSE_TYPES = new Set(["code"]);
 const ALLOWED_CODE_CHALLENGE_METHODS = new Set(["S256"]);
 const ALLOWED_TOKEN_AUTH_METHODS = new Set(["none", "client_secret_post"]);
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.MCP_ACCESS_TOKEN_TTL_SECONDS ?? 3600);
-const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.MCP_REFRESH_TOKEN_TTL_SECONDS ?? 90 * 24 * 60 * 60);
+const REFRESH_TOKEN_TTL_SECONDS = Number(
+  process.env.MCP_REFRESH_TOKEN_TTL_SECONDS ?? 90 * 24 * 60 * 60,
+);
 const AUTH_CODE_TTL_SECONDS = Number(process.env.MCP_AUTH_CODE_TTL_SECONDS ?? 600);
-const AUTHORIZE_DEDUP_WINDOW_SECONDS = Number(process.env.OAUTH_AUTHORIZE_DEDUP_WINDOW_SECONDS ?? 15);
+const AUTHORIZE_DEDUP_WINDOW_SECONDS = Number(
+  process.env.OAUTH_AUTHORIZE_DEDUP_WINDOW_SECONDS ?? 15,
+);
 const CONSENT_NONCE_TTL_SECONDS = 10 * 60;
 const MAX_DYNAMIC_CLIENT_METADATA_REDIRECTS = 3;
 const DEFAULT_TRUSTED_PROXY_CIDRS = [
@@ -60,13 +64,16 @@ const DEFAULT_TRUSTED_PROXY_CIDRS = [
   "2a06:98c0::/29",
   "2c0f:f248::/32",
 ];
-const KNOWN_METADATA_CLIENTS = new Map<string, {
-  clientName: string;
-  redirectUris: string[];
-  grantTypes: string[];
-  responseTypes: string[];
-  tokenEndpointAuthMethod: string;
-}>([
+const KNOWN_METADATA_CLIENTS = new Map<
+  string,
+  {
+    clientName: string;
+    redirectUris: string[];
+    grantTypes: string[];
+    responseTypes: string[];
+    tokenEndpointAuthMethod: string;
+  }
+>([
   [
     "https://claude.ai/oauth/mcp-oauth-client-metadata",
     {
@@ -237,7 +244,10 @@ function getOAuthRateLimitClientAddress(req: Request): string {
   }
 
   const cloudflareClientIp = parseIpAddress(req.header("cf-connecting-ip"));
-  if (cloudflareClientIp && forwardedFor.some((address) => isTrustedProxyAddress(address, trustedProxyCidrs))) {
+  if (
+    cloudflareClientIp &&
+    forwardedFor.some((address) => isTrustedProxyAddress(address, trustedProxyCidrs))
+  ) {
     return cloudflareClientIp.toString();
   }
 
@@ -281,7 +291,8 @@ function hashSha256Base64Url(rawValue: string): string {
 }
 
 function getIssuerBaseUrl(req: Request): string {
-  const configured = process.env.OAUTH_ISSUER || process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL;
+  const configured =
+    process.env.OAUTH_ISSUER || process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL;
   if (configured && configured.trim().length > 0) {
     return configured.replace(/\/+$/, "");
   }
@@ -356,7 +367,9 @@ function hasOnlyAllowedValues(values: string[], allowedValues: Set<string>): boo
 function normalizeAuthorizeRequestParams(req: Request): AuthorizeRequestParams {
   const rawScope = pickBodyOrQueryString(req, "scope");
   const requestedScopes = parseScopeList(rawScope);
-  const invalidScopes = Array.from(new Set(requestedScopes.filter((scope) => !ALLOWED_SCOPES.has(scope))));
+  const invalidScopes = Array.from(
+    new Set(requestedScopes.filter((scope) => !ALLOWED_SCOPES.has(scope))),
+  );
   const scope = normalizeScope(rawScope);
   const state = pickBodyOrQueryString(req, "state");
   const resource = pickBodyOrQueryString(req, "resource");
@@ -391,7 +404,10 @@ function isValidUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     if (parsed.protocol === "https:") return true;
-    if (parsed.protocol === "http:" && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")) {
+    if (
+      parsed.protocol === "http:" &&
+      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")
+    ) {
       return true;
     }
     return false;
@@ -465,10 +481,7 @@ function parseIpv4MappedAddress(address: string): string | null {
   }
 
   const words = suffix.split(":");
-  if (
-    words.length !== 2 ||
-    words.some((word) => !/^[0-9a-f]{1,4}$/.test(word))
-  ) {
+  if (words.length !== 2 || words.some((word) => !/^[0-9a-f]{1,4}$/.test(word))) {
     return null;
   }
 
@@ -478,12 +491,7 @@ function parseIpv4MappedAddress(address: string): string | null {
     return null;
   }
 
-  return [
-    (first >> 8) & 255,
-    first & 255,
-    (second >> 8) & 255,
-    second & 255,
-  ].join(".");
+  return [(first >> 8) & 255, first & 255, (second >> 8) & 255, second & 255].join(".");
 }
 
 async function resolvesToPublicAddresses(value: string): Promise<boolean> {
@@ -503,7 +511,11 @@ async function resolvesToPublicAddresses(value: string): Promise<boolean> {
 async function fetchDynamicClientMetadata(clientId: string): Promise<unknown | null> {
   let metadataUrl = clientId;
 
-  for (let redirectCount = 0; redirectCount <= MAX_DYNAMIC_CLIENT_METADATA_REDIRECTS; redirectCount += 1) {
+  for (
+    let redirectCount = 0;
+    redirectCount <= MAX_DYNAMIC_CLIENT_METADATA_REDIRECTS;
+    redirectCount += 1
+  ) {
     if (!isAllowedDynamicClientMetadataUrl(metadataUrl)) {
       return null;
     }
@@ -548,7 +560,13 @@ function isValidRedirectUri(redirectUri: string, client: OAuthClientLike): boole
   return client.redirectUris.includes(redirectUri);
 }
 
-function redirectWithError(res: Response, redirectUri: string, state: string, error: string, description?: string): void {
+function redirectWithError(
+  res: Response,
+  redirectUri: string,
+  state: string,
+  error: string,
+  description?: string,
+): void {
   try {
     const redirectTarget = new URL(redirectUri);
     redirectTarget.searchParams.set("error", error);
@@ -639,7 +657,10 @@ function parseStringArray(input: unknown, fallback: string[]): string[] {
         return parsed.filter((entry): entry is string => typeof entry === "string");
       }
     } catch {
-      return trimmed.split(",").map((part) => part.trim()).filter(Boolean);
+      return trimmed
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
     }
   }
   return fallback;
@@ -671,7 +692,10 @@ function renderAuthorizeHtml(input: {
 }): string {
   const scopes = input.scope.split(/\s+/).filter(Boolean);
   const scopeItems = scopes
-    .map((scope) => `<li><strong>${escapeHtml(scope)}</strong> - ${escapeHtml(mapScopeToDescription(scope))}</li>`)
+    .map(
+      (scope) =>
+        `<li><strong>${escapeHtml(scope)}</strong> - ${escapeHtml(mapScopeToDescription(scope))}</li>`,
+    )
     .join("\n");
 
   return getAuthorizeTemplate()
@@ -686,7 +710,10 @@ function renderAuthorizeHtml(input: {
     .replace(/{{CODE_CHALLENGE_METHOD}}/g, escapeHtml(input.codeChallengeMethod))
     .replace(/{{RESOURCE}}/g, escapeHtml(input.resource))
     .replace(/{{CSRF_TOKEN}}/g, escapeHtml(input.csrfToken))
-    .replace(/{{SCOPE_ITEMS}}/g, scopeItems || "<li><strong>read</strong> - View projects and conversations</li>")
+    .replace(
+      /{{SCOPE_ITEMS}}/g,
+      scopeItems || "<li><strong>read</strong> - View projects and conversations</li>",
+    )
     .replace(/{{TIER_NOTICE}}/g, input.tierNotice);
 }
 
@@ -710,9 +737,15 @@ function parseMetadataClient(rawMetadata: unknown, clientId: string): OAuthClien
   }
 
   const clientName = pickString(metadata.client_name) || "Claude Connector";
-  const grantTypes = parseStringArray(metadata.grant_types, ["authorization_code", "refresh_token"]);
+  const grantTypes = parseStringArray(metadata.grant_types, [
+    "authorization_code",
+    "refresh_token",
+  ]);
   const responseTypes = parseStringArray(metadata.response_types, ["code"]);
-  if (!hasOnlyAllowedValues(grantTypes, ALLOWED_GRANT_TYPES) || !hasOnlyAllowedValues(responseTypes, ALLOWED_RESPONSE_TYPES)) {
+  if (
+    !hasOnlyAllowedValues(grantTypes, ALLOWED_GRANT_TYPES) ||
+    !hasOnlyAllowedValues(responseTypes, ALLOWED_RESPONSE_TYPES)
+  ) {
     return null;
   }
 
@@ -798,7 +831,11 @@ async function resolveOAuthClient(clientId: string): Promise<OAuthClientLike | n
   }
 }
 
-function verifyPkce(codeVerifier: string, codeChallenge: string, codeChallengeMethod: string): boolean {
+function verifyPkce(
+  codeVerifier: string,
+  codeChallenge: string,
+  codeChallengeMethod: string,
+): boolean {
   if (codeChallengeMethod !== "S256") return false;
   const expectedChallenge = hashSha256Base64Url(codeVerifier);
   return expectedChallenge === codeChallenge;
@@ -853,13 +890,21 @@ async function validateTokenClient(req: Request): Promise<{
     return {
       ok: false,
       client,
-      error: { status: 401, code: "invalid_client", description: "Unsupported token_endpoint_auth_method" },
+      error: {
+        status: 401,
+        code: "invalid_client",
+        description: "Unsupported token_endpoint_auth_method",
+      },
     };
   }
 
   if (client.tokenEndpointAuthMethod === "client_secret_post") {
     const providedSecret = pickBodyOrQueryString(req, "client_secret");
-    if (!providedSecret || !client.clientSecretHash || hashSha256Hex(providedSecret) !== client.clientSecretHash) {
+    if (
+      !providedSecret ||
+      !client.clientSecretHash ||
+      hashSha256Hex(providedSecret) !== client.clientSecretHash
+    ) {
       return {
         ok: false,
         client,
@@ -871,11 +916,15 @@ async function validateTokenClient(req: Request): Promise<{
   return { ok: true, client };
 }
 
-function validateAuthorizeParams(params: AuthorizeRequestParams): { ok: boolean; description?: string } {
+function validateAuthorizeParams(params: AuthorizeRequestParams): {
+  ok: boolean;
+  description?: string;
+} {
   if (!params.clientId) return { ok: false, description: "Missing client_id" };
   if (!params.redirectUri) return { ok: false, description: "Missing redirect_uri" };
   if (!params.responseType) return { ok: false, description: "Missing response_type" };
-  if (params.responseType !== "code") return { ok: false, description: "Unsupported response_type" };
+  if (params.responseType !== "code")
+    return { ok: false, description: "Unsupported response_type" };
   if (params.invalidScopes.length > 0) {
     return { ok: false, description: `Unsupported scope: ${params.invalidScopes.join(" ")}` };
   }
@@ -899,7 +948,10 @@ function buildAuthorizationCodeRedirect(
   return redirectTarget.toString();
 }
 
-function buildAuthorizationDecisionCacheKey(userId: string, params: AuthorizeRequestParams): string {
+function buildAuthorizationDecisionCacheKey(
+  userId: string,
+  params: AuthorizeRequestParams,
+): string {
   return JSON.stringify([
     userId,
     params.clientId,
@@ -983,8 +1035,7 @@ function sendDuplicateApprovalResponse(res: Response): void {
   res
     .status(202)
     .setHeader("Cache-Control", "no-store")
-    .setHeader("Content-Type", "text/html; charset=utf-8")
-    .send(`<!DOCTYPE html>
+    .setHeader("Content-Type", "text/html; charset=utf-8").send(`<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -1035,7 +1086,11 @@ function approveAuthorizationRequest(
 
   pruneExpiredAuthorizationCodes(now);
 
-  const redirectUrl = buildAuthorizationCodeRedirect(params.redirectUri, params.state, authorizationCode);
+  const redirectUrl = buildAuthorizationCodeRedirect(
+    params.redirectUri,
+    params.state,
+    authorizationCode,
+  );
   recentAuthorizationDecisions.set(cacheKey, {
     codeHash,
     redirectUrl,
@@ -1068,20 +1123,38 @@ export function registerOAuthRoutes(app: Express): void {
       const clientNameInput = pickString(req.body?.client_name).trim();
       const redirectUris = parseStringArray(req.body?.redirect_uris, []);
       const tokenEndpointAuthMethod = pickString(req.body?.token_endpoint_auth_method) || "none";
-      const grantTypes = parseStringArray(req.body?.grant_types, ["authorization_code", "refresh_token"]);
+      const grantTypes = parseStringArray(req.body?.grant_types, [
+        "authorization_code",
+        "refresh_token",
+      ]);
       const responseTypes = parseStringArray(req.body?.response_types, ["code"]);
 
       if (!clientNameInput) {
         return sendOAuthError(res, 400, "invalid_client_metadata", "client_name is required");
       }
       if (redirectUris.length === 0) {
-        return sendOAuthError(res, 400, "invalid_redirect_uri", "At least one redirect URI is required");
+        return sendOAuthError(
+          res,
+          400,
+          "invalid_redirect_uri",
+          "At least one redirect URI is required",
+        );
       }
       if (!redirectUris.every((uri) => isValidUrl(uri))) {
-        return sendOAuthError(res, 400, "invalid_redirect_uri", "All redirect URIs must be valid absolute URLs");
+        return sendOAuthError(
+          res,
+          400,
+          "invalid_redirect_uri",
+          "All redirect URIs must be valid absolute URLs",
+        );
       }
       if (!ALLOWED_TOKEN_AUTH_METHODS.has(tokenEndpointAuthMethod)) {
-        return sendOAuthError(res, 400, "invalid_client_metadata", "Unsupported token_endpoint_auth_method");
+        return sendOAuthError(
+          res,
+          400,
+          "invalid_client_metadata",
+          "Unsupported token_endpoint_auth_method",
+        );
       }
       if (!hasOnlyAllowedValues(grantTypes, ALLOWED_GRANT_TYPES)) {
         return sendOAuthError(res, 400, "invalid_client_metadata", "Unsupported grant_type");
@@ -1091,9 +1164,8 @@ export function registerOAuthRoutes(app: Express): void {
       }
 
       const clientId = `mcp_client_${randomUUID()}`;
-      const clientSecret = tokenEndpointAuthMethod === "client_secret_post"
-        ? randomBytes(32).toString("hex")
-        : null;
+      const clientSecret =
+        tokenEndpointAuthMethod === "client_secret_post" ? randomBytes(32).toString("hex") : null;
       const clientSecretHash = clientSecret ? hashSha256Hex(clientSecret) : null;
       const createdAt = getUnixSeconds();
 
@@ -1129,15 +1201,24 @@ export function registerOAuthRoutes(app: Express): void {
       const decision = pickBodyOrQueryString(req, "decision");
       const paramValidation = validateAuthorizeParams(params);
       if (!paramValidation.ok) {
-        return res.status(400).json({ error: "invalid_request", error_description: paramValidation.description });
+        return res
+          .status(400)
+          .json({ error: "invalid_request", error_description: paramValidation.description });
       }
 
       const client = await resolveOAuthClient(params.clientId);
       if (!client) {
-        return res.status(400).json({ error: "invalid_client", error_description: "Unknown client_id" });
+        return res
+          .status(400)
+          .json({ error: "invalid_client", error_description: "Unknown client_id" });
       }
       if (!isValidRedirectUri(params.redirectUri, client)) {
-        return res.status(400).json({ error: "invalid_redirect_uri", error_description: "redirect_uri is not allowed" });
+        return res
+          .status(400)
+          .json({
+            error: "invalid_redirect_uri",
+            error_description: "redirect_uri is not allowed",
+          });
       }
 
       const sessionUser = await resolveSessionUser(req);
@@ -1155,9 +1236,10 @@ export function registerOAuthRoutes(app: Express): void {
 
       const userTierLevel = TIER_LEVELS[sessionUser.tier] ?? 0;
       const proTierLevel = TIER_LEVELS.pro ?? 1;
-      const tierNotice = userTierLevel < proTierLevel
-        ? "<p class=\"notice warning\">Note: Chat, compile, and verify endpoints require a Pro plan. Authorization can still proceed.</p>"
-        : "";
+      const tierNotice =
+        userTierLevel < proTierLevel
+          ? '<p class="notice warning">Note: Chat, compile, and verify endpoints require a Pro plan. Authorization can still proceed.</p>'
+          : "";
       const csrfToken = issueConsentNonce(sessionUser, params);
 
       const html = renderAuthorizeHtml({
@@ -1180,7 +1262,12 @@ export function registerOAuthRoutes(app: Express): void {
       return res.status(200).send(html);
     } catch (error) {
       if (isUnverifiedClerkEmailError(error)) {
-        return sendOAuthError(res, 403, "access_denied", "Clerk email must be verified before authorization");
+        return sendOAuthError(
+          res,
+          403,
+          "access_denied",
+          "Clerk email must be verified before authorization",
+        );
       }
       console.error("OAuth authorize page error:", error);
       return sendOAuthError(res, 500, "server_error", "Failed to render authorization page");
@@ -1190,7 +1277,9 @@ export function registerOAuthRoutes(app: Express): void {
   app.post("/oauth/authorize", authLimiter, async (req: Request, res: Response) => {
     try {
       if (!isTrustedAuthorizePostOrigin(req)) {
-        return res.status(403).json({ error: "invalid_request", error_description: "Untrusted authorization origin" });
+        return res
+          .status(403)
+          .json({ error: "invalid_request", error_description: "Untrusted authorization origin" });
       }
 
       const params = normalizeAuthorizeRequestParams(req);
@@ -1198,15 +1287,24 @@ export function registerOAuthRoutes(app: Express): void {
       const csrfToken = pickBodyOrQueryString(req, "csrf_token");
       const paramValidation = validateAuthorizeParams(params);
       if (!paramValidation.ok) {
-        return res.status(400).json({ error: "invalid_request", error_description: paramValidation.description });
+        return res
+          .status(400)
+          .json({ error: "invalid_request", error_description: paramValidation.description });
       }
 
       const client = await resolveOAuthClient(params.clientId);
       if (!client) {
-        return res.status(400).json({ error: "invalid_client", error_description: "Unknown client_id" });
+        return res
+          .status(400)
+          .json({ error: "invalid_client", error_description: "Unknown client_id" });
       }
       if (!isValidRedirectUri(params.redirectUri, client)) {
-        return res.status(400).json({ error: "invalid_redirect_uri", error_description: "redirect_uri is not allowed" });
+        return res
+          .status(400)
+          .json({
+            error: "invalid_redirect_uri",
+            error_description: "redirect_uri is not allowed",
+          });
       }
 
       const sessionUser = await resolveSessionUser(req);
@@ -1216,7 +1314,12 @@ export function registerOAuthRoutes(app: Express): void {
       }
 
       if (!csrfToken || !validateAndConsumeConsentNonce(csrfToken, sessionUser, params)) {
-        return res.status(403).json({ error: "invalid_request", error_description: "Invalid authorization consent token" });
+        return res
+          .status(403)
+          .json({
+            error: "invalid_request",
+            error_description: "Invalid authorization consent token",
+          });
       }
 
       if (decision !== "approve") {
@@ -1225,7 +1328,7 @@ export function registerOAuthRoutes(app: Express): void {
           params.redirectUri,
           params.state,
           "access_denied",
-          "The user denied the request"
+          "The user denied the request",
         );
       }
 
@@ -1234,7 +1337,12 @@ export function registerOAuthRoutes(app: Express): void {
       return;
     } catch (error) {
       if (isUnverifiedClerkEmailError(error)) {
-        return sendOAuthError(res, 403, "access_denied", "Clerk email must be verified before authorization");
+        return sendOAuthError(
+          res,
+          403,
+          "access_denied",
+          "Clerk email must be verified before authorization",
+        );
       }
       console.error("OAuth authorize decision error:", error);
       return sendOAuthError(res, 500, "server_error", "Failed to process authorization decision");
@@ -1265,16 +1373,31 @@ export function registerOAuthRoutes(app: Express): void {
         const requestedClientId = pickBodyOrQueryString(req, "client_id");
 
         if (!code || !redirectUri || !codeVerifier || !requestedClientId) {
-          return sendOAuthError(res, 400, "invalid_request", "Missing required authorization_code parameters");
+          return sendOAuthError(
+            res,
+            400,
+            "invalid_request",
+            "Missing required authorization_code parameters",
+          );
         }
 
         const now = getUnixSeconds();
         const authCode = consumeAuthorizationCode(hashSha256Hex(code), now);
         if (!authCode) {
-          return sendOAuthError(res, 400, "invalid_grant", "Authorization code is invalid, expired, or already used");
+          return sendOAuthError(
+            res,
+            400,
+            "invalid_grant",
+            "Authorization code is invalid, expired, or already used",
+          );
         }
         if (authCode.clientId !== client.clientId || authCode.redirectUri !== redirectUri) {
-          return sendOAuthError(res, 400, "invalid_grant", "Authorization code does not match client or redirect URI");
+          return sendOAuthError(
+            res,
+            400,
+            "invalid_grant",
+            "Authorization code does not match client or redirect URI",
+          );
         }
         if (!verifyPkce(codeVerifier, authCode.codeChallenge, authCode.codeChallengeMethod)) {
           return sendOAuthError(res, 400, "invalid_grant", "PKCE verification failed");
@@ -1315,7 +1438,12 @@ export function registerOAuthRoutes(app: Express): void {
           return sendOAuthError(res, 400, "invalid_grant", "Refresh token is invalid");
         }
         if (existingToken.clientId !== client.clientId) {
-          return sendOAuthError(res, 400, "invalid_grant", "Refresh token does not belong to this client");
+          return sendOAuthError(
+            res,
+            400,
+            "invalid_grant",
+            "Refresh token does not belong to this client",
+          );
         }
 
         const now = getUnixSeconds();

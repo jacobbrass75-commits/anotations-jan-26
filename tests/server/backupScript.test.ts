@@ -18,7 +18,9 @@ function toBashPath(path: string): string {
     return path;
   }
 
-  return path.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, drive: string) => `/${drive.toLowerCase()}`);
+  return path
+    .replace(/\\/g, "/")
+    .replace(/^([A-Za-z]):/, (_, drive: string) => `/${drive.toLowerCase()}`);
 }
 
 const backupScript = toBashPath(join(repoRoot, "deploy", "backup-data.sh"));

@@ -29,9 +29,7 @@ function stripInlineMarkdown(text: string): string {
 
 function normalizeQuotedText(text: string): string {
   return buildTextFingerprint(
-    stripInlineMarkdown(text)
-      .replace(/[“”]/g, "\"")
-      .replace(/[‘’]/g, "'")
+    stripInlineMarkdown(text).replace(/[“”]/g, '"').replace(/[‘’]/g, "'"),
   );
 }
 
@@ -41,7 +39,10 @@ function isAlreadyLinked(fullText: string, offset: number, length: number): bool
   return before === "[" && after === "](";
 }
 
-function wrapQuotedOccurrences(markdown: string, target: QuoteJumpTarget): { text: string; replacements: number } {
+function wrapQuotedOccurrences(
+  markdown: string,
+  target: QuoteJumpTarget,
+): { text: string; replacements: number } {
   if (!target.quote.trim() || !target.jumpPath.trim()) {
     return { text: markdown, replacements: 0 };
   }
@@ -82,7 +83,7 @@ function prepareTargets(targets: QuoteJumpTarget[]): PreparedQuoteJumpTarget[] {
 
 function findBestJumpTarget(
   quoteText: string,
-  targets: PreparedQuoteJumpTarget[]
+  targets: PreparedQuoteJumpTarget[],
 ): PreparedQuoteJumpTarget | null {
   const fingerprint = normalizeQuotedText(quoteText);
   if (fingerprint.length < 12) {
@@ -115,12 +116,9 @@ function findBestJumpTarget(
 
 function wrapMatchedQuotedSpans(
   markdown: string,
-  targets: PreparedQuoteJumpTarget[]
+  targets: PreparedQuoteJumpTarget[],
 ): { text: string; replacements: number } {
-  const quotedPatterns = [
-    /(")([^"\r\n]{8,}?)(")/g,
-    /(“)([^”\r\n]{8,}?)(”)/g,
-  ];
+  const quotedPatterns = [/(")([^"\r\n]{8,}?)(")/g, /(“)([^”\r\n]{8,}?)(”)/g];
 
   let replacements = 0;
   let nextText = markdown;
@@ -161,7 +159,9 @@ export function dedupeQuoteJumpTargets(targets: QuoteJumpTarget[]): QuoteJumpTar
 export function applyJumpLinksToMarkdown(markdown: string, targets: QuoteJumpTarget[]): string {
   let result = markdown;
   const preparedTargets = prepareTargets(targets);
-  const sortedTargets = [...preparedTargets].sort((left, right) => right.quote.length - left.quote.length);
+  const sortedTargets = [...preparedTargets].sort(
+    (left, right) => right.quote.length - left.quote.length,
+  );
 
   for (const target of sortedTargets) {
     const linked = wrapQuotedOccurrences(result, target);

@@ -40,10 +40,16 @@ describe("restore-drill.mjs", () => {
     await bootstrapTempWorkspace(sourceWorkDir);
     await copyFile(
       join(sourceWorkDir, "data", "sourceannotator.db"),
-      join(backupDir, "sourceannotator.db")
+      join(backupDir, "sourceannotator.db"),
     );
 
-    await execFileAsync("tar", ["-czf", join(backupDir, "uploads.tar.gz"), "-C", tempDir, "uploads"]);
+    await execFileAsync("tar", [
+      "-czf",
+      join(backupDir, "uploads.tar.gz"),
+      "-C",
+      tempDir,
+      "uploads",
+    ]);
 
     await execFileAsync(process.execPath, [restoreDrillScript], {
       cwd: repoRoot,

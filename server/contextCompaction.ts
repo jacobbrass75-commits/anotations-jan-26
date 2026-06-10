@@ -18,7 +18,10 @@ const DEFAULT_COMPACTION_THRESHOLD = 6;
 function extractText(response: { content?: Array<{ type: string; text?: string }> }): string {
   if (!Array.isArray(response.content)) return "";
   return response.content
-    .filter((block): block is { type: string; text: string } => block.type === "text" && typeof block.text === "string")
+    .filter(
+      (block): block is { type: string; text: string } =>
+        block.type === "text" && typeof block.text === "string",
+    )
     .map((block) => block.text)
     .join("\n")
     .trim();
@@ -33,7 +36,12 @@ function normalizeContent(content: unknown): string {
     return content
       .map((block) => {
         if (typeof block === "string") return block;
-        if (block && typeof block === "object" && "text" in block && typeof block.text === "string") {
+        if (
+          block &&
+          typeof block === "object" &&
+          "text" in block &&
+          typeof block.text === "string"
+        ) {
           return block.text;
         }
         return "[structured content]";
@@ -98,7 +106,10 @@ Be concise. Target 300-500 tokens. Write in past tense.`,
         content:
           summaryInput +
           turnsToSummarize
-            .map((message) => `[${message.role}]: ${normalizeContent(message.content).slice(0, 2000) || "[empty]"}`)
+            .map(
+              (message) =>
+                `[${message.role}]: ${normalizeContent(message.content).slice(0, 2000) || "[empty]"}`,
+            )
             .join("\n\n"),
       },
     ],
@@ -173,5 +184,8 @@ export function truncateToolResult(result: string, limit: number): string {
     return result;
   }
 
-  return result.slice(0, Math.max(0, limit - 50)) + "\n\n[...truncated - use more specific queries for details]";
+  return (
+    result.slice(0, Math.max(0, limit - 50)) +
+    "\n\n[...truncated - use more specific queries for details]"
+  );
 }

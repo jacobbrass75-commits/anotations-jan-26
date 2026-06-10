@@ -130,20 +130,24 @@ describe("OAuth route hardening", () => {
 
     try {
       const clientId = await registerClient(server.baseUrl);
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/oauth/authorize", {
-        method: "POST",
-        headers: { origin: server.baseUrl },
-        body: {
-          client_id: clientId,
-          redirect_uri: "http://localhost/callback",
-          response_type: "code",
-          scope: "read write",
-          state: "state-1",
-          code_challenge: "challenge",
-          code_challenge_method: "S256",
-          decision: "approve",
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/oauth/authorize",
+        {
+          method: "POST",
+          headers: { origin: server.baseUrl },
+          body: {
+            client_id: clientId,
+            redirect_uri: "http://localhost/callback",
+            response_type: "code",
+            scope: "read write",
+            state: "state-1",
+            code_challenge: "challenge",
+            code_challenge_method: "S256",
+            decision: "approve",
+          },
         },
-      });
+      );
 
       expect(response.status).toBe(403);
       expect(response.body).toEqual({
@@ -166,7 +170,10 @@ describe("OAuth route hardening", () => {
         "https://[::ffff:10.0.0.1]/oauth-client.json",
         "https://[::ffff:c0a8:0001]/oauth-client.json",
       ]) {
-        const response = await requestJson<Record<string, unknown>>(server.baseUrl, authorizePath(clientId));
+        const response = await requestJson<Record<string, unknown>>(
+          server.baseUrl,
+          authorizePath(clientId),
+        );
 
         expect(response.status).toBe(400);
         expect(response.body).toEqual({
@@ -195,8 +202,13 @@ describe("OAuth route hardening", () => {
     globalThis.fetch = metadataFetch as typeof fetch;
 
     try {
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, authorizePath(clientId));
-      const metadataCalls = metadataFetch.mock.calls.filter(([input]) => fetchInputUrl(input) === clientId);
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        authorizePath(clientId),
+      );
+      const metadataCalls = metadataFetch.mock.calls.filter(
+        ([input]) => fetchInputUrl(input) === clientId,
+      );
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({
@@ -229,7 +241,7 @@ describe("OAuth route hardening", () => {
           billing_cycle_start,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         "existing-oauth-user",
@@ -261,7 +273,10 @@ describe("OAuth route hardening", () => {
 
     try {
       const clientId = await registerClient(server.baseUrl);
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, authorizePath(clientId));
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        authorizePath(clientId),
+      );
       const usersAfterAuth = sqlite
         ?.prepare("SELECT id, tier, email_verified FROM users WHERE email = ?")
         .all("oauth@example.com");
@@ -302,7 +317,7 @@ describe("OAuth route hardening", () => {
           billing_cycle_start,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         "existing-unverified-oauth-user",
@@ -334,7 +349,10 @@ describe("OAuth route hardening", () => {
 
     try {
       const clientId = await registerClient(server.baseUrl);
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, authorizePath(clientId));
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        authorizePath(clientId),
+      );
       const usersAfterAuth = sqlite
         ?.prepare("SELECT id, tier, email_verified FROM users WHERE email = ?")
         .all("oauth-unverified-local@example.com");
@@ -382,17 +400,21 @@ describe("OAuth route hardening", () => {
     try {
       const statuses: number[] = [];
       for (let index = 0; index < 61; index += 1) {
-        const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/oauth/register", {
-          method: "POST",
-          headers: { "x-forwarded-for": `198.51.100.${index}, 203.0.113.10` },
-          body: {
-            client_name: `Rate Limit Client ${index}`,
-            redirect_uris: ["http://localhost/callback"],
-            grant_types: ["authorization_code", "refresh_token"],
-            response_types: ["code"],
-            token_endpoint_auth_method: "none",
+        const response = await requestJson<Record<string, unknown>>(
+          server.baseUrl,
+          "/oauth/register",
+          {
+            method: "POST",
+            headers: { "x-forwarded-for": `198.51.100.${index}, 203.0.113.10` },
+            body: {
+              client_name: `Rate Limit Client ${index}`,
+              redirect_uris: ["http://localhost/callback"],
+              grant_types: ["authorization_code", "refresh_token"],
+              response_types: ["code"],
+              token_endpoint_auth_method: "none",
+            },
           },
-        });
+        );
         statuses.push(response.status);
       }
 

@@ -145,11 +145,15 @@ describe("project route integration", () => {
     const { server, token } = await createApp();
 
     try {
-      const bareProject = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/projects", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: { name: "Bare Project" },
-      });
+      const bareProject = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/projects",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: { name: "Bare Project" },
+        },
+      );
 
       expect(bareProject.status).toBe(201);
       expect(bareProject.body).toMatchObject({
@@ -157,15 +161,19 @@ describe("project route integration", () => {
         name: "Bare Project",
       });
 
-      const contextProject = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/projects", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: {
-          name: "Context Project",
-          thesis: "AI-generated context should consume token budget",
-          scope: "Budgeted context generation",
+      const contextProject = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/projects",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: {
+            name: "Context Project",
+            thesis: "AI-generated context should consume token budget",
+            scope: "Budgeted context generation",
+          },
         },
-      });
+      );
 
       expect(contextProject.status).toBe(201);
       expect(contextProject.body).toMatchObject({
@@ -302,7 +310,8 @@ describe("project route integration", () => {
 
   it("records token usage for budget-gated project document analysis", async () => {
     const { db, server, token } = await createApp({ tokensUsed: 0, tokenLimit: 10_000 });
-    const { documents, projects, projectDocuments, textChunks, users } = await import("../../shared/schema");
+    const { documents, projects, projectDocuments, textChunks, users } =
+      await import("../../shared/schema");
     const { eq } = await import("drizzle-orm");
 
     try {

@@ -51,14 +51,25 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
   const handleAnalyze = async () => {
     const validSamples = samples.filter((s) => s.trim().length > 0);
     if (validSamples.length < 2) {
-      toast({ title: "Need more samples", description: "Provide at least 2 writing samples.", variant: "destructive" });
+      toast({
+        title: "Need more samples",
+        description: "Provide at least 2 writing samples.",
+        variant: "destructive",
+      });
       return;
     }
     try {
       await analyzeMutation.mutateAsync({ projectId, samples: validSamples });
-      toast({ title: "Voice profile created", description: "Your writing style has been analyzed." });
+      toast({
+        title: "Voice profile created",
+        description: "Your writing style has been analyzed.",
+      });
     } catch {
-      toast({ title: "Analysis failed", description: "Could not analyze writing samples. Try again.", variant: "destructive" });
+      toast({
+        title: "Analysis failed",
+        description: "Could not analyze writing samples. Try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -77,7 +88,11 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
       setEditedProfile(null);
       toast({ title: "Profile updated", description: "Voice profile saved." });
     } catch {
-      toast({ title: "Save failed", description: "Could not save voice profile.", variant: "destructive" });
+      toast({
+        title: "Save failed",
+        description: "Could not save voice profile.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -88,14 +103,22 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
       setEditedProfile(null);
       toast({ title: "Profile deleted", description: "Voice profile removed." });
     } catch {
-      toast({ title: "Delete failed", description: "Could not delete voice profile.", variant: "destructive" });
+      toast({
+        title: "Delete failed",
+        description: "Could not delete voice profile.",
+        variant: "destructive",
+      });
     }
   };
 
   const handleReanalyze = async () => {
     const validSamples = samples.filter((s) => s.trim().length > 0);
     if (validSamples.length < 2) {
-      toast({ title: "Need more samples", description: "Add at least 2 writing samples to re-analyze.", variant: "destructive" });
+      toast({
+        title: "Need more samples",
+        description: "Add at least 2 writing samples to re-analyze.",
+        variant: "destructive",
+      });
       return;
     }
     try {
@@ -104,7 +127,11 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
       setEditedProfile(null);
       toast({ title: "Voice profile updated", description: "Re-analyzed with new samples." });
     } catch {
-      toast({ title: "Re-analysis failed", description: "Could not re-analyze. Try again.", variant: "destructive" });
+      toast({
+        title: "Re-analysis failed",
+        description: "Could not re-analyze. Try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -123,7 +150,8 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
         <div>
           <h3 className="text-lg font-semibold">Writing Voice</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Paste 2-5 samples of your own writing. Scholar Mark will analyze your style and use it when generating text for this project.
+            Paste 2-5 samples of your own writing. Scholar Mark will analyze your style and use it
+            when generating text for this project.
           </p>
         </div>
 
@@ -135,7 +163,12 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
                   Sample {i + 1}
                 </Label>
                 {samples.length > 1 && (
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeSample(i)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => removeSample(i)}
+                  >
                     <Trash2 className="h-3 w-3 text-destructive" />
                   </Button>
                 )}
@@ -147,7 +180,9 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
                 placeholder="Paste a writing sample here (500-1500 words works best)..."
                 className="min-h-[120px] font-mono text-xs"
               />
-              <p className="text-xs text-muted-foreground">{sample.split(/\s+/).filter(Boolean).length} words</p>
+              <p className="text-xs text-muted-foreground">
+                {sample.split(/\s+/).filter(Boolean).length} words
+              </p>
             </div>
           ))}
         </div>
@@ -197,7 +232,13 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
 
   const updateArrayField = (field: keyof VoiceProfile, value: string) => {
     if (!editedProfile) return;
-    setEditedProfile({ ...editedProfile, [field]: value.split(",").map((s) => s.trim()).filter(Boolean) });
+    setEditedProfile({
+      ...editedProfile,
+      [field]: value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    });
   };
 
   return (
@@ -212,7 +253,14 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
         <div className="flex items-center gap-2">
           {isEditing ? (
             <>
-              <Button variant="outline" size="sm" onClick={() => { setIsEditing(false); setEditedProfile(null); }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditedProfile(null);
+                }}
+              >
                 Cancel
               </Button>
               <Button size="sm" onClick={handleSaveEdit} disabled={updateMutation.isPending}>
@@ -226,7 +274,12 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
                 <Pen className="h-3 w-3 mr-2" />
                 Edit
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleteMutation.isPending}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+              >
                 <Trash2 className="h-3 w-3 text-destructive" />
               </Button>
             </>
@@ -254,23 +307,96 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
 
       {/* Style Details */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ProfileField label="Sentence Rhythm" value={profile.avgSentenceLength} field="avgSentenceLength" isEditing={isEditing} onChange={updateField} />
-        <ProfileField label="Vocabulary Level" value={profile.vocabularyLevel} field="vocabularyLevel" isEditing={isEditing} onChange={updateField} />
-        <ProfileField label="Paragraph Structure" value={profile.paragraphStructure} field="paragraphStructure" isEditing={isEditing} onChange={updateField} />
-        <ProfileField label="Evidence Introduction" value={profile.evidenceIntroduction} field="evidenceIntroduction" isEditing={isEditing} onChange={updateField} />
-        <ProfileField label="Argument Structure" value={profile.argumentStructure} field="argumentStructure" isEditing={isEditing} onChange={updateField} />
-        <ProfileField label="Hedging Style" value={profile.hedgingStyle} field="hedgingStyle" isEditing={isEditing} onChange={updateField} />
-        <ProfileField label="Opening Pattern" value={profile.openingPattern} field="openingPattern" isEditing={isEditing} onChange={updateField} />
-        <ProfileField label="Closing Pattern" value={profile.closingPattern} field="closingPattern" isEditing={isEditing} onChange={updateField} />
+        <ProfileField
+          label="Sentence Rhythm"
+          value={profile.avgSentenceLength}
+          field="avgSentenceLength"
+          isEditing={isEditing}
+          onChange={updateField}
+        />
+        <ProfileField
+          label="Vocabulary Level"
+          value={profile.vocabularyLevel}
+          field="vocabularyLevel"
+          isEditing={isEditing}
+          onChange={updateField}
+        />
+        <ProfileField
+          label="Paragraph Structure"
+          value={profile.paragraphStructure}
+          field="paragraphStructure"
+          isEditing={isEditing}
+          onChange={updateField}
+        />
+        <ProfileField
+          label="Evidence Introduction"
+          value={profile.evidenceIntroduction}
+          field="evidenceIntroduction"
+          isEditing={isEditing}
+          onChange={updateField}
+        />
+        <ProfileField
+          label="Argument Structure"
+          value={profile.argumentStructure}
+          field="argumentStructure"
+          isEditing={isEditing}
+          onChange={updateField}
+        />
+        <ProfileField
+          label="Hedging Style"
+          value={profile.hedgingStyle}
+          field="hedgingStyle"
+          isEditing={isEditing}
+          onChange={updateField}
+        />
+        <ProfileField
+          label="Opening Pattern"
+          value={profile.openingPattern}
+          field="openingPattern"
+          isEditing={isEditing}
+          onChange={updateField}
+        />
+        <ProfileField
+          label="Closing Pattern"
+          value={profile.closingPattern}
+          field="closingPattern"
+          isEditing={isEditing}
+          onChange={updateField}
+        />
       </div>
 
       <Separator />
 
       {/* Array Fields */}
-      <ArrayField label="Tone Markers" items={profile.toneMarkers} field="toneMarkers" isEditing={isEditing} onChange={updateArrayField} />
-      <ArrayField label="Distinctive Phrases" items={profile.distinctivePhrases} field="distinctivePhrases" isEditing={isEditing} onChange={updateArrayField} />
-      <ArrayField label="Common Transitions" items={profile.commonTransitions} field="commonTransitions" isEditing={isEditing} onChange={updateArrayField} />
-      <ArrayField label="Patterns to Avoid" items={profile.avoidedPatterns} field="avoidedPatterns" isEditing={isEditing} onChange={updateArrayField} variant="destructive" />
+      <ArrayField
+        label="Tone Markers"
+        items={profile.toneMarkers}
+        field="toneMarkers"
+        isEditing={isEditing}
+        onChange={updateArrayField}
+      />
+      <ArrayField
+        label="Distinctive Phrases"
+        items={profile.distinctivePhrases}
+        field="distinctivePhrases"
+        isEditing={isEditing}
+        onChange={updateArrayField}
+      />
+      <ArrayField
+        label="Common Transitions"
+        items={profile.commonTransitions}
+        field="commonTransitions"
+        isEditing={isEditing}
+        onChange={updateArrayField}
+      />
+      <ArrayField
+        label="Patterns to Avoid"
+        items={profile.avoidedPatterns}
+        field="avoidedPatterns"
+        isEditing={isEditing}
+        onChange={updateArrayField}
+        variant="destructive"
+      />
 
       <Separator />
 
@@ -285,7 +411,12 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
             <div className="flex items-center justify-between">
               <Label className="text-xs">Sample {i + 1}</Label>
               {samples.length > 1 && (
-                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => removeSample(i)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  onClick={() => removeSample(i)}
+                >
                   <Trash2 className="h-3 w-3 text-destructive" />
                 </Button>
               )}
@@ -300,7 +431,9 @@ export default function VoiceProfileEditor({ projectId }: VoiceProfileEditorProp
         ))}
         <div className="flex items-center gap-3">
           {samples.length < 10 && (
-            <Button variant="outline" size="sm" onClick={addSample}>+ Add Sample</Button>
+            <Button variant="outline" size="sm" onClick={addSample}>
+              + Add Sample
+            </Button>
           )}
           <div className="flex-1" />
           <Button variant="outline" size="sm" onClick={handleReanalyze} disabled={isAnalyzing}>
@@ -331,11 +464,17 @@ function ProfileField({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardDescription className="text-xs font-medium uppercase tracking-wider">{label}</CardDescription>
+        <CardDescription className="text-xs font-medium uppercase tracking-wider">
+          {label}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {isEditing ? (
-          <Input value={value} onChange={(e) => onChange(field, e.target.value)} className="text-sm" />
+          <Input
+            value={value}
+            onChange={(e) => onChange(field, e.target.value)}
+            className="text-sm"
+          />
         ) : (
           <p className="text-sm">{value}</p>
         )}
@@ -372,7 +511,11 @@ function ArrayField({
       ) : (
         <div className="flex flex-wrap gap-2">
           {items.map((item, i) => (
-            <Badge key={i} variant={variant === "destructive" ? "destructive" : "secondary"} className="text-xs">
+            <Badge
+              key={i}
+              variant={variant === "destructive" ? "destructive" : "secondary"}
+              className="text-xs"
+            >
               {item}
             </Badge>
           ))}

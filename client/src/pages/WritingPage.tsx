@@ -20,25 +20,41 @@ export default function WritingPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link href="/">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+              >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Home
               </Button>
             </Link>
             <Link href="/projects">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+              >
                 <FolderOpen className="h-4 w-4 mr-2" />
                 Projects
               </Button>
             </Link>
             <Link href="/writing-styles">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+              >
                 <PenLine className="h-4 w-4 mr-2" />
                 Styles
               </Button>
             </Link>
             <Link href="/chat">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+              >
                 <MessageSquare className="h-4 w-4 mr-2" />
                 Chat
               </Button>
@@ -59,7 +75,10 @@ export default function WritingPage() {
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 pb-8 w-full eva-grid-bg" style={{ height: "calc(100vh - 56px)" }}>
+      <main
+        className="flex-1 container mx-auto px-4 py-6 pb-8 w-full eva-grid-bg"
+        style={{ height: "calc(100vh - 56px)" }}
+      >
         <WritingChat key={initialProjectId ?? "standalone"} initialProjectId={initialProjectId} />
       </main>
     </div>

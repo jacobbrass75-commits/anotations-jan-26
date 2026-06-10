@@ -67,7 +67,7 @@ describe("document ingestion", () => {
         "This is a pasted research source with enough length to chunk and summarize.\n\nIt includes multiple sentences for the ingestion path.",
       sourceBuffer: Buffer.from(
         "This is a pasted research source with enough length to chunk and summarize.\n\nIt includes multiple sentences for the ingestion path.",
-        "utf-8"
+        "utf-8",
       ),
       userId: "user-1",
     });

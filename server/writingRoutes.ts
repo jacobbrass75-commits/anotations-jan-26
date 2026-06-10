@@ -47,7 +47,7 @@ export async function savePaperToProject(
   projectId: string,
   topic: string,
   fullText: string,
-  userId: string
+  userId: string,
 ): Promise<{
   documentId: string;
   projectDocumentId: string;
@@ -82,246 +82,263 @@ export async function savePaperToProject(
 
 export function registerWritingRoutes(app: Express): void {
   // POST /api/write - Start writing pipeline, stream results via SSE
-  app.post("/api/write", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
-    let stopHeartbeat: (() => void) | null = null;
+  app.post(
+    "/api/write",
+    requireAuth,
+    aiLimiter,
+    requireTier("pro"),
+    checkTokenBudget,
+    async (req: Request, res: Response) => {
+      let stopHeartbeat: (() => void) | null = null;
 
-    try {
-      const body = req.body as Partial<WritingRequest> & {
-        sourceDocumentIds?: unknown;
-        writingStyleId?: unknown;
-      };
-
-      // Validate required fields
-      if (!body.topic || typeof body.topic !== "string" || body.topic.trim().length === 0) {
-        return res.status(400).json({ error: "Topic is required" });
-      }
-
-      const hasSourceSelection = Array.isArray(body.sourceDocumentIds);
-      const sourceDocumentIds = hasSourceSelection
-        ? (body.sourceDocumentIds as unknown[]).filter((id): id is string => typeof id === "string")
-        : undefined;
-
-      // Load selected reusable writing style first, then fall back to project voice profile.
-      let voiceProfile: string | null = null;
-      if (body.writingStyleId !== undefined && body.writingStyleId !== null && body.writingStyleId !== "") {
-        if (typeof body.writingStyleId !== "string") {
-          return res.status(400).json({ error: "writingStyleId must be a string" });
-        }
-        const writingStyle = await writingStyleStorage.getWritingStyleForUser(body.writingStyleId, req.user!.userId);
-        if (!writingStyle) {
-          return res.status(404).json({ error: "Writing style not found" });
-        }
-        voiceProfile = writingStyle.voiceProfile;
-      }
-
-      if (body.projectId) {
-        const project = await projectStorage.getProject(body.projectId as string);
-        if (!project || project.userId !== req.user!.userId) {
-          return res.status(404).json({ error: "Project not found" });
-        }
-        if (!voiceProfile && project?.voiceProfile) {
-          voiceProfile = project.voiceProfile;
-        }
-      }
-
-      const request: WritingRequest = {
-        topic: body.topic.trim(),
-        annotationIds: Array.isArray(body.annotationIds) ? body.annotationIds : [],
-        sourceDocumentIds,
-        projectId: body.projectId || undefined,
-        citationStyle: body.citationStyle || "chicago",
-        tone: body.tone || "academic",
-        targetLength: body.targetLength || "medium",
-        noEnDashes: body.noEnDashes ?? false,
-        deepWrite: body.deepWrite ?? false,
-        voiceProfile,
-      };
-
-      const sources: WritingSource[] = [];
-      const seenSourceIds = new Set<string>();
-      const addSource = (source: WritingSource) => {
-        if (seenSourceIds.has(source.id)) return;
-        seenSourceIds.add(source.id);
-        sources.push(source);
-      };
-
-      let projectDocs: Awaited<ReturnType<typeof projectStorage.getProjectDocumentsByProject>> = [];
-
-      if (request.projectId) {
-        projectDocs = await projectStorage.getProjectDocumentsByProject(request.projectId);
-
-        const selectedProjectDocs = hasSourceSelection
-          ? projectDocs.filter((projectDoc) => sourceDocumentIds?.includes(projectDoc.id))
-          : projectDocs;
-
-        for (const projectDoc of selectedProjectDocs) {
-          const fullDoc = await storage.getDocument(projectDoc.documentId);
-          if (!fullDoc || fullDoc.userId !== req.user!.userId) continue;
-
-          const citationData = (projectDoc.citationData as CitationData | null) || null;
-          const summaryExcerpt =
-            clipText(projectDoc.document.summary, MAX_SOURCE_EXCERPT_CHARS) ||
-            clipText(fullDoc.fullText, MAX_SOURCE_EXCERPT_CHARS);
-
-          addSource({
-            id: projectDoc.id,
-            kind: "project_document",
-            title: citationData?.title || projectDoc.document.filename,
-            author: buildAuthorLabel(citationData),
-            excerpt: summaryExcerpt || "No summary available.",
-            fullText:
-              clipText(fullDoc.fullText, MAX_SOURCE_FULLTEXT_CHARS) ||
-              summaryExcerpt ||
-              "No source text available.",
-            category: "project_source",
-            note: projectDoc.roleInProject || null,
-            citationData,
-            documentFilename: projectDoc.document.filename,
-          });
-        }
-      }
-
-      // Backward compatibility: annotation-based writing requests
-      if (request.annotationIds.length > 0 && request.projectId) {
-        const projectDocById = new Map(projectDocs.map((projectDoc) => [projectDoc.id, projectDoc]));
-
-        for (const annotationId of request.annotationIds) {
-          // Try project annotations first
-          const projectAnnotation = await projectStorage.getProjectAnnotation(annotationId);
-          if (projectAnnotation) {
-            const projectDoc = projectDocById.get(projectAnnotation.projectDocumentId);
-            if (!projectDoc) continue;
-            const citationData = (projectDoc?.citationData as CitationData | null) || null;
-            const docFilename = projectDoc?.document?.filename || "Unknown Source";
-
-            addSource({
-              id: projectAnnotation.id,
-              kind: "annotation",
-              title: citationData?.title || docFilename,
-              author: buildAuthorLabel(citationData),
-              excerpt: clipText(projectAnnotation.highlightedText, MAX_SOURCE_EXCERPT_CHARS),
-              fullText: clipText(
-                `${projectAnnotation.highlightedText}\n${projectAnnotation.note ?? ""}`,
-                MAX_SOURCE_FULLTEXT_CHARS
-              ),
-              category: projectAnnotation.category,
-              note: projectAnnotation.note,
-              citationData,
-              documentFilename: docFilename,
-            });
-            continue;
-          }
-
-          // Fall back to legacy annotations
-          const legacyAnnotation = await storage.getAnnotation(annotationId);
-          if (legacyAnnotation) {
-            const doc = await storage.getDocument(legacyAnnotation.documentId);
-            if (!doc || doc.userId !== req.user!.userId) continue;
-            addSource({
-              id: legacyAnnotation.id,
-              kind: "annotation",
-              title: doc?.filename || "Legacy Source",
-              author: "Unknown Author",
-              excerpt: clipText(legacyAnnotation.highlightedText, MAX_SOURCE_EXCERPT_CHARS),
-              fullText: clipText(
-                `${legacyAnnotation.highlightedText}\n${legacyAnnotation.note ?? ""}`,
-                MAX_SOURCE_FULLTEXT_CHARS
-              ),
-              category: legacyAnnotation.category,
-              note: legacyAnnotation.note,
-              citationData: null,
-              documentFilename: doc?.filename || "Unknown Source",
-            });
-          }
-        }
-      }
-
-      let aborted = false;
-      let completedFullText = "";
-      let tokensUsed = 0;
-
-      req.on("close", () => {
-        aborted = true;
-      });
-
-      stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
-
-      // Helper to send SSE events
-      const sendEvent = (event: WritingSSEEvent) => {
-        if (aborted || res.writableEnded) return;
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      };
-
-      // Run the pipeline
-      await runWritingPipeline(request, sources, (event) => {
-        if (event.type === "complete" && event.fullText) {
-          completedFullText = event.fullText;
-          tokensUsed = (event.usage?.inputTokens ?? 0) + (event.usage?.outputTokens ?? 0);
-        }
-        if (!aborted) {
-          sendEvent(event);
-        }
-      });
-
-      if (tokensUsed > 0) {
-        await incrementTokenUsage(req.user!.userId, tokensUsed);
-      }
-
-      if (!aborted && completedFullText && request.projectId) {
-        try {
-          sendEvent({
-            type: "status",
-            phase: "saving",
-            message: "Saving generated paper to the project...",
-          });
-          const savedPaper = await savePaperToProject(
-            request.projectId,
-            request.topic,
-            completedFullText,
-            req.user!.userId
-          );
-          sendEvent({
-            type: "saved",
-            message: `Saved to project as ${savedPaper.filename}`,
-            savedPaper,
-          });
-        } catch (saveError) {
-          console.error("Failed to save generated paper:", saveError);
-          sendEvent({
-            type: "status",
-            phase: "complete",
-            message: "Paper generated, but it could not be saved to the project.",
-          });
-        }
-      }
-
-      // End the stream
-      stopHeartbeat?.();
-      stopHeartbeat = null;
-      if (!aborted) {
-        res.write("data: [DONE]\n\n");
-        res.end();
-      }
-    } catch (error) {
-      console.error("Writing pipeline error:", error);
-      stopHeartbeat?.();
-      stopHeartbeat = null;
-      // If headers haven't been sent yet, send a JSON error
-      if (!res.headersSent) {
-        res.status(500).json({
-          error: sanitizeSseError(error, "Writing pipeline failed"),
-        });
-      } else {
-        // Headers already sent (SSE mode), send error event
-        const errorEvent: WritingSSEEvent = {
-          type: "error",
-          error: sanitizeSseError(error, "Writing pipeline failed"),
+      try {
+        const body = req.body as Partial<WritingRequest> & {
+          sourceDocumentIds?: unknown;
+          writingStyleId?: unknown;
         };
-        res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
-        res.end();
+
+        // Validate required fields
+        if (!body.topic || typeof body.topic !== "string" || body.topic.trim().length === 0) {
+          return res.status(400).json({ error: "Topic is required" });
+        }
+
+        const hasSourceSelection = Array.isArray(body.sourceDocumentIds);
+        const sourceDocumentIds = hasSourceSelection
+          ? (body.sourceDocumentIds as unknown[]).filter(
+              (id): id is string => typeof id === "string",
+            )
+          : undefined;
+
+        // Load selected reusable writing style first, then fall back to project voice profile.
+        let voiceProfile: string | null = null;
+        if (
+          body.writingStyleId !== undefined &&
+          body.writingStyleId !== null &&
+          body.writingStyleId !== ""
+        ) {
+          if (typeof body.writingStyleId !== "string") {
+            return res.status(400).json({ error: "writingStyleId must be a string" });
+          }
+          const writingStyle = await writingStyleStorage.getWritingStyleForUser(
+            body.writingStyleId,
+            req.user!.userId,
+          );
+          if (!writingStyle) {
+            return res.status(404).json({ error: "Writing style not found" });
+          }
+          voiceProfile = writingStyle.voiceProfile;
+        }
+
+        if (body.projectId) {
+          const project = await projectStorage.getProject(body.projectId as string);
+          if (!project || project.userId !== req.user!.userId) {
+            return res.status(404).json({ error: "Project not found" });
+          }
+          if (!voiceProfile && project?.voiceProfile) {
+            voiceProfile = project.voiceProfile;
+          }
+        }
+
+        const request: WritingRequest = {
+          topic: body.topic.trim(),
+          annotationIds: Array.isArray(body.annotationIds) ? body.annotationIds : [],
+          sourceDocumentIds,
+          projectId: body.projectId || undefined,
+          citationStyle: body.citationStyle || "chicago",
+          tone: body.tone || "academic",
+          targetLength: body.targetLength || "medium",
+          noEnDashes: body.noEnDashes ?? false,
+          deepWrite: body.deepWrite ?? false,
+          voiceProfile,
+        };
+
+        const sources: WritingSource[] = [];
+        const seenSourceIds = new Set<string>();
+        const addSource = (source: WritingSource) => {
+          if (seenSourceIds.has(source.id)) return;
+          seenSourceIds.add(source.id);
+          sources.push(source);
+        };
+
+        let projectDocs: Awaited<ReturnType<typeof projectStorage.getProjectDocumentsByProject>> =
+          [];
+
+        if (request.projectId) {
+          projectDocs = await projectStorage.getProjectDocumentsByProject(request.projectId);
+
+          const selectedProjectDocs = hasSourceSelection
+            ? projectDocs.filter((projectDoc) => sourceDocumentIds?.includes(projectDoc.id))
+            : projectDocs;
+
+          for (const projectDoc of selectedProjectDocs) {
+            const fullDoc = await storage.getDocument(projectDoc.documentId);
+            if (!fullDoc || fullDoc.userId !== req.user!.userId) continue;
+
+            const citationData = (projectDoc.citationData as CitationData | null) || null;
+            const summaryExcerpt =
+              clipText(projectDoc.document.summary, MAX_SOURCE_EXCERPT_CHARS) ||
+              clipText(fullDoc.fullText, MAX_SOURCE_EXCERPT_CHARS);
+
+            addSource({
+              id: projectDoc.id,
+              kind: "project_document",
+              title: citationData?.title || projectDoc.document.filename,
+              author: buildAuthorLabel(citationData),
+              excerpt: summaryExcerpt || "No summary available.",
+              fullText:
+                clipText(fullDoc.fullText, MAX_SOURCE_FULLTEXT_CHARS) ||
+                summaryExcerpt ||
+                "No source text available.",
+              category: "project_source",
+              note: projectDoc.roleInProject || null,
+              citationData,
+              documentFilename: projectDoc.document.filename,
+            });
+          }
+        }
+
+        // Backward compatibility: annotation-based writing requests
+        if (request.annotationIds.length > 0 && request.projectId) {
+          const projectDocById = new Map(
+            projectDocs.map((projectDoc) => [projectDoc.id, projectDoc]),
+          );
+
+          for (const annotationId of request.annotationIds) {
+            // Try project annotations first
+            const projectAnnotation = await projectStorage.getProjectAnnotation(annotationId);
+            if (projectAnnotation) {
+              const projectDoc = projectDocById.get(projectAnnotation.projectDocumentId);
+              if (!projectDoc) continue;
+              const citationData = (projectDoc?.citationData as CitationData | null) || null;
+              const docFilename = projectDoc?.document?.filename || "Unknown Source";
+
+              addSource({
+                id: projectAnnotation.id,
+                kind: "annotation",
+                title: citationData?.title || docFilename,
+                author: buildAuthorLabel(citationData),
+                excerpt: clipText(projectAnnotation.highlightedText, MAX_SOURCE_EXCERPT_CHARS),
+                fullText: clipText(
+                  `${projectAnnotation.highlightedText}\n${projectAnnotation.note ?? ""}`,
+                  MAX_SOURCE_FULLTEXT_CHARS,
+                ),
+                category: projectAnnotation.category,
+                note: projectAnnotation.note,
+                citationData,
+                documentFilename: docFilename,
+              });
+              continue;
+            }
+
+            // Fall back to legacy annotations
+            const legacyAnnotation = await storage.getAnnotation(annotationId);
+            if (legacyAnnotation) {
+              const doc = await storage.getDocument(legacyAnnotation.documentId);
+              if (!doc || doc.userId !== req.user!.userId) continue;
+              addSource({
+                id: legacyAnnotation.id,
+                kind: "annotation",
+                title: doc?.filename || "Legacy Source",
+                author: "Unknown Author",
+                excerpt: clipText(legacyAnnotation.highlightedText, MAX_SOURCE_EXCERPT_CHARS),
+                fullText: clipText(
+                  `${legacyAnnotation.highlightedText}\n${legacyAnnotation.note ?? ""}`,
+                  MAX_SOURCE_FULLTEXT_CHARS,
+                ),
+                category: legacyAnnotation.category,
+                note: legacyAnnotation.note,
+                citationData: null,
+                documentFilename: doc?.filename || "Unknown Source",
+              });
+            }
+          }
+        }
+
+        let aborted = false;
+        let completedFullText = "";
+        let tokensUsed = 0;
+
+        req.on("close", () => {
+          aborted = true;
+        });
+
+        stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
+
+        // Helper to send SSE events
+        const sendEvent = (event: WritingSSEEvent) => {
+          if (aborted || res.writableEnded) return;
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        };
+
+        // Run the pipeline
+        await runWritingPipeline(request, sources, (event) => {
+          if (event.type === "complete" && event.fullText) {
+            completedFullText = event.fullText;
+            tokensUsed = (event.usage?.inputTokens ?? 0) + (event.usage?.outputTokens ?? 0);
+          }
+          if (!aborted) {
+            sendEvent(event);
+          }
+        });
+
+        if (tokensUsed > 0) {
+          await incrementTokenUsage(req.user!.userId, tokensUsed);
+        }
+
+        if (!aborted && completedFullText && request.projectId) {
+          try {
+            sendEvent({
+              type: "status",
+              phase: "saving",
+              message: "Saving generated paper to the project...",
+            });
+            const savedPaper = await savePaperToProject(
+              request.projectId,
+              request.topic,
+              completedFullText,
+              req.user!.userId,
+            );
+            sendEvent({
+              type: "saved",
+              message: `Saved to project as ${savedPaper.filename}`,
+              savedPaper,
+            });
+          } catch (saveError) {
+            console.error("Failed to save generated paper:", saveError);
+            sendEvent({
+              type: "status",
+              phase: "complete",
+              message: "Paper generated, but it could not be saved to the project.",
+            });
+          }
+        }
+
+        // End the stream
+        stopHeartbeat?.();
+        if (!aborted) {
+          res.write("data: [DONE]\n\n");
+          res.end();
+        }
+      } catch (error) {
+        console.error("Writing pipeline error:", error);
+        stopHeartbeat?.();
+        // If headers haven't been sent yet, send a JSON error
+        if (!res.headersSent) {
+          res.status(500).json({
+            error: sanitizeSseError(error, "Writing pipeline failed"),
+          });
+        } else {
+          // Headers already sent (SSE mode), send error event
+          const errorEvent: WritingSSEEvent = {
+            type: "error",
+            error: sanitizeSseError(error, "Writing pipeline failed"),
+          };
+          res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+          res.end();
+        }
       }
-    }
-  });
+    },
+  );
 
   // GET /api/write/history - Placeholder for future writing session history
   app.get("/api/write/history", requireAuth, async (_req: Request, res: Response) => {

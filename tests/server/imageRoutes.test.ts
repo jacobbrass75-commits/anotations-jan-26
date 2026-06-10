@@ -107,11 +107,15 @@ describe("image generation route", () => {
     const { server, token } = await createImageApp("free");
 
     try {
-      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/generate-image", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
-        body: { prompt: "A manuscript desk" },
-      });
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/generate-image",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: { prompt: "A manuscript desk" },
+        },
+      );
 
       expect(response.status).toBe(403);
       expect(response.body).toEqual({

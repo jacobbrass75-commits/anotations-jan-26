@@ -45,9 +45,7 @@ export function DocumentStatusCard({
       </div>
       {(statusMessage || typeof progress === "number") && (
         <div className="mt-2 space-y-1">
-          {statusMessage && (
-            <div className="text-xs text-muted-foreground">{statusMessage}</div>
-          )}
+          {statusMessage && <div className="text-xs text-muted-foreground">{statusMessage}</div>}
           {typeof progress === "number" && (
             <Progress value={Math.max(0, Math.min(100, progress))} className="h-1.5" />
           )}
@@ -55,7 +53,12 @@ export function DocumentStatusCard({
       )}
       {onView && (
         <div className="mt-2">
-          <Button variant="ghost" size="sm" className="h-auto p-0 text-xs underline underline-offset-2" onClick={onView}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-auto p-0 text-xs underline underline-offset-2"
+            onClick={onView}
+          >
             View in panel
           </Button>
         </div>

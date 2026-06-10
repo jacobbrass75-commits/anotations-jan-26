@@ -31,7 +31,9 @@ export function useVoiceProfile(projectId: string) {
 export function useAnalyzeVoiceProfile() {
   return useMutation({
     mutationFn: async ({ projectId, samples }: { projectId: string; samples: string[] }) => {
-      const res = await apiRequest("POST", `/api/projects/${projectId}/voice-profile/analyze`, { samples });
+      const res = await apiRequest("POST", `/api/projects/${projectId}/voice-profile/analyze`, {
+        samples,
+      });
       return res.json() as Promise<{ voiceProfile: VoiceProfile }>;
     },
     onSuccess: (_, { projectId }) => {
@@ -42,8 +44,16 @@ export function useAnalyzeVoiceProfile() {
 
 export function useUpdateVoiceProfile() {
   return useMutation({
-    mutationFn: async ({ projectId, voiceProfile }: { projectId: string; voiceProfile: VoiceProfile }) => {
-      const res = await apiRequest("PUT", `/api/projects/${projectId}/voice-profile`, { voiceProfile });
+    mutationFn: async ({
+      projectId,
+      voiceProfile,
+    }: {
+      projectId: string;
+      voiceProfile: VoiceProfile;
+    }) => {
+      const res = await apiRequest("PUT", `/api/projects/${projectId}/voice-profile`, {
+        voiceProfile,
+      });
       return res.json();
     },
     onSuccess: (_, { projectId }) => {

@@ -75,11 +75,11 @@ Four modules keep token costs down (~91% reduction from the pre-optimization bas
 
 Documents tagged as `evidence`, `style_reference`, or `background` get different context treatment:
 
-| Role | Context Treatment |
-|------|-------------------|
-| `evidence` | Full citation pipeline — quote directly, cite precisely. Annotation count and chunk count shown. |
-| `style_reference` | Voice/style guide only. Never cited or quoted. Triggers Haiku one-shot style analysis. |
-| `background` | Summary-level context. Light citation only, no direct quotes. |
+| Role              | Context Treatment                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------ |
+| `evidence`        | Full citation pipeline — quote directly, cite precisely. Annotation count and chunk count shown. |
+| `style_reference` | Voice/style guide only. Never cited or quoted. Triggers Haiku one-shot style analysis.           |
+| `background`      | Summary-level context. Light citation only, no direct quotes.                                    |
 
 ### 2. Evidence Clipboard (`server/evidenceClipboard.ts`)
 
@@ -105,11 +105,11 @@ Automatic Haiku turn summarization after 6 turns.
 Dynamic caps on tool response sizes based on source count:
 
 | Source Count | Max Response Size |
-|--------------|-------------------|
-| 1-5 | 5,000 chars |
-| 6-10 | 3,000 chars |
-| 11-20 | 1,500 chars |
-| 21+ | 800 chars |
+| ------------ | ----------------- |
+| 1-5          | 5,000 chars       |
+| 6-10         | 3,000 chars       |
+| 11-20        | 1,500 chars       |
+| 21+          | 800 chars         |
 
 ---
 
@@ -128,28 +128,28 @@ Exceptions: skip phases when student says "just write it", when revising, when c
 
 ## Model Summary
 
-| Role | Model | Mode |
-|------|-------|------|
-| Chat writer | `claude-opus-4-6` | Precision |
-| Chat writer | `claude-sonnet-4-5-20250929` | Extended |
-| Evidence gatherer | `claude-haiku-4-5-20251001` | Precision phase 1 |
-| Evidence extractor | `claude-haiku-4-5-20251001` | Precision post-turn |
-| Context compaction | `claude-haiku-4-5-20251001` | Both modes |
-| Style analysis | `claude-haiku-4-5-20251001` | Both modes |
-| Research agent | `claude-sonnet-4-5-20250929` | Extended only |
-| Compile | Mode-dependent (Opus or Sonnet) | Both |
-| Verify | Mode-dependent (Opus or Sonnet) | Both |
+| Role               | Model                           | Mode                |
+| ------------------ | ------------------------------- | ------------------- |
+| Chat writer        | `claude-opus-4-6`               | Precision           |
+| Chat writer        | `claude-sonnet-4-5-20250929`    | Extended            |
+| Evidence gatherer  | `claude-haiku-4-5-20251001`     | Precision phase 1   |
+| Evidence extractor | `claude-haiku-4-5-20251001`     | Precision post-turn |
+| Context compaction | `claude-haiku-4-5-20251001`     | Both modes          |
+| Style analysis     | `claude-haiku-4-5-20251001`     | Both modes          |
+| Research agent     | `claude-sonnet-4-5-20250929`    | Extended only       |
+| Compile            | Mode-dependent (Opus or Sonnet) | Both                |
+| Verify             | Mode-dependent (Opus or Sonnet) | Both                |
 
 ---
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `server/chatRoutes.ts` | Main writing chat handler, model constants, escalation loop |
-| `server/gatherer.ts` | Haiku evidence gathering (precision phase 1) |
-| `server/evidenceClipboard.ts` | Evidence clipboard persistence and deduplication |
-| `server/contextCompaction.ts` | Turn summarization and compacted history assembly |
-| `server/sourceRoles.ts` | Source role types, style analysis, role-based formatting |
-| `server/researchAgent.ts` | Deep research with quote verification |
-| `server/writingPipeline.ts` | Source formatting utilities, tiered source types |
+| File                          | Purpose                                                     |
+| ----------------------------- | ----------------------------------------------------------- |
+| `server/chatRoutes.ts`        | Main writing chat handler, model constants, escalation loop |
+| `server/gatherer.ts`          | Haiku evidence gathering (precision phase 1)                |
+| `server/evidenceClipboard.ts` | Evidence clipboard persistence and deduplication            |
+| `server/contextCompaction.ts` | Turn summarization and compacted history assembly           |
+| `server/sourceRoles.ts`       | Source role types, style analysis, role-based formatting    |
+| `server/researchAgent.ts`     | Deep research with quote verification                       |
+| `server/writingPipeline.ts`   | Source formatting utilities, tiered source types            |

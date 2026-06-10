@@ -14,16 +14,16 @@ describe("annotation link helpers", () => {
         annotationId: "annotation-1",
         startPosition: 42,
         anchorFingerprint: "importantquote",
-      })
+      }),
     ).toBe(
-      "/projects/project-1/documents/doc-1?annotationId=annotation-1&start=42&anchor=importantquote"
+      "/projects/project-1/documents/doc-1?annotationId=annotation-1&start=42&anchor=importantquote",
     );
 
     expect(
       buildProjectAnnotationJumpPath({
         projectId: "project-1",
         projectDocumentId: "doc-1",
-      })
+      }),
     ).toBe("/projects/project-1/documents/doc-1");
   });
 });

@@ -12,13 +12,15 @@ export function OverviewCards({ overview, conversations, isLoading }: OverviewCa
   const totalToolCalls = overview?.totals.toolCalls ?? 0;
   const totalConversations = overview?.totals.uniqueConversations ?? 0;
 
-  const totalFailures = overview?.toolCallFrequency.reduce((sum, t) => sum + t.failureCount, 0) ?? 0;
-  const failureRate = totalToolCalls > 0 ? ((totalFailures / totalToolCalls) * 100).toFixed(1) : "0";
+  const totalFailures =
+    overview?.toolCallFrequency.reduce((sum, t) => sum + t.failureCount, 0) ?? 0;
+  const failureRate =
+    totalToolCalls > 0 ? ((totalFailures / totalToolCalls) * 100).toFixed(1) : "0";
 
   const avgPeakTokens =
     conversations.length > 0
       ? Math.round(
-          conversations.reduce((sum, c) => sum + (c.peakTokens ?? 0), 0) / conversations.length
+          conversations.reduce((sum, c) => sum + (c.peakTokens ?? 0), 0) / conversations.length,
         )
       : 0;
 
@@ -62,7 +64,9 @@ export function OverviewCards({ overview, conversations, isLoading }: OverviewCa
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className={`font-mono text-3xl ${Number(failureRate) > 10 ? "text-destructive" : "text-chart-2"}`}>
+          <div
+            className={`font-mono text-3xl ${Number(failureRate) > 10 ? "text-destructive" : "text-chart-2"}`}
+          >
             {isLoading ? placeholder : `${failureRate}%`}
           </div>
           <div className="text-xs font-mono text-muted-foreground mt-1">

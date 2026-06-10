@@ -62,9 +62,7 @@ function installPlaywright() {
 function cleanupOldTempFiles() {
   try {
     const files = fs.readdirSync(__dirname);
-    const tempFiles = files.filter(
-      (f) => f.startsWith(".temp-") && f.endsWith(".js")
-    );
+    const tempFiles = files.filter((f) => f.startsWith(".temp-") && f.endsWith(".js"));
     tempFiles.forEach((file) => {
       try {
         fs.unlinkSync(path.join(__dirname, file));

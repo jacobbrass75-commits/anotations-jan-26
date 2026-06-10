@@ -112,12 +112,18 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
         <div className="flex flex-col items-center gap-4">
           <div className="eva-hex-spinner" />
           <div className="text-center">
-            <p className="text-sm font-medium text-foreground eva-section-title">DOCUMENT INSERTION</p>
-            <p className="text-xs text-muted-foreground mt-1">Extracting text and preparing for analysis</p>
+            <p className="text-sm font-medium text-foreground eva-section-title">
+              DOCUMENT INSERTION
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Extracting text and preparing for analysis
+            </p>
           </div>
           <div className="w-full max-w-xs">
             <Progress value={uploadProgress} className="h-2" />
-            <p className="text-xs text-muted-foreground text-center mt-2 font-mono">{uploadProgress}% complete</p>
+            <p className="text-xs text-muted-foreground text-center mt-2 font-mono">
+              {uploadProgress}% complete
+            </p>
           </div>
         </div>
       </Card>
@@ -157,9 +163,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
           </div>
           {isPdf && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">
-                Text Extraction Mode
-              </label>
+              <label className="text-sm font-medium text-foreground">Text Extraction Mode</label>
               <Select value={ocrMode} onValueChange={setOcrMode}>
                 <SelectTrigger className="w-full eva-focus-glow" data-testid="select-ocr-mode">
                   <SelectValue />
@@ -168,22 +172,24 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
                   <SelectItem value="standard">Standard (digital PDFs, fast)</SelectItem>
                   <SelectItem value="advanced">Advanced OCR (scanned PDFs, PaddleOCR)</SelectItem>
                   <SelectItem value="vision">Vision OCR (scanned PDFs, GPT-4o)</SelectItem>
-                  <SelectItem value="vision_batch">Vision OCR Batch (long scanned PDFs, faster)</SelectItem>
+                  <SelectItem value="vision_batch">
+                    Vision OCR Batch (long scanned PDFs, faster)
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 {ocrMode === "standard" && "Best for PDFs with selectable text. Fastest option."}
                 {ocrMode === "advanced" && "Uses PaddleOCR at 200 DPI. Good for scanned documents."}
-                {ocrMode === "vision" && "Uses GPT-4o Vision per page. Best quality for complex layouts."}
-                {ocrMode === "vision_batch" && "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
+                {ocrMode === "vision" &&
+                  "Uses GPT-4o Vision per page. Best quality for complex layouts."}
+                {ocrMode === "vision_batch" &&
+                  "Processes multiple pages per AI request. Recommended for long scanned PDFs."}
               </p>
             </div>
           )}
           {shouldShowOcrModel && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">
-                AI OCR Model
-              </label>
+              <label className="text-sm font-medium text-foreground">AI OCR Model</label>
               <Select value={ocrModel} onValueChange={setOcrModel}>
                 <SelectTrigger className="w-full eva-focus-glow" data-testid="select-ocr-model">
                   <SelectValue />
@@ -231,7 +237,9 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
             <Upload className="h-8 w-8 text-primary" />
           </div>
           <div className="text-center">
-            <p className="eva-section-title text-sm font-medium text-foreground">DOCUMENT INSERTION</p>
+            <p className="eva-section-title text-sm font-medium text-foreground">
+              DOCUMENT INSERTION
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
               Drag and drop or select file for analysis
             </p>
