@@ -282,12 +282,8 @@ export function HighlightedText({
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="relative prose prose-sm dark:prose-invert max-w-none leading-relaxed"
-      onMouseUp={handleMouseUp}
-    >
-      <div className="text-base font-serif text-foreground whitespace-pre-wrap">
+    <div ref={containerRef} className="relative" onMouseUp={handleMouseUp}>
+      <div className="reading-surface mx-auto text-foreground whitespace-pre-wrap">
         {renderContent()}
       </div>
 

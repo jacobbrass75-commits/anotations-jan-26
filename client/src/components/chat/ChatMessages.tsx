@@ -98,7 +98,7 @@ function AssistantMarkdownBubble({
   return (
     <div className="flex justify-start mb-4">
       <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-card border shadow-sm">
-        <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+        <div className="prose reading-surface dark:prose-invert [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
           <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
             {content}
           </ReactMarkdown>

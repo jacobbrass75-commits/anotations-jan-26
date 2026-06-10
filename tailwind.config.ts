@@ -87,6 +87,52 @@ export default {
         serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
       },
+      typography: {
+        DEFAULT: {
+          css: {
+            maxWidth: "70ch",
+            color: "hsl(var(--foreground))",
+            fontFamily: "var(--font-serif)",
+            fontSize: "1.0625rem",
+            lineHeight: "1.7",
+            "--tw-prose-body": "hsl(var(--foreground))",
+            "--tw-prose-headings": "hsl(var(--foreground))",
+            "--tw-prose-links": "hsl(var(--primary))",
+            "--tw-prose-bold": "hsl(var(--foreground))",
+            "--tw-prose-counters": "hsl(var(--muted-foreground))",
+            "--tw-prose-bullets": "hsl(var(--muted-foreground))",
+            "--tw-prose-hr": "hsl(var(--border))",
+            "--tw-prose-quotes": "hsl(var(--foreground))",
+            "--tw-prose-quote-borders": "hsl(var(--border))",
+            "--tw-prose-captions": "hsl(var(--muted-foreground))",
+            "--tw-prose-code": "hsl(var(--foreground))",
+            "--tw-prose-pre-code": "hsl(var(--foreground))",
+            "--tw-prose-pre-bg": "hsl(var(--muted))",
+            "--tw-prose-th-borders": "hsl(var(--border))",
+            "--tw-prose-td-borders": "hsl(var(--border))",
+            "h1, h2, h3, h4": {
+              fontFamily: "var(--font-serif)",
+              fontWeight: "650",
+              letterSpacing: "0",
+              lineHeight: "1.2",
+            },
+            "p, ul, ol, blockquote": {
+              marginTop: "0.9em",
+              marginBottom: "0.9em",
+            },
+            li: {
+              marginTop: "0.25em",
+              marginBottom: "0.25em",
+            },
+            a: {
+              textUnderlineOffset: "3px",
+            },
+            "code, pre": {
+              fontFamily: "var(--font-mono)",
+            },
+          },
+        },
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },

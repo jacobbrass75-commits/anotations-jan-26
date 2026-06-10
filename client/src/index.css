@@ -240,6 +240,15 @@
     font-size: 15px;
     line-height: 1.6;
   }
+
+  .reading-surface {
+    font-family: var(--font-serif);
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    max-width: 70ch;
+    hyphens: auto;
+    text-rendering: optimizeLegibility;
+  }
 }
 
 /**

@@ -67,7 +67,7 @@ export function DocumentPanel({
       </CardHeader>
       <CardContent className="min-h-0 flex-1">
         <ScrollArea className="h-full pr-1">
-          <article className="prose prose-sm dark:prose-invert max-w-none font-serif leading-relaxed">
+          <article className="prose reading-surface dark:prose-invert">
             <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
               {content}
             </ReactMarkdown>
