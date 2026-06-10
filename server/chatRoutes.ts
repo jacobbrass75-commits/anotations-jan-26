@@ -11,6 +11,7 @@ import { projectStorage } from "./projectStorage";
 import { writingStyleStorage } from "./writingStyleStorage";
 import { storage } from "./storage";
 import { checkTokenBudget, requireAuth, requireTier } from "./auth";
+import { aiLimiter } from "./rateLimits";
 import { incrementTokenUsage } from "./authStorage";
 import { logContextSnapshot, logToolCall } from "./analyticsLogger";
 import {
@@ -1236,7 +1237,7 @@ export function registerChatRoutes(app: Express) {
     }
   });
 
-  app.post("/api/chat/conversations/:id/messages", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/messages", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     let stopHeartbeat: (() => void) | null = null;
 
     try {
@@ -1710,7 +1711,7 @@ ${chunkContext}`;
     }
   });
 
-  app.post("/api/chat/conversations/:id/compile", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/compile", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     let stopHeartbeat: (() => void) | null = null;
 
     try {
@@ -1829,7 +1830,7 @@ ${transcript}${sourcesBlock}`;
     }
   });
 
-  app.post("/api/chat/conversations/:id/verify", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/chat/conversations/:id/verify", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     let stopHeartbeat: (() => void) | null = null;
 
     try {

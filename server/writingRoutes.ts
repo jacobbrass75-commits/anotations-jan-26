@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { checkTokenBudget, requireAuth, requireTier } from "./auth";
+import { aiLimiter } from "./rateLimits";
 import { incrementTokenUsage } from "./authStorage";
 import { projectStorage } from "./projectStorage";
 import { writingStyleStorage } from "./writingStyleStorage";
@@ -81,7 +82,7 @@ export async function savePaperToProject(
 
 export function registerWritingRoutes(app: Express): void {
   // POST /api/write - Start writing pipeline, stream results via SSE
-  app.post("/api/write", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/write", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     let stopHeartbeat: (() => void) | null = null;
 
     try {

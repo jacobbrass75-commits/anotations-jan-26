@@ -5,6 +5,7 @@ import { apiKeys } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { getUserById, sanitizeUser } from "./authStorage";
 import { db } from "./db";
+import { authLimiter } from "./rateLimits";
 
 const EXTENSION_API_KEY_SCOPE = "projects:read web_clips:write api_keys:self_revoke";
 
@@ -56,6 +57,8 @@ function isExtensionApiKeyRequest(body: unknown): boolean {
 }
 
 export function registerAuthRoutes(app: Express): void {
+  app.use("/api/auth", authLimiter);
+
   // GET /api/auth/me - Return current user profile
   app.get("/api/auth/me", requireAuth, async (req: Request, res: Response) => {
     try {

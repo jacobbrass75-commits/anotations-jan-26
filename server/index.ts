@@ -12,6 +12,7 @@ import { serveStatic } from "./static";
 import { initAnalytics } from "./analyticsLogger";
 import { createServer } from "http";
 import { assertProductionConfig } from "./productionConfig";
+import { globalLimiter } from "./rateLimits";
 
 assertProductionConfig(process.env, { phase: "runtime" });
 
@@ -87,6 +88,8 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+app.use(globalLimiter);
 
 // Reject malformed percent-encoding before Express route matching can throw.
 app.use((req, res, next) => {

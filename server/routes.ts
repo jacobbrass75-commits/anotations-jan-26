@@ -59,6 +59,7 @@ import {
 import { annotations, documents, projectAnnotations, projectDocuments, projects } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { checkTokenBudget, requireAuth } from "./auth";
+import { aiLimiter } from "./rateLimits";
 import { decrementStorageUsage, reserveStorageUsage } from "./authStorage";
 import { createTokenUsageAccumulator } from "./aiUsage";
 import {
@@ -337,7 +338,7 @@ export async function registerRoutes(
   });
 
   // Upload document
-  app.post("/api/upload", requireAuth, checkTokenBudget, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload", requireAuth, aiLimiter, checkTokenBudget, upload.single("file"), async (req: Request, res: Response) => {
     let reservedStorageBytes = 0;
     try {
       if (!req.file) {
@@ -466,7 +467,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/upload-text", requireAuth, checkTokenBudget, textUpload.none(), async (req: Request, res: Response) => {
+  app.post("/api/upload-text", requireAuth, aiLimiter, checkTokenBudget, textUpload.none(), async (req: Request, res: Response) => {
     let reservedStorageBytes = 0;
     try {
       const rawText = typeof req.body.text === "string" ? req.body.text : "";
@@ -506,6 +507,7 @@ export async function registerRoutes(
   app.post(
     "/api/upload-group",
     requireAuth,
+    aiLimiter,
     checkTokenBudget,
     enforceContentLengthLimit(MAX_COMBINED_UPLOAD_TOTAL_BYTES),
     groupUpload.array("files", MAX_COMBINED_UPLOAD_FILES),
@@ -702,7 +704,7 @@ export async function registerRoutes(
   });
 
   // Set intent and trigger AI analysis
-  app.post("/api/documents/:id/set-intent", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/set-intent", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const { intent, thoroughness = 'standard' } = req.body;
@@ -918,7 +920,7 @@ export async function registerRoutes(
   });
 
   // Search document
-  app.post("/api/documents/:id/search", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/documents/:id/search", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const { query } = req.body;

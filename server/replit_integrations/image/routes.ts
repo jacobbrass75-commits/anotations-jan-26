@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { checkTokenBudget, requireAuth, requireTier } from "../../auth";
 import { openai } from "./client";
+import { aiLimiter } from "../../rateLimits";
 
 const ALLOWED_IMAGE_SIZES = new Set(["1024x1024", "512x512", "256x256"]);
 const IMAGE_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -19,7 +20,7 @@ function checkImageRateLimit(userId: string): boolean {
 }
 
 export function registerImageRoutes(app: Express): void {
-  app.post("/api/generate-image", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/generate-image", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     try {
       const { prompt, size = "1024x1024" } = req.body;
       const normalizedPrompt = typeof prompt === "string" ? prompt.trim() : "";

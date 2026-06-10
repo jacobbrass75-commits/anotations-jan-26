@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { checkTokenBudget, requireAuth, requireTier } from "./auth";
+import { aiLimiter } from "./rateLimits";
 import { incrementTokenUsage } from "./authStorage";
 import { humanizeText, MAX_HUMANIZER_TEXT_LENGTH } from "./humanizer";
 
@@ -18,7 +19,7 @@ function getErrorStatus(message: string): number {
 }
 
 export function registerHumanizerRoutes(app: Express): void {
-  app.post("/api/humanize", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/humanize", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     const startedAt = Date.now();
     try {
       const { text, model, temperature } = req.body ?? {};

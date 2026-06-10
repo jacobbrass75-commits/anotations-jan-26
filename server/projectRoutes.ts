@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { eq } from "drizzle-orm";
 import { checkTokenBudget, hasTokenBudgetAvailable, requireAuth, requireTier } from "./auth";
+import { aiLimiter } from "./rateLimits";
 import { projectStorage } from "./projectStorage";
 import { globalSearch, searchProjectDocument } from "./projectSearch";
 import { generateChicagoFootnote, generateChicagoBibliography, generateFootnoteWithQuote, generateInlineCitation, generateFootnote, generateInTextCitation, generateBibliographyEntry } from "./citationGenerator";
@@ -325,7 +326,7 @@ async function verifyProjectDocumentOwnership(req: Request, res: Response, proje
 export function registerProjectRoutes(app: Express): void {
   // === PROJECTS ===
 
-  app.post("/api/projects", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/projects", requireAuth, aiLimiter, async (req: Request, res: Response) => {
     try {
       const validated = insertProjectSchema.parse(req.body);
       const thesis = typeof validated.thesis === "string" ? validated.thesis : "";
@@ -377,7 +378,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
+  app.put("/api/projects/:id", requireAuth, aiLimiter, async (req: Request, res: Response) => {
     try {
       const project = await verifyProjectOwnership(req, res, req.params.id);
       if (!project) return;
@@ -598,7 +599,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === PROJECT DOCUMENTS ===
 
-  app.post("/api/projects/:projectId/documents", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/documents", requireAuth, aiLimiter, async (req: Request, res: Response) => {
     try {
       const project = await verifyProjectOwnership(req, res, req.params.projectId);
       if (!project) return;
@@ -674,7 +675,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/projects/:projectId/documents/batch", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/documents/batch", requireAuth, aiLimiter, async (req: Request, res: Response) => {
     try {
       const validated = batchAddDocumentsRequestSchema.parse(req.body);
       const { documentIds, folderId } = validated;
@@ -989,7 +990,7 @@ export function registerProjectRoutes(app: Express): void {
 
   // === AI ANALYSIS ===
 
-  app.post("/api/project-documents/:id/analyze", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/analyze", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const { intent, thoroughness } = req.body;
@@ -1046,7 +1047,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/project-documents/:id/auto-analyze", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/auto-analyze", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const projectDoc = await verifyProjectDocumentOwnership(req, res, req.params.id);
@@ -1110,7 +1111,7 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Multi-prompt parallel analysis
-  app.post("/api/project-documents/:id/analyze-multi", requireAuth, requireTier("max"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/analyze-multi", requireAuth, aiLimiter, requireTier("max"), checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const { prompts, thoroughness } = req.body;
@@ -1321,7 +1322,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/projects/:projectId/batch-analyze", requireAuth, requireTier("max"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/projects/:projectId/batch-analyze", requireAuth, aiLimiter, requireTier("max"), checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const validated = batchAnalysisRequestSchema.parse(req.body);
@@ -1424,7 +1425,7 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Search within a single project document
-  app.post("/api/project-documents/:id/search", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/project-documents/:id/search", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const { query } = req.body;
@@ -1464,7 +1465,7 @@ export function registerProjectRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/citations/ai", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/citations/ai", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const { documentId, highlightedText, style = "chicago" } = req.body;
@@ -1543,7 +1544,7 @@ export function registerProjectRoutes(app: Express): void {
   });
 
   // Generate footnote for a specific annotation by ID
-  app.post("/api/project-annotations/:id/footnote", requireAuth, checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/project-annotations/:id/footnote", requireAuth, aiLimiter, checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const annotation = await projectStorage.getProjectAnnotation(req.params.id);
@@ -1646,7 +1647,7 @@ export function registerProjectRoutes(app: Express): void {
   // === VOICE PROFILE ===
 
   /** Analyze writing samples and generate a voice profile */
-  app.post("/api/projects/:id/voice-profile/analyze", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/voice-profile/analyze", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const project = await verifyProjectOwnership(req, res, req.params.id);

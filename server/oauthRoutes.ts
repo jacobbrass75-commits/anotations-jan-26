@@ -8,6 +8,7 @@ import { isIP } from "net";
 import { join } from "path";
 import { TIER_LEVELS } from "./auth";
 import { getOrCreateUser } from "./authStorage";
+import { authLimiter } from "./rateLimits";
 import {
   createAuthorizationCode,
   createMcpToken,
@@ -1122,7 +1123,7 @@ export function registerOAuthRoutes(app: Express): void {
     }
   });
 
-  app.get("/oauth/authorize", oauthRateLimit, async (req: Request, res: Response) => {
+  app.get("/oauth/authorize", authLimiter, async (req: Request, res: Response) => {
     try {
       const params = normalizeAuthorizeRequestParams(req);
       const decision = pickBodyOrQueryString(req, "decision");
@@ -1186,7 +1187,7 @@ export function registerOAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/oauth/authorize", oauthRateLimit, async (req: Request, res: Response) => {
+  app.post("/oauth/authorize", authLimiter, async (req: Request, res: Response) => {
     try {
       if (!isTrustedAuthorizePostOrigin(req)) {
         return res.status(403).json({ error: "invalid_request", error_description: "Untrusted authorization origin" });
@@ -1240,7 +1241,7 @@ export function registerOAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/oauth/token", oauthRateLimit, async (req: Request, res: Response) => {
+  app.post("/oauth/token", authLimiter, async (req: Request, res: Response) => {
     try {
       res.setHeader("Cache-Control", "no-store");
       res.setHeader("Pragma", "no-cache");

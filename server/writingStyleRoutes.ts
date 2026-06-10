@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { checkTokenBudget, requireAuth, requireTier } from "./auth";
+import { aiLimiter } from "./rateLimits";
 import { createTokenUsageAccumulator } from "./aiUsage";
 import { writingStyleStorage } from "./writingStyleStorage";
 import {
@@ -72,7 +73,7 @@ export function registerWritingStyleRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/writing-styles", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.post("/api/writing-styles", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const name = normalizeName(req.body?.name);
@@ -118,7 +119,7 @@ export function registerWritingStyleRoutes(app: Express): void {
     }
   });
 
-  app.put("/api/writing-styles/:id", requireAuth, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
+  app.put("/api/writing-styles/:id", requireAuth, aiLimiter, requireTier("pro"), checkTokenBudget, async (req: Request, res: Response) => {
     const tokenUsage = createTokenUsageAccumulator();
     try {
       const existing = await getOwnedWritingStyleOr404(req, res);
