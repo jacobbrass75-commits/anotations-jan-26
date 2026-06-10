@@ -61,6 +61,7 @@ import {
   getModelsForConversation,
   getWritingMode,
   isTieredSource,
+  planSourceBlock,
   toAnthropicMessages,
   type AnthropicHistoryMessage,
   type ContextUsageEstimate,
@@ -631,6 +632,18 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         const tieredSources = sources.filter((source): source is TieredSource =>
           isTieredSource(source),
         );
+        // Same plan buildSourceBlock used for the system prompt; recomputed here
+        // (pure + cheap) to report evidence utilization per turn.
+        const sourcePlan = planSourceBlock(sources);
+        const countCitedAnnotations = (text: string): number => {
+          let cited = 0;
+          for (const source of tieredSources) {
+            for (const annotation of source.annotations) {
+              if (annotation.id && text.includes(annotation.id)) cited += 1;
+            }
+          }
+          return cited;
+        };
         const allowedSourceDocumentIds = new Set(tieredSources.map((source) => source.documentId));
         const allowedProjectDocumentIds = new Set(tieredSources.map((source) => source.id));
         const sourceTools = buildSourceTools();
@@ -765,10 +778,15 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
               detectedRequests.push(request);
             });
 
+            // Cache the system prompt: it carries the (large) source block and is
+            // byte-stable across escalation rounds and conversation turns, so every
+            // call after the first within the cache TTL reads it at ~0.1x input cost.
             const stream = anthropic.messages.stream({
               model: models.chat,
               max_tokens: CHAT_MAX_TOKENS,
-              system: systemPrompt,
+              system: [
+                { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
+              ],
               messages: messagesForTurn,
             });
 
@@ -843,6 +861,28 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           });
           await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_message");
 
+          if (sourcePlan.totalAnnotations > 0) {
+            const annotationsCited = countCitedAnnotations(assistantContent);
+            void logContextSnapshot({
+              conversationId: conv.id,
+              turnNumber: history.filter((m) => m.role === "user").length,
+              escalationRound: escalationCount,
+              estimatedTokens: usageEstimate.totalUsed,
+              warningLevel: usageEstimate.warningLevel,
+              trigger: "turn_complete",
+              timestamp: Date.now(),
+              metadata: {
+                annotationsInPrompt: sourcePlan.includedAnnotations,
+                annotationsTotal: sourcePlan.totalAnnotations,
+                annotationsCited,
+                evidenceUtilization:
+                  sourcePlan.includedAnnotations > 0
+                    ? Number((annotationsCited / sourcePlan.includedAnnotations).toFixed(3))
+                    : 0,
+              },
+            }).catch((err) => logger.warn({ err: err }, "[analytics] logContextSnapshot error:"));
+          }
+
           if (!hasAutoTitled && isFirstExchange && conv.title === "New Chat") {
             const autoTitle = content.length <= 50 ? content : `${content.slice(0, 47)}...`;
             await chatStorage.updateConversation(conv.id, { title: autoTitle });
@@ -850,15 +890,20 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           }
 
           if (mode === "precision") {
-            sendWritingStatus("Remembering which evidence was used...", "saving", 92);
-            const updatedClipboard = await extractUsedEvidence(
-              anthropic,
-              turn.fullText,
-              evidenceBriefText,
-              clipboard,
-              history.filter((message) => message.role === "user").length,
-            );
-            await updateConversationClipboard(conv.id, serializeClipboard(updatedClipboard));
+            // Evidence extraction only matters when the turn produced document
+            // content - conversational turns (questions, outlines, chatter) cite
+            // nothing worth persisting, so skip the extra Haiku call.
+            if (assistantContent.includes("<document")) {
+              sendWritingStatus("Remembering which evidence was used...", "saving", 92);
+              const updatedClipboard = await extractUsedEvidence(
+                anthropic,
+                turn.fullText,
+                evidenceBriefText,
+                clipboard,
+                history.filter((message) => message.role === "user").length,
+              );
+              await updateConversationClipboard(conv.id, serializeClipboard(updatedClipboard));
+            }
             break;
           }
 

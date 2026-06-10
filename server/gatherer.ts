@@ -240,10 +240,16 @@ Call the minimum number of tools needed. Be selective.`;
     { role: "user", content: "Gather evidence for this turn." },
   ];
 
+  // Cache the gatherer system prompt across the tool-use iterations below
+  // (the same prompt is resent on every loop pass).
+  const cachedSystem = [
+    { type: "text" as const, text: gathererPrompt, cache_control: { type: "ephemeral" as const } },
+  ];
+
   let response = await anthropic.messages.create({
     model: ANTHROPIC_MODELS.haiku,
     max_tokens: 4096,
-    system: gathererPrompt,
+    system: cachedSystem,
     messages,
     tools,
   });
@@ -271,7 +277,7 @@ Call the minimum number of tools needed. Be selective.`;
     response = await anthropic.messages.create({
       model: ANTHROPIC_MODELS.haiku,
       max_tokens: 4096,
-      system: gathererPrompt,
+      system: cachedSystem,
       messages,
       tools,
     });
