@@ -71,9 +71,9 @@
   --chart-5: 25 50% 60%; /* Warm */
 
   /* Typography */
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-serif: "Merriweather", Georgia, serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Inter Variable", system-ui, sans-serif;
+  --font-serif: "Source Serif 4 Variable", Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", monospace;
 
   /* Spacing & Radius */
   --radius: 0.5rem;
@@ -259,18 +259,6 @@
     font-size: 15px;
     line-height: 1.6;
   }
-}
-
-/* Dark mode: Rajdhani for headings only, system font for body */
-.dark h1,
-.dark h2,
-.dark h3,
-.dark h4,
-.dark h5,
-.dark h6 {
-  font-family: "Rajdhani", var(--font-sans);
-  font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
 /**
