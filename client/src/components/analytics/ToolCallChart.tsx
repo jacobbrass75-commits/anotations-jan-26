@@ -24,9 +24,9 @@ export function ToolCallChart({ data }: ToolCallChartProps) {
   }));
 
   return (
-    <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
+    <Card className="bg-card/70 border-border">
       <CardHeader className="pb-2">
-        <CardTitle className="eva-section-title">Tool Call Frequency</CardTitle>
+        <CardTitle className="font-semibold">Tool Call Frequency</CardTitle>
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (

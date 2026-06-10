@@ -298,7 +298,7 @@ export function HighlightedText({
           className="absolute z-50 animate-in fade-in-0 zoom-in-95"
           style={{ top: popoverPosition.top, left: popoverPosition.left }}
         >
-          <Card className="w-80 p-4 shadow-lg eva-clip-sm bg-card">
+          <Card className="w-80 p-4 shadow-lg bg-card">
             <div className="flex items-start justify-between gap-2 mb-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <div

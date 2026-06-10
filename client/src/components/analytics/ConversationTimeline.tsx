@@ -89,7 +89,7 @@ export function ConversationTimeline({ conversationId, onClose }: ConversationTi
     <Sheet open={!!conversationId} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-[500px] sm:w-[540px] p-0 flex flex-col">
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border">
-          <SheetTitle className="eva-section-title">Conversation Timeline</SheetTitle>
+          <SheetTitle className="font-semibold">Conversation Timeline</SheetTitle>
           {conversationId && (
             <div className="text-xs font-mono text-muted-foreground truncate">{conversationId}</div>
           )}

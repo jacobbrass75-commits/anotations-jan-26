@@ -78,7 +78,7 @@ export default function Projects() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-6 eva-grid-bg">
+      <div className="min-h-screen bg-background p-6">
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-4">
             <div className="h-8 w-48 bg-muted rounded" />
@@ -103,7 +103,7 @@ export default function Projects() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <h1 className="eva-section-title text-lg">RESEARCH PROJECTS</h1>
+            <h1 className="font-semibold text-lg">RESEARCH PROJECTS</h1>
           </div>
 
           <div className="flex items-center gap-2">
@@ -231,11 +231,11 @@ export default function Projects() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-6 pb-8 eva-grid-bg">
+      <main className="max-w-6xl mx-auto p-6 pb-8">
         {projects && projects.length === 0 ? (
           <div className="text-center py-16 space-y-4">
             <FolderOpen className="h-16 w-16 mx-auto text-primary" />
-            <h2 className="eva-section-title text-base">NO ACTIVE PROJECTS</h2>
+            <h2 className="font-semibold text-base">NO ACTIVE PROJECTS</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
               Create a research project to organize your documents, annotations, and enable global
               search across your entire collection.
@@ -254,7 +254,7 @@ export default function Projects() {
             {projects?.map((project) => (
               <Link key={project.id} href={`/projects/${project.id}`}>
                 <Card
-                  className="h-full hover-elevate cursor-pointer group eva-clip-panel eva-corner-decor hover:shadow-lg transition-all duration-200"
+                  className="h-full hover-lift cursor-pointer group hover:shadow-lg transition-all duration-200"
                   data-testid={`card-project-${project.id}`}
                 >
                   <CardHeader className="pb-2">

@@ -54,7 +54,7 @@ export default function AdminAnalytics() {
             <h1 className="font-sans uppercase tracking-[0.2em] font-bold text-primary text-sm">
               WRITING HARNESS
             </h1>
-            <div className="eva-status-active" />
+            <div className="h-2 w-2 rounded-full bg-primary" />
           </div>
           <div className="flex items-center gap-1">
             {(["24h", "7d", "30d", "all"] as TimeRange[]).map((range) => (
@@ -72,7 +72,7 @@ export default function AdminAnalytics() {
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 space-y-6 eva-grid-bg">
+      <main className="flex-1 container mx-auto px-4 py-6 space-y-6">
         <OverviewCards
           overview={overview}
           conversations={conversations}
@@ -87,9 +87,9 @@ export default function AdminAnalytics() {
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <WarningBreakdownChart data={overview?.warningLevelBreakdown ?? []} />
 
-          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
+          <Card className="bg-card/70 border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="eva-section-title">Top Requested Sources</CardTitle>
+              <CardTitle className="font-semibold">Top Requested Sources</CardTitle>
             </CardHeader>
             <CardContent>
               {topSources.length === 0 ? (

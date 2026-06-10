@@ -16,7 +16,7 @@ export default function WritingPage() {
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <PenTool className="h-5 w-5 text-primary" />
-            <h1 className="eva-section-title">AI WRITING</h1>
+            <h1 className="font-semibold">AI WRITING</h1>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/">
@@ -76,7 +76,7 @@ export default function WritingPage() {
       </header>
 
       <main
-        className="flex-1 container mx-auto px-4 py-6 pb-8 w-full eva-grid-bg"
+        className="flex-1 container mx-auto px-4 py-6 pb-8 w-full"
         style={{ height: "calc(100vh - 56px)" }}
       >
         <WritingChat key={initialProjectId ?? "standalone"} initialProjectId={initialProjectId} />

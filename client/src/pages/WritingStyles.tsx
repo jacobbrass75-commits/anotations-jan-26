@@ -211,7 +211,7 @@ export default function WritingStyles() {
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <PenLine className="h-5 w-5 text-primary" />
-            <h1 className="eva-section-title">WRITING STYLES</h1>
+            <h1 className="font-semibold">WRITING STYLES</h1>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/">
@@ -237,7 +237,7 @@ export default function WritingStyles() {
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 eva-grid-bg">
+      <main className="flex-1 container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 min-h-[calc(100vh-112px)]">
           <aside className="rounded-xl border border-border bg-card/80 overflow-hidden">
             <div className="p-4 border-b border-border flex items-center justify-between">

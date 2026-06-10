@@ -110,11 +110,9 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
     return (
       <Card className="p-8">
         <div className="flex flex-col items-center gap-4">
-          <div className="eva-hex-spinner" />
+          <div className="animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <div className="text-center">
-            <p className="text-sm font-medium text-foreground eva-section-title">
-              DOCUMENT INSERTION
-            </p>
+            <p className="text-sm font-medium text-foreground font-semibold">DOCUMENT INSERTION</p>
             <p className="text-xs text-muted-foreground mt-1">
               Extracting text and preparing for analysis
             </p>
@@ -165,7 +163,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-foreground">Text Extraction Mode</label>
               <Select value={ocrMode} onValueChange={setOcrMode}>
-                <SelectTrigger className="w-full eva-focus-glow" data-testid="select-ocr-mode">
+                <SelectTrigger className="w-full" data-testid="select-ocr-mode">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -191,7 +189,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-foreground">AI OCR Model</label>
               <Select value={ocrModel} onValueChange={setOcrModel}>
-                <SelectTrigger className="w-full eva-focus-glow" data-testid="select-ocr-model">
+                <SelectTrigger className="w-full" data-testid="select-ocr-model">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -216,7 +214,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
 
   return (
     <Card
-      className={`p-8 border-2 border-dashed eva-clip-panel transition-colors duration-200 ${
+      className={`p-8 border-2 border-dashed  transition-colors duration-200 ${
         dragActive ? "border-primary bg-primary/5" : "border-primary/30 hover:border-primary/60"
       }`}
       onDragEnter={handleDrag}
@@ -237,9 +235,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
             <Upload className="h-8 w-8 text-primary" />
           </div>
           <div className="text-center">
-            <p className="eva-section-title text-sm font-medium text-foreground">
-              DOCUMENT INSERTION
-            </p>
+            <p className="font-semibold text-sm font-medium text-foreground">DOCUMENT INSERTION</p>
             <p className="text-xs text-muted-foreground mt-1">
               Drag and drop or select file for analysis
             </p>

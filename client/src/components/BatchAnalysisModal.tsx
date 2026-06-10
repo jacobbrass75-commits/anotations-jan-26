@@ -181,7 +181,12 @@ export function BatchAnalysisModal({
       case "failed":
         return <XCircle className="h-4 w-4 text-destructive" />;
       case "processing":
-        return <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />;
+        return (
+          <div
+            className="animate-spin rounded-full border-2 border-primary border-t-transparent"
+            style={{ width: "1rem", height: "1rem" }}
+          />
+        );
       default:
         return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
@@ -200,11 +205,11 @@ export function BatchAnalysisModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto eva-grid-bg">
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            <span className="eva-section-title text-sm">BATCH ANALYSIS</span>
+            <span className="font-semibold text-sm">BATCH ANALYSIS</span>
           </DialogTitle>
           <DialogDescription>
             Run the same research question across multiple documents
@@ -242,7 +247,7 @@ export function BatchAnalysisModal({
                   {documents.map((doc) => (
                     <label
                       key={doc.id}
-                      className="flex items-center gap-3 p-2 hover-elevate rounded-md cursor-pointer font-mono text-sm"
+                      className="flex items-center gap-3 p-2 hover-lift rounded-md cursor-pointer font-mono text-sm"
                       data-testid={`row-doc-${doc.id}`}
                     >
                       <Checkbox
@@ -368,7 +373,7 @@ export function BatchAnalysisModal({
                 {response.results.map((result) => (
                   <div
                     key={result.projectDocumentId}
-                    className="flex items-center gap-3 p-2 rounded-md eva-clip-sm"
+                    className="flex items-center gap-3 p-2 rounded-md"
                     data-testid={`result-${result.projectDocumentId}`}
                   >
                     {getStatusIcon(result.status)}
@@ -413,7 +418,10 @@ export function BatchAnalysisModal({
             >
               {isAnalyzing ? (
                 <span className="flex items-center gap-2">
-                  <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
+                  <div
+                    className="animate-spin rounded-full border-2 border-primary border-t-transparent"
+                    style={{ width: "1rem", height: "1rem" }}
+                  />
                   ANALYZING...
                 </span>
               ) : (

@@ -56,10 +56,10 @@ export function IntentPanel({
   const canSubmit = research.trim() && goals.trim() && !isDisabled;
 
   return (
-    <Card className="h-full flex flex-col eva-corner-decor">
+    <Card className="h-full flex flex-col">
       <CardHeader className="flex flex-row items-center gap-2 pb-4">
         <Target className="h-5 w-5 text-primary" />
-        <h2 className="eva-section-title text-sm">RESEARCH INTENT</h2>
+        <h2 className="font-semibold text-sm">RESEARCH INTENT</h2>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col gap-4">
@@ -72,7 +72,7 @@ export function IntentPanel({
               placeholder="DESCRIBE YOUR RESEARCH TOPIC, THESIS, OR AREA OF STUDY..."
               value={research}
               onChange={(e) => setResearch(e.target.value)}
-              className="h-28 resize-none eva-focus-glow font-mono text-sm"
+              className="h-28 resize-none font-mono text-sm"
               disabled={isDisabled}
               data-testid="textarea-research"
             />
@@ -87,7 +87,7 @@ export function IntentPanel({
               placeholder="KEY QUOTES, EVIDENCE, ARGUMENTS, METHODOLOGY REFERENCES..."
               value={goals}
               onChange={(e) => setGoals(e.target.value)}
-              className="h-24 resize-none eva-focus-glow font-mono text-sm"
+              className="h-24 resize-none font-mono text-sm"
               disabled={isDisabled}
               data-testid="textarea-goals"
             />
@@ -131,7 +131,7 @@ export function IntentPanel({
             >
               {isAnalyzing ? (
                 <span className="flex items-center gap-2">
-                  <div className="eva-status-warning" />
+                  <div className="h-2 w-2 rounded-full bg-destructive" />
                   ANALYZING...
                 </span>
               ) : (

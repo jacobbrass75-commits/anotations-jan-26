@@ -147,12 +147,12 @@ export function MultiPromptPanel({
 
   return (
     <>
-      <Card className="h-full flex flex-col eva-corner-decor">
+      <Card className="h-full flex flex-col">
         <CardHeader className="pb-3 border-b shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <h2 className="eva-section-title text-sm">MULTI-PROMPT ANALYSIS</h2>
+              <h2 className="font-semibold text-sm">MULTI-PROMPT ANALYSIS</h2>
             </div>
             {hasAnalyzed && <Badge variant="secondary">{annotationCount} annotations</Badge>}
           </div>
@@ -171,7 +171,7 @@ export function MultiPromptPanel({
                   value={prompt.text}
                   onChange={(e) => updatePromptText(prompt.id, e.target.value)}
                   placeholder={`Prompt ${index + 1}: e.g., "Find evidence about..."`}
-                  className="flex-1 font-mono eva-focus-glow"
+                  className="flex-1 font-mono"
                   disabled={isAnalyzing}
                 />
                 {prompts.length > 1 && (
@@ -235,7 +235,7 @@ export function MultiPromptPanel({
                     variant="outline"
                     size="sm"
                     disabled={isAnalyzing}
-                    className="eva-focus-glow uppercase tracking-wider text-xs"
+                    className="uppercase tracking-wider text-xs"
                   >
                     <FolderOpen className="h-4 w-4 mr-1" />
                     Templates
@@ -270,7 +270,10 @@ export function MultiPromptPanel({
             >
               {isAnalyzing ? (
                 <span className="flex items-center gap-2">
-                  <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
+                  <div
+                    className="animate-spin rounded-full border-2 border-primary border-t-transparent"
+                    style={{ width: "1rem", height: "1rem" }}
+                  />
                   ANALYZING...
                 </span>
               ) : (
@@ -318,7 +321,10 @@ export function MultiPromptPanel({
               disabled={!templateName.trim() || isSavingTemplate}
             >
               {isSavingTemplate ? (
-                <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
+                <div
+                  className="animate-spin rounded-full border-2 border-primary border-t-transparent"
+                  style={{ width: "1rem", height: "1rem" }}
+                />
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}

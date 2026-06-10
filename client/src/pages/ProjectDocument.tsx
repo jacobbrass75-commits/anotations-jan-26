@@ -665,7 +665,7 @@ export default function ProjectDocumentPage() {
       </header>
 
       {/* Main Content - 4 Column Grid */}
-      <main className="flex-1 container mx-auto px-4 py-6 pb-8 eva-grid-bg">
+      <main className="flex-1 container mx-auto px-4 py-6 pb-8">
         <div className="grid lg:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
           {/* Left Sidebar: Multi-Prompt Panel + Citation Info */}
           <div className="lg:col-span-1 flex flex-col gap-4 overflow-hidden">
@@ -760,7 +760,7 @@ export default function ProjectDocumentPage() {
 
       {/* Citation Dialog */}
       <Dialog open={isCitationOpen} onOpenChange={setIsCitationOpen}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto eva-grid-bg">
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-2">
               <span>Citation Metadata</span>
@@ -774,7 +774,7 @@ export default function ProjectDocumentPage() {
               >
                 {isAutoFilling ? (
                   <div
-                    className="eva-hex-spinner mr-1.5"
+                    className="animate-spin rounded-full border-2 border-primary border-t-transparent mr-1.5"
                     style={{ width: "0.75rem", height: "0.75rem" }}
                   />
                 ) : (

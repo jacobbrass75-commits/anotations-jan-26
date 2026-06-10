@@ -149,10 +149,10 @@ export function AnnotationSidebar({
 
   if (isLoading) {
     return (
-      <Card className="h-full flex flex-col eva-corner-decor">
+      <Card className="h-full flex flex-col">
         <CardHeader className="flex flex-row items-center gap-2 pb-4 border-b">
           <MessageSquare className="h-5 w-5 text-primary" />
-          <h2 className="eva-section-title text-sm">ANNOTATIONS</h2>
+          <h2 className="font-semibold text-sm">ANNOTATIONS</h2>
         </CardHeader>
         <CardContent className="flex-1 p-4">
           <div className="space-y-4">
@@ -170,22 +170,19 @@ export function AnnotationSidebar({
 
   return (
     <>
-      <Card className="h-full flex flex-col overflow-hidden eva-corner-decor">
+      <Card className="h-full flex flex-col overflow-hidden">
         <CardHeader className="flex flex-col gap-3 pb-4 border-b shrink-0">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-primary" />
-              <h2 className="eva-section-title text-sm">ANNOTATIONS</h2>
+              <h2 className="font-semibold text-sm">ANNOTATIONS</h2>
             </div>
             <Badge variant="secondary">{annotations.length}</Badge>
           </div>
 
           <div className="flex items-center gap-2">
             <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
-              <SelectTrigger
-                className="flex-1 eva-focus-glow"
-                data-testid="select-annotation-filter"
-              >
+              <SelectTrigger className="flex-1" data-testid="select-annotation-filter">
                 <Filter className="h-3.5 w-3.5 mr-2" />
                 <SelectValue />
               </SelectTrigger>
@@ -209,7 +206,7 @@ export function AnnotationSidebar({
                 value={String(promptFilter)}
                 onValueChange={(v) => setPromptFilter(v === "all" ? "all" : Number(v))}
               >
-                <SelectTrigger className="flex-1 eva-focus-glow" data-testid="select-prompt-filter">
+                <SelectTrigger className="flex-1" data-testid="select-prompt-filter">
                   <SelectValue placeholder="All Prompts" />
                 </SelectTrigger>
                 <SelectContent>
@@ -263,7 +260,7 @@ export function AnnotationSidebar({
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => e.key === "Enter" && onSelect(annotation)}
-                    className={`group w-full text-left p-3 rounded-lg border transition-all duration-200 cursor-pointer hover-elevate eva-clip-sm hover:shadow-[0_0_15px_rgba(255,106,0,0.1)] ${
+                    className={`group w-full text-left p-3 rounded-lg border transition-all duration-200 cursor-pointer hover-lift   ${
                       selectedAnnotationId === annotation.id
                         ? "border-primary bg-primary/5"
                         : "border-transparent bg-muted/50 hover:bg-muted"

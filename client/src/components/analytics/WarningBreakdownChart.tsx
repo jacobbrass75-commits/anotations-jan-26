@@ -20,9 +20,9 @@ export function WarningBreakdownChart({ data }: WarningBreakdownChartProps) {
   }));
 
   return (
-    <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
+    <Card className="bg-card/70 border-border">
       <CardHeader className="pb-2">
-        <CardTitle className="eva-section-title">Context Warning Levels</CardTitle>
+        <CardTitle className="font-semibold">Context Warning Levels</CardTitle>
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (

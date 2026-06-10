@@ -343,7 +343,12 @@ export function BatchUploadModal({
       case "error":
         return <XCircle className="h-4 w-4 text-destructive" />;
       case "uploading":
-        return <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />;
+        return (
+          <div
+            className="animate-spin rounded-full border-2 border-primary border-t-transparent"
+            style={{ width: "1rem", height: "1rem" }}
+          />
+        );
       default:
         return <FileText className="h-4 w-4 text-muted-foreground" />;
     }
@@ -358,7 +363,7 @@ export function BatchUploadModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5" />
-            <span className="eva-section-title text-sm">BATCH DOCUMENT INSERTION</span>
+            <span className="font-semibold text-sm">BATCH DOCUMENT INSERTION</span>
           </DialogTitle>
           <DialogDescription>Select from your library or upload new files</DialogDescription>
         </DialogHeader>
@@ -424,7 +429,7 @@ export function BatchUploadModal({
                         {availableDocuments.map((doc) => (
                           <label
                             key={doc.id}
-                            className="flex items-center gap-3 p-2 hover-elevate rounded-md cursor-pointer font-mono text-sm"
+                            className="flex items-center gap-3 p-2 hover-lift rounded-md cursor-pointer font-mono text-sm"
                             data-testid={`row-doc-${doc.id}`}
                           >
                             <Checkbox
@@ -493,7 +498,7 @@ export function BatchUploadModal({
               ) : (
                 <>
                   <Card
-                    className={`p-6 border-2 border-dashed eva-clip-panel transition-colors ${
+                    className={`p-6 border-2 border-dashed  transition-colors ${
                       dragActive
                         ? "border-primary bg-primary/5"
                         : "border-primary/30 hover:border-primary/60"
@@ -689,7 +694,10 @@ export function BatchUploadModal({
             >
               {isAdding ? (
                 <span className="flex items-center gap-2">
-                  <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
+                  <div
+                    className="animate-spin rounded-full border-2 border-primary border-t-transparent"
+                    style={{ width: "1rem", height: "1rem" }}
+                  />
                   ADDING...
                 </span>
               ) : (

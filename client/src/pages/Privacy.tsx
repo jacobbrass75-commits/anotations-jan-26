@@ -69,7 +69,7 @@ export default function Privacy() {
 
       <main className="container mx-auto max-w-4xl px-4 py-10 space-y-6">
         <div className="space-y-3">
-          <div className="eva-section-title">Privacy Policy</div>
+          <div className="font-semibold">Privacy Policy</div>
           <h1 className="text-3xl md:text-4xl font-sans uppercase tracking-[0.12em] text-primary leading-tight">
             ScholarMark Privacy Policy
           </h1>
@@ -79,7 +79,7 @@ export default function Privacy() {
           </p>
         </div>
 
-        <Card className="eva-clip-panel border-border bg-card/80">
+        <Card className="border-border bg-card/80">
           <CardContent className="p-6 space-y-8">
             {sections.map((section) => (
               <section key={section.title} className="space-y-3">

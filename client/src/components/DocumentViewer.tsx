@@ -106,10 +106,10 @@ export function DocumentViewer({
     return (
       <Card className="h-full flex flex-col items-center justify-center">
         <div className="text-center p-8 max-w-sm">
-          <div className="mx-auto mb-4 eva-hex-spinner" />
+          <div className="mx-auto mb-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <div className="mb-2 flex items-center justify-center gap-2">
-            <div className="eva-status-warning" />
-            <h3 className="eva-section-title text-primary">PROCESSING DOCUMENT...</h3>
+            <div className="h-2 w-2 rounded-full bg-destructive" />
+            <h3 className="font-semibold text-primary">PROCESSING DOCUMENT...</h3>
           </div>
           <p className="text-sm text-muted-foreground">
             Extracting text from your source file. This may take a moment...
@@ -121,7 +121,7 @@ export function DocumentViewer({
 
   if (document.status === "error") {
     return (
-      <Card className="h-full flex flex-col items-center justify-center eva-warning-stripes">
+      <Card className="h-full flex flex-col items-center justify-center border-destructive/30 bg-destructive/5">
         <div className="text-center p-8 max-w-sm">
           <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2">Processing Failed</h3>
@@ -134,11 +134,11 @@ export function DocumentViewer({
   }
 
   return (
-    <Card className="h-full flex flex-col overflow-hidden eva-corner-decor">
+    <Card className="h-full flex flex-col overflow-hidden">
       <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4 border-b shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <FileText className="h-5 w-5 text-primary shrink-0" />
-          <h2 className="eva-section-title text-sm font-semibold truncate">{document.filename}</h2>
+          <h2 className="font-semibold text-sm font-semibold truncate">{document.filename}</h2>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground mr-2">
@@ -179,11 +179,8 @@ export function DocumentViewer({
       </CardHeader>
       <CardContent className="flex-1 p-0 overflow-hidden">
         {viewMode === "transcript" ? (
-          <ScrollArea className="h-full eva-grid-bg">
-            <div
-              ref={scrollRef}
-              className="p-6 max-w-4xl mx-auto border-l-2 border-border eva-materialize"
-            >
+          <ScrollArea className="h-full">
+            <div ref={scrollRef} className="p-6 max-w-4xl mx-auto border-l-2 border-border">
               <HighlightedText
                 text={document.fullText}
                 annotations={annotations}
