@@ -4,6 +4,8 @@ export const testFiles = [
   "tests/client/accountUtils.test.ts",
   "tests/server/quoteJumpLinks.test.ts",
   "tests/server/chunker.test.ts",
+  "tests/server/pipelineV2.test.ts",
+  "tests/server/promptBuilder.test.ts",
   "tests/server/citationGenerator.test.ts",
   "tests/server/sourceFiles.test.ts",
   "tests/server/uploadMiddleware.test.ts",

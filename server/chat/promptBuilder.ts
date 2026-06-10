@@ -140,7 +140,89 @@ export function isTieredSource(source: PromptSource): source is TieredSource {
   return "annotations" in source;
 }
 
-export function buildSourceBlock(sources: PromptSource[]): string {
+/**
+ * Token budget for inline annotations across all sources in the system prompt.
+ * Small projects fit entirely (previous behavior preserved); past the budget,
+ * each source gets a top-K slice and the rest stays retrievable via the
+ * gatherer tools and <chunk_request> escalation.
+ */
+export const ANNOTATION_PROMPT_TOKEN_BUDGET = Math.max(
+  1000,
+  parseInt(process.env.ANNOTATION_PROMPT_TOKEN_BUDGET || "8000", 10) || 8000,
+);
+const MIN_ANNOTATIONS_PER_SOURCE = 3;
+
+type TieredAnnotation = TieredSource["annotations"][number];
+
+function estimateAnnotationTokens(annotation: TieredAnnotation): number {
+  const overheadChars = 120; // id/category/position/document lines
+  return Math.ceil(
+    (annotation.highlightedText.length + (annotation.note?.length || 0) + overheadChars) / 4,
+  );
+}
+
+export interface SourceBlockPlan {
+  /** Per-source annotation caps, keyed by source id. Null = no caps needed. */
+  perSourceLimits: Map<string, number> | null;
+  totalAnnotations: number;
+  includedAnnotations: number;
+  estimatedAnnotationTokens: number;
+}
+
+export function planSourceBlock(sources: PromptSource[]): SourceBlockPlan {
+  const tiered = sources.filter(isTieredSource);
+  const totalAnnotations = tiered.reduce((count, source) => count + source.annotations.length, 0);
+  const estimatedAnnotationTokens = tiered.reduce(
+    (count, source) =>
+      count +
+      source.annotations.reduce(
+        (sourceTotal, annotation) => sourceTotal + estimateAnnotationTokens(annotation),
+        0,
+      ),
+    0,
+  );
+
+  if (estimatedAnnotationTokens <= ANNOTATION_PROMPT_TOKEN_BUDGET) {
+    return {
+      perSourceLimits: null,
+      totalAnnotations,
+      includedAnnotations: totalAnnotations,
+      estimatedAnnotationTokens,
+    };
+  }
+
+  const annotatedSources = tiered.filter((source) => source.annotations.length > 0);
+  const perSourceBudget = ANNOTATION_PROMPT_TOKEN_BUDGET / Math.max(annotatedSources.length, 1);
+  const perSourceLimits = new Map<string, number>();
+  let includedAnnotations = 0;
+
+  for (const source of annotatedSources) {
+    const sourceTokens = source.annotations.reduce(
+      (sourceTotal, annotation) => sourceTotal + estimateAnnotationTokens(annotation),
+      0,
+    );
+    const avgTokens = Math.max(sourceTokens / source.annotations.length, 1);
+    const rawLimit = Math.floor(perSourceBudget / avgTokens);
+    const limit = Math.min(
+      source.annotations.length,
+      Math.max(MIN_ANNOTATIONS_PER_SOURCE, rawLimit),
+    );
+    perSourceLimits.set(source.id, limit);
+    includedAnnotations += limit;
+  }
+
+  return {
+    perSourceLimits,
+    totalAnnotations,
+    includedAnnotations,
+    estimatedAnnotationTokens,
+  };
+}
+
+export function buildSourceBlock(
+  sources: PromptSource[],
+  plan: SourceBlockPlan = planSourceBlock(sources),
+): string {
   if (sources.length === 0) {
     return "No explicit source materials are attached to this conversation.";
   }
@@ -148,7 +230,9 @@ export function buildSourceBlock(sources: PromptSource[]): string {
   return sources
     .map((source, i) => {
       const sourceText = isTieredSource(source)
-        ? formatSourceForPromptTiered(source)
+        ? formatSourceForPromptTiered(source, {
+            maxAnnotations: plan.perSourceLimits?.get(source.id),
+          })
         : formatSourceForPrompt(source);
       return `--- Source ${i + 1} ---\n${sourceText}`;
     })
