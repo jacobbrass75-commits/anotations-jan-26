@@ -116,49 +116,15 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-function summarizeApiResponse(path: string, body: unknown): string | null {
-  if (typeof body === "undefined") return null;
-
-  if ((path === "/api/documents" || path === "/api/documents/meta") && Array.isArray(body)) {
-    return `items=${body.length}`;
-  }
-
-  try {
-    const serialized = JSON.stringify(body);
-    if (!serialized) return null;
-    const maxLength = 2000;
-    if (serialized.length <= maxLength) {
-      return serialized;
-    }
-    return `${serialized.slice(0, maxLength)}...<truncated ${serialized.length - maxLength} chars>`;
-  } catch {
-    return "[unserializable]";
-  }
-}
-
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        const summary = summarizeApiResponse(path, capturedJsonResponse);
-        if (summary) {
-          logLine += ` :: ${summary}`;
-        }
-      }
-
-      log(logLine);
+      const userId = req.user?.userId ?? "anonymous";
+      log(`${req.method} ${path} ${res.statusCode} durationMs=${duration} userId=${userId}`);
     }
   });
 
