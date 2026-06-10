@@ -75,6 +75,6 @@ while IFS= read -r backup_dir; do
   if (( backup_dir_index > RETENTION_COUNT )); then
     rm -rf "$backup_dir"
   fi
-done < <(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d | sort -r)
+done < <(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d ! -name "$(basename "$LATEST_LINK")" | sort -r)
 
 echo "[backup] backup complete: $BACKUP_DIR"

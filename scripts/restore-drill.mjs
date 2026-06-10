@@ -130,7 +130,7 @@ async function prepareWorkspace() {
   await copyFile(join(repoRoot, "shared", "schema.ts"), join(workDir, "shared", "schema.ts"));
 
   try {
-    await symlink(join(repoRoot, "node_modules"), join(workDir, "node_modules"));
+    await symlink(join(repoRoot, "node_modules"), join(workDir, "node_modules"), "junction");
   } catch (error) {
     if (!(error instanceof Error) || error.code !== "EEXIST") {
       throw error;

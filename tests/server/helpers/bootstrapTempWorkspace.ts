@@ -14,7 +14,7 @@ export async function bootstrapTempWorkspace(tempDir: string): Promise<void> {
   await copyFile(join(repoRoot, "shared", "schema.ts"), join(tempDir, "shared", "schema.ts"));
 
   try {
-    await symlink(join(repoRoot, "node_modules"), join(tempDir, "node_modules"));
+    await symlink(join(repoRoot, "node_modules"), join(tempDir, "node_modules"), "junction");
   } catch (error) {
     if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") {
       throw error;

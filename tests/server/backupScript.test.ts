@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { execFile } from "child_process";
+import { existsSync } from "fs";
 import { lstat, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join, resolve } from "path";
@@ -9,7 +10,18 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const backupScript = join(repoRoot, "deploy", "backup-data.sh");
+const gitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+const bashExecutable = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
+
+function toBashPath(path: string): string {
+  if (process.platform !== "win32") {
+    return path;
+  }
+
+  return path.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, drive: string) => `/${drive.toLowerCase()}`);
+}
+
+const backupScript = toBashPath(join(repoRoot, "deploy", "backup-data.sh"));
 
 describe("backup-data.sh", () => {
   const tempDirs: string[] = [];
@@ -52,12 +64,12 @@ describe("backup-data.sh", () => {
     const backupRoot = join(appDir, "backups");
     const timestamp = "20260330T120000Z";
 
-    await execFileAsync("bash", [backupScript], {
+    await execFileAsync(bashExecutable, [backupScript], {
       cwd: repoRoot,
       env: {
         ...process.env,
-        APP_DIR: appDir,
-        BACKUP_ROOT: backupRoot,
+        APP_DIR: toBashPath(appDir),
+        BACKUP_ROOT: toBashPath(backupRoot),
         BACKUP_TIMESTAMP: timestamp,
       },
     });
@@ -88,30 +100,34 @@ describe("backup-data.sh", () => {
     expect(metadata.uploadsArchiveBytes).toBeGreaterThan(0);
 
     const latestStat = await lstat(join(backupRoot, "latest"));
-    expect(latestStat.isSymbolicLink()).toBe(true);
+    if (process.platform === "win32") {
+      expect(latestStat.isSymbolicLink() || latestStat.isDirectory()).toBe(true);
+    } else {
+      expect(latestStat.isSymbolicLink()).toBe(true);
+    }
   });
 
   it("prunes older backups when retention count is exceeded", async () => {
     const { appDir } = await createTempApp();
     const backupRoot = join(appDir, "backups");
 
-    await execFileAsync("bash", [backupScript], {
+    await execFileAsync(bashExecutable, [backupScript], {
       cwd: repoRoot,
       env: {
         ...process.env,
-        APP_DIR: appDir,
-        BACKUP_ROOT: backupRoot,
+        APP_DIR: toBashPath(appDir),
+        BACKUP_ROOT: toBashPath(backupRoot),
         BACKUP_TIMESTAMP: "20260330T120000Z",
         RETENTION_COUNT: "1",
       },
     });
 
-    await execFileAsync("bash", [backupScript], {
+    await execFileAsync(bashExecutable, [backupScript], {
       cwd: repoRoot,
       env: {
         ...process.env,
-        APP_DIR: appDir,
-        BACKUP_ROOT: backupRoot,
+        APP_DIR: toBashPath(appDir),
+        BACKUP_ROOT: toBashPath(backupRoot),
         BACKUP_TIMESTAMP: "20260330T130000Z",
         RETENTION_COUNT: "1",
       },

@@ -40,8 +40,14 @@ describe("document ingestion", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  async function rememberSqliteHandle(): Promise<void> {
+    const { sqlite: importedSqlite } = await import("../../server/db");
+    sqlite = importedSqlite;
+  }
+
   it("normalizes pasted source titles into safe txt filenames", async () => {
     const { normalizePastedSourceFilename } = await import("../../server/documentIngestion");
+    await rememberSqliteHandle();
 
     expect(normalizePastedSourceFilename("  Notes / Draft \n  ")).toBe("Notes Draft.txt");
     expect(normalizePastedSourceFilename("already.txt")).toBe("already.txt");
@@ -51,10 +57,9 @@ describe("document ingestion", () => {
   it("stores pasted text as a normal document source with chunks and summary metadata", async () => {
     const { createTextBackedDocument } = await import("../../server/documentIngestion");
     const { storage } = await import("../../server/storage");
-    const { sqlite: importedSqlite } = await import("../../server/db");
     const { hasDocumentSource } = await import("../../server/sourceFiles");
 
-    sqlite = importedSqlite;
+    await rememberSqliteHandle();
 
     const created = await createTextBackedDocument({
       filename: "Pasted Source.txt",
