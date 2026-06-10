@@ -17,7 +17,6 @@ import type {
   RefinedAnnotation,
   PipelineAnnotation,
   DocumentContext,
-  AnnotationCategory,
 } from "@shared/schema";
 import {
   generatorResponseSchema,
@@ -61,169 +60,18 @@ interface PipelineUsageOptions {
 // Document context cache for V2
 const documentContextCacheV2 = new Map<string, DocumentContext>();
 
-const INTENT_STOPWORDS = new Set([
-  "about",
-  "above",
-  "after",
-  "again",
-  "against",
-  "also",
-  "and",
-  "any",
-  "are",
-  "around",
-  "because",
-  "been",
-  "before",
-  "being",
-  "between",
-  "both",
-  "can",
-  "could",
-  "document",
-  "does",
-  "each",
-  "find",
-  "focus",
-  "from",
-  "have",
-  "into",
-  "just",
-  "like",
-  "main",
-  "more",
-  "most",
-  "much",
-  "must",
-  "only",
-  "other",
-  "over",
-  "research",
-  "should",
-  "that",
-  "their",
-  "them",
-  "then",
-  "there",
-  "these",
-  "this",
-  "those",
-  "through",
-  "under",
-  "using",
-  "very",
-  "what",
-  "when",
-  "where",
-  "which",
-  "with",
-  "would",
-]);
-
-function extractIntentKeywords(intent: string): string[] {
-  const tokens = intent
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 4 && !INTENT_STOPWORDS.has(token));
-  return Array.from(new Set(tokens));
-}
-
-function splitChunkIntoSentences(
-  chunk: string,
-): Array<{ text: string; start: number; end: number }> {
-  const candidates: Array<{ text: string; start: number; end: number }> = [];
-  const sentencePattern = /[^.!?\n]+[.!?]?/g;
-  let match: RegExpExecArray | null;
-  while ((match = sentencePattern.exec(chunk)) !== null) {
-    const raw = match[0];
-    const trimmed = raw.trim();
-    if (trimmed.length < 25) continue;
-    const startOffset = raw.indexOf(trimmed);
-    const start = match.index + (startOffset >= 0 ? startOffset : 0);
-    const end = start + trimmed.length;
-    candidates.push({ text: trimmed, start, end });
-  }
-  return candidates;
-}
-
-function looksLikeNoise(text: string): boolean {
-  const normalized = text.toLowerCase();
-  if (normalized.length < 20) return true;
-  if (/^\s*\[\d+\]/.test(normalized)) return true;
-  if (/doi:\s*[\d./]/.test(normalized)) return true;
-  if (/^\s*\d+\s+of\s+\d+\s*$/i.test(normalized)) return true;
-  if (/^paragraph\s+\d+:/i.test(normalized)) return false;
-  if (/^\s*(figure|table)\s+\d+/i.test(normalized)) return true;
-  if (/^\s*\d+\./.test(normalized) && normalized.includes(",")) return true;
-  return false;
-}
-
-function inferHeuristicCategory(sentence: string): AnnotationCategory {
-  const lower = sentence.toLowerCase();
-  if (
-    /\b(method|methodology|procedure|approach|sample|protocol|review loop|limitation)\b/.test(lower)
-  ) {
-    return "methodology";
-  }
-  if (/\b(result|results|evidence|data|show|shows|found|findings|reduce|increase)\b/.test(lower)) {
-    return "evidence";
-  }
-  if (/\b(argue|argument|claim|conclude|conclusion|suggest|therefore)\b/.test(lower)) {
-    return "argument";
-  }
-  return "key_quote";
-}
-
-function buildHeuristicNote(sentence: string, keywords: string[]): string {
-  const lower = sentence.toLowerCase();
-  const matched = keywords.filter((keyword) => lower.includes(keyword)).slice(0, 3);
-  if (matched.length > 0) {
-    return `Relevant to ${matched.join(", ")} and directly supports the research focus.`;
-  }
-  return "Contains a substantive claim that supports the active research focus.";
-}
-
-function buildHeuristicCandidates(chunk: string, intent: string): CandidateAnnotation[] {
-  const keywords = extractIntentKeywords(intent);
-  const sentenceCandidates = splitChunkIntoSentences(chunk)
-    .filter((candidate) => !looksLikeNoise(candidate.text))
-    .map((candidate) => {
-      const lower = candidate.text.toLowerCase();
-      const keywordMatches = keywords.reduce(
-        (count, keyword) => (lower.includes(keyword) ? count + 1 : count),
-        0,
-      );
-      const bonus = /\b(result|evidence|method|claim|conclusion|limitations?)\b/.test(lower)
-        ? 1
-        : 0;
-      return {
-        ...candidate,
-        score: keywordMatches * 2 + bonus,
-      };
-    })
-    .sort((a, b) => b.score - a.score || b.text.length - a.text.length);
-
-  const picked = sentenceCandidates.slice(0, PIPELINE_V2_CONFIG.CANDIDATES_PER_CHUNK);
-  const fallbackPool =
-    picked.length > 0
-      ? picked
-      : splitChunkIntoSentences(chunk)
-          .slice(0, 1)
-          .map((candidate) => ({ ...candidate, score: 0 }));
-
-  return fallbackPool.map((candidate) => {
-    const confidenceBase = 0.62 + Math.min(3, Math.max(0, candidate.score || 0)) * 0.08;
-    return {
-      highlightStart: candidate.start,
-      highlightEnd: candidate.end,
-      highlightText: chunk.slice(candidate.start, candidate.end),
-      category: inferHeuristicCategory(candidate.text),
-      note: buildHeuristicNote(candidate.text, keywords),
-      confidence: Math.min(0.88, confidenceBase),
-    };
-  });
+// Fail closed when the soft verifier is unavailable: unverified candidates must
+// never enter the corpus, because every stored annotation later feeds writing context.
+function buildRejectionVerdicts(
+  candidates: CandidateAnnotation[],
+  reason: string,
+): VerifierVerdict[] {
+  return candidates.map((_candidate, index) => ({
+    candidateIndex: index,
+    approved: false,
+    qualityScore: 0,
+    issues: [reason],
+  }));
 }
 
 function logStageFailure(
@@ -456,24 +304,25 @@ If nothing genuinely relevant, return: {"candidates": []}`;
     reportProviderUsage(response, onTokenUsage);
 
     const content = response.choices[0].message.content;
-    if (!content) return buildHeuristicCandidates(chunk, intent);
+    if (!content) {
+      logger.warn("[V2] Generator returned no content; treating chunk as having no candidates");
+      return [];
+    }
 
     const parsed = JSON.parse(content);
     const validated = generatorResponseSchema.safeParse(parsed);
 
     if (!validated.success) {
       logger.error({ err: validated.error }, "[V2] Generator response validation failed:");
-      return buildHeuristicCandidates(chunk, intent);
+      return [];
     }
 
-    if (validated.data.candidates.length === 0) {
-      return buildHeuristicCandidates(chunk, intent);
-    }
-
+    // An empty list is a legitimate answer: this chunk has nothing relevant.
+    // Do not substitute heuristic candidates - weak annotations poison writing context.
     return validated.data.candidates;
   } catch (error) {
     logger.error({ err: error }, "[V2] Generator error:");
-    return buildHeuristicCandidates(chunk, intent);
+    return [];
   }
 }
 
@@ -627,12 +476,8 @@ Return JSON:
 
     const content = response.choices[0].message.content;
     if (!content) {
-      return candidates.map((candidate, index) => ({
-        candidateIndex: index,
-        approved: true,
-        qualityScore: Math.max(0.72, Math.min(0.9, candidate.confidence || 0.75)),
-        issues: [],
-      }));
+      logger.warn("[V2] Verifier returned no content; rejecting candidates (fail closed)");
+      return buildRejectionVerdicts(candidates, "Verifier returned no content; rejected");
     }
 
     const parsed = JSON.parse(content);
@@ -640,23 +485,13 @@ Return JSON:
 
     if (!validated.success) {
       logger.error({ err: validated.error }, "[V2] Verifier response validation failed:");
-      return candidates.map((candidate, index) => ({
-        candidateIndex: index,
-        approved: true,
-        qualityScore: Math.max(0.72, Math.min(0.9, candidate.confidence || 0.75)),
-        issues: ["Verifier schema validation failed; accepted heuristic fallback"],
-      }));
+      return buildRejectionVerdicts(candidates, "Verifier response failed validation; rejected");
     }
 
     return validated.data.verdicts;
   } catch (error) {
     logger.error({ err: error }, "[V2] Verifier error:");
-    return candidates.map((candidate, index) => ({
-      candidateIndex: index,
-      approved: true,
-      qualityScore: Math.max(0.72, Math.min(0.9, candidate.confidence || 0.75)),
-      issues: ["Verifier model error; accepted heuristic fallback"],
-    }));
+    return buildRejectionVerdicts(candidates, "Verifier model error; rejected (fail closed)");
   }
 }
 
