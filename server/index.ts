@@ -20,10 +20,15 @@ const app = express();
 const httpServer = createServer(app);
 app.set("trust proxy", true);
 
-const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+function splitCsv(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+const allowedOrigins = splitCsv(process.env.ALLOWED_ORIGINS);
+const extraAllowedOrigins = splitCsv(process.env.EXTRA_ALLOWED_ORIGINS);
 const allowedChromeExtensionIds = (process.env.CHROME_EXTENSION_IDS ?? "")
   .split(",")
   .map((extensionId) => extensionId.trim())
@@ -33,14 +38,44 @@ const extensionCorsEnabled = process.env.EXTENSION_CORS_MODE !== "disabled";
 const ALWAYS_ALLOWED_ORIGINS = new Set([
   "https://claude.ai",
   "https://claude.com",
+]);
+const DEFAULT_ALLOWED_ORIGINS = [
   "https://mcp.scholarmark.ai",
   "https://app.scholarmark.ai",
-]);
-const ALLOWED_ORIGIN_SET = new Set(allowedOrigins.map((origin) => normalizeOrigin(origin)));
+];
+const ALLOWED_ORIGIN_SET = new Set(
+  [...DEFAULT_ALLOWED_ORIGINS, ...allowedOrigins, ...extraAllowedOrigins].map((origin) =>
+    normalizeOrigin(origin)
+  ),
+);
+const EXTRA_ALLOWED_PROTOCOL_HOST_SET = new Set(
+  extraAllowedOrigins
+    .map((origin) => getProtocolHostForPortlessOrigin(origin))
+    .filter((origin): origin is string => Boolean(origin)),
+);
 const ALLOWED_CHROME_EXTENSION_IDS = new Set(allowedChromeExtensionIds);
 
 function normalizeOrigin(origin: string): string {
   return origin.trim().replace(/\/+$/, "");
+}
+
+function getProtocolHostForPortlessOrigin(origin: string): string | null {
+  try {
+    const url = new URL(normalizeOrigin(origin));
+    if (url.port || !["http:", "https:"].includes(url.protocol)) return null;
+    return `${url.protocol}//${url.hostname}`;
+  } catch {
+    return null;
+  }
+}
+
+function isExtraAllowedOrigin(origin: string): boolean {
+  try {
+    const url = new URL(normalizeOrigin(origin));
+    return EXTRA_ALLOWED_PROTOCOL_HOST_SET.has(`${url.protocol}//${url.hostname}`);
+  } catch {
+    return false;
+  }
 }
 
 function isAllowedOrigin(origin?: string): boolean {
@@ -54,9 +89,9 @@ function isAllowedOrigin(origin?: string): boolean {
     return ALLOWED_CHROME_EXTENSION_IDS.size === 0 || ALLOWED_CHROME_EXTENSION_IDS.has(extensionId);
   }
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
-  if (/^https?:\/\/89\.167\.10\.34(:\d+)?$/i.test(origin)) return true;
   if (ALWAYS_ALLOWED_ORIGINS.has(normalizedOrigin)) return true;
   if (ALLOWED_ORIGIN_SET.has(normalizedOrigin)) return true;
+  if (isExtraAllowedOrigin(normalizedOrigin)) return true;
   return false;
 }
 
