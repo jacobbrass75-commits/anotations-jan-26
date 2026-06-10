@@ -2,8 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE — "Darling" */
-/* Inspired by Darling in the Franxx. Warm, clean, confident. */
+/* LIGHT MODE - Academic */
 :root {
   --button-outline: rgba(0, 0, 0, 0.1);
   --badge-outline: rgba(0, 0, 0, 0.05);
@@ -24,28 +23,28 @@
   --sidebar: 30 13% 95%;
   --sidebar-foreground: 28 5% 16%;
   --sidebar-border: 25 8% 90%;
-  --sidebar-primary: 350 50% 59%; /* #D4556B muted rose */
+  --sidebar-primary: 215 45% 32%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent: 30 10% 92%;
   --sidebar-accent-foreground: 28 5% 16%;
-  --sidebar-ring: 350 50% 59%;
+  --sidebar-ring: 215 45% 32%;
 
   /* Popover */
   --popover: 30 13% 96%;
   --popover-foreground: 28 5% 16%;
   --popover-border: 25 8% 90%;
 
-  /* Primary — Muted Rose (Zero Two red, pulled back 40%) */
-  --primary: 350 50% 59%; /* #D4556B */
+  /* Primary */
+  --primary: 215 45% 32%;
   --primary-foreground: 0 0% 100%;
 
-  /* Secondary — Calm Blue (Franxx blue, desaturated) */
-  --secondary: 212 28% 50%; /* #5B7FA5 */
+  /* Secondary */
+  --secondary: 215 15% 45%;
   --secondary-foreground: 0 0% 100%;
 
   /* Muted */
   --muted: 25 8% 92%;
-  --muted-foreground: 25 4% 52%; /* #8A8580 warm gray */
+  --muted-foreground: 25 4% 38%;
 
   /* Accent */
   --accent: 25 8% 93%;
@@ -54,21 +53,21 @@
   /* Borders & Input */
   --border: 25 8% 90%; /* #E8E4E0 barely-there blush gray */
   --input: 25 8% 78%;
-  --ring: 350 50% 59%;
+  --ring: 215 45% 32%;
 
   /* Success / Active — Soft Teal */
   --success: 168 27% 49%; /* #5A9E8F */
 
-  /* Destructive — Warm Rose */
-  --destructive: 354 55% 53%; /* #C94454 */
+  /* Destructive */
+  --destructive: 354 55% 48%;
   --destructive-foreground: 0 0% 98%;
 
   /* Charts */
-  --chart-1: 350 50% 50%; /* Rose */
-  --chart-2: 168 27% 49%; /* Teal */
-  --chart-3: 212 28% 50%; /* Blue */
-  --chart-4: 40 70% 55%; /* Amber */
-  --chart-5: 25 50% 60%; /* Warm */
+  --chart-1: 215 45% 40%;
+  --chart-2: 40 65% 50%;
+  --chart-3: 150 25% 40%;
+  --chart-4: 350 45% 40%;
+  --chart-5: 215 10% 55%;
 
   /* Typography */
   --font-sans: "Inter Variable", system-ui, sans-serif;
@@ -79,14 +78,6 @@
   --radius: 0.5rem;
   --spacing: 0.25rem;
 
-  --shadow-2xs: 0px 2px 0px 0px hsl(28 5% 16% / 0);
-  --shadow-xs: 0px 2px 0px 0px hsl(28 5% 16% / 0);
-  --shadow-sm: 0px 2px 0px 0px hsl(28 5% 16% / 0), 0px 1px 2px -1px hsl(28 5% 16% / 0);
-  --shadow: 0px 2px 0px 0px hsl(28 5% 16% / 0), 0px 1px 2px -1px hsl(28 5% 16% / 0);
-  --shadow-md: 0px 2px 0px 0px hsl(28 5% 16% / 0), 0px 2px 4px -1px hsl(28 5% 16% / 0);
-  --shadow-lg: 0px 2px 0px 0px hsl(28 5% 16% / 0), 0px 4px 6px -1px hsl(28 5% 16% / 0);
-  --shadow-xl: 0px 2px 0px 0px hsl(28 5% 16% / 0), 0px 8px 10px -1px hsl(28 5% 16% / 0);
-  --shadow-2xl: 0px 2px 0px 0px hsl(28 5% 16% / 0);
   --tracking-normal: 0em;
 
   /* Fallback for older browsers */
@@ -132,8 +123,7 @@
   );
 }
 
-/* DARK MODE — "Eva" */
-/* Inspired by Evangelion NERV. Refined for legibility. Orange is accent only. */
+/* DARK MODE - Academic */
 .dark {
   --button-outline: rgba(255, 255, 255, 0.1);
   --badge-outline: rgba(255, 255, 255, 0.05);
@@ -141,70 +131,61 @@
   --elevate-1: rgba(255, 255, 255, 0.04);
   --elevate-2: rgba(255, 255, 255, 0.09);
 
-  /* Base — Deep purple-black */
-  --background: 260 30% 8%; /* Deep NERV purple-black */
+  /* Base */
+  --background: 220 10% 10%;
   --foreground: 30 5% 92%; /* #EBEAE8 much more legible than before */
 
-  /* Cards — Slightly lighter for contrast */
-  --card: 260 30% 12%;
+  /* Cards */
+  --card: 220 10% 13%;
   --card-foreground: 30 5% 92%;
-  --card-border: 260 20% 18%;
+  --card-border: 220 8% 20%;
 
   /* Sidebar */
-  --sidebar: 260 30% 10%;
+  --sidebar: 220 10% 11%;
   --sidebar-foreground: 30 5% 92%;
-  --sidebar-border: 260 20% 16%;
-  --sidebar-primary: 24 90% 55%; /* Eva orange — accent only */
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 260 25% 15%;
+  --sidebar-border: 220 8% 20%;
+  --sidebar-primary: 40 50% 60%;
+  --sidebar-primary-foreground: 220 10% 10%;
+  --sidebar-accent: 220 10% 16%;
   --sidebar-accent-foreground: 30 5% 92%;
-  --sidebar-ring: 24 90% 55%;
+  --sidebar-ring: 40 50% 60%;
 
   /* Popover */
-  --popover: 260 30% 11%;
+  --popover: 220 10% 13%;
   --popover-foreground: 30 5% 92%;
-  --popover-border: 260 20% 18%;
+  --popover-border: 220 8% 20%;
 
-  /* Primary — Eva Orange (accent only — buttons, links, highlights) */
-  --primary: 24 90% 55%;
-  --primary-foreground: 0 0% 100%;
+  /* Primary */
+  --primary: 40 50% 60%;
+  --primary-foreground: 220 10% 10%;
 
   /* Secondary */
-  --secondary: 260 25% 18%;
+  --secondary: 220 8% 20%;
   --secondary-foreground: 30 5% 92%;
 
-  /* Muted — Actually readable now (65% lightness, was 55%) */
-  --muted: 260 15% 16%;
-  --muted-foreground: 260 10% 65%;
+  /* Muted */
+  --muted: 220 8% 18%;
+  --muted-foreground: 220 8% 65%;
 
   /* Accent */
-  --accent: 260 25% 15%;
+  --accent: 220 8% 18%;
   --accent-foreground: 30 5% 92%;
 
   /* Borders & Input */
-  --border: 260 20% 18%;
-  --input: 260 15% 25%;
-  --ring: 24 90% 55%;
+  --border: 220 8% 20%;
+  --input: 220 8% 24%;
+  --ring: 40 50% 60%;
 
   /* Destructive */
-  --destructive: 0 70% 55%;
+  --destructive: 0 62% 46%;
   --destructive-foreground: 0 0% 98%;
 
   /* Charts */
-  --chart-1: 24 90% 55%; /* Orange */
-  --chart-2: 120 50% 45%; /* Green */
-  --chart-3: 200 70% 55%; /* Blue */
-  --chart-4: 340 60% 55%; /* Pink */
-  --chart-5: 55 80% 55%; /* Yellow */
-
-  --shadow-2xs: 0px 2px 0px 0px hsl(260 30% 8% / 0);
-  --shadow-xs: 0px 2px 0px 0px hsl(260 30% 8% / 0);
-  --shadow-sm: 0px 2px 0px 0px hsl(260 30% 8% / 0), 0px 1px 2px -1px hsl(260 30% 8% / 0);
-  --shadow: 0px 2px 0px 0px hsl(260 30% 8% / 0), 0px 1px 2px -1px hsl(260 30% 8% / 0);
-  --shadow-md: 0px 2px 0px 0px hsl(260 30% 8% / 0), 0px 2px 4px -1px hsl(260 30% 8% / 0);
-  --shadow-lg: 0px 2px 0px 0px hsl(260 30% 8% / 0), 0px 4px 6px -1px hsl(260 30% 8% / 0);
-  --shadow-xl: 0px 2px 0px 0px hsl(260 30% 8% / 0), 0px 8px 10px -1px hsl(260 30% 8% / 0);
-  --shadow-2xl: 0px 2px 0px 0px hsl(260 30% 8% / 0);
+  --chart-1: 40 50% 60%;
+  --chart-2: 150 25% 50%;
+  --chart-3: 215 35% 60%;
+  --chart-4: 350 35% 60%;
+  --chart-5: 220 8% 65%;
 
   /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
