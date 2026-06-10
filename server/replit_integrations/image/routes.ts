@@ -2,6 +2,9 @@ import type { Express, Request, Response } from "express";
 import { checkTokenBudget, requireAuth, requireTier } from "../../auth";
 import { openai } from "./client";
 import { aiLimiter } from "../../rateLimits";
+import { createLogger } from "../../logger";
+
+const logger = createLogger("replit_integrations/image/routes");
 
 const ALLOWED_IMAGE_SIZES = new Set(["1024x1024", "512x512", "256x256"]);
 const IMAGE_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -64,10 +67,13 @@ export function registerImageRoutes(app: Express): void {
           b64_json: imageData.b64_json,
         });
       } catch (error) {
-        console.error("Image generation failed:", {
-          userId: req.user?.userId,
-          message: error instanceof Error ? error.message : String(error),
-        });
+        logger.error(
+          {
+            userId: req.user?.userId,
+            message: error instanceof Error ? error.message : String(error),
+          },
+          "Image generation failed:",
+        );
         res.status(500).json({ error: "Failed to generate image" });
       }
     },

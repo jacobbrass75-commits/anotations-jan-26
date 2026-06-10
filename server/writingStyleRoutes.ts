@@ -5,6 +5,9 @@ import { createTokenUsageAccumulator } from "./aiUsage";
 import { writingStyleStorage } from "./writingStyleStorage";
 import { analyzeVoiceProfileSamples, validateWritingSamples } from "./voiceProfileAnalysis";
 import { voiceProfileSchema, type VoiceProfile, type WritingStyle } from "@shared/schema";
+import { createLogger } from "./logger";
+
+const logger = createLogger("writingStyleRoutes");
 
 function normalizeName(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -73,7 +76,7 @@ export function registerWritingStyleRoutes(app: Express): void {
         const styles = await writingStyleStorage.getWritingStylesForUser(req.user!.userId);
         res.json(styles.map(toWritingStyleResponse));
       } catch (error) {
-        console.error("Error listing writing styles:", error);
+        logger.error({ err: error }, "Error listing writing styles:");
         res.status(500).json({ message: "Failed to list writing styles" });
       }
     },
@@ -122,7 +125,7 @@ export function registerWritingStyleRoutes(app: Express): void {
         await tokenUsage.flush(req.user!.userId, "writing_style_analysis");
         res.status(201).json(toWritingStyleResponse(created));
       } catch (error) {
-        console.error("Error creating writing style:", error);
+        logger.error({ err: error }, "Error creating writing style:");
         res.status(500).json({ message: "Failed to create writing style" });
       }
     },
@@ -138,7 +141,7 @@ export function registerWritingStyleRoutes(app: Express): void {
         if (!style) return;
         res.json(toWritingStyleResponse(style));
       } catch (error) {
-        console.error("Error fetching writing style:", error);
+        logger.error({ err: error }, "Error fetching writing style:");
         res.status(500).json({ message: "Failed to fetch writing style" });
       }
     },
@@ -212,7 +215,7 @@ export function registerWritingStyleRoutes(app: Express): void {
         await tokenUsage.flush(req.user!.userId, "writing_style_update");
         res.json(toWritingStyleResponse(updated || existing));
       } catch (error) {
-        console.error("Error updating writing style:", error);
+        logger.error({ err: error }, "Error updating writing style:");
         res.status(500).json({ message: "Failed to update writing style" });
       }
     },
@@ -229,7 +232,7 @@ export function registerWritingStyleRoutes(app: Express): void {
         await writingStyleStorage.deleteWritingStyle(style.id);
         res.json({ success: true });
       } catch (error) {
-        console.error("Error deleting writing style:", error);
+        logger.error({ err: error }, "Error deleting writing style:");
         res.status(500).json({ message: "Failed to delete writing style" });
       }
     },

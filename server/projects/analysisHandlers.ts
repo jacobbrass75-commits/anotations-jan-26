@@ -24,6 +24,9 @@ import {
   type BatchDocumentResult,
 } from "@shared/schema";
 import { verifyProjectDocumentOwnership, verifyProjectOwnership } from "./documentHandlers";
+import { createLogger } from "../logger";
+
+const logger = createLogger("projects/analysisHandlers");
 
 export interface AnalysisConstraints {
   categories?: AnnotationCategory[];
@@ -114,7 +117,7 @@ export async function analyzeProjectDocument(
       }));
     }
   } catch (embeddingError) {
-    console.warn("Embedding-based ranking failed, using document order:", embeddingError);
+    logger.warn({ err: embeddingError }, "Embedding-based ranking failed, using document order:");
     topChunks = chunks.slice(0, maxChunks).map((chunk) => ({
       text: chunk.text,
       startPosition: chunk.startPosition,
@@ -122,7 +125,7 @@ export async function analyzeProjectDocument(
     }));
   }
 
-  console.log(`Analyzing ${topChunks.length} of ${chunks.length} chunks (${thoroughness} mode)`);
+  logger.info(`Analyzing ${topChunks.length} of ${chunks.length} chunks (${thoroughness} mode)`);
 
   const existingAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
   const existingUserAnnotations = existingAnnotations.filter(
@@ -146,11 +149,14 @@ export async function analyzeProjectDocument(
       { onTokenUsage },
     );
   } catch (pipelineError) {
-    console.error("[ProjectAnalyze] Pipeline failed", {
-      projectDocumentId: projectDocId,
-      documentId: doc.id,
-      error: pipelineError instanceof Error ? pipelineError.message : String(pipelineError),
-    });
+    logger.error(
+      {
+        projectDocumentId: projectDocId,
+        documentId: doc.id,
+        error: pipelineError instanceof Error ? pipelineError.message : String(pipelineError),
+      },
+      "[ProjectAnalyze] Pipeline failed",
+    );
     throw new Error("AI pipeline failed while processing document chunks", {
       cause: pipelineError,
     });
@@ -196,7 +202,7 @@ export async function analyzeProjectDocument(
       .then((searchableContent) => {
         projectStorage.updateProjectAnnotation(created.id, { searchableContent });
       })
-      .catch((err) => console.warn("Search indexing failed (non-blocking):", err));
+      .catch((err) => logger.warn({ err: err }, "Search indexing failed (non-blocking):"));
   }
 
   return {
@@ -249,13 +255,16 @@ export function registerProjectAnalysisRoutes(app: Express): void {
           : "standard";
 
         const startTime = Date.now();
-        console.log("[ProjectAnalyze] Starting single-prompt analysis", {
-          projectDocumentId: req.params.id,
-          projectId: projectDoc.projectId,
-          documentId: projectDoc.documentId,
-          userId: req.user?.userId,
-          thoroughness: validThoroughness,
-        });
+        logger.info(
+          {
+            projectDocumentId: req.params.id,
+            projectId: projectDoc.projectId,
+            documentId: projectDoc.documentId,
+            userId: req.user?.userId,
+            thoroughness: validThoroughness,
+          },
+          "[ProjectAnalyze] Starting single-prompt analysis",
+        );
 
         const result = await analyzeProjectDocument(
           req.params.id,
@@ -267,14 +276,17 @@ export function registerProjectAnalysisRoutes(app: Express): void {
           req.params.id,
         );
 
-        console.log("[ProjectAnalyze] Completed single-prompt analysis", {
-          projectDocumentId: req.params.id,
-          chunksAnalyzed: result.chunksAnalyzed,
-          totalChunks: result.totalChunks,
-          annotationsCreated: result.annotationsCreated,
-          totalAnnotationsOnDocument: finalAnnotations.length,
-          durationMs: Date.now() - startTime,
-        });
+        logger.info(
+          {
+            projectDocumentId: req.params.id,
+            chunksAnalyzed: result.chunksAnalyzed,
+            totalChunks: result.totalChunks,
+            annotationsCreated: result.annotationsCreated,
+            totalAnnotationsOnDocument: finalAnnotations.length,
+            durationMs: Date.now() - startTime,
+          },
+          "[ProjectAnalyze] Completed single-prompt analysis",
+        );
 
         await tokenUsage.flush(req.user!.userId, "project_document_analysis");
         res.json({
@@ -287,7 +299,7 @@ export function registerProjectAnalysisRoutes(app: Express): void {
           },
         });
       } catch (error) {
-        console.error("Error analyzing project document:", error);
+        logger.error({ err: error }, "Error analyzing project document:");
         res
           .status(500)
           .json({ error: error instanceof Error ? error.message : "Failed to analyze document" });
@@ -363,7 +375,7 @@ export function registerProjectAnalysisRoutes(app: Express): void {
           },
         });
       } catch (error) {
-        console.error("Error auto-analyzing project document:", error);
+        logger.error({ err: error }, "Error auto-analyzing project document:");
         res.status(500).json({
           error: error instanceof Error ? error.message : "Failed to auto-analyze document",
         });
@@ -506,20 +518,23 @@ export function registerProjectAnalysisRoutes(app: Express): void {
         const analysisRunId = randomUUID();
 
         const startTime = Date.now();
-        console.log(
+        logger.info(
           `Multi-prompt analysis: ${prompts.length} prompts on ${topChunks.length} chunks`,
         );
-        console.log("[ProjectAnalyze] Starting multi-prompt analysis", {
-          analysisRunId,
-          projectDocumentId: projectDocId,
-          projectId: projectDoc.projectId,
-          documentId: projectDoc.documentId,
-          promptCount: prompts.length,
-          chunksAnalyzed: topChunks.length,
-          totalChunks: chunks.length,
-          userId: req.user?.userId,
-          thoroughness: validThoroughness,
-        });
+        logger.info(
+          {
+            analysisRunId,
+            projectDocumentId: projectDocId,
+            projectId: projectDoc.projectId,
+            documentId: projectDoc.documentId,
+            promptCount: prompts.length,
+            chunksAnalyzed: topChunks.length,
+            totalChunks: chunks.length,
+            userId: req.user?.userId,
+            thoroughness: validThoroughness,
+          },
+          "[ProjectAnalyze] Starting multi-prompt analysis",
+        );
 
         // Run all prompts in parallel
         const resultsMap = await processChunksWithMultiplePrompts(
@@ -572,14 +587,17 @@ export function registerProjectAnalysisRoutes(app: Express): void {
         }
 
         const finalAnnotations = await projectStorage.getProjectAnnotationsByDocument(projectDocId);
-        console.log("[ProjectAnalyze] Completed multi-prompt analysis", {
-          analysisRunId,
-          projectDocumentId: projectDocId,
-          promptCount: prompts.length,
-          totalAnnotationsCreated: totalAnnotations,
-          totalAnnotationsOnDocument: finalAnnotations.length,
-          durationMs: Date.now() - startTime,
-        });
+        logger.info(
+          {
+            analysisRunId,
+            projectDocumentId: projectDocId,
+            promptCount: prompts.length,
+            totalAnnotationsCreated: totalAnnotations,
+            totalAnnotationsOnDocument: finalAnnotations.length,
+            durationMs: Date.now() - startTime,
+          },
+          "[ProjectAnalyze] Completed multi-prompt analysis",
+        );
 
         await tokenUsage.flush(req.user!.userId, "project_document_multi_analysis");
         res.json({
@@ -594,7 +612,7 @@ export function registerProjectAnalysisRoutes(app: Express): void {
           },
         });
       } catch (error) {
-        console.error("Error in multi-prompt analysis:", error);
+        logger.error({ err: error }, "Error in multi-prompt analysis:");
         res
           .status(500)
           .json({ error: error instanceof Error ? error.message : "Failed to analyze document" });
@@ -690,7 +708,7 @@ export function registerProjectAnalysisRoutes(app: Express): void {
         await tokenUsage.flush(req.user!.userId, "project_batch_analysis");
         res.json(response);
       } catch (error) {
-        console.error("Error in batch analysis:", error);
+        logger.error({ err: error }, "Error in batch analysis:");
         res.status(500).json({ error: "Failed to process batch analysis" });
       }
     },

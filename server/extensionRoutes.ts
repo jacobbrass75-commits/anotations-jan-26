@@ -2,6 +2,9 @@ import type { Express, Request, Response } from "express";
 import { requireAuth, requireTier } from "./auth";
 import { projectStorage } from "./projectStorage";
 import type { AnnotationCategory } from "@shared/schema";
+import { createLogger } from "./logger";
+
+const logger = createLogger("extensionRoutes");
 
 export function registerExtensionRoutes(app: Express): void {
   // POST /api/extension/save — Save a highlight from the Chrome extension
@@ -97,7 +100,7 @@ export function registerExtensionRoutes(app: Express): void {
           },
         });
       } catch (error) {
-        console.error("Extension save error:", error);
+        logger.error({ err: error }, "Extension save error:");
         res.status(500).json({
           message: error instanceof Error ? error.message : "Failed to save highlight",
         });

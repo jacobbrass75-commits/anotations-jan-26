@@ -81,6 +81,9 @@ import {
   formatDeepDiveFindings,
   loadSurroundingChunks,
 } from "./toolRequests";
+import { createLogger } from "../logger";
+
+const logger = createLogger("chat/handlers");
 
 async function getOwnedConversationOr404(
   req: Request,
@@ -114,12 +117,15 @@ async function recordUserTokenUsage(
   try {
     await incrementTokenUsage(userId, tokensUsed);
   } catch (error) {
-    console.warn("[chatRoutes] failed to increment token usage", {
-      userId,
-      source,
-      tokensUsed,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    logger.warn(
+      {
+        userId,
+        source,
+        tokensUsed,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "[chatRoutes] failed to increment token usage",
+    );
   }
 }
 
@@ -196,10 +202,13 @@ async function loadProjectSourcesTiered(
           .set({ styleAnalysis })
           .where(eq(projectDocuments.id, projectDoc.id));
       } catch (error) {
-        console.warn("[chatRoutes] style analysis failed", {
-          projectDocumentId: projectDoc.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
+        logger.warn(
+          {
+            projectDocumentId: projectDoc.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[chatRoutes] style analysis failed",
+        );
       }
     }
 
@@ -368,7 +377,7 @@ export function registerChatRoutes(app: Express) {
           : await chatStorage.getConversationsForUser(req.user!.userId, projectId);
         res.json(conversations);
       } catch (error) {
-        console.error("Error listing conversations:", error);
+        logger.error({ err: error }, "Error listing conversations:");
         res.status(500).json({ message: "Failed to list conversations" });
       }
     },
@@ -422,7 +431,7 @@ export function registerChatRoutes(app: Express) {
         });
         res.json(conv);
       } catch (error) {
-        console.error("Error creating conversation:", error);
+        logger.error({ err: error }, "Error creating conversation:");
         res.status(500).json({ message: "Failed to create conversation" });
       }
     },
@@ -439,7 +448,7 @@ export function registerChatRoutes(app: Express) {
         const messages = await chatStorage.getMessagesForConversation(conv.id);
         res.json({ ...conv, messages });
       } catch (error) {
-        console.error("Error fetching conversation:", error);
+        logger.error({ err: error }, "Error fetching conversation:");
         res.status(500).json({ message: "Failed to fetch conversation" });
       }
     },
@@ -456,7 +465,7 @@ export function registerChatRoutes(app: Express) {
         await chatStorage.deleteConversation(req.params.id);
         res.json({ success: true });
       } catch (error) {
-        console.error("Error deleting conversation:", error);
+        logger.error({ err: error }, "Error deleting conversation:");
         res.status(500).json({ message: "Failed to delete conversation" });
       }
     },
@@ -505,7 +514,7 @@ export function registerChatRoutes(app: Express) {
         const conv = await chatStorage.updateConversation(req.params.id, updates);
         res.json(conv);
       } catch (error) {
-        console.error("Error updating conversation:", error);
+        logger.error({ err: error }, "Error updating conversation:");
         res.status(500).json({ message: "Failed to update conversation" });
       }
     },
@@ -526,7 +535,7 @@ export function registerChatRoutes(app: Express) {
         const conv = await chatStorage.updateSelectedSources(req.params.id, selectedSourceIds);
         res.json(conv);
       } catch (error) {
-        console.error("Error updating sources:", error);
+        logger.error({ err: error }, "Error updating sources:");
         res.status(500).json({ message: "Failed to update sources" });
       }
     },
@@ -904,7 +913,7 @@ ${chunkContext}`;
               resultSizeChars: contextMessage.length,
               success: !contextMessage.includes("ERROR"),
               timestamp: Date.now(),
-            }).catch((err) => console.warn("[analytics] logToolCall error:", err));
+            }).catch((err) => logger.warn({ err: err }, "[analytics] logToolCall error:"));
           } else if (request.type === "context_request") {
             if (!deepDiveAllowed) {
               sendEvent({
@@ -951,7 +960,7 @@ ${chunkContext}`;
                 });
               }
             } catch (researchError) {
-              console.error("Research agent error:", researchError);
+              logger.error({ err: researchError }, "Research agent error:");
               contextMessage = `[DEEP DIVE FINDINGS - ERROR]\n${
                 researchError instanceof Error ? researchError.message : "Research agent failed."
               }`;
@@ -968,7 +977,7 @@ ${chunkContext}`;
               resultSizeChars: contextMessage.length,
               success: !contextMessage.includes("ERROR"),
               timestamp: Date.now(),
-            }).catch((err) => console.warn("[analytics] logToolCall error:", err));
+            }).catch((err) => logger.warn({ err: err }, "[analytics] logToolCall error:"));
           }
 
           if (!contextMessage.trim()) {
@@ -994,7 +1003,7 @@ ${chunkContext}`;
             trigger: request.type,
             timestamp: Date.now(),
             metadata: { documentId: request.documentId || null },
-          }).catch((err) => console.warn("[analytics] logContextSnapshot error:", err));
+          }).catch((err) => logger.warn({ err: err }, "[analytics] logContextSnapshot error:"));
           sendContextWarningIfNeeded(usageEstimate);
           deepDiveAllowed = usageEstimate.warningLevel !== "critical";
           escalationCount += 1;
@@ -1014,7 +1023,7 @@ ${chunkContext}`;
           res.end();
         }
       } catch (error) {
-        console.error("Error sending message:", error);
+        logger.error({ err: error }, "Error sending message:");
         stopHeartbeat?.();
         stopHeartbeat = null;
         if (!res.headersSent) {
@@ -1114,7 +1123,7 @@ ${chunkContext}`;
         });
 
         stream.on("error", (error) => {
-          console.error("Compile stream error:", error);
+          logger.error({ err: error }, "Compile stream error:");
           if (!aborted) {
             stopHeartbeat?.();
             stopHeartbeat = null;
@@ -1125,7 +1134,7 @@ ${chunkContext}`;
           }
         });
       } catch (error) {
-        console.error("Compile error:", error);
+        logger.error({ err: error }, "Compile error:");
         stopHeartbeat?.();
         stopHeartbeat = null;
         if (!res.headersSent) {
@@ -1211,7 +1220,7 @@ ${chunkContext}`;
         });
 
         stream.on("error", (error) => {
-          console.error("Verify stream error:", error);
+          logger.error({ err: error }, "Verify stream error:");
           if (!aborted) {
             stopHeartbeat?.();
             stopHeartbeat = null;
@@ -1222,7 +1231,7 @@ ${chunkContext}`;
           }
         });
       } catch (error) {
-        console.error("Verify error:", error);
+        logger.error({ err: error }, "Verify error:");
         stopHeartbeat?.();
         stopHeartbeat = null;
         if (!res.headersSent) {

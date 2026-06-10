@@ -15,6 +15,9 @@ import {
 import { registerProjectSearchRoutes } from "./searchHandlers";
 import { registerVoiceProfileRoutes } from "./voiceProfileHandlers";
 import { insertProjectSchema, insertFolderSchema } from "@shared/schema";
+import { createLogger } from "../logger";
+
+const logger = createLogger("projects/handlers");
 
 const updateProjectSchema = insertProjectSchema
   .omit({ userId: true })
@@ -58,7 +61,7 @@ export function registerProjectRoutes(app: Express): void {
           // Embeddings may not be available, store context summary without embedding
           await projectStorage.updateProject(project.id, { contextSummary });
         } catch (contextError) {
-          console.warn("Context generation failed (non-blocking):", contextError);
+          logger.warn({ err: contextError }, "Context generation failed (non-blocking):");
         } finally {
           await tokenUsage.flush(req.user!.userId, "project_context_create");
         }
@@ -66,7 +69,7 @@ export function registerProjectRoutes(app: Express): void {
 
       res.status(201).json(project);
     } catch (error) {
-      console.error("Error creating project:", error);
+      logger.error({ err: error }, "Error creating project:");
       res.status(400).json({ error: "Failed to create project" });
     }
   });
@@ -76,7 +79,7 @@ export function registerProjectRoutes(app: Express): void {
       const projects = await projectStorage.getAllProjects(req.user!.userId);
       res.json(projects);
     } catch (error) {
-      console.error("Error fetching projects:", error);
+      logger.error({ err: error }, "Error fetching projects:");
       res.status(500).json({ error: "Failed to fetch projects" });
     }
   });
@@ -87,7 +90,7 @@ export function registerProjectRoutes(app: Express): void {
       if (!project) return;
       res.json(project);
     } catch (error) {
-      console.error("Error fetching project:", error);
+      logger.error({ err: error }, "Error fetching project:");
       res.status(500).json({ error: "Failed to fetch project" });
     }
   });
@@ -126,7 +129,7 @@ export function registerProjectRoutes(app: Express): void {
           );
           await projectStorage.updateProject(req.params.id, { contextSummary });
         } catch (contextError) {
-          console.warn("Context generation failed (non-blocking):", contextError);
+          logger.warn({ err: contextError }, "Context generation failed (non-blocking):");
         } finally {
           await tokenUsage.flush(req.user!.userId, "project_context_update");
         }
@@ -134,7 +137,7 @@ export function registerProjectRoutes(app: Express): void {
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating project:", error);
+      logger.error({ err: error }, "Error updating project:");
       res.status(500).json({ error: "Failed to update project" });
     }
   });
@@ -146,7 +149,7 @@ export function registerProjectRoutes(app: Express): void {
       await projectStorage.deleteProject(req.params.id);
       res.status(204).send();
     } catch (error) {
-      console.error("Error deleting project:", error);
+      logger.error({ err: error }, "Error deleting project:");
       res.status(500).json({ error: "Failed to delete project" });
     }
   });
@@ -175,7 +178,7 @@ export function registerProjectRoutes(app: Express): void {
         });
         res.status(201).json(template);
       } catch (error) {
-        console.error("Error creating prompt template:", error);
+        logger.error({ err: error }, "Error creating prompt template:");
         res.status(500).json({ error: "Failed to create prompt template" });
       }
     },
@@ -191,7 +194,7 @@ export function registerProjectRoutes(app: Express): void {
         const templates = await projectStorage.getPromptTemplatesByProject(req.params.projectId);
         res.json(templates);
       } catch (error) {
-        console.error("Error fetching prompt templates:", error);
+        logger.error({ err: error }, "Error fetching prompt templates:");
         res.status(500).json({ error: "Failed to fetch prompt templates" });
       }
     },
@@ -211,7 +214,7 @@ export function registerProjectRoutes(app: Express): void {
       }
       res.json(updated);
     } catch (error) {
-      console.error("Error updating prompt template:", error);
+      logger.error({ err: error }, "Error updating prompt template:");
       res.status(500).json({ error: "Failed to update prompt template" });
     }
   });
@@ -223,7 +226,7 @@ export function registerProjectRoutes(app: Express): void {
       await projectStorage.deletePromptTemplate(req.params.id);
       res.status(204).send();
     } catch (error) {
-      console.error("Error deleting prompt template:", error);
+      logger.error({ err: error }, "Error deleting prompt template:");
       res.status(500).json({ error: "Failed to delete prompt template" });
     }
   });
@@ -241,7 +244,7 @@ export function registerProjectRoutes(app: Express): void {
       const folder = await projectStorage.createFolder(validated);
       res.status(201).json(folder);
     } catch (error) {
-      console.error("Error creating folder:", error);
+      logger.error({ err: error }, "Error creating folder:");
       res.status(400).json({ error: "Failed to create folder" });
     }
   });
@@ -253,7 +256,7 @@ export function registerProjectRoutes(app: Express): void {
       const folders = await projectStorage.getFoldersByProject(req.params.projectId);
       res.json(folders);
     } catch (error) {
-      console.error("Error fetching folders:", error);
+      logger.error({ err: error }, "Error fetching folders:");
       res.status(500).json({ error: "Failed to fetch folders" });
     }
   });
@@ -284,7 +287,7 @@ export function registerProjectRoutes(app: Express): void {
       }
       res.json(updated);
     } catch (error) {
-      console.error("Error updating folder:", error);
+      logger.error({ err: error }, "Error updating folder:");
       res.status(500).json({ error: "Failed to update folder" });
     }
   });
@@ -296,7 +299,7 @@ export function registerProjectRoutes(app: Express): void {
       await projectStorage.deleteFolder(req.params.id);
       res.status(204).send();
     } catch (error) {
-      console.error("Error deleting folder:", error);
+      logger.error({ err: error }, "Error deleting folder:");
       res.status(500).json({ error: "Failed to delete folder" });
     }
   });
@@ -319,7 +322,7 @@ export function registerProjectRoutes(app: Express): void {
       }
       res.json(updated);
     } catch (error) {
-      console.error("Error moving folder:", error);
+      logger.error({ err: error }, "Error moving folder:");
       res.status(500).json({ error: "Failed to move folder" });
     }
   });

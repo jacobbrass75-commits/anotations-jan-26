@@ -3,6 +3,9 @@ import { chunkTextV2 } from "./pipelineV2";
 import { generateDocumentSummary } from "./openai";
 import { saveDocumentSource } from "./sourceFiles";
 import type { Document } from "@shared/schema";
+import { createLogger } from "./logger";
+
+const logger = createLogger("documentIngestion");
 
 export interface CreateTextBackedDocumentInput {
   filename: string;
@@ -73,7 +76,7 @@ export async function createTextBackedDocument({
       });
     })
     .catch((error) => {
-      console.error(`Failed to generate summary for document ${doc.id}:`, error);
+      logger.error({ err: error }, `Failed to generate summary for document ${doc.id}:`);
     });
 
   const storedDoc = await storage.getDocument(doc.id);

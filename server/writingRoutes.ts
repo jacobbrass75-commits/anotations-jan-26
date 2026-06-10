@@ -14,6 +14,9 @@ import {
 import { sanitizeSseError, startSseHeartbeat } from "./sseUtils";
 import { buildAuthorLabel, clipText } from "./chat/shared";
 import type { CitationData } from "@shared/schema";
+import { createLogger } from "./logger";
+
+const logger = createLogger("writingRoutes");
 
 const MAX_SOURCE_EXCERPT_CHARS = 700;
 const MAX_SOURCE_FULLTEXT_CHARS = 7000;
@@ -289,7 +292,7 @@ export function registerWritingRoutes(app: Express): void {
               savedPaper,
             });
           } catch (saveError) {
-            console.error("Failed to save generated paper:", saveError);
+            logger.error({ err: saveError }, "Failed to save generated paper:");
             sendEvent({
               type: "status",
               phase: "complete",
@@ -305,7 +308,7 @@ export function registerWritingRoutes(app: Express): void {
           res.end();
         }
       } catch (error) {
-        console.error("Writing pipeline error:", error);
+        logger.error({ err: error }, "Writing pipeline error:");
         stopHeartbeat?.();
         // If headers haven't been sent yet, send a JSON error
         if (!res.headersSent) {

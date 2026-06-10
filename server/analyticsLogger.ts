@@ -1,5 +1,8 @@
 import { randomUUID } from "crypto";
 import { sqlite } from "./db";
+import { createLogger } from "./logger";
+
+const logger = createLogger("analyticsLogger");
 
 type WarningLevel = "ok" | "caution" | "critical";
 
@@ -87,7 +90,7 @@ export function logToolCall(event: ToolCallEvent): Promise<void> {
       );
     })
     .catch((err) => {
-      console.warn("[analytics] logToolCall failed:", err);
+      logger.warn({ err: err }, "[analytics] logToolCall failed:");
     });
 }
 
@@ -107,7 +110,7 @@ export function logContextSnapshot(event: ContextSnapshotEvent): Promise<void> {
       );
     })
     .catch((err) => {
-      console.warn("[analytics] logContextSnapshot failed:", err);
+      logger.warn({ err: err }, "[analytics] logContextSnapshot failed:");
     });
 }
 
@@ -115,8 +118,8 @@ export function initAnalytics(): void {
   try {
     sqlite.prepare("SELECT COUNT(*) FROM analytics_tool_calls").get();
     sqlite.prepare("SELECT COUNT(*) FROM analytics_context_snapshots").get();
-    console.log("[analytics] tables verified OK");
+    logger.info("[analytics] tables verified OK");
   } catch (err) {
-    console.error("[analytics] CRITICAL: analytics tables missing or broken:", err);
+    logger.error({ err: err }, "[analytics] CRITICAL: analytics tables missing or broken:");
   }
 }

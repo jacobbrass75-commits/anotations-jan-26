@@ -27,6 +27,9 @@ import {
 } from "@shared/schema";
 import { ANNOTATION_MODEL } from "./openai";
 import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
+import { createLogger } from "./logger";
+
+const logger = createLogger("pipelineV2");
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -229,10 +232,13 @@ function logStageFailure(
   error: unknown,
 ) {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[V2] ${stage} stage failed`, {
-    ...details,
-    error: message,
-  });
+  logger.error(
+    {
+      ...details,
+      error: message,
+    },
+    `[V2] ${stage} stage failed`,
+  );
 }
 
 /**
@@ -456,7 +462,7 @@ If nothing genuinely relevant, return: {"candidates": []}`;
     const validated = generatorResponseSchema.safeParse(parsed);
 
     if (!validated.success) {
-      console.error("[V2] Generator response validation failed:", validated.error);
+      logger.error({ err: validated.error }, "[V2] Generator response validation failed:");
       return buildHeuristicCandidates(chunk, intent);
     }
 
@@ -466,7 +472,7 @@ If nothing genuinely relevant, return: {"candidates": []}`;
 
     return validated.data.candidates;
   } catch (error) {
-    console.error("[V2] Generator error:", error);
+    logger.error({ err: error }, "[V2] Generator error:");
     return buildHeuristicCandidates(chunk, intent);
   }
 }
@@ -633,7 +639,7 @@ Return JSON:
     const validated = verifierResponseSchema.safeParse(parsed);
 
     if (!validated.success) {
-      console.error("[V2] Verifier response validation failed:", validated.error);
+      logger.error({ err: validated.error }, "[V2] Verifier response validation failed:");
       return candidates.map((candidate, index) => ({
         candidateIndex: index,
         approved: true,
@@ -644,7 +650,7 @@ Return JSON:
 
     return validated.data.verdicts;
   } catch (error) {
-    console.error("[V2] Verifier error:", error);
+    logger.error({ err: error }, "[V2] Verifier error:");
     return candidates.map((candidate, index) => ({
       candidateIndex: index,
       approved: true,
@@ -846,7 +852,7 @@ Return JSON:
     const validated = refinerResponseSchema.safeParse(parsed);
 
     if (!validated.success) {
-      console.error("[V2] Refiner validation failed:", validated.error);
+      logger.error({ err: validated.error }, "[V2] Refiner validation failed:");
       return verified.map((v) => ({
         highlightStart: v.highlightStart,
         highlightEnd: v.highlightEnd,
@@ -859,7 +865,7 @@ Return JSON:
 
     return validated.data.refined;
   } catch (error) {
-    console.error("[V2] Refiner error:", error);
+    logger.error({ err: error }, "[V2] Refiner error:");
     return verified.map((v) => ({
       highlightStart: v.highlightStart,
       highlightEnd: v.highlightEnd,
@@ -924,7 +930,7 @@ Return JSON:
       return validated.data;
     }
   } catch (error) {
-    console.error("[V2] Document context generation failed:", error);
+    logger.error({ err: error }, "[V2] Document context generation failed:");
   }
 
   return undefined;
@@ -1050,12 +1056,15 @@ export async function processChunksWithPipelineV2(
           batchResult.reason instanceof Error
             ? batchResult.reason.message
             : String(batchResult.reason);
-        console.error("[V2] Chunk analysis failed", {
-          chunkId: chunk.id,
-          chunkStart: chunk.startPosition,
-          chunkLength: chunk.text.length,
-          error: message,
-        });
+        logger.error(
+          {
+            chunkId: chunk.id,
+            chunkStart: chunk.startPosition,
+            chunkLength: chunk.text.length,
+            error: message,
+          },
+          "[V2] Chunk analysis failed",
+        );
         continue;
       }
 

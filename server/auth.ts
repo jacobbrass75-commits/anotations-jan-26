@@ -5,6 +5,9 @@ import jwt from "jsonwebtoken";
 import type { User } from "@shared/schema";
 import { getOrCreateUser, getUserByEmail, getUserById } from "./authStorage";
 import { sqlite } from "./db";
+import { createLogger } from "./logger";
+
+const logger = createLogger("auth");
 
 // Extend Express Request to include user property (same shape as before)
 declare global {
@@ -516,7 +519,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
     finishAuth(req, res, next, user);
   } catch (err) {
-    console.error("Auth error:", err);
+    logger.error({ err: err }, "Auth error:");
     res.status(401).json({ message: "Authentication failed" });
   }
 }
@@ -597,7 +600,7 @@ export async function hasTokenBudget(req: Request, res: Response): Promise<boole
 
     return true;
   } catch (error) {
-    console.error("Token budget check failed:", error);
+    logger.error({ err: error }, "Token budget check failed:");
     res.status(500).json({ message: "Failed to check token budget" });
     return false;
   }
@@ -613,7 +616,7 @@ export async function hasTokenBudgetAvailable(req: Request): Promise<boolean> {
 
     return !(user.tokenLimit > 0 && user.tokensUsed >= user.tokenLimit);
   } catch (error) {
-    console.error("Token budget availability check failed:", error);
+    logger.error({ err: error }, "Token budget availability check failed:");
     return false;
   }
 }

@@ -9,6 +9,9 @@ import { storage } from "./storage";
 import { chunkTextV2 } from "./pipelineV2";
 import { generateDocumentSummary } from "./openai";
 import { saveDocumentSource } from "./sourceFiles";
+import { createLogger } from "./logger";
+
+const logger = createLogger("ocrProcessor");
 
 const PYTHON_SCRIPTS_DIR = join(process.cwd(), "server", "python");
 
@@ -238,7 +241,7 @@ async function runVisionRequestWithRetry<T>(label: string, task: () => Promise<T
       }
 
       const delayMs = getRateLimitDelayMs(error, attempt) + Math.floor(Math.random() * 250);
-      console.warn(
+      logger.warn(
         `[Vision OCR] Rate-limited during ${label} (attempt ${attempt}/${VISION_MAX_RETRIES}). Retrying in ${delayMs}ms`,
       );
       await sleep(delayMs);
@@ -338,7 +341,7 @@ async function extractVisionTextForPage(
   totalPages: number,
   model: VisionOcrModel,
 ): Promise<string> {
-  console.log(`[Vision OCR] Processing page ${pageNumber}/${totalPages} with model=${model}`);
+  logger.info(`[Vision OCR] Processing page ${pageNumber}/${totalPages} with model=${model}`);
   const imageUrl = await readImageAsDataUrl(imagePath);
 
   const response = await runVisionRequestWithRetry(`page ${pageNumber}/${totalPages}`, () =>
@@ -377,7 +380,7 @@ async function extractVisionTextForBatch(
 ): Promise<string[]> {
   const startPage = startPageIndex + 1;
   const endPage = startPageIndex + imagePaths.length;
-  console.log(
+  logger.info(
     `[Vision OCR] Processing pages ${startPage}-${endPage}/${totalPages} in batch with model=${model}`,
   );
 
@@ -474,9 +477,9 @@ async function preprocessImageForVision(
     await writeFile(outputPath, outputBuffer);
     return outputPath;
   } catch (error) {
-    console.warn(
+    logger.warn(
+      { err: error },
       `[Vision OCR] HEIC preprocessing failed for ${inputPath}, using original image`,
-      error,
     );
     return inputPath;
   }
@@ -505,7 +508,7 @@ async function extractVisionTextsWithChunking(
     const chunkStartIndex = chunkIndex * DEFAULT_HEIC_PAGE_CHUNK_SIZE;
     const startPage = chunkStartIndex + 1;
     const endPage = startPage + chunk.length - 1;
-    console.log(
+    logger.info(
       `[Vision OCR] Processing chunk ${chunkIndex + 1}/${chunks.length} pages ${startPage}-${endPage} for doc ${docId}`,
     );
     await extractVisionTextsFromImagePaths(docId, chunk, {
@@ -579,7 +582,7 @@ function runPython(scriptPath: string, args: string[]): Promise<string> {
       // Log progress lines from Python
       const lines = data.toString().trim().split("\n");
       for (const line of lines) {
-        if (line) console.log(`[OCR] ${line}`);
+        if (line) logger.info(`[OCR] ${line}`);
       }
     });
 
@@ -649,11 +652,11 @@ export async function processWithPaddleOcr(docId: string, tempPdfPath: string): 
       });
     });
 
-    console.log(
+    logger.info(
       `[OCR] PaddleOCR complete for doc ${docId}: ${fullText.length} chars, ${chunks.length} chunks`,
     );
   } catch (error) {
-    console.error(`[OCR] PaddleOCR failed for doc ${docId}:`, error);
+    logger.error({ err: error }, `[OCR] PaddleOCR failed for doc ${docId}:`);
     await storage.updateDocument(docId, {
       status: "error",
       processingError: error instanceof Error ? error.message : "PaddleOCR processing failed",
@@ -719,7 +722,7 @@ async function extractVisionTextsFromImagePaths(
   const batchSize = Math.max(1, options.batchSize ?? DEFAULT_VISION_BATCH_SIZE);
   const model = options.model ?? DEFAULT_VISION_MODEL;
 
-  console.log(
+  logger.info(
     `[Vision OCR] Mode=${useBatchMode ? "batch" : "page"} pages=${localPageCount} pending=${pendingImages.length} batchSize=${batchSize} model=${model} minGapMs=${VISION_MIN_REQUEST_GAP_MS} doc=${docId}`,
   );
 
@@ -745,9 +748,9 @@ async function extractVisionTextsFromImagePaths(
               await applyPageText(item.index, batchTexts[offset] || "");
             }
           } catch (batchError) {
-            console.warn(
+            logger.warn(
+              { err: batchError },
               `[Vision OCR] Batch ${startPageNumber + batchStartIndex}-${startPageNumber + batchStartIndex + batch.length - 1} failed, retrying per-page`,
-              batchError,
             );
 
             for (const item of batch) {
@@ -1005,9 +1008,9 @@ export async function extractImageUploadsFromZip(
           .sort((a, b) => a.order - b.order);
       }
     } catch (error) {
-      console.warn(
+      logger.warn(
+        { err: error },
         "[Vision OCR] Failed to parse ZIP manifest, falling back to filename order",
-        error,
       );
     }
   }
@@ -1056,7 +1059,7 @@ export async function processWithVisionOcr(
       return;
     }
 
-    console.log(`[Vision OCR] Processing ${result.total_pages} pages for doc ${docId}`);
+    logger.info(`[Vision OCR] Processing ${result.total_pages} pages for doc ${docId}`);
     const pageTexts = await extractVisionTextsFromImagePaths(docId, result.images, options);
     const { fullText, chunkCount } = await saveVisionOcrResult(
       docId,
@@ -1065,11 +1068,11 @@ export async function processWithVisionOcr(
     );
     if (!fullText) return;
 
-    console.log(
+    logger.info(
       `[Vision OCR] Complete for doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`,
     );
   } catch (error) {
-    console.error(`[Vision OCR] Failed for doc ${docId}:`, error);
+    logger.error({ err: error }, `[Vision OCR] Failed for doc ${docId}:`);
     await storage.updateDocument(docId, {
       status: "error",
       processingError: error instanceof Error ? error.message : "Vision OCR processing failed",
@@ -1132,7 +1135,7 @@ export async function processImageWithVisionOcr(
         imagePaths.push(preprocessedPath);
       }
 
-      console.log(
+      logger.info(
         `[Vision OCR] Extracted ${imagePaths.length} image(s) from ${extension} for doc ${docId}`,
       );
     }
@@ -1150,7 +1153,7 @@ export async function processImageWithVisionOcr(
       batchMode: options.batchMode ?? imagePaths.length > 1,
     };
 
-    console.log(`[Vision OCR] Processing ${imagePaths.length} image(s) for doc ${docId}`);
+    logger.info(`[Vision OCR] Processing ${imagePaths.length} image(s) for doc ${docId}`);
     const pageTexts = await extractVisionTextsWithChunking(docId, imagePaths, imageOptions);
     const { fullText, chunkCount } = await saveVisionOcrResult(
       docId,
@@ -1159,11 +1162,11 @@ export async function processImageWithVisionOcr(
     );
     if (!fullText) return;
 
-    console.log(
+    logger.info(
       `[Vision OCR] Complete for image doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`,
     );
   } catch (error) {
-    console.error(`[Vision OCR] Image processing failed for doc ${docId}:`, error);
+    logger.error({ err: error }, `[Vision OCR] Image processing failed for doc ${docId}:`);
     await storage.updateDocument(docId, {
       status: "error",
       processingError: error instanceof Error ? error.message : "Image OCR processing failed",
@@ -1263,9 +1266,9 @@ export async function processImageGroupWithVisionOcr(
         const pdfBuffer = await createPdfFromImagePaths(pageImagePaths);
         await saveDocumentSource(docId, combinedSourceFilename, pdfBuffer);
       } catch (sourceError) {
-        console.warn(
+        logger.warn(
+          { err: sourceError },
           `[Vision OCR] Failed to save combined PDF source for doc ${docId}:`,
-          sourceError,
         );
       }
     }
@@ -1275,7 +1278,7 @@ export async function processImageGroupWithVisionOcr(
       batchMode: options.batchMode ?? pageImagePaths.length > 1,
     };
 
-    console.log(
+    logger.info(
       `[Vision OCR] Processing ${pageImagePaths.length} page(s) for combined doc ${docId}`,
     );
     const pageTexts = await extractVisionTextsWithChunking(docId, pageImagePaths, groupOptions);
@@ -1286,11 +1289,11 @@ export async function processImageGroupWithVisionOcr(
     );
     if (!fullText) return;
 
-    console.log(
+    logger.info(
       `[Vision OCR] Complete for combined image doc ${docId}: ${fullText.length} chars, ${chunkCount} chunks`,
     );
   } catch (error) {
-    console.error(`[Vision OCR] Combined image processing failed for doc ${docId}:`, error);
+    logger.error({ err: error }, `[Vision OCR] Combined image processing failed for doc ${docId}:`);
     await storage.updateDocument(docId, {
       status: "error",
       processingError:

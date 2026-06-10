@@ -2,6 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { ANTHROPIC_MODELS } from "./aiModels";
+import { createLogger } from "./logger";
+
+const logger = createLogger("humanizer");
 
 export interface HumanizeOptions {
   model?: string;
@@ -71,7 +74,7 @@ async function loadPromptTemplate(): Promise<string> {
     const trimmed = file.trim();
     cachedPromptTemplate = trimmed.length > 0 ? trimmed : FALLBACK_PROMPT;
   } catch (error) {
-    console.warn("[Humanizer] Prompt file missing, using fallback template");
+    logger.warn("[Humanizer] Prompt file missing, using fallback template");
     cachedPromptTemplate = FALLBACK_PROMPT;
   }
 
@@ -224,9 +227,12 @@ export async function humanizeText(
       if (!hasAnthropic) {
         throw error;
       }
-      console.warn("[Humanizer] Gemini failed, falling back to Anthropic", {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[Humanizer] Gemini failed, falling back to Anthropic",
+      );
     }
   }
 

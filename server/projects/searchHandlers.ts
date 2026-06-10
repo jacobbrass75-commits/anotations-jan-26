@@ -4,6 +4,9 @@ import { aiLimiter } from "../rateLimits";
 import { globalSearch, searchProjectDocument } from "../projectSearch";
 import { createTokenUsageAccumulator } from "../aiUsage";
 import { verifyProjectDocumentOwnership, verifyProjectOwnership } from "./documentHandlers";
+import { createLogger } from "../logger";
+
+const logger = createLogger("projects/searchHandlers");
 
 export function registerProjectSearchRoutes(app: Express): void {
   // === SEARCH ===
@@ -21,7 +24,7 @@ export function registerProjectSearchRoutes(app: Express): void {
       const results = await globalSearch(req.params.projectId, query, filters, limit);
       res.json(results);
     } catch (error) {
-      console.error("Error performing search:", error);
+      logger.error({ err: error }, "Error performing search:");
       res.status(500).json({ error: "Failed to perform search" });
     }
   });
@@ -48,7 +51,7 @@ export function registerProjectSearchRoutes(app: Express): void {
         await tokenUsage.flush(req.user!.userId, "project_document_search");
         res.json(results);
       } catch (error) {
-        console.error("Error searching project document:", error);
+        logger.error({ err: error }, "Error searching project document:");
         res
           .status(500)
           .json({ error: error instanceof Error ? error.message : "Failed to search document" });

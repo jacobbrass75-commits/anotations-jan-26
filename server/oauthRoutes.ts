@@ -21,6 +21,9 @@ import {
   revokeMcpTokenById,
   consumeAuthorizationCode,
 } from "./oauthStorage";
+import { createLogger } from "./logger";
+
+const logger = createLogger("oauthRoutes");
 
 const DEFAULT_SCOPES = ["read", "write"];
 const ALLOWED_SCOPES = new Set(DEFAULT_SCOPES);
@@ -185,7 +188,7 @@ function getTrustedProxyCidrs(): Array<[ipaddr.IPv4 | ipaddr.IPv6, number]> {
     try {
       return [ipaddr.parseCIDR(cidr)];
     } catch {
-      console.warn("Ignoring invalid OAUTH_TRUSTED_PROXY_CIDRS entry", { cidr });
+      logger.warn({ cidr }, "Ignoring invalid OAUTH_TRUSTED_PROXY_CIDRS entry");
       return [];
     }
   });
@@ -1190,7 +1193,7 @@ export function registerOAuthRoutes(app: Express): void {
         token_endpoint_auth_method: tokenEndpointAuthMethod,
       });
     } catch (error) {
-      console.error("OAuth client registration error:", error);
+      logger.error({ err: error }, "OAuth client registration error:");
       return sendOAuthError(res, 500, "server_error", "Failed to register OAuth client");
     }
   });
@@ -1213,12 +1216,10 @@ export function registerOAuthRoutes(app: Express): void {
           .json({ error: "invalid_client", error_description: "Unknown client_id" });
       }
       if (!isValidRedirectUri(params.redirectUri, client)) {
-        return res
-          .status(400)
-          .json({
-            error: "invalid_redirect_uri",
-            error_description: "redirect_uri is not allowed",
-          });
+        return res.status(400).json({
+          error: "invalid_redirect_uri",
+          error_description: "redirect_uri is not allowed",
+        });
       }
 
       const sessionUser = await resolveSessionUser(req);
@@ -1269,7 +1270,7 @@ export function registerOAuthRoutes(app: Express): void {
           "Clerk email must be verified before authorization",
         );
       }
-      console.error("OAuth authorize page error:", error);
+      logger.error({ err: error }, "OAuth authorize page error:");
       return sendOAuthError(res, 500, "server_error", "Failed to render authorization page");
     }
   });
@@ -1299,12 +1300,10 @@ export function registerOAuthRoutes(app: Express): void {
           .json({ error: "invalid_client", error_description: "Unknown client_id" });
       }
       if (!isValidRedirectUri(params.redirectUri, client)) {
-        return res
-          .status(400)
-          .json({
-            error: "invalid_redirect_uri",
-            error_description: "redirect_uri is not allowed",
-          });
+        return res.status(400).json({
+          error: "invalid_redirect_uri",
+          error_description: "redirect_uri is not allowed",
+        });
       }
 
       const sessionUser = await resolveSessionUser(req);
@@ -1314,12 +1313,10 @@ export function registerOAuthRoutes(app: Express): void {
       }
 
       if (!csrfToken || !validateAndConsumeConsentNonce(csrfToken, sessionUser, params)) {
-        return res
-          .status(403)
-          .json({
-            error: "invalid_request",
-            error_description: "Invalid authorization consent token",
-          });
+        return res.status(403).json({
+          error: "invalid_request",
+          error_description: "Invalid authorization consent token",
+        });
       }
 
       if (decision !== "approve") {
@@ -1344,7 +1341,7 @@ export function registerOAuthRoutes(app: Express): void {
           "Clerk email must be verified before authorization",
         );
       }
-      console.error("OAuth authorize decision error:", error);
+      logger.error({ err: error }, "OAuth authorize decision error:");
       return sendOAuthError(res, 500, "server_error", "Failed to process authorization decision");
     }
   });
@@ -1479,7 +1476,7 @@ export function registerOAuthRoutes(app: Express): void {
 
       return sendOAuthError(res, 400, "unsupported_grant_type", "Unsupported grant_type");
     } catch (error) {
-      console.error("OAuth token error:", error);
+      logger.error({ err: error }, "OAuth token error:");
       return sendOAuthError(res, 500, "server_error", "Failed to issue token");
     }
   });
@@ -1492,7 +1489,7 @@ export function registerOAuthRoutes(app: Express): void {
       }
       return res.status(200).send("");
     } catch (error) {
-      console.error("OAuth revoke error:", error);
+      logger.error({ err: error }, "OAuth revoke error:");
       return res.status(200).send("");
     }
   });

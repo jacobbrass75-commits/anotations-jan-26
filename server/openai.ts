@@ -17,6 +17,9 @@ import {
   documentContextSchema,
 } from "@shared/schema";
 import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
+import { createLogger } from "./logger";
+
+const logger = createLogger("openai");
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -147,7 +150,7 @@ If not relevant, respond with:
 
     return JSON.parse(content) as AnalysisResult;
   } catch (error) {
-    console.error("Error analyzing chunk:", error);
+    logger.error({ err: error }, "Error analyzing chunk:");
     return { isRelevant: false };
   }
 }
@@ -200,7 +203,7 @@ Respond with JSON:
 
     return JSON.parse(content);
   } catch (error) {
-    console.error("Error generating summary:", error);
+    logger.error({ err: error }, "Error generating summary:");
     return {
       summary: "Could not generate summary.",
       mainArguments: [],
@@ -273,7 +276,7 @@ Return:
 
     return prompts.slice(0, 6).length === 6 ? prompts.slice(0, 6) : fallback;
   } catch (error) {
-    console.warn("Auto annotation prompt generation failed, using defaults:", error);
+    logger.warn({ err: error }, "Auto annotation prompt generation failed, using defaults:");
     return fallback;
   }
 }
@@ -337,7 +340,7 @@ Respond with JSON array of results (max 5):
     const parsed = JSON.parse(content);
     return parsed.results || [];
   } catch (error) {
-    console.error("Error searching document:", error);
+    logger.error({ err: error }, "Error searching document:");
     return [];
   }
 }
@@ -520,13 +523,13 @@ If nothing relevant, return: {"candidates": []}`;
     const validated = generatorResponseSchema.safeParse(parsed);
 
     if (!validated.success) {
-      console.error("Generator response validation failed:", validated.error);
+      logger.error({ err: validated.error }, "Generator response validation failed:");
       return [];
     }
 
     return validated.data.candidates;
   } catch (error) {
-    console.error("Generator error:", error);
+    logger.error({ err: error }, "Generator error:");
     return [];
   }
 }
@@ -601,13 +604,13 @@ Return JSON:
     const validated = verifierResponseSchema.safeParse(parsed);
 
     if (!validated.success) {
-      console.error("Verifier response validation failed:", validated.error);
+      logger.error({ err: validated.error }, "Verifier response validation failed:");
       return [];
     }
 
     return validated.data.verdicts;
   } catch (error) {
-    console.error("Verifier error:", error);
+    logger.error({ err: error }, "Verifier error:");
     return [];
   }
 }
@@ -760,7 +763,7 @@ Return JSON:
     const validated = refinerResponseSchema.safeParse(parsed);
 
     if (!validated.success) {
-      console.error("Refiner response validation failed:", validated.error);
+      logger.error({ err: validated.error }, "Refiner response validation failed:");
       // Fallback
       return verified.map((v) => ({
         highlightStart: v.highlightStart,
@@ -774,7 +777,7 @@ Return JSON:
 
     return validated.data.refined;
   } catch (error) {
-    console.error("Refiner error:", error);
+    logger.error({ err: error }, "Refiner error:");
     // Fallback
     return verified.map((v) => ({
       highlightStart: v.highlightStart,
@@ -838,7 +841,7 @@ Return JSON:
       return validated.data;
     }
   } catch (error) {
-    console.error("Document context generation failed:", error);
+    logger.error({ err: error }, "Document context generation failed:");
   }
 
   return undefined;
@@ -1020,7 +1023,7 @@ If you cannot identify any citation information, respond with: {"error": "Unable
 
     const parsed = JSON.parse(content);
     if (parsed.error) {
-      console.log("AI could not extract citation metadata:", parsed.error);
+      logger.info({ err: parsed.error }, "AI could not extract citation metadata:");
       return null;
     }
 
@@ -1047,7 +1050,7 @@ If you cannot identify any citation information, respond with: {"error": "Unable
 
     return parsed as CitationData;
   } catch (error) {
-    console.error("Error extracting citation metadata:", error);
+    logger.error({ err: error }, "Error extracting citation metadata:");
     return null;
   }
 }

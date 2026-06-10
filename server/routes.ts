@@ -62,6 +62,9 @@ import { aiLimiter } from "./rateLimits";
 import { decrementStorageUsage, reserveStorageUsage } from "./authStorage";
 import { createTokenUsageAccumulator } from "./aiUsage";
 import { createTextBackedDocument, normalizePastedSourceFilename } from "./documentIngestion";
+import { createLogger } from "./logger";
+
+const logger = createLogger("routes");
 const MAX_COMBINED_UPLOAD_FILES = Number.isFinite(Number(process.env.MAX_COMBINED_UPLOAD_FILES))
   ? Math.max(1, Math.floor(Number(process.env.MAX_COMBINED_UPLOAD_FILES)))
   : 25;
@@ -166,11 +169,14 @@ async function releaseReservedStorage(userId: string, bytes: number): Promise<vo
   try {
     await decrementStorageUsage(userId, bytes);
   } catch (error) {
-    console.warn("Failed to release reserved storage usage", {
-      userId,
-      bytes,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    logger.warn(
+      {
+        userId,
+        bytes,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "Failed to release reserved storage usage",
+    );
   }
 }
 
@@ -231,7 +237,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
       sqlite.prepare("SELECT 1").get();
       return res.json({ ok: true, service: "scholarmark-app", database: "ok" });
     } catch (error) {
-      console.error("Readiness check failed:", error);
+      logger.error({ err: error }, "Readiness check failed:");
       return res.status(503).json({ ok: false, service: "scholarmark-app", database: "error" });
     }
   });
@@ -327,7 +333,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         capturedAt: Date.now(),
       });
     } catch (error) {
-      console.error("Error fetching system status:", error);
+      logger.error({ err: error }, "Error fetching system status:");
       return res.status(500).json({ message: "Failed to fetch system status" });
     }
   });
@@ -465,7 +471,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         return res.status(400).json({ message: "Unsupported OCR mode for this file type" });
       } catch (error) {
         await releaseReservedStorage(req.user!.userId, reservedStorageBytes);
-        console.error("Upload error:", error);
+        logger.error({ err: error }, "Upload error:");
         res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
       }
     },
@@ -506,7 +512,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         return res.json(doc);
       } catch (error) {
         await releaseReservedStorage(req.user!.userId, reservedStorageBytes);
-        console.error("Upload text error:", error);
+        logger.error({ err: error }, "Upload text error:");
         return res.status(500).json({
           message: error instanceof Error ? error.message : "Paste upload failed",
         });
@@ -609,7 +615,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         return res.status(202).json(updatedDoc);
       } catch (error) {
         await releaseReservedStorage(req.user!.userId, reservedStorageBytes);
-        console.error("Upload-group error:", error);
+        logger.error({ err: error }, "Upload-group error:");
         res.status(500).json({ message: error instanceof Error ? error.message : "Upload failed" });
       }
     },
@@ -628,7 +634,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         chunkCount: doc.chunkCount,
       });
     } catch (error) {
-      console.error("Error fetching document status:", error);
+      logger.error({ err: error }, "Error fetching document status:");
       res.status(500).json({ message: "Failed to fetch document status" });
     }
   });
@@ -639,7 +645,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
       const docs = await storage.getAllDocuments(req.user!.userId);
       res.json(docs);
     } catch (error) {
-      console.error("Error fetching documents:", error);
+      logger.error({ err: error }, "Error fetching documents:");
       res.status(500).json({ message: "Failed to fetch documents" });
     }
   });
@@ -650,7 +656,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
       const docs = await storage.getAllDocumentMeta(req.user!.userId);
       res.json(docs);
     } catch (error) {
-      console.error("Error fetching document metadata:", error);
+      logger.error({ err: error }, "Error fetching document metadata:");
       res.status(500).json({ message: "Failed to fetch document metadata" });
     }
   });
@@ -662,7 +668,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
       if (!doc) return;
       res.json(doc);
     } catch (error) {
-      console.error("Error fetching document:", error);
+      logger.error({ err: error }, "Error fetching document:");
       res.status(500).json({ message: "Failed to fetch document" });
     }
   });
@@ -682,7 +688,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         sourceUrl: available ? `/api/documents/${doc.id}/source` : null,
       });
     } catch (error) {
-      console.error("Error fetching source metadata:", error);
+      logger.error({ err: error }, "Error fetching source metadata:");
       res.status(500).json({ message: "Failed to fetch source metadata" });
     }
   });
@@ -713,7 +719,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         }
       });
     } catch (error) {
-      console.error("Error streaming source document:", error);
+      logger.error({ err: error }, "Error streaming source document:");
       res.status(500).json({ message: "Failed to stream source document" });
     }
   });
@@ -742,11 +748,9 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         if (!doc) return;
 
         if (doc.status === "processing") {
-          return res
-            .status(409)
-            .json({
-              message: "Document is still processing. Please wait until processing completes.",
-            });
+          return res.status(409).json({
+            message: "Document is still processing. Please wait until processing completes.",
+          });
         }
         if (doc.status === "error") {
           return res
@@ -850,7 +854,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         await tokenUsage.flush(req.user!.userId, "document_analysis");
         res.json(finalAnnotations);
       } catch (error) {
-        console.error("Analysis error:", error);
+        logger.error({ err: error }, "Analysis error:");
         res
           .status(500)
           .json({ message: error instanceof Error ? error.message : "Analysis failed" });
@@ -867,7 +871,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
       const annotations = await storage.getAnnotationsForDocument(doc.id);
       res.json(annotations);
     } catch (error) {
-      console.error("Error fetching annotations:", error);
+      logger.error({ err: error }, "Error fetching annotations:");
       res.status(500).json({ message: "Failed to fetch annotations" });
     }
   });
@@ -903,7 +907,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
 
       res.json(annotation);
     } catch (error) {
-      console.error("Error creating annotation:", error);
+      logger.error({ err: error }, "Error creating annotation:");
       res.status(500).json({ message: "Failed to create annotation" });
     }
   });
@@ -932,7 +936,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
 
       res.json(annotation);
     } catch (error) {
-      console.error("Error updating annotation:", error);
+      logger.error({ err: error }, "Error updating annotation:");
       res.status(500).json({ message: "Failed to update annotation" });
     }
   });
@@ -946,7 +950,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
       await storage.deleteAnnotation(req.params.id);
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting annotation:", error);
+      logger.error({ err: error }, "Error deleting annotation:");
       res.status(500).json({ message: "Failed to delete annotation" });
     }
   });
@@ -1003,7 +1007,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         await tokenUsage.flush(req.user!.userId, "document_search");
         res.json(results);
       } catch (error) {
-        console.error("Search error:", error);
+        logger.error({ err: error }, "Search error:");
         res.status(500).json({ message: error instanceof Error ? error.message : "Search failed" });
       }
     },
@@ -1021,7 +1025,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         keyConcepts: doc.keyConcepts,
       });
     } catch (error) {
-      console.error("Error fetching summary:", error);
+      logger.error({ err: error }, "Error fetching summary:");
       res.status(500).json({ message: "Failed to fetch summary" });
     }
   });

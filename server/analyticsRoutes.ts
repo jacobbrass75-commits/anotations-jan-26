@@ -1,6 +1,9 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { requireAuth } from "./auth";
 import { sqlite } from "./db";
+import { createLogger } from "./logger";
+
+const logger = createLogger("analyticsRoutes");
 
 const selectToolCallFrequency = sqlite.prepare(
   `SELECT
@@ -309,7 +312,7 @@ export function registerAnalyticsRoutes(app: Express): void {
           },
         });
       } catch (error) {
-        console.error("Analytics export error:", error);
+        logger.error({ err: error }, "Analytics export error:");
         return res.status(500).json({ message: "Failed to export analytics" });
       }
     },
@@ -360,7 +363,7 @@ export function registerAnalyticsRoutes(app: Express): void {
           timeline,
         });
       } catch (error) {
-        console.error("Conversation analytics error:", error);
+        logger.error({ err: error }, "Conversation analytics error:");
         return res.status(500).json({ message: "Failed to fetch conversation analytics" });
       }
     },
@@ -436,7 +439,7 @@ export function registerAnalyticsRoutes(app: Express): void {
 
         return res.json({ conversations, total, limit, offset });
       } catch (error) {
-        console.error("Analytics conversations error:", error);
+        logger.error({ err: error }, "Analytics conversations error:");
         return res.status(500).json({ message: "Failed to fetch conversations" });
       }
     },

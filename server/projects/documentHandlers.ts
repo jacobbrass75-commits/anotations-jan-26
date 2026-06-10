@@ -18,6 +18,9 @@ import {
   type BatchAddDocumentResult,
   type BatchAddDocumentsResponse,
 } from "@shared/schema";
+import { createLogger } from "../logger";
+
+const logger = createLogger("projects/documentHandlers");
 
 /** Verify the project belongs to the requesting user. Returns the project or sends 403/404. */
 export async function verifyProjectOwnership(req: Request, res: Response, projectId: string) {
@@ -149,9 +152,9 @@ export function registerProjectDocumentRoutes(app: Express): void {
                   undefined,
                   tokenUsage.add,
                 );
-                console.log(`[Citation] Auto-extracted citation for ${doc.filename}`);
+                logger.info(`[Citation] Auto-extracted citation for ${doc.filename}`);
               } catch (citationError) {
-                console.warn("Citation extraction failed (non-blocking):", citationError);
+                logger.warn({ err: citationError }, "Citation extraction failed (non-blocking):");
               }
 
               await projectStorage.updateProjectDocument(projectDoc.id, {
@@ -163,12 +166,12 @@ export function registerProjectDocumentRoutes(app: Express): void {
             }
           }
         } catch (contextError) {
-          console.warn("Context generation failed (non-blocking):", contextError);
+          logger.warn({ err: contextError }, "Context generation failed (non-blocking):");
         }
 
         res.status(201).json(projectDoc);
       } catch (error) {
-        console.error("Error adding document to project:", error);
+        logger.error({ err: error }, "Error adding document to project:");
         res.status(400).json({ error: "Failed to add document to project" });
       }
     },
@@ -184,7 +187,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
         const documents = await projectStorage.getProjectDocumentsByProject(req.params.projectId);
         res.json(documents);
       } catch (error) {
-        console.error("Error fetching project documents:", error);
+        logger.error({ err: error }, "Error fetching project documents:");
         res.status(500).json({ error: "Failed to fetch project documents" });
       }
     },
@@ -276,7 +279,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
                 })
                 .catch(async (err) => {
                   await tokenUsage.flush(req.user!.userId, "project_batch_document_context");
-                  console.warn("Context generation failed (non-blocking):", err);
+                  logger.warn({ err: err }, "Context generation failed (non-blocking):");
                 });
             }
           } catch (error) {
@@ -300,7 +303,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
 
         res.status(201).json(response);
       } catch (error) {
-        console.error("Error in batch add documents:", error);
+        logger.error({ err: error }, "Error in batch add documents:");
         res.status(400).json({ error: "Failed to add documents" });
       }
     },
@@ -312,7 +315,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
       if (!projectDoc) return;
       res.json(projectDoc);
     } catch (error) {
-      console.error("Error fetching project document:", error);
+      logger.error({ err: error }, "Error fetching project document:");
       res.status(500).json({ error: "Failed to fetch project document" });
     }
   });
@@ -364,7 +367,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
       }
       res.json(updated);
     } catch (error) {
-      console.error("Error updating project document:", error);
+      logger.error({ err: error }, "Error updating project document:");
       res.status(500).json({ error: "Failed to update project document" });
     }
   });
@@ -376,7 +379,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
       await projectStorage.removeDocumentFromProject(req.params.id);
       res.status(204).send();
     } catch (error) {
-      console.error("Error removing document from project:", error);
+      logger.error({ err: error }, "Error removing document from project:");
       res.status(500).json({ error: "Failed to remove document from project" });
     }
   });
@@ -401,7 +404,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
       }
       res.json(updated);
     } catch (error) {
-      console.error("Error moving project document:", error);
+      logger.error({ err: error }, "Error moving project document:");
       res.status(500).json({ error: "Failed to move project document" });
     }
   });
@@ -422,7 +425,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
         }
         res.json(updated);
       } catch (error) {
-        console.error("Error updating citation data:", error);
+        logger.error({ err: error }, "Error updating citation data:");
         res.status(400).json({ error: "Failed to update citation data" });
       }
     },
@@ -455,12 +458,12 @@ export function registerProjectDocumentRoutes(app: Express): void {
             searchableContent,
           });
         } catch (indexError) {
-          console.warn("Search indexing failed (non-blocking):", indexError);
+          logger.warn({ err: indexError }, "Search indexing failed (non-blocking):");
         }
 
         res.status(201).json(annotation);
       } catch (error) {
-        console.error("Error creating project annotation:", error);
+        logger.error({ err: error }, "Error creating project annotation:");
         res.status(400).json({ error: "Failed to create annotation" });
       }
     },
@@ -476,7 +479,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
         const annotations = await projectStorage.getProjectAnnotationsByDocument(req.params.id);
         res.json(annotations);
       } catch (error) {
-        console.error("Error fetching project annotations:", error);
+        logger.error({ err: error }, "Error fetching project annotations:");
         res.status(500).json({ error: "Failed to fetch annotations" });
       }
     },
@@ -502,7 +505,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
       }
       res.json(updated);
     } catch (error) {
-      console.error("Error updating project annotation:", error);
+      logger.error({ err: error }, "Error updating project annotation:");
       res.status(500).json({ error: "Failed to update annotation" });
     }
   });
@@ -524,7 +527,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
       await projectStorage.deleteProjectAnnotation(req.params.id);
       res.status(204).send();
     } catch (error) {
-      console.error("Error deleting project annotation:", error);
+      logger.error({ err: error }, "Error deleting project annotation:");
       res.status(500).json({ error: "Failed to delete annotation" });
     }
   });
@@ -549,7 +552,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
         }
         res.json(updated);
       } catch (error) {
-        console.error("Error updating view state:", error);
+        logger.error({ err: error }, "Error updating view state:");
         res.status(500).json({ error: "Failed to update view state" });
       }
     },

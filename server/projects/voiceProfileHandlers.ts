@@ -5,6 +5,9 @@ import { projectStorage } from "../projectStorage";
 import { createTokenUsageAccumulator } from "../aiUsage";
 import { analyzeVoiceProfileSamples, validateWritingSamples } from "../voiceProfileAnalysis";
 import { verifyProjectOwnership } from "./documentHandlers";
+import { createLogger } from "../logger";
+
+const logger = createLogger("projects/voiceProfileHandlers");
 
 export function registerVoiceProfileRoutes(app: Express): void {
   // === VOICE PROFILE ===
@@ -41,7 +44,7 @@ export function registerVoiceProfileRoutes(app: Express): void {
         await tokenUsage.flush(req.user!.userId, "voice_profile_analysis");
         res.json({ voiceProfile });
       } catch (error) {
-        console.error("Error analyzing voice profile:", error);
+        logger.error({ err: error }, "Error analyzing voice profile:");
         res.status(500).json({ error: "Failed to analyze writing style" });
       }
     },
@@ -60,7 +63,7 @@ export function registerVoiceProfileRoutes(app: Express): void {
 
       res.json({ voiceProfile, hasSamples });
     } catch (error) {
-      console.error("Error fetching voice profile:", error);
+      logger.error({ err: error }, "Error fetching voice profile:");
       res.status(500).json({ error: "Failed to fetch voice profile" });
     }
   });
@@ -82,7 +85,7 @@ export function registerVoiceProfileRoutes(app: Express): void {
 
       res.json({ voiceProfile });
     } catch (error) {
-      console.error("Error updating voice profile:", error);
+      logger.error({ err: error }, "Error updating voice profile:");
       res.status(500).json({ error: "Failed to update voice profile" });
     }
   });
@@ -103,7 +106,7 @@ export function registerVoiceProfileRoutes(app: Express): void {
 
         res.json({ success: true });
       } catch (error) {
-        console.error("Error deleting voice profile:", error);
+        logger.error({ err: error }, "Error deleting voice profile:");
         res.status(500).json({ error: "Failed to delete voice profile" });
       }
     },

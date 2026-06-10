@@ -1,6 +1,9 @@
 import OpenAI from "openai";
 import { getEmbeddingWithUsage } from "./openai";
 import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
+import { createLogger } from "./logger";
+
+const logger = createLogger("contextGenerator");
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -60,7 +63,7 @@ Generate a search-optimized context paragraph:`;
 
     return response.choices[0]?.message?.content || "";
   } catch (error) {
-    console.error("Error generating retrieval context:", error);
+    logger.error({ err: error }, "Error generating retrieval context:");
     return `${documentSummary} ${mainArguments.join(" ")} ${keyConcepts.join(" ")}`;
   }
 }
@@ -102,7 +105,7 @@ Generate a search-optimized project summary:`;
 
     return response.choices[0]?.message?.content || "";
   } catch (error) {
-    console.error("Error generating project context:", error);
+    logger.error({ err: error }, "Error generating project context:");
     return `${thesis} ${scope}`;
   }
 }
@@ -144,7 +147,7 @@ Generate a search-optimized folder summary:`;
 
     return response.choices[0]?.message?.content || "";
   } catch (error) {
-    console.error("Error generating folder context:", error);
+    logger.error({ err: error }, "Error generating folder context:");
     return folderDescription;
   }
 }

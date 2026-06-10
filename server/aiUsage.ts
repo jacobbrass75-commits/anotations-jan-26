@@ -1,4 +1,7 @@
 import { incrementTokenUsage } from "./authStorage";
+import { createLogger } from "./logger";
+
+const logger = createLogger("aiUsage");
 
 export type TokenUsageReporter = (tokens: number) => void;
 
@@ -64,11 +67,14 @@ export async function recordUserTokenUsage(
   try {
     await incrementTokenUsage(userId, Math.floor(tokens));
   } catch (error) {
-    console.warn("[aiUsage] failed to increment token usage", {
-      userId,
-      source,
-      tokens,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    logger.warn(
+      {
+        userId,
+        source,
+        tokens,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "[aiUsage] failed to increment token usage",
+    );
   }
 }

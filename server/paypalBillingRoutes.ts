@@ -3,6 +3,9 @@ import { randomUUID } from "crypto";
 import { sqlite } from "./db";
 import { requireAuth } from "./auth";
 import { setUserTier } from "./authStorage";
+import { createLogger } from "./logger";
+
+const logger = createLogger("paypalBillingRoutes");
 
 type PayPalEnvironment = "sandbox" | "live";
 type BillingTier = "pro" | "max";
@@ -311,7 +314,7 @@ export function registerPayPalBillingRoutes(app: ExpressApp): void {
 
       return res.json({ orderId: order.id });
     } catch (error) {
-      console.error("[billing] failed to create PayPal order", error);
+      logger.error({ err: error }, "[billing] failed to create PayPal order");
       return res.status(502).json({ message: "Failed to create PayPal order" });
     }
   });
@@ -334,7 +337,7 @@ export function registerPayPalBillingRoutes(app: ExpressApp): void {
         const result = await grantTierIfPaymentCompleted(req.params.orderId, capturedOrder);
         return res.json(result);
       } catch (error) {
-        console.error("[billing] failed to capture PayPal order", error);
+        logger.error({ err: error }, "[billing] failed to capture PayPal order");
         return res.status(502).json({ message: "Failed to capture PayPal order" });
       }
     },
@@ -366,7 +369,7 @@ export function registerPayPalBillingRoutes(app: ExpressApp): void {
 
       return res.json({ received: true });
     } catch (error) {
-      console.error("[billing] PayPal webhook handling failed", error);
+      logger.error({ err: error }, "[billing] PayPal webhook handling failed");
       return res.status(500).json({ message: "PayPal webhook handling failed" });
     }
   });

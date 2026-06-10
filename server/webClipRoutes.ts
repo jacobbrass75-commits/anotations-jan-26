@@ -16,6 +16,9 @@ import { db } from "./db";
 import { generateChicagoBibliography, generateChicagoFootnote } from "./citationGenerator";
 import { storage } from "./storage";
 import { projectStorage } from "./projectStorage";
+import { createLogger } from "./logger";
+
+const logger = createLogger("webClipRoutes");
 
 const WEB_CLIP_CATEGORY_VALUES = [...annotationCategories, "web_clip"] as const;
 const webClipCategorySet = new Set<string>(WEB_CLIP_CATEGORY_VALUES);
@@ -331,7 +334,7 @@ export function registerWebClipRoutes(app: Express): void {
 
         return res.status(201).json(created);
       } catch (error) {
-        console.error("Error creating web clip:", error);
+        logger.error({ err: error }, "Error creating web clip:");
         return res
           .status(500)
           .json({ error: error instanceof Error ? error.message : "Failed to create web clip" });
@@ -392,7 +395,7 @@ export function registerWebClipRoutes(app: Express): void {
 
       return res.json(rows);
     } catch (error) {
-      console.error("Error listing web clips:", error);
+      logger.error({ err: error }, "Error listing web clips:");
       return res.status(500).json({ error: "Failed to list web clips" });
     }
   });
@@ -421,7 +424,7 @@ export function registerWebClipRoutes(app: Express): void {
 
       return res.json(rows);
     } catch (error) {
-      console.error("Error filtering web clips by URL:", error);
+      logger.error({ err: error }, "Error filtering web clips by URL:");
       return res.status(500).json({ error: "Failed to fetch clips for URL" });
     }
   });
@@ -435,7 +438,7 @@ export function registerWebClipRoutes(app: Express): void {
 
       return res.json(clip);
     } catch (error) {
-      console.error("Error fetching web clip:", error);
+      logger.error({ err: error }, "Error fetching web clip:");
       return res.status(500).json({ error: "Failed to fetch web clip" });
     }
   });
@@ -504,7 +507,7 @@ export function registerWebClipRoutes(app: Express): void {
 
       return res.json(updated);
     } catch (error) {
-      console.error("Error updating web clip:", error);
+      logger.error({ err: error }, "Error updating web clip:");
       return res.status(500).json({ error: "Failed to update web clip" });
     }
   });
@@ -521,7 +524,7 @@ export function registerWebClipRoutes(app: Express): void {
         .where(and(eq(webClips.id, req.params.id), eq(webClips.userId, req.user!.userId)));
       return res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting web clip:", error);
+      logger.error({ err: error }, "Error deleting web clip:");
       return res.status(500).json({ error: "Failed to delete web clip" });
     }
   });
@@ -664,7 +667,7 @@ export function registerWebClipRoutes(app: Express): void {
 
       return res.status(201).json({ annotation, projectDocumentId: targetProjectDocumentId });
     } catch (error) {
-      console.error("Error promoting web clip:", error);
+      logger.error({ err: error }, "Error promoting web clip:");
       return res
         .status(500)
         .json({ error: error instanceof Error ? error.message : "Failed to promote web clip" });

@@ -6,6 +6,9 @@ import { requireAuth } from "./auth";
 import { getUserById, sanitizeUser } from "./authStorage";
 import { db } from "./db";
 import { authLimiter } from "./rateLimits";
+import { createLogger } from "./logger";
+
+const logger = createLogger("authRoutes");
 
 const EXTENSION_API_KEY_SCOPE = "projects:read web_clips:write api_keys:self_revoke";
 
@@ -68,7 +71,7 @@ export function registerAuthRoutes(app: Express): void {
       }
       return res.json(sanitizeUser(user));
     } catch (error) {
-      console.error("Get profile error:", error);
+      logger.error({ err: error }, "Get profile error:");
       return res.status(500).json({ message: "Failed to fetch profile" });
     }
   });
@@ -99,7 +102,7 @@ export function registerAuthRoutes(app: Express): void {
           : null,
       });
     } catch (error) {
-      console.error("Usage error:", error);
+      logger.error({ err: error }, "Usage error:");
       return res.status(500).json({ message: "Failed to fetch usage" });
     }
   });
@@ -125,7 +128,7 @@ export function registerAuthRoutes(app: Express): void {
 
         return res.json({ apiKeys: keys });
       } catch (error) {
-        console.error("API key list error:", error);
+        logger.error({ err: error }, "API key list error:");
         return res.status(500).json({ message: "Failed to fetch API keys" });
       }
     },
@@ -166,7 +169,7 @@ export function registerAuthRoutes(app: Express): void {
           key: rawKey,
         });
       } catch (error) {
-        console.error("API key create error:", error);
+        logger.error({ err: error }, "API key create error:");
         return res.status(500).json({ message: "Failed to create API key" });
       }
     },
@@ -206,7 +209,7 @@ export function registerAuthRoutes(app: Express): void {
 
       return res.status(204).send();
     } catch (error) {
-      console.error("API key revoke error:", error);
+      logger.error({ err: error }, "API key revoke error:");
       return res.status(500).json({ message: "Failed to revoke API key" });
     }
   });

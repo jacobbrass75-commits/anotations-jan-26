@@ -13,6 +13,7 @@ import { initAnalytics } from "./analyticsLogger";
 import { createServer } from "http";
 import { assertProductionConfig } from "./productionConfig";
 import { globalLimiter } from "./rateLimits";
+import { createLogger } from "./logger";
 
 assertProductionConfig(process.env, { phase: "runtime" });
 
@@ -134,15 +135,10 @@ app.use((req, res, next) => {
 // Initialize Clerk authentication
 configureClerk(app);
 
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
+const serverLogger = createLogger("server");
 
-  console.log(`${formattedTime} [${source}] ${message}`);
+export function log(message: string, source = "express") {
+  serverLogger.info({ source }, message);
 }
 
 app.use((req, res, next) => {
@@ -188,7 +184,7 @@ app.use((req, res, next) => {
     }
 
     if (status >= 500) {
-      console.error(err);
+      serverLogger.error({ err }, "Unhandled request error");
     }
 
     return res.status(status).json({ message });

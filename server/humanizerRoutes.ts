@@ -3,6 +3,9 @@ import { checkTokenBudget, requireAuth, requireTier } from "./auth";
 import { aiLimiter } from "./rateLimits";
 import { incrementTokenUsage } from "./authStorage";
 import { humanizeText, MAX_HUMANIZER_TEXT_LENGTH } from "./humanizer";
+import { createLogger } from "./logger";
+
+const logger = createLogger("humanizerRoutes");
 
 function getErrorStatus(message: string): number {
   if (
@@ -59,23 +62,29 @@ export function registerHumanizerRoutes(app: Express): void {
           try {
             await incrementTokenUsage(req.user!.userId, result.tokensUsed);
           } catch (error) {
-            console.warn("[Humanizer] Failed to increment token usage", {
-              userId: req.user?.userId,
-              error: error instanceof Error ? error.message : String(error),
-            });
+            logger.warn(
+              {
+                userId: req.user?.userId,
+                error: error instanceof Error ? error.message : String(error),
+              },
+              "[Humanizer] Failed to increment token usage",
+            );
           }
         }
 
         const durationMs = Date.now() - startedAt;
-        console.log("[Humanizer] Request completed", {
-          userId: req.user?.userId,
-          provider: result.provider,
-          model: result.model,
-          inputChars: text.length,
-          outputChars: result.humanizedText.length,
-          tokensUsed: result.tokensUsed ?? null,
-          durationMs,
-        });
+        logger.info(
+          {
+            userId: req.user?.userId,
+            provider: result.provider,
+            model: result.model,
+            inputChars: text.length,
+            outputChars: result.humanizedText.length,
+            tokensUsed: result.tokensUsed ?? null,
+            durationMs,
+          },
+          "[Humanizer] Request completed",
+        );
 
         return res.json({
           humanizedText: result.humanizedText,
@@ -85,10 +94,13 @@ export function registerHumanizerRoutes(app: Express): void {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to humanize text";
-        console.error("[Humanizer] Request failed", {
-          userId: req.user?.userId,
-          error: message,
-        });
+        logger.error(
+          {
+            userId: req.user?.userId,
+            error: message,
+          },
+          "[Humanizer] Request failed",
+        );
         return res.status(getErrorStatus(message)).json({ error: message });
       }
     },

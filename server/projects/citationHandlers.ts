@@ -18,6 +18,9 @@ import {
   type CitationStyle,
 } from "@shared/schema";
 import { verifyDocumentOwnership, verifyProjectDocumentOwnership } from "./documentHandlers";
+import { createLogger } from "../logger";
+
+const logger = createLogger("projects/citationHandlers");
 
 export function registerCitationRoutes(app: Express): void {
   // === CITATIONS ===
@@ -36,7 +39,7 @@ export function registerCitationRoutes(app: Express): void {
 
       res.json({ footnote, bibliography, inlineCitation, style: validStyle });
     } catch (error) {
-      console.error("Error generating citation:", error);
+      logger.error({ err: error }, "Error generating citation:");
       res.status(400).json({ error: "Failed to generate citation" });
     }
   });
@@ -82,7 +85,7 @@ export function registerCitationRoutes(app: Express): void {
         await tokenUsage.flush(req.user!.userId, "citation_ai");
         res.json({ footnote, bibliography, citationData });
       } catch (error) {
-        console.error("Error generating AI citation:", error);
+        logger.error({ err: error }, "Error generating AI citation:");
         res.status(500).json({ error: "Failed to generate citation" });
       }
     },
@@ -130,7 +133,7 @@ export function registerCitationRoutes(app: Express): void {
           bibliography,
         });
       } catch (error) {
-        console.error("Error generating footnote with quote:", error);
+        logger.error({ err: error }, "Error generating footnote with quote:");
         res.status(400).json({ error: "Failed to generate footnote" });
       }
     },
@@ -242,7 +245,7 @@ export function registerCitationRoutes(app: Express): void {
           citationData,
         });
       } catch (error) {
-        console.error("Error generating annotation footnote:", error);
+        logger.error({ err: error }, "Error generating annotation footnote:");
         res.status(500).json({ error: "Failed to generate footnote" });
       }
     },
