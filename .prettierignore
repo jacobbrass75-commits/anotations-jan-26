@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+coverage/
+mcp-server/dist/
+chrome-extension/
+package-lock.json
+AUDIT-2026-06-09.md
+CODEX-TASKS.md
+audit.json

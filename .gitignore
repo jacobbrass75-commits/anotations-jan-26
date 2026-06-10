@@ -8,6 +8,7 @@ coverage/
 *.cjs
 /*.js
 !/postcss.config.js
+!/eslint.config.js
 
 # Environment variables (contains secrets!)
 .env
