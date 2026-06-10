@@ -17,6 +17,12 @@ describe("Anthropic model configuration", () => {
     expect(ANTHROPIC_MODELS.sonnet).toBe("claude-sonnet-4-6");
   });
 
+  it("uses Claude Fable 5 for the opt-in writing test model by default", async () => {
+    const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
+
+    expect(ANTHROPIC_MODELS.fable).toBe("claude-fable-5");
+  });
+
   it("maps older Opus and Sonnet env values to 4.6", async () => {
     vi.stubEnv("ANTHROPIC_OPUS_MODEL", "claude-opus-4-1-20250805");
     vi.stubEnv("ANTHROPIC_SONNET_MODEL", "claude-sonnet-4-20250514");

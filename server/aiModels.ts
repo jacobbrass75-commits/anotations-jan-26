@@ -9,6 +9,7 @@ function readModelEnv(
 }
 
 export const ANTHROPIC_MODELS = {
+  fable: readModelEnv("ANTHROPIC_FABLE_MODEL", "claude-fable-5"),
   opus: readModelEnv("ANTHROPIC_OPUS_MODEL", "claude-opus-4-6", {
     "claude-opus-4-1-20250805": "claude-opus-4-6",
     "claude-opus-4-20250514": "claude-opus-4-6",

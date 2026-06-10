@@ -15,11 +15,13 @@ import { sanitizeSseError, startSseHeartbeat } from "./sseUtils";
 import { buildAuthorLabel, clipText } from "./chat/shared";
 import type { CitationData } from "@shared/schema";
 import { createLogger } from "./logger";
+import { ANTHROPIC_MODELS } from "./aiModels";
 
 const logger = createLogger("writingRoutes");
 
 const MAX_SOURCE_EXCERPT_CHARS = 700;
 const MAX_SOURCE_FULLTEXT_CHARS = 7000;
+const FABLE_TEST_USER_REFS_ENV = "ANTHROPIC_FABLE_TEST_USER_REFS";
 
 function toSafeFilename(topic: string): string {
   const base = topic
@@ -29,6 +31,27 @@ function toSafeFilename(topic: string): string {
     .slice(0, 80);
   const datePart = new Date().toISOString().slice(0, 10);
   return `${base || "generated-paper"}-${datePart}.md`;
+}
+
+function parseCsvRefs(value: string | undefined): Set<string> {
+  return new Set(
+    (value || "")
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function getWritingModelOverrideForUser(user: Express.User): string | null {
+  const fableUserRefs = parseCsvRefs(process.env[FABLE_TEST_USER_REFS_ENV]);
+  if (fableUserRefs.size === 0) return null;
+
+  const userRefs = [user.userId, user.email].map((value) => value.toLowerCase());
+  if (!fableUserRefs.has("*") && !userRefs.some((value) => fableUserRefs.has(value))) {
+    return null;
+  }
+
+  return ANTHROPIC_MODELS.fable;
 }
 
 export async function savePaperToProject(
@@ -138,6 +161,7 @@ export function registerWritingRoutes(app: Express): void {
           noEnDashes: body.noEnDashes ?? false,
           deepWrite: body.deepWrite ?? false,
           voiceProfile,
+          modelOverride: getWritingModelOverrideForUser(req.user!),
         };
 
         const sources: WritingSource[] = [];

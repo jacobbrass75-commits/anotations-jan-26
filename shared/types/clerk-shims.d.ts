@@ -34,6 +34,28 @@ declare module "@clerk/clerk-react" {
     signOut: () => void | Promise<void>;
   };
 
+  export interface AuthenticateWithRedirectParams {
+    strategy: "oauth_google" | `oauth_${string}`;
+    redirectUrl: string;
+    redirectUrlComplete: string;
+    continueSignIn?: boolean;
+    continueSignUp?: boolean;
+  }
+
+  export interface ClerkOAuthResource {
+    authenticateWithRedirect: (params: AuthenticateWithRedirectParams) => Promise<void>;
+  }
+
+  export function useSignIn(): {
+    isLoaded: boolean;
+    signIn?: ClerkOAuthResource | null;
+  };
+
+  export function useSignUp(): {
+    isLoaded: boolean;
+    signUp?: ClerkOAuthResource | null;
+  };
+
   export const ClerkProvider: React.ComponentType<{
     children?: React.ReactNode;
     publishableKey?: string;
@@ -44,13 +66,19 @@ declare module "@clerk/clerk-react" {
     routing?: string;
     path?: string;
     signUpUrl?: string;
+    forceRedirectUrl?: string;
+    fallbackRedirectUrl?: string;
   }>;
 
   export const SignUp: React.ComponentType<{
     routing?: string;
     path?: string;
     signInUrl?: string;
+    forceRedirectUrl?: string;
+    fallbackRedirectUrl?: string;
   }>;
+
+  export const AuthenticateWithRedirectCallback: React.ComponentType<Record<string, unknown>>;
 
   export const UserButton: React.ComponentType<Record<string, unknown>>;
 

@@ -17,6 +17,7 @@ export interface WritingRequest {
   noEnDashes: boolean;
   deepWrite: boolean;
   voiceProfile?: string | null;
+  modelOverride?: string | null;
 }
 
 export interface WritingPlanSection {
@@ -136,6 +137,31 @@ function getUsage(response: {
 function addUsage(total: TokenUsage, usage: TokenUsage): void {
   total.inputTokens += usage.inputTokens;
   total.outputTokens += usage.outputTokens;
+}
+
+function usesAdaptiveThinking(model: string): boolean {
+  return /\b(fable|mythos)\b/i.test(model);
+}
+
+function applyWritingModelOptions(
+  params: Anthropic.MessageCreateParamsNonStreaming,
+  model: string,
+  deepWrite: boolean,
+): Anthropic.MessageCreateParamsNonStreaming {
+  if (usesAdaptiveThinking(model)) {
+    params.output_config = {
+      ...params.output_config,
+      effort: deepWrite ? "high" : "medium",
+    };
+    return params;
+  }
+
+  if (deepWrite) {
+    params.thinking = { type: "enabled", budget_tokens: 4096 };
+    params.max_tokens = Math.max(params.max_tokens, 8192);
+  }
+
+  return params;
 }
 
 function clipPromptText(text: string | null | undefined, maxChars: number): string {
@@ -263,7 +289,39 @@ export function formatSourceForPrompt(source: WritingSource): string {
   return parts.join("\n");
 }
 
-export function formatSourceForPromptTiered(source: TieredSource): string {
+export interface TieredFormatOptions {
+  /** Cap on annotations included inline. Omitted = include all (small-project behavior). */
+  maxAnnotations?: number;
+}
+
+/**
+ * Pick which annotations earn inline prompt space when a cap applies.
+ * Manual annotations are user-curated, so they always outrank AI ones;
+ * AI annotations compete on confidence. Selected annotations are returned
+ * in document order so the prompt reads coherently.
+ */
+export function selectAnnotationsForPrompt(
+  annotations: ProjectAnnotation[],
+  maxAnnotations?: number,
+): ProjectAnnotation[] {
+  if (!maxAnnotations || annotations.length <= maxAnnotations) {
+    return annotations;
+  }
+
+  const prioritized = [...annotations].sort((a, b) => {
+    const aManual = a.isAiGenerated === false ? 0 : 1;
+    const bManual = b.isAiGenerated === false ? 0 : 1;
+    if (aManual !== bManual) return aManual - bManual;
+    return (b.confidenceScore ?? 0) - (a.confidenceScore ?? 0);
+  });
+
+  return prioritized.slice(0, maxAnnotations).sort((a, b) => a.startPosition - b.startPosition);
+}
+
+export function formatSourceForPromptTiered(
+  source: TieredSource,
+  options: TieredFormatOptions = {},
+): string {
   const parts: string[] = [];
   parts.push(`[SOURCE ${source.id}]`);
   parts.push(
@@ -309,11 +367,21 @@ export function formatSourceForPromptTiered(source: TieredSource): string {
   if (source.projectContext) parts.push(`Project Context: ${source.projectContext}`);
 
   if (source.annotations.length > 0) {
+    const includedAnnotations = selectAnnotationsForPrompt(
+      source.annotations,
+      options.maxAnnotations,
+    );
+    const omittedCount = source.annotations.length - includedAnnotations.length;
+
     parts.push("");
-    parts.push(`ANNOTATED PASSAGES (${source.annotations.length} annotations):`);
+    parts.push(
+      omittedCount > 0
+        ? `ANNOTATED PASSAGES (showing ${includedAnnotations.length} of ${source.annotations.length} annotations):`
+        : `ANNOTATED PASSAGES (${source.annotations.length} annotations):`,
+    );
     parts.push("");
 
-    for (const ann of source.annotations) {
+    for (const ann of includedAnnotations) {
       const confidence =
         typeof ann.confidenceScore === "number"
           ? ` | Confidence: ${ann.confidenceScore.toFixed(2)}`
@@ -325,6 +393,13 @@ export function formatSourceForPromptTiered(source: TieredSource): string {
       if (ann.note) parts.push(`Note: ${ann.note}`);
       parts.push(`Position: chars ${ann.startPosition}-${ann.endPosition}`);
       parts.push(`Document: ${source.documentId}`);
+      parts.push("");
+    }
+
+    if (omittedCount > 0) {
+      parts.push(
+        `[${omittedCount} more annotations not shown - retrieve with get_source_chunks or <chunk_request> when needed]`,
+      );
       parts.push("");
     }
   } else {
@@ -450,12 +525,18 @@ Citation style: ${request.citationStyle}
 Source materials (${sources.length} total):
 ${sourceBlock || "(No sources provided - write based on topic alone)"}`;
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: PLANNER_MAX_TOKENS,
-    system: systemPrompt,
-    messages: [{ role: "user", content: userPrompt }],
-  });
+  const response = await client.messages.create(
+    applyWritingModelOptions(
+      {
+        model,
+        max_tokens: PLANNER_MAX_TOKENS,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      },
+      model,
+      usesAdaptiveThinking(model) && request.deepWrite,
+    ),
+  );
   addUsage(totalUsage, getUsage(response));
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
@@ -545,12 +626,18 @@ Citation style: ${request.citationStyle}
 Source list:
 ${sourceBrief || "(No sources provided)"}`;
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: COMPACT_PLANNER_MAX_TOKENS,
-    system: systemPrompt,
-    messages: [{ role: "user", content: userPrompt }],
-  });
+  const response = await client.messages.create(
+    applyWritingModelOptions(
+      {
+        model,
+        max_tokens: COMPACT_PLANNER_MAX_TOKENS,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      },
+      model,
+      usesAdaptiveThinking(model) && request.deepWrite,
+    ),
+  );
 
   const textBlocks = response.content.filter(
     (block): block is Anthropic.TextBlock => block.type === "text",
@@ -617,7 +704,7 @@ Requirements:
 
 Output the section text in markdown format. Start with the section heading as ## ${section.title}`;
 
-  const messageParams: Anthropic.MessageCreateParams = {
+  const messageParams: Anthropic.MessageCreateParamsNonStreaming = {
     model,
     max_tokens: Math.max(2048, section.targetWords * 2),
     system: systemPrompt,
@@ -629,14 +716,13 @@ Output the section text in markdown format. Start with the section heading as ##
     ],
   };
 
-  // Deep Write: add extended thinking on Sonnet
   if (request.deepWrite) {
-    messageParams.thinking = { type: "enabled", budget_tokens: 4096 };
-    // Extended thinking requires higher max_tokens
-    messageParams.max_tokens = Math.max(8192, section.targetWords * 3);
+    messageParams.max_tokens = Math.max(messageParams.max_tokens, section.targetWords * 3);
   }
 
-  const response = await client.messages.create(messageParams);
+  const response = await client.messages.create(
+    applyWritingModelOptions(messageParams, model, request.deepWrite),
+  );
 
   // Extract text content (skip thinking blocks)
   const textBlocks = response.content.filter(
@@ -678,17 +764,23 @@ The thesis of the paper is: ${plan.thesis}
 
 Output the complete paper in markdown format.${voiceBlock}`;
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: 8192,
-    system: systemPrompt,
-    messages: [
+  const response = await client.messages.create(
+    applyWritingModelOptions(
       {
-        role: "user",
-        content: `Here are the sections to stitch together:\n\n${combinedSections}\n\nBibliography entries from the plan:\n${plan.bibliography.join("\n")}`,
+        model,
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: `Here are the sections to stitch together:\n\n${combinedSections}\n\nBibliography entries from the plan:\n${plan.bibliography.join("\n")}`,
+          },
+        ],
       },
-    ],
-  });
+      model,
+      usesAdaptiveThinking(model) && request.deepWrite,
+    ),
+  );
 
   const textBlocks = response.content.filter(
     (block): block is Anthropic.TextBlock => block.type === "text",
@@ -707,7 +799,7 @@ export async function runWritingPipeline(
   onEvent: (event: WritingSSEEvent) => void,
 ): Promise<void> {
   const client = getClient();
-  const model = request.deepWrite ? DEEP_WRITE_MODEL : DEFAULT_MODEL;
+  const model = request.modelOverride || (request.deepWrite ? DEEP_WRITE_MODEL : DEFAULT_MODEL);
   const voiceBlock = buildVoiceProfileBlock(request.voiceProfile);
 
   const totalUsage: TokenUsage = {
@@ -720,7 +812,9 @@ export async function runWritingPipeline(
     onEvent({
       type: "status",
       phase: "planning",
-      message: "Creating outline...",
+      message: usesAdaptiveThinking(model)
+        ? "Creating outline with Claude Fable 5..."
+        : "Creating outline...",
     });
 
     const plannedWriting = await runPlanner(client, request, sources, model, voiceBlock);

@@ -12,6 +12,7 @@ const ProjectWorkspace = lazy(() => import("@/pages/ProjectWorkspace"));
 const ProjectDocument = lazy(() => import("@/pages/ProjectDocument"));
 const Login = lazy(() => import("@/pages/Login"));
 const Register = lazy(() => import("@/pages/Register"));
+const SsoCallback = lazy(() => import("@/pages/SsoCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 const Account = lazy(() => import("@/pages/Account"));
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/sign-in/*" component={Login} />
       <Route path="/sign-up" component={Register} />
       <Route path="/sign-up/*" component={Register} />
+      <Route path="/sso-callback" component={SsoCallback} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/account">

@@ -39,6 +39,8 @@ describe("writing route integration", () => {
     sqlite = null;
     process.chdir(originalCwd);
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_FABLE_TEST_USER_REFS;
+    delete process.env.ANTHROPIC_FABLE_MODEL;
     vi.resetModules();
     vi.restoreAllMocks();
     await rm(tempDir, { recursive: true, force: true });
@@ -326,6 +328,68 @@ describe("writing route integration", () => {
       expect(firstCall.system).toContain("selected signature phrase");
       expect(firstCall.system).not.toContain("Project-only style voice.");
       expect(firstCall.system).not.toContain("project signature phrase");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("uses Claude Fable only when the writing user is allowlisted", async () => {
+    process.env.ANTHROPIC_FABLE_TEST_USER_REFS = "writing@example.com";
+    const { server, token } = await createApp();
+
+    anthropicCreate
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              thesis: "Allowlisted users can test Fable.",
+              bibliography: [],
+              sections: [
+                {
+                  title: "Introduction",
+                  description: "Set up the argument.",
+                  sourceIds: [],
+                  targetWords: 100,
+                },
+              ],
+            }),
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "## Introduction\nA Fable draft section." }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "# Complete Paper\nA Fable draft section." }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/write`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          topic: "Fable opt-in",
+          citationStyle: "chicago",
+          tone: "academic",
+          targetLength: "short",
+        }),
+      });
+      const text = await response.text();
+      const modelParams = anthropicCreate.mock.calls.map(([params]) => params as any);
+
+      expect(response.status).toBe(200);
+      expect(text).toContain('"type":"complete"');
+      expect(modelParams).toHaveLength(3);
+      expect(modelParams.every((params) => params.model === "claude-fable-5")).toBe(true);
+      expect(modelParams.every((params) => params.output_config?.effort === "medium")).toBe(true);
+      expect(modelParams.every((params) => params.thinking === undefined)).toBe(true);
     } finally {
       await server.close();
     }
