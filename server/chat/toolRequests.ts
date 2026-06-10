@@ -1,15 +1,24 @@
 import { storage } from "../storage";
 import { getToolResponseLimit, truncateToolResult } from "../contextCompaction";
 import { formatSourceStubByRole } from "../sourceRoles";
+import { cosineSimilarity, getEmbeddingWithUsage } from "../openai";
+import { createLogger } from "../logger";
 import type { ResearchFinding } from "../researchAgent";
 import type { TieredSource } from "../writingPipeline";
 import { clipText } from "./shared";
 import { parseStyleAnalysisValue } from "./promptBuilder";
 
+const logger = createLogger("chatToolRequests");
+
 interface SourceToolInput {
   docId?: string;
   query?: string;
   maxItems?: number;
+}
+
+export interface SourceToolExecutorOptions {
+  /** Injectable for tests. Defaults to the OpenAI embedding used everywhere else. */
+  embedQuery?: (query: string) => Promise<number[]>;
 }
 
 export function buildSourceTools() {
@@ -72,6 +81,29 @@ function scoreAnnotationMatch(
   return queryTerms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
 }
 
+/**
+ * Semantic ranking when both sides have embeddings; keyword fraction as the
+ * fallback for legacy annotations without a stored search embedding. The 0.6
+ * scale keeps keyword scores below typical relevant-cosine values so embedded
+ * annotations win ties.
+ */
+export function scoreAnnotationForQuery(
+  annotation: TieredSource["annotations"][number],
+  queryTerms: string[],
+  queryEmbedding: number[] | null,
+): number {
+  if (
+    queryEmbedding &&
+    Array.isArray(annotation.searchEmbedding) &&
+    annotation.searchEmbedding.length === queryEmbedding.length
+  ) {
+    return cosineSimilarity(annotation.searchEmbedding, queryEmbedding);
+  }
+
+  if (queryTerms.length === 0) return 0;
+  return (scoreAnnotationMatch(annotation, queryTerms) / queryTerms.length) * 0.6;
+}
+
 function formatSourceSummary(source: TieredSource): string {
   const parts = [
     formatSourceStubByRole({
@@ -98,7 +130,10 @@ function formatSourceSummary(source: TieredSource): string {
   return parts.join("\n");
 }
 
-export function createSourceToolExecutor(sources: TieredSource[]) {
+export function createSourceToolExecutor(
+  sources: TieredSource[],
+  options: SourceToolExecutorOptions = {},
+) {
   const sourceByDocId = new Map<string, TieredSource>();
   for (const source of sources) {
     sourceByDocId.set(source.documentId, source);
@@ -106,6 +141,7 @@ export function createSourceToolExecutor(sources: TieredSource[]) {
   }
 
   const toolLimit = getToolResponseLimit(sources.length);
+  const embedQuery = options.embedQuery ?? ((query: string) => getEmbeddingWithUsage(query));
 
   return async (name: string, input: unknown): Promise<string> => {
     const { docId, query, maxItems } = normalizeSourceToolInput(input);
@@ -125,10 +161,23 @@ export function createSourceToolExecutor(sources: TieredSource[]) {
     if (name === "get_source_chunks") {
       const queryTerms = getQueryTerms(query);
       const annotationLimit = Math.max(1, Math.min(maxItems || 4, 6));
+
+      let queryEmbedding: number[] | null = null;
+      if (query?.trim()) {
+        try {
+          queryEmbedding = await embedQuery(query);
+        } catch (error) {
+          logger.warn(
+            { err: error },
+            "[chatTools] Query embedding failed; falling back to keyword ranking",
+          );
+        }
+      }
+
       const rankedAnnotations = [...source.annotations]
         .map((annotation) => ({
           annotation,
-          score: scoreAnnotationMatch(annotation, queryTerms),
+          score: scoreAnnotationForQuery(annotation, queryTerms, queryEmbedding),
         }))
         .sort((left, right) => right.score - left.score);
 
@@ -151,7 +200,20 @@ export function createSourceToolExecutor(sources: TieredSource[]) {
       }
 
       const chunks = await storage.getChunksForDocument(source.documentId);
-      const chunkText = chunks
+      const orderedChunks = queryEmbedding
+        ? [...chunks].sort((left, right) => {
+            const leftScore =
+              Array.isArray(left.embedding) && left.embedding.length === queryEmbedding.length
+                ? cosineSimilarity(left.embedding, queryEmbedding)
+                : -1;
+            const rightScore =
+              Array.isArray(right.embedding) && right.embedding.length === queryEmbedding.length
+                ? cosineSimilarity(right.embedding, queryEmbedding)
+                : -1;
+            return rightScore - leftScore;
+          })
+        : chunks;
+      const chunkText = orderedChunks
         .slice(0, annotationLimit)
         .map(
           (chunk, index) =>

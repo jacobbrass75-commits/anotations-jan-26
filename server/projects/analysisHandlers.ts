@@ -7,7 +7,7 @@ import {
   type ThoroughnessLevel,
 } from "../openai";
 import { processChunksWithPipelineV2 } from "../pipelineV2";
-import { generateSearchableContent } from "../contextGenerator";
+import { buildAnnotationSearchIndex } from "../contextGenerator";
 import type { TokenUsageReporter } from "../aiUsage";
 import type { Express, Request, Response } from "express";
 import { checkTokenBudget, requireAuth, requireTier } from "../auth";
@@ -198,9 +198,9 @@ export async function analyzeProjectDocument(
       confidenceScore: ann.confidence,
     });
 
-    generateSearchableContent(ann.highlightText, ann.note, ann.category as AnnotationCategory)
-      .then((searchableContent) => {
-        projectStorage.updateProjectAnnotation(created.id, { searchableContent });
+    buildAnnotationSearchIndex(ann.highlightText, ann.note, ann.category as AnnotationCategory)
+      .then((searchIndex) => {
+        projectStorage.updateProjectAnnotation(created.id, searchIndex);
       })
       .catch((err) => logger.warn({ err: err }, "Search indexing failed (non-blocking):"));
   }
@@ -561,7 +561,7 @@ export function registerProjectAnalysisRoutes(app: Express): void {
           let created = 0;
 
           for (const ann of annotations) {
-            await projectStorage.createProjectAnnotation({
+            const createdAnnotation = await projectStorage.createProjectAnnotation({
               projectDocumentId: projectDocId,
               startPosition: ann.absoluteStart,
               endPosition: ann.absoluteEnd,
@@ -576,6 +576,16 @@ export function registerProjectAnalysisRoutes(app: Express): void {
               analysisRunId,
             });
             created++;
+
+            buildAnnotationSearchIndex(
+              ann.highlightText,
+              ann.note,
+              ann.category as AnnotationCategory,
+            )
+              .then((searchIndex) => {
+                projectStorage.updateProjectAnnotation(createdAnnotation.id, searchIndex);
+              })
+              .catch((err) => logger.warn({ err: err }, "Search indexing failed (non-blocking):"));
           }
 
           results.push({

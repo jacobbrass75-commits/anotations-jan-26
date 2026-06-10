@@ -161,6 +161,33 @@ export async function generateSearchableContent(
   return `[${category}] ${highlightedText} ${note || ""} ${documentContext?.slice(0, 100) || ""}`.trim();
 }
 
+/**
+ * Searchable text plus its embedding for an annotation. The embedding powers
+ * semantic retrieval in the chat gatherer; when the embedding call fails we
+ * still return the text so keyword fallback keeps working.
+ */
+export async function buildAnnotationSearchIndex(
+  highlightedText: string,
+  note: string | null,
+  category: string,
+  documentContext?: string,
+): Promise<{ searchableContent: string; searchEmbedding?: number[] }> {
+  const searchableContent = await generateSearchableContent(
+    highlightedText,
+    note,
+    category,
+    documentContext,
+  );
+
+  try {
+    const searchEmbedding = await getEmbeddingWithUsage(searchableContent);
+    return { searchableContent, searchEmbedding };
+  } catch (error) {
+    logger.warn({ err: error }, "Annotation embedding failed; storing searchable text only");
+    return { searchableContent };
+  }
+}
+
 export async function embedText(
   text: string,
   onTokenUsage?: TokenUsageReporter,

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { hasTokenBudgetAvailable, requireAuth } from "../auth";
 import { aiLimiter } from "../rateLimits";
 import { projectStorage } from "../projectStorage";
-import { generateRetrievalContext, generateSearchableContent } from "../contextGenerator";
+import { buildAnnotationSearchIndex, generateRetrievalContext } from "../contextGenerator";
 import { db } from "../db";
 import { storage } from "../storage";
 import { isSourceRole } from "../sourceRoles";
@@ -449,14 +449,12 @@ export function registerProjectDocumentRoutes(app: Express): void {
 
         // Search indexing is optional - don't block annotation creation
         try {
-          const searchableContent = await generateSearchableContent(
+          const searchIndex = await buildAnnotationSearchIndex(
             validated.highlightedText,
             validated.note || null,
             validated.category,
           );
-          await projectStorage.updateProjectAnnotation(annotation.id, {
-            searchableContent,
-          });
+          await projectStorage.updateProjectAnnotation(annotation.id, searchIndex);
         } catch (indexError) {
           logger.warn({ err: indexError }, "Search indexing failed (non-blocking):");
         }
