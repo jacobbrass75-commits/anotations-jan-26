@@ -7,22 +7,34 @@
 <body>
   <div id="app">
     <div id="login-view" style="display: none;">
-      <div class="header">
-        <h1>ScholarMark</h1>
-        <p class="subtitle">Connect your ScholarMark account</p>
+      <div class="brand-panel">
+        <div class="mark" aria-hidden="true">SM</div>
+        <div>
+          <h1>ScholarMark</h1>
+          <p class="subtitle">Academic web clipping for your workspace</p>
+        </div>
       </div>
-      <div class="section">
-        <p class="hint" id="login-hint">
-          Choose Google or email in ScholarMark, then this extension connects automatically.
-        </p>
-        <button id="connect-btn" class="primary">Sign in or sign up</button>
+
+      <div class="section auth-card">
+        <p class="eyebrow">Secure Account Link</p>
+        <h2>Connect ScholarMark</h2>
+        <p class="hint" id="login-hint"></p>
+        <button id="connect-btn" class="google-button" aria-label="Continue with Google">
+          <span class="google-mark" aria-hidden="true">G</span>
+          <span>Continue with Google</span>
+        </button>
+        <button id="email-connect-btn" class="text-button">Use email instead</button>
+        <p class="fine-print">Opens ScholarMark in your browser and returns here automatically.</p>
       </div>
     </div>
 
     <div id="main-view" style="display: none;">
-      <div class="header">
-        <h1>ScholarMark</h1>
-        <p class="user-info" id="user-info"></p>
+      <div class="brand-panel">
+        <div class="mark" aria-hidden="true">SM</div>
+        <div>
+          <h1>ScholarMark</h1>
+          <p class="user-info" id="user-info"></p>
+        </div>
       </div>
 
       <div class="section">

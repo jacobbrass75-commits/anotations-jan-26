@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const loginView = document.getElementById("login-view");
   const mainView = document.getElementById("main-view");
   const connectBtn = document.getElementById("connect-btn");
+  const emailConnectBtn = document.getElementById("email-connect-btn");
   const loginHint = document.getElementById("login-hint");
   const statusText = document.getElementById("status-text");
   const userInfo = document.getElementById("user-info");
@@ -13,7 +14,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function showLoginView(serverUrl) {
     loginView.style.display = "block";
     mainView.style.display = "none";
-    loginHint.textContent = `Open ${serverUrl} to choose Google or email sign-in, then connect this extension.`;
+    loginHint.textContent = `Choose Google on ${serverUrl.replace(/^https?:\/\//, "")} to finish linking this extension.`;
   }
 
   function showMainView(user) {
@@ -54,6 +55,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   connectBtn.addEventListener("click", async () => {
     statusText.textContent = "";
+    await chrome.runtime.sendMessage({ type: "START_AUTH" });
+    window.close();
+  });
+
+  emailConnectBtn.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({ type: "START_AUTH" });
     window.close();
   });
