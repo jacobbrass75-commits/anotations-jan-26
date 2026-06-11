@@ -28,9 +28,9 @@ export function OverviewCards({ overview, conversations, isLoading }: OverviewCa
 
   return (
     <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-      <Card className="bg-card/70 border-border">
+      <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <CardTitle className="text-sm eva-section-title flex items-center gap-2">
             <MessageSquare className="h-4 w-4 text-primary" />
             Conversations
           </CardTitle>
@@ -42,9 +42,9 @@ export function OverviewCards({ overview, conversations, isLoading }: OverviewCa
         </CardContent>
       </Card>
 
-      <Card className="bg-card/70 border-border">
+      <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <CardTitle className="text-sm eva-section-title flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
             Tool Calls
           </CardTitle>
@@ -56,9 +56,9 @@ export function OverviewCards({ overview, conversations, isLoading }: OverviewCa
         </CardContent>
       </Card>
 
-      <Card className="bg-card/70 border-border">
+      <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <CardTitle className="text-sm eva-section-title flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-primary" />
             Failure Rate
           </CardTitle>
@@ -75,9 +75,9 @@ export function OverviewCards({ overview, conversations, isLoading }: OverviewCa
         </CardContent>
       </Card>
 
-      <Card className="bg-card/70 border-border">
+      <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <CardTitle className="text-sm eva-section-title flex items-center gap-2">
             <Activity className="h-4 w-4 text-primary" />
             Avg Peak Tokens
           </CardTitle>

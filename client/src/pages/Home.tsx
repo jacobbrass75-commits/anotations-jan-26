@@ -104,7 +104,7 @@ export default function Home() {
             <h1 className="font-sans uppercase tracking-[0.2em] font-bold text-primary">
               SCHOLARMARK
             </h1>
-            <div className="h-2 w-2 rounded-full bg-primary" />
+            <div className="eva-status-active" />
           </div>
           <div className="flex items-center gap-2">
             <Link href="/projects">
@@ -178,11 +178,11 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 pb-8 space-y-6">
-        <Card className="border-border bg-card/80">
+      <main className="flex-1 container mx-auto px-4 py-6 pb-8 space-y-6 eva-grid-bg">
+        <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80">
           <CardContent className="pt-8 pb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             <div className="space-y-3">
-              <div className="font-semibold">Research Workspace</div>
+              <div className="eva-section-title">Research Workspace</div>
               <h2 className="text-3xl md:text-4xl font-sans uppercase tracking-[0.12em] text-primary leading-tight">
                 ScholarMark Command Center
               </h2>
@@ -192,9 +192,9 @@ export default function Home() {
               </p>
               <div className="flex items-center gap-3 text-sm font-mono text-chart-2">
                 <div className="flex items-center gap-1.5">
-                  <div className="h-2 w-2 rounded-full bg-primary" />
-                  <div className="h-2 w-2 rounded-full bg-primary" />
-                  <div className="h-2 w-2 rounded-full bg-primary" />
+                  <div className="eva-status-active" />
+                  <div className="eva-status-active" />
+                  <div className="eva-status-active" />
                 </div>
                 <span>Workspace ready</span>
               </div>
@@ -276,9 +276,9 @@ export default function Home() {
         </Card>
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="bg-card/70 border-border">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <CardTitle className="text-sm eva-section-title flex items-center gap-2">
                 <FolderOpen className="h-4 w-4 text-primary" />
                 Projects
               </CardTitle>
@@ -288,9 +288,9 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/70 border-border">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <CardTitle className="text-sm eva-section-title flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
                 Documents
               </CardTitle>
@@ -300,9 +300,9 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/70 border-border">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <CardTitle className="text-sm eva-section-title flex items-center gap-2">
                 <Search className="h-4 w-4 text-primary" />
                 Annotations
               </CardTitle>
@@ -314,9 +314,9 @@ export default function Home() {
         </section>
 
         <section>
-          <Card className="bg-card/70 border-border">
+          <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="font-semibold">Recent Projects</CardTitle>
+              <CardTitle className="eva-section-title">Recent Projects</CardTitle>
               <Link href="/projects">
                 <Button
                   variant="ghost"
@@ -338,7 +338,7 @@ export default function Home() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {recentProjects.map((project) => (
                     <Link key={project.id} href={`/projects/${project.id}`}>
-                      <Card className="cursor-pointer hover-lift bg-background/40 border-border">
+                      <Card className="cursor-pointer hover-elevate eva-corner-decor bg-background/40 border-border">
                         <CardContent className="pt-4 pb-4 space-y-2">
                           <div className="font-sans uppercase tracking-[0.1em] text-sm line-clamp-2">
                             {project.name}

@@ -282,8 +282,12 @@ export function HighlightedText({
   };
 
   return (
-    <div ref={containerRef} className="relative" onMouseUp={handleMouseUp}>
-      <div className="reading-surface mx-auto text-foreground whitespace-pre-wrap">
+    <div
+      ref={containerRef}
+      className="relative prose prose-sm dark:prose-invert max-w-none leading-relaxed"
+      onMouseUp={handleMouseUp}
+    >
+      <div className="text-base font-serif text-foreground whitespace-pre-wrap">
         {renderContent()}
       </div>
 
@@ -294,7 +298,7 @@ export function HighlightedText({
           className="absolute z-50 animate-in fade-in-0 zoom-in-95"
           style={{ top: popoverPosition.top, left: popoverPosition.left }}
         >
-          <Card className="w-80 p-4 shadow-lg bg-card">
+          <Card className="w-80 p-4 shadow-lg eva-clip-sm bg-card">
             <div className="flex items-start justify-between gap-2 mb-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <div

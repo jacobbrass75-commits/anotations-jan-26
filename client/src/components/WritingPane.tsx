@@ -407,7 +407,7 @@ export default function WritingPane({ initialProjectId, lockProject = false }: W
                 {paper.topic}
               </div>
               <div className="max-w-[92%] rounded-2xl border border-border bg-background px-4 py-3">
-                <div className="prose reading-surface dark:prose-invert">
+                <div className="prose prose-sm max-w-none dark:prose-invert">
                   <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
                     {paper.content}
                   </ReactMarkdown>
@@ -427,7 +427,7 @@ export default function WritingPane({ initialProjectId, lockProject = false }: W
                   <span className="text-muted-foreground">{status || "Generating..."}</span>
                 </div>
                 {activeContent ? (
-                  <div className="prose reading-surface dark:prose-invert">
+                  <div className="prose prose-sm max-w-none dark:prose-invert">
                     <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
                       {activeContent}
                     </ReactMarkdown>

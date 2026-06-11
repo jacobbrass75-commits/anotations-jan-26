@@ -53,9 +53,9 @@ export function ManualAnnotationDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] eva-grid-bg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 font-semibold text-base">
+          <DialogTitle className="flex items-center gap-2 eva-section-title text-base">
             <Highlighter className="h-5 w-5 text-primary" />
             MANUAL ANNOTATION
           </DialogTitle>
@@ -73,7 +73,11 @@ export function ManualAnnotationDialog({
           <div className="space-y-2">
             <Label htmlFor="category">Category</Label>
             <Select value={category} onValueChange={(v) => setCategory(v as AnnotationCategory)}>
-              <SelectTrigger id="category" className="" data-testid="select-manual-category">
+              <SelectTrigger
+                id="category"
+                className="eva-focus-glow"
+                data-testid="select-manual-category"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

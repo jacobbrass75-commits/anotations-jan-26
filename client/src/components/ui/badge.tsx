@@ -3,10 +3,10 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
-const badgeStyles = cva(
+const badgeVariants = cva(
   // Whitespace-nowrap: Badges should never wrap.
   "whitespace-nowrap inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-[10px] font-mono transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2" +
-    " hover-lift ",
+    " hover-elevate ",
   {
     variants: {
       variant: {
@@ -24,10 +24,10 @@ const badgeStyles = cva(
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeStyles> {}
+  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps) {
-  return <div className={cn(badgeStyles({ variant }), className)} {...props} />;
+  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
-export { Badge, badgeStyles };
+export { Badge, badgeVariants };

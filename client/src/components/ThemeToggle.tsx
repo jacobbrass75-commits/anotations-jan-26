@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Simple theme toggle: Light (light) / Dark (dark)
+// Simple theme toggle: Light (Darling) / Dark (Eva)
 // Default: light mode (system default overridden to "light")
 const STORAGE_KEY = "sm-theme";
 

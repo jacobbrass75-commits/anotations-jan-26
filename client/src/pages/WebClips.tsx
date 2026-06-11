@@ -127,7 +127,7 @@ export default function WebClips() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <h1 className="font-semibold text-lg">WEB CLIPS</h1>
+            <h1 className="eva-section-title text-lg">WEB CLIPS</h1>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-xs text-muted-foreground">{clips.length} clips loaded</div>
@@ -146,8 +146,8 @@ export default function WebClips() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 pb-10 space-y-4">
-        <Card className="">
+      <main className="max-w-7xl mx-auto p-6 pb-10 space-y-4 eva-grid-bg">
+        <Card className="eva-clip-panel eva-corner-decor">
           <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-4 gap-3">
             <Input
               value={search}
@@ -206,13 +206,13 @@ export default function WebClips() {
             ))}
           </div>
         ) : isError ? (
-          <Card className="">
+          <Card className="eva-clip-panel">
             <CardContent className="pt-6 text-sm text-destructive">
               Failed to load web clips.
             </CardContent>
           </Card>
         ) : clips.length === 0 ? (
-          <Card className="">
+          <Card className="eva-clip-panel">
             <CardContent className="pt-6 text-sm text-muted-foreground">
               No clips found for the current filters.
             </CardContent>
@@ -220,7 +220,7 @@ export default function WebClips() {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {clips.map((clip) => (
-              <Card key={clip.id} className="">
+              <Card key={clip.id} className="eva-clip-panel eva-corner-decor">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-2 min-w-0">

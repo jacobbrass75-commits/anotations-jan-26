@@ -1445,7 +1445,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-64">
-                      <div className="prose reading-surface dark:prose-invert">
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
                         <ReactMarkdown
                           remarkPlugins={remarkPlugins}
                           components={markdownComponents}
@@ -1490,7 +1490,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-48">
-                      <div className="prose reading-surface dark:prose-invert">
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
                         <ReactMarkdown
                           remarkPlugins={remarkPlugins}
                           components={markdownComponents}
@@ -1546,7 +1546,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-48">
-                      <div className="prose reading-surface dark:prose-invert">
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
                         <ReactMarkdown
                           remarkPlugins={remarkPlugins}
                           components={markdownComponents}

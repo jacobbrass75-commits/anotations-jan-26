@@ -12,13 +12,10 @@ interface DocumentSummaryProps {
 export function DocumentSummary({ document, isLoading }: DocumentSummaryProps) {
   if (isLoading) {
     return (
-      <Card className="">
+      <Card className="eva-corner-decor">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
-            <div
-              className="animate-spin rounded-full border-2 border-primary border-t-transparent"
-              style={{ width: "1.5rem", height: "1.5rem" }}
-            />
+            <div className="eva-hex-spinner" style={{ width: "1.5rem", height: "1.5rem" }} />
             <span className="text-sm font-medium">Generating summary...</span>
           </div>
         </CardHeader>
@@ -36,11 +33,11 @@ export function DocumentSummary({ document, isLoading }: DocumentSummaryProps) {
   }
 
   return (
-    <Card className="">
+    <Card className="eva-corner-decor">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-sm">DOCUMENT ANALYSIS</h3>
+          <h3 className="eva-section-title text-sm">DOCUMENT ANALYSIS</h3>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

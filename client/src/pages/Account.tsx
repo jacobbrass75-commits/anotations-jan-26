@@ -120,7 +120,7 @@ export default function Account() {
 
   if (isLoading || usageLoading || !user) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center eva-grid-bg">
         <div className="space-y-3 text-center">
           <div className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground">
             Loading Account
@@ -174,13 +174,13 @@ export default function Account() {
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 pb-8 space-y-6">
+      <main className="flex-1 container mx-auto px-4 py-6 pb-8 space-y-6 eva-grid-bg">
         <section className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
-          <Card className="border-border bg-card/80">
+          <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80">
             <CardHeader>
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="font-semibold">Identity</div>
+                  <div className="eva-section-title">Identity</div>
                   <CardTitle className="mt-2 text-3xl font-sans uppercase tracking-[0.12em] text-primary">
                     {displayName}
                   </CardTitle>
@@ -246,9 +246,9 @@ export default function Account() {
             </CardContent>
           </Card>
 
-          <Card className="border-border bg-card/80">
+          <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80">
             <CardHeader>
-              <div className="font-semibold">Access Matrix</div>
+              <div className="eva-section-title">Access Matrix</div>
               <CardTitle className="mt-2 text-2xl font-sans uppercase tracking-[0.12em] text-primary">
                 Feature Access
               </CardTitle>
@@ -273,11 +273,11 @@ export default function Account() {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
-          <Card className="border-border bg-card/80">
+          <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <div className="font-semibold">Usage</div>
+                <div className="eva-section-title">Usage</div>
               </div>
               <CardTitle className="mt-2 text-2xl font-sans uppercase tracking-[0.12em] text-primary">
                 Token Budget
@@ -296,11 +296,11 @@ export default function Account() {
             </CardContent>
           </Card>
 
-          <Card className="border-border bg-card/80">
+          <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <HardDrive className="h-4 w-4 text-primary" />
-                <div className="font-semibold">Storage</div>
+                <div className="eva-section-title">Storage</div>
               </div>
               <CardTitle className="mt-2 text-2xl font-sans uppercase tracking-[0.12em] text-primary">
                 Document Capacity
@@ -320,9 +320,9 @@ export default function Account() {
           </Card>
         </section>
 
-        <Card className="border-border bg-card/80">
+        <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80">
           <CardHeader>
-            <div className="font-semibold">Management</div>
+            <div className="eva-section-title">Management</div>
             <CardTitle className="mt-2 text-2xl font-sans uppercase tracking-[0.12em] text-primary">
               Account Controls
             </CardTitle>
@@ -362,9 +362,9 @@ export default function Account() {
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-card/80 overflow-hidden">
+        <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80 overflow-hidden">
           <CardHeader>
-            <div className="font-semibold">Profile Management</div>
+            <div className="eva-section-title">Profile Management</div>
             <CardTitle className="mt-2 text-2xl font-sans uppercase tracking-[0.12em] text-primary">
               Identity And Security
             </CardTitle>

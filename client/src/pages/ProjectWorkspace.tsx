@@ -120,7 +120,7 @@ function FolderTree({
       <div key={folder.id}>
         <div
           className={`flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer group ${
-            isSelected ? "text-primary bg-primary/10 border-l-2 border-primary" : "hover-lift"
+            isSelected ? "text-primary bg-primary/10 border-l-2 border-primary" : "hover-elevate"
           }`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
           onClick={() => onSelectFolder(folder.id)}
@@ -165,7 +165,7 @@ function FolderTree({
         className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer ${
           selectedFolderId === null
             ? "text-primary bg-primary/10 border-l-2 border-primary"
-            : "hover-lift"
+            : "hover-elevate"
         }`}
         onClick={() => onSelectFolder(null)}
         data-testid="folder-root"
@@ -211,7 +211,7 @@ function SearchResultCard({
 
   return (
     <Card
-      className="hover-lift cursor-pointer"
+      className="hover-elevate cursor-pointer eva-clip-sm"
       data-testid={`search-result-${result.annotationId || result.documentId}`}
       onClick={onNavigateToDocument}
     >
@@ -250,10 +250,7 @@ function SearchResultCard({
               title="Copy footnote with quote"
             >
               {isGeneratingFootnote ? (
-                <div
-                  className="animate-spin rounded-full border-2 border-primary border-t-transparent"
-                  style={{ width: "1rem", height: "1rem" }}
-                />
+                <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
               ) : (
                 <Quote className="h-4 w-4" />
               )}
@@ -267,10 +264,7 @@ function SearchResultCard({
               title="Generate full citation"
             >
               {isGeneratingCitation ? (
-                <div
-                  className="animate-spin rounded-full border-2 border-primary border-t-transparent"
-                  style={{ width: "1rem", height: "1rem" }}
-                />
+                <div className="eva-hex-spinner" style={{ width: "1rem", height: "1rem" }} />
               ) : (
                 <BookOpen className="h-4 w-4" />
               )}
@@ -972,7 +966,7 @@ export default function ProjectWorkspace() {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <aside className="w-64 border-r bg-muted/30 flex flex-col">
+      <aside className="w-64 border-r bg-muted/30 eva-grid-bg flex flex-col">
         <div className="p-4 border-b">
           <Link href="/projects">
             <Button variant="ghost" size="sm" className="mb-2" data-testid="button-back-projects">
@@ -1023,7 +1017,7 @@ export default function ProjectWorkspace() {
         </ScrollArea>
       </aside>
 
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col eva-grid-bg">
         <header className="border-b border-border bg-background/95 backdrop-blur-md p-4">
           <div className="flex items-center justify-between gap-4">
             <Tabs
@@ -1112,19 +1106,21 @@ export default function ProjectWorkspace() {
         </header>
 
         {workspaceTab === "voice" ? (
-          <div className="flex-1 overflow-auto p-6 pb-8">
+          <div className="flex-1 overflow-auto p-6 pb-8 eva-grid-bg">
             <VoiceProfileEditor projectId={projectId} />
           </div>
         ) : workspaceTab === "write" ? (
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 eva-grid-bg">
             <WritingChat initialProjectId={projectId} lockProject />
           </div>
         ) : (
-          <div className="flex-1 overflow-auto p-6 pb-8">
+          <div className="flex-1 overflow-auto p-6 pb-8 eva-grid-bg">
             {searchResults.length > 0 ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-sm">SEARCH RESULTS ({searchResults.length})</h3>
+                  <h3 className="eva-section-title text-sm">
+                    SEARCH RESULTS ({searchResults.length})
+                  </h3>
                   <Button variant="ghost" size="sm" onClick={() => setSearchResults([])}>
                     Clear Results
                   </Button>
@@ -1179,7 +1175,7 @@ export default function ProjectWorkspace() {
                     {filteredDocuments.map((pd) => (
                       <Card
                         key={pd.id}
-                        className="group hover-lift"
+                        className="group hover-elevate"
                         data-testid={`doc-card-${pd.id}`}
                       >
                         <CardHeader className="pb-2">
@@ -1216,7 +1212,7 @@ export default function ProjectWorkspace() {
                               >
                                 {autoAnalyzingIds.has(pd.id) ? (
                                   <div
-                                    className="animate-spin rounded-full border-2 border-primary border-t-transparent"
+                                    className="eva-hex-spinner"
                                     style={{ width: "0.85rem", height: "0.85rem" }}
                                   />
                                 ) : (
@@ -1354,10 +1350,7 @@ export default function ProjectWorkspace() {
               disabled={updateProject.isPending || !editProjectForm.name.trim()}
             >
               {updateProject.isPending && (
-                <div
-                  className="animate-spin rounded-full border-2 border-primary border-t-transparent mr-2"
-                  style={{ width: "1rem", height: "1rem" }}
-                />
+                <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />
               )}
               Save Project
             </Button>
@@ -1444,7 +1437,7 @@ export default function ProjectWorkspace() {
               />
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed rounded-md p-6 text-center cursor-pointer hover-lift transition-colors"
+                className="border-2 border-dashed rounded-md p-6 text-center cursor-pointer hover-elevate transition-colors"
                 data-testid="dropzone-upload"
               >
                 <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
@@ -1626,10 +1619,7 @@ export default function ProjectWorkspace() {
                 data-testid="button-confirm-add-doc"
               >
                 {addDocument.isPending && (
-                  <div
-                    className="animate-spin rounded-full border-2 border-primary border-t-transparent mr-2"
-                    style={{ width: "1rem", height: "1rem" }}
-                  />
+                  <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />
                 )}
                 Add
               </Button>
@@ -1640,10 +1630,7 @@ export default function ProjectWorkspace() {
                 data-testid="button-upload-add"
               >
                 {isUploadingAndAdding && (
-                  <div
-                    className="animate-spin rounded-full border-2 border-primary border-t-transparent mr-2"
-                    style={{ width: "1rem", height: "1rem" }}
-                  />
+                  <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />
                 )}
                 {canCombineSelectedImages && combineImageUploads
                   ? `Upload & Add ${combinedUploadChunks.length} Document${combinedUploadChunks.length === 1 ? "" : "s"}`
@@ -1658,10 +1645,7 @@ export default function ProjectWorkspace() {
                 data-testid="button-paste-text-add"
               >
                 {isUploadingAndAdding && (
-                  <div
-                    className="animate-spin rounded-full border-2 border-primary border-t-transparent mr-2"
-                    style={{ width: "1rem", height: "1rem" }}
-                  />
+                  <div className="eva-hex-spinner mr-2" style={{ width: "1rem", height: "1rem" }} />
                 )}
                 Save & Add Source
               </Button>

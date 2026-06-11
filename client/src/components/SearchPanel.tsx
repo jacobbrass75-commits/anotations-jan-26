@@ -48,12 +48,12 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <Card className="border-t-2 border-t-primary/20 bg-card">
+      <Card className="border-t-2 border-t-primary/20 eva-corner-decor bg-card">
         <CollapsibleTrigger asChild>
           <CardHeader className="cursor-pointer flex flex-row items-center justify-between gap-4 py-3 hover:bg-muted/50 transition-colors">
             <div className="flex items-center gap-2">
               <Search className="h-5 w-5 text-primary" />
-              <h2 className="font-semibold text-sm">SOURCE SEARCH</h2>
+              <h2 className="eva-section-title text-sm">SOURCE SEARCH</h2>
               {results.length > 0 && (
                 <Badge variant="secondary" className="text-xs">
                   {results.length} results
@@ -78,13 +78,13 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                   placeholder="Search this document..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="pl-9 font-mono bg-muted/50 text-foreground border-border"
+                  className="pl-9 font-mono bg-muted/50 text-foreground eva-focus-glow border-border"
                   disabled={!documentId || isSearching}
                   data-testid="input-search"
                 />
                 {isSearching && (
                   <div
-                    className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 eva-hex-spinner"
                     style={{ width: "1rem", height: "1rem" }}
                   />
                 )}
@@ -127,7 +127,7 @@ export function SearchPanel({ documentId, onSearch, onJumpToPosition }: SearchPa
                   {displayedResults.map((result, index) => (
                     <Card
                       key={index}
-                      className="p-4 hover-lift cursor-pointer"
+                      className="p-4 hover-elevate cursor-pointer eva-clip-sm"
                       onClick={() => onJumpToPosition(result.startPosition, result.endPosition)}
                       data-testid={`search-result-${index}`}
                     >

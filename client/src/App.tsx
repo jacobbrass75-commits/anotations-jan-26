@@ -1,10 +1,12 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { DataTicker } from "@/components/DataTicker";
+import { BootSequence } from "@/components/BootSequence";
 
 const Home = lazy(() => import("@/pages/Home"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -153,15 +155,19 @@ function Router() {
 }
 
 function App() {
+  const [booted, setBooted] = useState(false);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <div className="min-h-screen pb-6">
+        {!booted && <BootSequence onComplete={() => setBooted(true)} />}
+        <div className="min-h-screen pb-6 eva-scanlines">
           <Suspense fallback={<RouteFallback />}>
             <Router />
           </Suspense>
         </div>
+        <DataTicker />
       </TooltipProvider>
     </QueryClientProvider>
   );

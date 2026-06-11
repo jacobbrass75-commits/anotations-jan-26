@@ -12,9 +12,9 @@ interface ConversationTableProps {
 
 export function ConversationTable({ conversations, isLoading, onSelect }: ConversationTableProps) {
   return (
-    <Card className="bg-card/70 border-border">
+    <Card className="eva-clip-panel eva-corner-decor bg-card/70 border-border">
       <CardHeader className="pb-2">
-        <CardTitle className="font-semibold">Conversation History</CardTitle>
+        <CardTitle className="eva-section-title">Conversation History</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
