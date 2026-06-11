@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ScholarMark",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Highlight and annotate any webpage. Save to your ScholarMark research projects.",
   "permissions": [
     "activeTab",
