@@ -146,7 +146,7 @@ function parseAdminUserIds(): string[] {
     .filter(Boolean);
 }
 
-function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   const adminUserIds = parseAdminUserIds();
   const user = req.user;
 

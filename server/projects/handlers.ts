@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { hasTokenBudgetAvailable, requireAuth } from "../auth";
+import { trackCampaignActivation } from "../campaignRoutes";
 import { aiLimiter } from "../rateLimits";
 import { projectStorage } from "../projectStorage";
 import { generateProjectContextSummary } from "../contextGenerator";
@@ -35,7 +36,12 @@ const updateProjectSchema = insertProjectSchema
 export function registerProjectRoutes(app: Express): void {
   // === PROJECTS ===
 
-  app.post("/api/projects", requireAuth, aiLimiter, async (req: Request, res: Response) => {
+  app.post(
+    "/api/projects",
+    requireAuth,
+    aiLimiter,
+    trackCampaignActivation("created_project"),
+    async (req: Request, res: Response) => {
     try {
       const validated = insertProjectSchema.parse(req.body);
       const thesis = typeof validated.thesis === "string" ? validated.thesis : "";

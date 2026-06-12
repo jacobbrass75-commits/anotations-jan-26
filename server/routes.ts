@@ -23,6 +23,7 @@ import { registerHumanizerRoutes } from "./humanizerRoutes";
 import { registerExtensionRoutes } from "./extensionRoutes";
 import { registerWebClipRoutes } from "./webClipRoutes";
 import { registerAnalyticsRoutes } from "./analyticsRoutes";
+import { registerCampaignRoutes, trackCampaignActivation } from "./campaignRoutes";
 import { registerPayPalBillingRoutes } from "./paypalBillingRoutes";
 import type { AnnotationCategory, Document } from "@shared/schema";
 import {
@@ -344,6 +345,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     requireAuth,
     aiLimiter,
     checkTokenBudget,
+    trackCampaignActivation("uploaded_document"),
     upload.single("file"),
     async (req: Request, res: Response) => {
       let reservedStorageBytes = 0;
@@ -482,6 +484,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     requireAuth,
     aiLimiter,
     checkTokenBudget,
+    trackCampaignActivation("uploaded_document"),
     textUpload.none(),
     async (req: Request, res: Response) => {
       let reservedStorageBytes = 0;
@@ -526,6 +529,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     requireAuth,
     aiLimiter,
     checkTokenBudget,
+    trackCampaignActivation("uploaded_document"),
     enforceContentLengthLimit(MAX_COMBINED_UPLOAD_TOTAL_BYTES),
     groupUpload.array("files", MAX_COMBINED_UPLOAD_FILES),
     async (req: Request, res: Response) => {
@@ -1050,6 +1054,9 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
 
   // Register admin analytics routes
   registerAnalyticsRoutes(app);
+
+  // Register summer campaign routes (invite tracking, signups, metrics)
+  registerCampaignRoutes(app);
 
   // Register A/B test routes
   // registerABTestRoutes(app); // TODO: Not implemented yet

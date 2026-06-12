@@ -24,6 +24,8 @@ const WritingStyles = lazy(() => import("@/pages/WritingStyles"));
 const WebClips = lazy(() => import("@/pages/WebClips"));
 const ExtensionAuth = lazy(() => import("@/pages/ExtensionAuth"));
 const AdminAnalytics = lazy(() => import("@/pages/AdminAnalytics"));
+const AdminCampaign = lazy(() => import("@/pages/AdminCampaign"));
+const SummerCampaign = lazy(() => import("@/pages/SummerCampaign"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 function RouteFallback() {
@@ -51,6 +53,9 @@ function Router() {
       <Route path="/sso-callback" component={SsoCallback} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/privacy" component={Privacy} />
+      <Route path="/summer" component={SummerCampaign} />
+      <Route path="/invite" component={SummerCampaign} />
+      <Route path="/invite/:code" component={SummerCampaign} />
       <Route path="/account">
         {() => (
           <ProtectedRoute>
@@ -146,6 +151,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <AdminAnalytics />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/admin/campaign">
+        {() => (
+          <ProtectedRoute>
+            <AdminCampaign />
           </ProtectedRoute>
         )}
       </Route>

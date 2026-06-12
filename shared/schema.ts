@@ -889,3 +889,96 @@ export const ocrPageResults = sqliteTable(
   },
   (table) => [uniqueIndex("idx_ocr_page_results_job_page").on(table.jobId, table.pageNumber)],
 );
+
+// === SUMMER CAMPAIGN (thesis/capstone head start) ===
+
+export const campaignClassYears = ["rising_junior", "rising_senior", "other"] as const;
+export type CampaignClassYear = (typeof campaignClassYears)[number];
+
+export const campaignPaperTypes = [
+  "senior_thesis",
+  "capstone",
+  "honors_paper",
+  "research_seminar",
+  "grad_writing_sample",
+  "not_sure",
+] as const;
+export type CampaignPaperType = (typeof campaignPaperTypes)[number];
+
+export const campaignHasTopicValues = ["yes", "kind_of", "no"] as const;
+export type CampaignHasTopic = (typeof campaignHasTopicValues)[number];
+
+// One row per tracked landing-page hit (invite link click)
+export const campaignVisits = sqliteTable("campaign_visits", {
+  id: text("id").primaryKey().$defaultFn(genId),
+  campus: text("campus"),
+  major: text("major"),
+  channel: text("channel"),
+  inviteCode: text("invite_code"),
+  referredBy: text("referred_by"),
+  landingPath: text("landing_path"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+});
+
+// One row per campaign lead. `userId`/`activatedAt` are filled in later when
+// the lead registers an account and performs a first real action in the app.
+export const campaignSignups = sqliteTable("campaign_signups", {
+  id: text("id").primaryKey().$defaultFn(genId),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  school: text("school").notNull(),
+  major: text("major").notNull(),
+  classYear: text("class_year").notNull().$type<CampaignClassYear>(),
+  paperType: text("paper_type").notNull().$type<CampaignPaperType>(),
+  hasTopic: text("has_topic").notNull().default("no").$type<CampaignHasTopic>(),
+  // Attribution captured from the invite link
+  campus: text("campus"),
+  channel: text("channel"),
+  inviteCode: text("invite_code"),
+  referredBy: text("referred_by"),
+  // This lead's own shareable referral code
+  referralCode: text("referral_code").notNull().unique(),
+  userId: text("user_id"),
+  activatedAt: integer("activated_at", { mode: "timestamp" }),
+  firstAction: text("first_action"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+});
+
+const campaignAttributionField = z
+  .string()
+  .trim()
+  .max(120)
+  .optional()
+  .transform((value) => (value ? value : undefined));
+
+export const campaignVisitSchema = z.object({
+  campus: campaignAttributionField,
+  major: campaignAttributionField,
+  channel: campaignAttributionField,
+  inviteCode: campaignAttributionField,
+  referredBy: campaignAttributionField,
+  landingPath: campaignAttributionField,
+});
+export type CampaignVisitInput = z.infer<typeof campaignVisitSchema>;
+
+export const campaignSignupFormSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  email: z.string().trim().toLowerCase().email().max(254),
+  school: z.string().trim().min(1).max(120),
+  major: z.string().trim().min(1).max(120),
+  classYear: z.enum(campaignClassYears),
+  paperType: z.enum(campaignPaperTypes),
+  hasTopic: z.enum(campaignHasTopicValues).default("no"),
+  campus: campaignAttributionField,
+  channel: campaignAttributionField,
+  inviteCode: campaignAttributionField,
+  referredBy: campaignAttributionField,
+});
+export type CampaignSignupForm = z.infer<typeof campaignSignupFormSchema>;
+
+export type CampaignVisit = typeof campaignVisits.$inferSelect;
+export type CampaignSignup = typeof campaignSignups.$inferSelect;
