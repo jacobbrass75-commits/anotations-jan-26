@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>长安 Chang'an 743 CE — Tang Dynasty Walking Sim</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#000; height:100%;
+    font-family: "Songti SC","Noto Serif SC","SimSun",Georgia,serif; }
+  #app { position:fixed; inset:0; }
+  canvas.webgl { display:block; }
+
+  #intro {
+    position:fixed; inset:0; z-index:30; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; cursor:pointer;
+    background: radial-gradient(ellipse at 50% 40%, #2a1810 0%, #120a06 70%, #000 100%);
+    color:#e8d5a8; user-select:none;
+  }
+  #intro h1 { font-size:64px; margin:0 0 6px; letter-spacing:18px; color:#f0dfae;
+    text-shadow:0 0 30px rgba(220,160,60,.45); }
+  #intro h2 { font-size:18px; font-weight:normal; margin:0 0 28px; color:#c9b282; letter-spacing:3px; }
+  #intro .story { max-width:620px; line-height:1.8; font-size:15px; color:#cbb88f; margin-bottom:30px; padding:0 20px;}
+  #intro .start { font-size:20px; color:#ffd98a; border:1px solid #8a6f3a; padding:10px 38px;
+    border-radius:2px; background:rgba(120,80,20,.15); }
+  #intro .start:hover { background:rgba(160,110,30,.3); }
+  #intro .keys { margin-top:26px; font-size:13px; color:#9b8a66; line-height:1.9; }
+  #intro kbd { background:#33271a; border:1px solid #5a472c; border-radius:3px; padding:1px 7px;
+    font-family:inherit; color:#e0cf9f; }
+
+  .hud { position:fixed; z-index:10; color:#f3e6c0; text-shadow:0 1px 3px rgba(0,0,0,.9); pointer-events:none; }
+  #loc { top:18px; left:50%; transform:translateX(-50%); text-align:center; }
+  #loc .cn { font-size:26px; letter-spacing:6px; }
+  #loc .en { font-size:12px; letter-spacing:2px; color:#d4c08e; margin-top:2px; }
+  #coins { top:18px; right:22px; font-size:17px; text-align:right; }
+  #coins .label { font-size:11px; color:#cdb787; }
+  #clock { top:64px; right:22px; font-size:13px; color:#d8c491; text-align:right;}
+  #toast { bottom:120px; left:50%; transform:translateX(-50%); max-width:640px; text-align:center;
+    font-size:15px; line-height:1.6; background:rgba(20,12,5,.72); border:1px solid rgba(190,150,80,.35);
+    padding:10px 22px; border-radius:3px; opacity:0; transition:opacity .5s; }
+  #help { bottom:14px; left:16px; font-size:12px; color:#cbb88f; line-height:1.75; }
+  #help kbd { background:rgba(40,30,16,.8); border:1px solid #5a472c; border-radius:3px; padding:0 5px; color:#e8d5a8; font-family:inherit;}
+  #crosshair { top:50%; left:50%; width:4px; height:4px; margin:-2px; border-radius:50%;
+    background:rgba(255,240,200,.75); box-shadow:0 0 4px rgba(0,0,0,.8); }
+  #fps { top:18px; left:20px; font-size:12px; color:#b7a478; display:none; }
+
+  #minimapWrap { position:fixed; right:18px; bottom:18px; z-index:10; width:200px; height:200px;
+    border:2px solid rgba(150,115,55,.6); border-radius:50%; overflow:hidden;
+    box-shadow:0 2px 14px rgba(0,0,0,.6); pointer-events:none; }
+  #minimap { width:100%; height:100%; }
+
+  #bigmapWrap { position:fixed; inset:0; z-index:25; display:none; align-items:center; justify-content:center;
+    background:rgba(8,5,2,.82); }
+  #bigmap { border:2px solid #7a5f30; box-shadow:0 0 40px rgba(0,0,0,.8); background:#1a140c; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="intro">
+  <h1>长 安</h1>
+  <h2>CHANG'AN · 天宝二年 · 743 CE</h2>
+  <div class="story">
+    You are a silk merchant from Samarkand, arrived at last at the eastern terminus of the
+    Silk Road — Chang'an, capital of the Tang, the largest city on Earth. One million people
+    live inside its rammed-earth walls. The Vermilion Bird Avenue runs five kilometres from
+    the Mingde Gate to the Imperial City. The bells will ring at dusk and the ward gates will
+    close — but for now, the city is yours to walk.
+  </div>
+  <div class="start">入 城 · Click to enter the city</div>
+  <div class="keys">
+    <kbd>W A S D</kbd> walk &nbsp; <kbd>Shift</kbd> run &nbsp; <kbd>H</kbd> horse &nbsp;
+    <kbd>Space</kbd> jump &nbsp; <kbd>E</kbd> trade at stalls &nbsp; <kbd>M</kbd> city map &nbsp;
+    <kbd>T</kbd> time of day &nbsp; <kbd>F</kbd> fps
+  </div>
+</div>
+
+<div id="loc" class="hud"><div class="cn">明德门</div><div class="en">MINGDE GATE</div></div>
+<div id="coins" class="hud"><span id="coinsVal">100</span> 缗<div class="label">strings of cash</div></div>
+<div id="clock" class="hud">酉时 · golden hour</div>
+<div id="toast" class="hud"></div>
+<div id="fps" class="hud"></div>
+<div id="crosshair" class="hud"></div>
+<div id="help" class="hud">
+  <kbd>WASD</kbd> walk · <kbd>Shift</kbd> run · <kbd>H</kbd> horse · <kbd>E</kbd> trade ·
+  <kbd>M</kbd> map · <kbd>T</kbd> time · climb the wall ramps beside the gates
+</div>
+
+<div id="minimapWrap"><canvas id="minimap" width="400" height="400"></canvas></div>
+<div id="bigmapWrap"><canvas id="bigmap"></canvas></div>
+
+<script type="importmap">
+  { "imports": { "three": "./vendor/three.module.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
