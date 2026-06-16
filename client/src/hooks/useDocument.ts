@@ -60,6 +60,23 @@ export function useDocumentSourceMeta(id: string | null) {
   });
 }
 
+export function useDeleteDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (documentId: string) => {
+      await apiRequest("DELETE", `/api/documents/${documentId}`);
+      return documentId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/documents/meta"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+    },
+  });
+}
+
 export function useAnnotations(documentId: string | null) {
   return useQuery<Annotation[]>({
     queryKey: ["/api/documents", documentId, "annotations"],

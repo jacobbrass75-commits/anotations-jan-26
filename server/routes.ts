@@ -39,7 +39,9 @@ import {
   initializeOcrQueue,
 } from "./ocrQueue";
 import {
+  deleteDocumentSource,
   getDocumentSourcePath,
+  getDocumentSourceSize,
   hasDocumentSource,
   inferDocumentSourceMimeType,
   saveDocumentSource,
@@ -778,6 +780,37 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     } catch (error) {
       logger.error({ err: error }, "Error streaming source document:");
       res.status(500).json({ message: "Failed to stream source document" });
+    }
+  });
+
+  app.delete("/api/documents/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
+
+      const sourceBytes = await getDocumentSourceSize(doc.id, doc.filename);
+      const generatedBytes = Buffer.byteLength(doc.fullText || "", "utf8");
+      const bytesToRelease = sourceBytes > 0 ? sourceBytes : generatedBytes;
+
+      await storage.deleteDocument(doc.id);
+
+      try {
+        await deleteDocumentSource(doc.id, doc.filename);
+      } catch (error) {
+        logger.warn(
+          {
+            documentId: doc.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Document deleted but source file cleanup failed",
+        );
+      }
+
+      await releaseReservedStorage(req.user!.userId, bytesToRelease);
+      res.status(204).send();
+    } catch (error) {
+      logger.error({ err: error }, "Error deleting document:");
+      res.status(500).json({ message: "Failed to delete document" });
     }
   });
 

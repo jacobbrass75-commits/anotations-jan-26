@@ -13,11 +13,13 @@ import {
 } from "@/hooks/useProjects";
 import { useGlobalSearch, useGenerateCitation } from "@/hooks/useProjectSearch";
 import {
+  useDeleteDocument,
   useUploadDocument,
   useUploadDocumentGroup,
   useUploadTextDocument,
 } from "@/hooks/useDocument";
 import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -63,6 +65,7 @@ import {
   Quote,
   PenTool,
   Mic,
+  Unlink,
 } from "lucide-react";
 import { BatchAnalysisModal } from "@/components/BatchAnalysisModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -370,6 +373,7 @@ export default function ProjectWorkspace() {
   const updateProject = useUpdateProject();
   const addDocument = useAddDocumentToProject();
   const removeDocument = useRemoveDocumentFromProject();
+  const deleteDocument = useDeleteDocument();
   const autoAnalyzeProjectDocument = useAutoAnalyzeProjectDocument();
   const globalSearch = useGlobalSearch();
   const generateCitation = useGenerateCitation();
@@ -589,13 +593,39 @@ export default function ProjectWorkspace() {
   };
 
   const handleRemoveDocument = async (id: string) => {
-    if (!confirm("Remove this document from the project?")) return;
+    if (!confirm("Remove this source from this project? It will stay in your source library.")) {
+      return;
+    }
 
     try {
       await removeDocument.mutateAsync({ id, projectId });
-      toast({ title: "Success", description: "Document removed" });
+      toast({ title: "Source removed", description: "The source stayed in your library." });
     } catch (error) {
-      toast({ title: "Error", description: "Failed to remove document", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to remove source", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteSource = async (documentId: string) => {
+    const projectUses = projectDocuments.filter((pd) => pd.documentId === documentId).length;
+    const message =
+      projectUses > 1
+        ? "Delete this source from your library and all project links? This cannot be undone."
+        : "Delete this source from your library? This removes it from the project and frees source capacity.";
+    if (!confirm(message)) return;
+
+    try {
+      await deleteDocument.mutateAsync(documentId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "documents"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] }),
+      ]);
+      toast({ title: "Source deleted", description: "Source capacity and storage were updated." });
+    } catch (error) {
+      toast({
+        title: "Delete failed",
+        description: "Could not delete the source. Try again or contact support.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1224,7 +1254,19 @@ export default function ProjectWorkspace() {
                                 size="icon"
                                 className="h-7 w-7 opacity-0 group-hover:opacity-100"
                                 onClick={() => handleRemoveDocument(pd.id)}
+                                title="Remove from this project"
                                 data-testid={`button-remove-doc-${pd.id}`}
+                              >
+                                <Unlink className="h-3 w-3 text-muted-foreground" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 opacity-0 group-hover:opacity-100"
+                                onClick={() => handleDeleteSource(pd.documentId)}
+                                title="Delete source"
+                                disabled={deleteDocument.isPending}
+                                data-testid={`button-delete-source-${pd.documentId}`}
                               >
                                 <Trash2 className="h-3 w-3 text-destructive" />
                               </Button>

@@ -1,5 +1,5 @@
 import { constants } from "fs";
-import { access, mkdir, writeFile } from "fs/promises";
+import { access, mkdir, stat, unlink, writeFile } from "fs/promises";
 import { extname, join } from "path";
 
 const UPLOADS_DIR = join(process.cwd(), "data", "uploads");
@@ -50,6 +50,26 @@ export async function hasDocumentSource(documentId: string, filename: string): P
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function getDocumentSourceSize(documentId: string, filename: string): Promise<number> {
+  try {
+    const metadata = await stat(getDocumentSourcePath(documentId, filename));
+    return metadata.isFile() ? metadata.size : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function deleteDocumentSource(documentId: string, filename: string): Promise<void> {
+  try {
+    await unlink(getDocumentSourcePath(documentId, filename));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw error;
   }
 }
 

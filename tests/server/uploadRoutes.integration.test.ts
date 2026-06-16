@@ -1,7 +1,8 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { createServer, request as httpRequest } from "http";
+import { constants } from "fs";
 import multer from "multer";
-import { mkdtemp, rm } from "fs/promises";
+import { access, mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -313,6 +314,69 @@ describe("upload route hardening", () => {
         limit: 5,
         requiredTier: "pro",
       });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("deletes an owned source, project links, saved file, and storage usage", async () => {
+    const { server, token, sqlite } = await createUploadApp();
+    const form = new FormData();
+    const sourceText = "This is a source with enough text to save and later delete.";
+    form.append("title", "Delete me");
+    form.append("text", sourceText);
+
+    try {
+      const uploadResponse = await fetch(`${server.baseUrl}/api/upload-text`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      });
+      expect(uploadResponse.status).toBe(200);
+
+      const createdDoc = sqlite
+        .prepare("SELECT id, filename FROM documents WHERE user_id = ?")
+        .get("upload-user") as { id: string; filename: string };
+      const { getDocumentSourcePath } = await import("../../server/sourceFiles");
+      const sourcePath = getDocumentSourcePath(createdDoc.id, createdDoc.filename);
+
+      sqlite
+        .prepare(
+          "INSERT INTO projects (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("delete-project", "upload-user", "Delete Project", Date.now(), Date.now());
+      sqlite
+        .prepare(
+          "INSERT INTO project_documents (id, project_id, document_id, added_at) VALUES (?, ?, ?, ?)",
+        )
+        .run("delete-project-doc", "delete-project", createdDoc.id, Date.now());
+
+      await expect(access(sourcePath, constants.F_OK)).resolves.toBeUndefined();
+      const beforeDelete = sqlite
+        .prepare("SELECT storage_used FROM users WHERE id = ?")
+        .get("upload-user") as { storage_used: number };
+      expect(beforeDelete.storage_used).toBe(Buffer.byteLength(sourceText, "utf8"));
+
+      const deleteResponse = await fetch(`${server.baseUrl}/api/documents/${createdDoc.id}`, {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      const deletedDoc = sqlite
+        .prepare("SELECT id FROM documents WHERE id = ?")
+        .get(createdDoc.id) as { id: string } | undefined;
+      const deletedProjectDoc = sqlite
+        .prepare("SELECT id FROM project_documents WHERE id = ?")
+        .get("delete-project-doc") as { id: string } | undefined;
+      const afterDelete = sqlite
+        .prepare("SELECT storage_used FROM users WHERE id = ?")
+        .get("upload-user") as { storage_used: number };
+
+      expect(deleteResponse.status).toBe(204);
+      expect(deletedDoc).toBeUndefined();
+      expect(deletedProjectDoc).toBeUndefined();
+      expect(afterDelete.storage_used).toBe(0);
+      await expect(access(sourcePath, constants.F_OK)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await server.close();
     }
