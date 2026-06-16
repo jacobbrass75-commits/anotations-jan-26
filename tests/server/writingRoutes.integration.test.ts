@@ -46,7 +46,9 @@ describe("writing route integration", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createApp(options: { existingDocuments?: number; tier?: "pro" | "max" } = {}) {
+  async function createApp(
+    options: { existingDocuments?: number; tier?: "free" | "pro" | "max" } = {},
+  ) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
     const { documents, users } = await import("../../shared/schema");
     const { registerWritingRoutes } = await import("../../server/writingRoutes");
@@ -122,6 +124,62 @@ describe("writing route integration", () => {
         currentTier: "pro",
       });
       expect(anthropicCreate).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("allows free Quick Draft through the limited token budget", async () => {
+    const { server, token } = await createApp({ tier: "free" });
+    anthropicCreate
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              thesis: "Free users can try the core writing loop.",
+              bibliography: [],
+              sections: [
+                {
+                  title: "Introduction",
+                  description: "Set up the argument.",
+                  sourceIds: [],
+                  targetWords: 100,
+                },
+              ],
+            }),
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "## Introduction\nA limited free draft." }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "# Complete Paper\nA limited free draft." }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/write`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          topic: "Free writing trial",
+          citationStyle: "chicago",
+          tone: "academic",
+          targetLength: "short",
+        }),
+      });
+      const text = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(text).toContain('"type":"complete"');
+      expect(anthropicCreate).toHaveBeenCalledTimes(3);
     } finally {
       await server.close();
     }

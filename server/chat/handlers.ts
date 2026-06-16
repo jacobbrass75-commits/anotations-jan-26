@@ -10,7 +10,7 @@ import { db } from "../db";
 import { projectStorage } from "../projectStorage";
 import { writingStyleStorage } from "../writingStyleStorage";
 import { storage } from "../storage";
-import { checkTokenBudget, requireAuth, requireTier } from "../auth";
+import { checkTokenBudget, requireAuth } from "../auth";
 import { aiLimiter } from "../rateLimits";
 import { incrementTokenUsage } from "../authStorage";
 import { logContextSnapshot, logToolCall } from "../analyticsLogger";
@@ -51,7 +51,6 @@ import {
   MAX_SOURCE_EXCERPT_CHARS,
   MAX_SOURCE_FULLTEXT_CHARS,
   MAX_SOURCE_TOTAL_FULLTEXT_CHARS,
-  MODELS,
   VERIFY_MAX_TOKENS,
   buildCompilePrompt,
   buildQuoteJumpTargets,
@@ -360,7 +359,6 @@ export function registerChatRoutes(app: Express) {
   app.get(
     "/api/chat/conversations",
     requireAuth,
-    requireTier("pro"),
     async (req: Request, res: Response) => {
       try {
         const rawProjectId =
@@ -387,7 +385,6 @@ export function registerChatRoutes(app: Express) {
   app.post(
     "/api/chat/conversations",
     requireAuth,
-    requireTier("pro"),
     async (req: Request, res: Response) => {
       try {
         const {
@@ -404,6 +401,10 @@ export function registerChatRoutes(app: Express) {
         } = req.body || {};
 
         const normalizedWritingModel = writingModel === "extended" ? "extended" : "precision";
+        const defaultModels = getModelsForConversation(
+          { writingModel: normalizedWritingModel },
+          req.user!.tier,
+        );
         if (projectId) {
           const project = await getOwnedProjectOr404(projectId, req.user!.userId);
           if (!project) {
@@ -419,7 +420,7 @@ export function registerChatRoutes(app: Express) {
 
         const conv = await chatStorage.createConversation({
           title: title || "New Chat",
-          model: model || MODELS.precision.chat,
+          model: model || defaultModels.chat,
           writingModel: normalizedWritingModel,
           userId: req.user!.userId,
           projectId: projectId || null,
@@ -441,7 +442,6 @@ export function registerChatRoutes(app: Express) {
   app.get(
     "/api/chat/conversations/:id",
     requireAuth,
-    requireTier("pro"),
     async (req: Request, res: Response) => {
       try {
         const conv = await getOwnedConversationOr404(req, res);
@@ -458,7 +458,6 @@ export function registerChatRoutes(app: Express) {
   app.delete(
     "/api/chat/conversations/:id",
     requireAuth,
-    requireTier("pro"),
     async (req: Request, res: Response) => {
       try {
         const conv = await getOwnedConversationOr404(req, res);
@@ -475,7 +474,6 @@ export function registerChatRoutes(app: Express) {
   app.put(
     "/api/chat/conversations/:id",
     requireAuth,
-    requireTier("pro"),
     async (req: Request, res: Response) => {
       try {
         const {
@@ -524,7 +522,6 @@ export function registerChatRoutes(app: Express) {
   app.put(
     "/api/chat/conversations/:id/sources",
     requireAuth,
-    requireTier("pro"),
     async (req: Request, res: Response) => {
       try {
         const { selectedSourceIds } = req.body;
@@ -546,7 +543,6 @@ export function registerChatRoutes(app: Express) {
     "/api/chat/conversations/:id/messages",
     requireAuth,
     aiLimiter,
-    requireTier("pro"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;
@@ -569,7 +565,7 @@ export function registerChatRoutes(app: Express) {
         let history = await chatStorage.getMessagesForConversation(conv.id);
         let anthropicMessages = toAnthropicMessages(history);
         const mode = getWritingMode(conv);
-        const models = getModelsForConversation(conv);
+        const models = getModelsForConversation(conv, req.user!.tier);
 
         const { project, sources, writingStyle } = await loadConversationContext(
           conv,
@@ -1087,7 +1083,6 @@ ${chunkContext}`;
     "/api/chat/conversations/:id/compile",
     requireAuth,
     aiLimiter,
-    requireTier("pro"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;
@@ -1100,7 +1095,7 @@ ${chunkContext}`;
         const style = citationStyle || conv.citationStyle || "chicago";
         const writingTone = tone || conv.tone || "academic";
         const avoidDashes = noEnDashes ?? conv.noEnDashes ?? false;
-        const models = getModelsForConversation(conv);
+        const models = getModelsForConversation(conv, req.user!.tier);
 
         const history = await chatStorage.getMessagesForConversation(conv.id);
         if (history.length === 0) {
@@ -1198,7 +1193,6 @@ ${chunkContext}`;
     "/api/chat/conversations/:id/verify",
     requireAuth,
     aiLimiter,
-    requireTier("max"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;
@@ -1212,7 +1206,7 @@ ${chunkContext}`;
           return res.status(400).json({ message: "compiledContent is required" });
         }
 
-        const models = getModelsForConversation(conv);
+        const models = getModelsForConversation(conv, req.user!.tier);
         const style = conv.citationStyle || "chicago";
         const { project, sources } = await loadConversationContext(conv, req.user!.userId);
         const verifyPrompt = buildVerifyPrompt({

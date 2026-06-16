@@ -18,6 +18,12 @@ const PROJECT_LIMITS: Record<PlanTier, number | null> = {
   max: null,
 };
 
+const PROJECT_SOURCE_LIMITS: Record<PlanTier, number | null> = {
+  free: 5,
+  pro: 50,
+  max: null,
+};
+
 export function normalizePlanTier(tier: string | null | undefined): PlanTier {
   if (tier === "pro" || tier === "max") {
     return tier;
@@ -35,6 +41,10 @@ export function getDocumentLimit(tier: string | null | undefined): number | null
 
 export function getProjectLimit(tier: string | null | undefined): number | null {
   return PROJECT_LIMITS[normalizePlanTier(tier)];
+}
+
+export function getProjectSourceLimit(tier: string | null | undefined): number | null {
+  return PROJECT_SOURCE_LIMITS[normalizePlanTier(tier)];
 }
 
 export function defaultVisionModelForTier(tier: string | null | undefined): "gpt-4o" | "gpt-4o-mini" {

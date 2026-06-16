@@ -351,6 +351,71 @@ describe("project route integration", () => {
     }
   });
 
+  it("rejects the sixth source on a free project", async () => {
+    const { db, server, token } = await createApp({
+      tier: "free",
+      tokensUsed: 0,
+      tokenLimit: 10_000,
+    });
+    const { documents, projects, projectDocuments } = await import("../../shared/schema");
+    const { eq } = await import("drizzle-orm");
+    const now = new Date("2026-05-05T00:00:00.000Z");
+
+    await db.insert(projects).values({
+      id: "free-source-project",
+      userId: "quota-user",
+      name: "Free Source Project",
+      createdAt: now,
+      updatedAt: now,
+    } as any);
+    await db.insert(documents).values(
+      Array.from({ length: 6 }, (_, index) => ({
+        id: `free-source-doc-${index + 1}`,
+        userId: "quota-user",
+        filename: `source-${index + 1}.txt`,
+        fullText: `source ${index + 1}`,
+        uploadDate: now,
+        chunkCount: 0,
+        status: "ready",
+      })) as any,
+    );
+    await db.insert(projectDocuments).values(
+      Array.from({ length: 5 }, (_, index) => ({
+        id: `free-project-doc-${index + 1}`,
+        projectId: "free-source-project",
+        documentId: `free-source-doc-${index + 1}`,
+      })) as any,
+    );
+
+    try {
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/projects/free-source-project/documents",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: { documentId: "free-source-doc-6" },
+        },
+      );
+      const rows = await db
+        .select()
+        .from(projectDocuments)
+        .where(eq(projectDocuments.projectId, "free-source-project"));
+
+      expect(response.status).toBe(403);
+      expect(response.body).toMatchObject({
+        code: "project_source_limit",
+        current: 5,
+        limit: 5,
+        requested: 1,
+        requiredTier: "pro",
+      });
+      expect(rows).toHaveLength(5);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("records token usage for budget-gated project document analysis", async () => {
     const { db, server, token } = await createApp({ tokensUsed: 0, tokenLimit: 10_000 });
     const { documents, projects, projectDocuments, textChunks, users } =

@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { checkTokenBudget, requireAuth, requireTier } from "./auth";
+import { checkTokenBudget, requireAuth } from "./auth";
 import { aiLimiter } from "./rateLimits";
 import { incrementTokenUsage } from "./authStorage";
 import {
@@ -113,7 +113,6 @@ export function registerWritingRoutes(app: Express): void {
     "/api/write",
     requireAuth,
     aiLimiter,
-    requireTier("pro"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;

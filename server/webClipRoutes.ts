@@ -18,6 +18,11 @@ import { storage } from "./storage";
 import { projectStorage } from "./projectStorage";
 import { createLogger } from "./logger";
 import { DocumentQuotaError, reserveDocumentCapacity } from "./documentQuota";
+import {
+  ProjectSourceQuotaError,
+  assertProjectSourceCapacityAvailable,
+  projectSourceQuotaErrorBody,
+} from "./projectSourceQuota";
 
 const logger = createLogger("webClipRoutes");
 
@@ -588,6 +593,7 @@ export function registerWebClipRoutes(app: Express): void {
         targetDocumentText = sourceDocument?.fullText || "";
       } else {
         const { fullText, startPosition, endPosition } = buildClipDocumentText(clip);
+        await assertProjectSourceCapacityAvailable(resolvedProjectId, req.user!.tier);
         const reservation = await reserveDocumentCapacity(
           req.user!.userId,
           Buffer.byteLength(fullText, "utf8"),
@@ -685,6 +691,9 @@ export function registerWebClipRoutes(app: Express): void {
       logger.error({ err: error }, "Error promoting web clip:");
       if (error instanceof DocumentQuotaError) {
         return res.status(error.status).json({ error: error.message });
+      }
+      if (error instanceof ProjectSourceQuotaError) {
+        return res.status(error.status).json(projectSourceQuotaErrorBody(error));
       }
       return res
         .status(500)

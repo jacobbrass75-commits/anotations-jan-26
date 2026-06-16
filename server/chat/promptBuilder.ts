@@ -33,6 +33,20 @@ export const MODELS = {
   research: ANTHROPIC_MODELS.sonnet,
 } as const;
 
+const FREE_MODELS: typeof MODELS = {
+  precision: {
+    chat: ANTHROPIC_MODELS.haiku,
+    compile: ANTHROPIC_MODELS.haiku,
+    verify: ANTHROPIC_MODELS.sonnet,
+  },
+  extended: {
+    chat: ANTHROPIC_MODELS.sonnet,
+    compile: ANTHROPIC_MODELS.sonnet,
+    verify: ANTHROPIC_MODELS.sonnet,
+  },
+  research: ANTHROPIC_MODELS.sonnet,
+};
+
 const TOKEN_LIMITS = {
   precision: 200_000,
   extended: 200_000,
@@ -87,9 +101,12 @@ export function getWritingMode(conv: Pick<Conversation, "writingModel">): Writin
   return conv.writingModel === "extended" ? "extended" : "precision";
 }
 
-export function getModelsForConversation(conv: Pick<Conversation, "writingModel">) {
+export function getModelsForConversation(
+  conv: Pick<Conversation, "writingModel">,
+  tier?: string | null,
+) {
   const mode = getWritingMode(conv);
-  return MODELS[mode];
+  return tier === "free" ? FREE_MODELS[mode] : MODELS[mode];
 }
 
 function estimateTokens(text: string): number {

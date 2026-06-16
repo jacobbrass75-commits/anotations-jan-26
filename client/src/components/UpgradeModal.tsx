@@ -39,7 +39,7 @@ export function UpgradeModal({ open, onClose, requiredTier, feature }: UpgradeMo
             <>
               <p>Pro includes:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>50 documents, 10 projects, 500 MB storage</li>
+                <li>50 sources, 10 projects, 500 MB storage</li>
                 <li>AI chat, writing (Quick Draft), and export</li>
                 <li>GPT-4o-mini Vision OCR</li>
                 <li>Chrome extension &amp; bibliography generation</li>
@@ -50,9 +50,9 @@ export function UpgradeModal({ open, onClose, requiredTier, feature }: UpgradeMo
             <>
               <p>Max includes everything in Pro, plus:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>No set document/project count limit, with 5 GB storage</li>
+                <li>No set source/project count limit, with 5 GB storage</li>
                 <li>Deep Write</li>
-                <li>Source-grounded drafting and paper check</li>
+                <li>Higher limits for source-grounded drafting</li>
                 <li>GPT-4o Vision OCR &amp; 2M tokens/mo</li>
               </ul>
             </>

@@ -35,6 +35,13 @@ interface StripeBillingConfig {
   currency: string;
 }
 
+interface StripeCheckoutResponse {
+  url?: string;
+  code?: string;
+  action?: string;
+  message?: string;
+}
+
 interface PayPalButtonsInstance {
   render: (element: HTMLElement) => Promise<void>;
   close?: () => void;
@@ -55,7 +62,7 @@ declare global {
 }
 
 const features: TierFeature[] = [
-  { label: "Documents", free: "5 active", pro: "50 active", max: "No set count limit" },
+  { label: "Sources", free: "5 active", pro: "50 active", max: "No set count limit" },
   { label: "Projects", free: "1", pro: "10", max: "No set count limit" },
   { label: "Storage", free: "50 MB", pro: "500 MB", max: "5 GB" },
   {
@@ -65,15 +72,20 @@ const features: TierFeature[] = [
     max: "Chicago, MLA 9, APA 7",
   },
   { label: "OCR", free: "PaddleOCR", pro: "GPT-4o-mini Vision", max: "GPT-4o Vision" },
-  { label: "Chat", free: "---", pro: "Yes", max: "Yes" },
+  { label: "AI chat", free: "Limited", pro: "Yes", max: "Yes" },
   { label: "AI token budget/mo", free: "50K", pro: "500K", max: "2M" },
   {
     label: "AI Writing",
-    free: "---",
+    free: "Quick Draft limited",
     pro: "Quick Draft",
     max: "Quick Draft + Deep Write",
   },
-  { label: "Source-grounded drafting", free: "---", pro: "---", max: "Paper check" },
+  {
+    label: "Source verification",
+    free: "Included",
+    pro: "Included",
+    max: "Included",
+  },
   { label: "Export", free: "---", pro: "DOCX / PDF", max: "DOCX / PDF" },
   { label: "Chrome Extension", free: "---", pro: "Yes", max: "Yes" },
   { label: "Bibliography Gen", free: "---", pro: "Yes", max: "Yes" },
@@ -312,20 +324,31 @@ function AutomatedVenmoButton({
   );
 }
 
+async function openStripeBillingPortal(): Promise<void> {
+  const response = await apiRequest("POST", "/api/billing/stripe/portal");
+  const body = (await response.json()) as { url?: string };
+  if (!body.url) {
+    throw new Error("Stripe billing portal did not return a URL");
+  }
+  window.location.assign(body.url);
+}
+
 function StripeCheckoutButton({
   tier,
   amount,
   label,
   isSignedIn,
+  hasActiveStripeSubscription,
   onSignIn,
 }: {
   tier: "pro" | "max";
   amount: string;
   label: string;
   isSignedIn: boolean;
+  hasActiveStripeSubscription: boolean;
   onSignIn: () => void;
 }) {
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "portal" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
   if (!isSignedIn) {
@@ -336,17 +359,49 @@ function StripeCheckoutButton({
     );
   }
 
+  const loading = status === "loading" || status === "portal";
+  const buttonText = hasActiveStripeSubscription
+    ? status === "portal"
+      ? "Opening Billing Portal..."
+      : `Change to ${label} in Billing Portal`
+    : status === "loading"
+      ? "Opening checkout..."
+      : `Subscribe to ${label} for $${amount}/mo`;
+
   return (
     <div className="w-full space-y-2">
       <Button
         className="w-full"
-        disabled={status === "loading"}
+        disabled={loading}
         onClick={async () => {
           try {
-            setStatus("loading");
             setError(null);
-            const response = await apiRequest("POST", "/api/billing/stripe/checkout", { tier });
-            const body = (await response.json()) as { url?: string };
+            if (hasActiveStripeSubscription) {
+              setStatus("portal");
+              await openStripeBillingPortal();
+              return;
+            }
+
+            setStatus("loading");
+            const response = await fetch("/api/billing/stripe/checkout", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ tier }),
+            });
+            const body = (await response.json().catch(() => ({}))) as StripeCheckoutResponse;
+            if (
+              response.status === 409 &&
+              body.code === "active_subscription_exists" &&
+              body.action === "billing_portal"
+            ) {
+              setStatus("portal");
+              await openStripeBillingPortal();
+              return;
+            }
+            if (!response.ok) {
+              throw new Error(body.message || "Stripe checkout could not open");
+            }
             if (!body.url) {
               throw new Error("Stripe checkout did not return a URL");
             }
@@ -358,7 +413,7 @@ function StripeCheckoutButton({
           }
         }}
       >
-        {status === "loading" ? "Opening checkout..." : `Subscribe to ${label} for $${amount}/mo`}
+        {buttonText}
       </Button>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
@@ -371,6 +426,7 @@ function PlanCheckoutButton({
   label,
   accountRef,
   isSignedIn,
+  hasActiveStripeSubscription,
   stripeConfig,
   paypalConfig,
   onSignIn,
@@ -381,6 +437,7 @@ function PlanCheckoutButton({
   label: string;
   accountRef: string | null;
   isSignedIn: boolean;
+  hasActiveStripeSubscription: boolean;
   stripeConfig: StripeBillingConfig | null;
   paypalConfig: PayPalBillingConfig | null;
   onSignIn: () => void;
@@ -401,6 +458,7 @@ function PlanCheckoutButton({
         amount={amount}
         label={label}
         isSignedIn={isSignedIn}
+        hasActiveStripeSubscription={hasActiveStripeSubscription}
         onSignIn={onSignIn}
       />
     );
@@ -434,6 +492,11 @@ export default function Pricing() {
   const { user, isSignedIn } = useAuth();
   const [, setLocation] = useLocation();
   const currentTier = user?.tier ?? "free";
+  const hasActiveStripeSubscription = Boolean(
+    user?.stripeCustomerId &&
+      user?.stripeSubscriptionId &&
+      ["active", "trialing", "past_due"].includes(user.subscriptionStatus || ""),
+  );
   const accountRef = user?.email || user?.id || null;
   const checkoutStatus =
     typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("checkout") : null;
@@ -531,12 +594,14 @@ export default function Pricing() {
               </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>5 active documents</p>
+              <p>5 active sources</p>
               <p>1 project</p>
               <p>50 MB storage</p>
               <p>Chicago citation formatting</p>
               <p>PaddleOCR</p>
               <p>50K AI token budget/mo</p>
+              <p>Limited Haiku chat and Sonnet Quick Draft</p>
+              <p>Source verification included</p>
             </CardContent>
             <CardFooter>
               {currentTier === "free" ? (
@@ -568,13 +633,14 @@ export default function Pricing() {
               </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>50 active documents</p>
+              <p>50 active sources</p>
               <p>10 projects</p>
               <p>500 MB storage</p>
               <p>Chicago, MLA 9, and APA 7 citation formatting</p>
               <p>GPT-4o-mini Vision OCR</p>
               <p>500K AI token budget/mo</p>
               <p>AI writing: Quick Draft</p>
+              <p>Source verification included</p>
               <p>DOCX/PDF export</p>
               <p>Chrome extension</p>
               <p>Bibliography generation</p>
@@ -591,6 +657,7 @@ export default function Pricing() {
                   label="Pro"
                   accountRef={accountRef}
                   isSignedIn={isSignedIn}
+                  hasActiveStripeSubscription={hasActiveStripeSubscription}
                   stripeConfig={stripeConfig}
                   paypalConfig={paypalConfig}
                   onSignIn={handleSignIn}
@@ -610,13 +677,13 @@ export default function Pricing() {
               </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>No set document/project count limit</p>
+              <p>No set source/project count limit</p>
               <p>5 GB storage</p>
               <p>Chicago, MLA 9, and APA 7 citation formatting</p>
               <p>GPT-4o Vision OCR</p>
               <p>2M AI token budget/mo</p>
               <p>Quick Draft + Deep Write</p>
-              <p>Source-grounded drafting and paper check</p>
+              <p>Higher limits for source-grounded drafting</p>
               <p>DOCX/PDF export</p>
               <p>Everything in Pro</p>
             </CardContent>
@@ -632,6 +699,7 @@ export default function Pricing() {
                   label="Max"
                   accountRef={accountRef}
                   isSignedIn={isSignedIn}
+                  hasActiveStripeSubscription={hasActiveStripeSubscription}
                   stripeConfig={stripeConfig}
                   paypalConfig={paypalConfig}
                   onSignIn={handleSignIn}

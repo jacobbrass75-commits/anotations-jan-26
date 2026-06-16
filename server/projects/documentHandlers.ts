@@ -10,6 +10,11 @@ import { isSourceRole } from "../sourceRoles";
 import { extractCitationMetadata } from "../openai";
 import { createTokenUsageAccumulator } from "../aiUsage";
 import {
+  ProjectSourceQuotaError,
+  assertProjectSourceCapacityAvailable,
+  projectSourceQuotaErrorBody,
+} from "../projectSourceQuota";
+import {
   insertProjectDocumentSchema,
   insertProjectAnnotationSchema,
   citationDataSchema,
@@ -125,6 +130,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
             return res.status(400).json({ error: "Folder must belong to the selected project" });
           }
         }
+        await assertProjectSourceCapacityAvailable(req.params.projectId, req.user!.tier);
 
         const projectDoc = await projectStorage.addDocumentToProject(validated);
 
@@ -172,6 +178,9 @@ export function registerProjectDocumentRoutes(app: Express): void {
         res.status(201).json(projectDoc);
       } catch (error) {
         logger.error({ err: error }, "Error adding document to project:");
+        if (error instanceof ProjectSourceQuotaError) {
+          return res.status(error.status).json(projectSourceQuotaErrorBody(error));
+        }
         res.status(400).json({ error: "Failed to add document to project" });
       }
     },
@@ -217,6 +226,19 @@ export function registerProjectDocumentRoutes(app: Express): void {
 
         const existingDocs = await projectStorage.getProjectDocumentsByProject(projectId);
         const existingDocIds = new Set(existingDocs.map((d) => d.documentId));
+        const newOwnedDocumentIds = new Set<string>();
+        for (const documentId of documentIds) {
+          if (existingDocIds.has(documentId)) continue;
+          const doc = await storage.getDocument(documentId);
+          if (doc?.userId === req.user!.userId) {
+            newOwnedDocumentIds.add(documentId);
+          }
+        }
+        await assertProjectSourceCapacityAvailable(
+          projectId,
+          req.user!.tier,
+          newOwnedDocumentIds.size,
+        );
         const canGenerateContext = await hasTokenBudgetAvailable(req);
 
         const results: BatchAddDocumentResult[] = [];
@@ -304,6 +326,9 @@ export function registerProjectDocumentRoutes(app: Express): void {
         res.status(201).json(response);
       } catch (error) {
         logger.error({ err: error }, "Error in batch add documents:");
+        if (error instanceof ProjectSourceQuotaError) {
+          return res.status(error.status).json(projectSourceQuotaErrorBody(error));
+        }
         res.status(400).json({ error: "Failed to add documents" });
       }
     },

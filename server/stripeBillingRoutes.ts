@@ -362,6 +362,8 @@ export function registerStripeBillingRoutes(app: ExpressApp): void {
         PAID_SUBSCRIPTION_STATUSES.has(user.subscriptionStatus)
       ) {
         return res.status(409).json({
+          code: "active_subscription_exists",
+          action: "billing_portal",
           message:
             "This account already has an active Stripe subscription. Use the billing portal to manage or change plans.",
         });

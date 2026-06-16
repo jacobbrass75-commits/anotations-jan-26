@@ -150,10 +150,10 @@ type Feature =
   | "unlimited_citations";
 
 const FEATURE_TIERS: Record<Feature, string> = {
-  chat: "pro",
-  writing: "pro",
+  chat: "free",
+  writing: "free",
   deep_write: "max",
-  source_verified: "max",
+  source_verified: "free",
   export: "pro",
   bulk_export: "max",
   chrome_extension: "pro",

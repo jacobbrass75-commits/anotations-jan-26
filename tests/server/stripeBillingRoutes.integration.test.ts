@@ -192,6 +192,10 @@ describe("Stripe billing routes", () => {
       );
 
       expect(response.status).toBe(409);
+      expect(response.body).toMatchObject({
+        code: "active_subscription_exists",
+        action: "billing_portal",
+      });
       expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
     } finally {
       await server.close();

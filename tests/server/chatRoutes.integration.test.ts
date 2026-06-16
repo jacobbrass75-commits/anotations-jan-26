@@ -62,7 +62,7 @@ describe("chat route integration", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createApp(options: { tier?: "pro" | "max" } = {}) {
+  async function createApp(options: { tier?: "free" | "pro" | "max" } = {}) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
     const { users, conversations } = await import("../../shared/schema");
     const { registerChatRoutes } = await import("../../server/chatRoutes");
@@ -113,8 +113,8 @@ describe("chat route integration", () => {
     };
   }
 
-  it("requires Max for source verification", async () => {
-    const { server, token } = await createApp({ tier: "pro" });
+  it("allows free source verification with the Sonnet verifier model", async () => {
+    const { server, token } = await createApp({ tier: "free" });
 
     try {
       const response = await fetch(
@@ -128,15 +128,39 @@ describe("chat route integration", () => {
           body: JSON.stringify({ compiledContent: "# Draft\nA sourced argument." }),
         },
       );
-      const body = await response.json();
+      const body = await response.text();
+      const verifyCall = anthropicStream.mock.calls.at(-1)?.[0] as { model?: string };
 
-      expect(response.status).toBe(403);
-      expect(body).toMatchObject({
-        message: "This feature requires the max plan",
-        requiredTier: "max",
-        currentTier: "pro",
-      });
-      expect(anthropicStream).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(body).toContain("Budgeted chat answer.");
+      expect(body).toContain('"type":"done"');
+      expect(verifyCall.model).toBe("claude-sonnet-4-6");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("uses Haiku for free precision chat turns", async () => {
+    const { server, token } = await createApp({ tier: "free" });
+
+    try {
+      const response = await fetch(
+        `${server.baseUrl}/api/chat/conversations/conversation-1/messages`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ content: "Draft a sentence." }),
+        },
+      );
+      const body = await response.text();
+      const chatCall = anthropicStream.mock.calls.at(-1)?.[0] as { model?: string };
+
+      expect(response.status).toBe(200);
+      expect(body).toContain('"type":"done"');
+      expect(chatCall.model).toBe("claude-haiku-4-5-20251001");
     } finally {
       await server.close();
     }
