@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -28,6 +28,7 @@ const ExtensionAuth = lazy(() => import("@/pages/ExtensionAuth"));
 const AdminAnalytics = lazy(() => import("@/pages/AdminAnalytics"));
 const AdminCampaign = lazy(() => import("@/pages/AdminCampaign"));
 const SummerCampaign = lazy(() => import("@/pages/SummerCampaign"));
+const SummerOnboarding = lazy(() => import("@/pages/SummerOnboarding"));
 const LocalWritingStudio = lazy(() => import("@/pages/LocalWritingStudio"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
@@ -37,6 +38,20 @@ function isLocalPreviewEnabled() {
   if (import.meta.env.DEV) return true;
   if (typeof window === "undefined") return false;
   return LOCAL_PREVIEW_HOSTS.has(window.location.hostname);
+}
+
+function usesPublicShell(pathname: string): boolean {
+  return (
+    pathname === "/pricing" ||
+    pathname === "/privacy" ||
+    pathname === "/terms" ||
+    pathname === "/support" ||
+    pathname === "/sso-callback" ||
+    pathname.startsWith("/sign-in") ||
+    pathname.startsWith("/sign-up") ||
+    pathname.startsWith("/summer") ||
+    pathname.startsWith("/invite")
+  );
 }
 
 function RouteFallback() {
@@ -68,6 +83,13 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/terms" component={Terms} />
       <Route path="/support" component={Support} />
+      <Route path="/summer/onboarding">
+        {() => (
+          <ProtectedRoute>
+            <SummerOnboarding />
+          </ProtectedRoute>
+        )}
+      </Route>
       <Route path="/summer" component={SummerCampaign} />
       <Route path="/invite" component={SummerCampaign} />
       <Route path="/invite/:code" component={SummerCampaign} />
@@ -184,18 +206,20 @@ function Router() {
 
 function App() {
   const [booted, setBooted] = useState(false);
+  const [pathname] = useLocation();
+  const publicShell = usesPublicShell(pathname);
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        {!booted && <BootSequence onComplete={() => setBooted(true)} />}
-        <div className="min-h-screen pb-6 eva-scanlines">
+        {!publicShell && !booted && <BootSequence onComplete={() => setBooted(true)} />}
+        <div className={publicShell ? "min-h-screen" : "min-h-screen pb-6 eva-scanlines"}>
           <Suspense fallback={<RouteFallback />}>
             <Router />
           </Suspense>
         </div>
-        <DataTicker />
+        {!publicShell && <DataTicker />}
       </TooltipProvider>
     </QueryClientProvider>
   );

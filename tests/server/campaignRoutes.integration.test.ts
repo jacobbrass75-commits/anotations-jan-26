@@ -224,10 +224,25 @@ describe("summer campaign routes", () => {
       expect(paidSignup.status).toBe(201);
 
       const metrics = await requestJson<{
-        totals: { visits: number; signups: number; activated: number; paid: number };
-        rates: { signupRate: number | null; paidRate: number | null };
+        totals: {
+          visits: number;
+          signups: number;
+          registered: number;
+          activated: number;
+          paid: number;
+        };
+        rates: {
+          signupRate: number | null;
+          registrationRate: number | null;
+          paidRate: number | null;
+        };
         breakdowns: { channel: Array<{ value: string; paid: number }> };
-        recentSignups: Array<{ email: string; paid: boolean; plan: string | null }>;
+        recentSignups: Array<{
+          email: string;
+          registered: boolean;
+          paid: boolean;
+          plan: string | null;
+        }>;
       }>(server.baseUrl, "/api/admin/campaign/metrics", {
         headers: { authorization: `Bearer ${adminToken}` },
       });
@@ -235,16 +250,18 @@ describe("summer campaign routes", () => {
       expect(metrics.body?.totals).toMatchObject({
         visits: 2,
         signups: 2,
+        registered: 1,
         activated: 0,
         paid: 1,
       });
       expect(metrics.body?.rates.signupRate).toBe(1);
+      expect(metrics.body?.rates.registrationRate).toBe(0.5);
       expect(metrics.body?.rates.paidRate).toBe(0.5);
       expect(metrics.body?.breakdowns.channel.find((row) => row.value === "discord")?.paid).toBe(
         1,
       );
       expect(metrics.body?.recentSignups.find((row) => row.email === "paid@example.com")).toEqual(
-        expect.objectContaining({ paid: true, plan: "pro" }),
+        expect.objectContaining({ registered: true, paid: true, plan: "pro" }),
       );
     } finally {
       await server.close();
@@ -287,7 +304,43 @@ describe("summer campaign routes", () => {
         (rows) => Boolean(rows[0]?.activatedAt),
       );
       expect(activated[0].userId).toBe("lead-user");
+      expect(activated[0].accountCreatedAt).toBeInstanceOf(Date);
       expect(activated[0].firstAction).toBe("created_project");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("claims a campaign lead when the matching account is created", async () => {
+    const { campaignSignups, db, server } = await createCampaignApp();
+
+    try {
+      await db.insert(campaignSignups).values({
+        name: "New Lead",
+        email: "newlead@example.com",
+        school: "Test U",
+        major: "Political Science",
+        classYear: "rising_junior",
+        paperType: "capstone",
+        hasTopic: "kind_of",
+        referralCode: "newlead-0001",
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+      });
+
+      const { getOrCreateUser } = await import("../../server/authStorage");
+      await getOrCreateUser("clerk-new-lead", "newlead@example.com", "free", {
+        emailVerified: true,
+      });
+
+      const rows = await waitFor(
+        () => db.select().from(campaignSignups).all(),
+        (latestRows) =>
+          latestRows.some((row) => row.email === "newlead@example.com" && row.userId),
+      );
+      const signup = rows.find((row) => row.email === "newlead@example.com");
+      expect(signup?.userId).toBe("clerk-new-lead");
+      expect(signup?.accountCreatedAt).toBeInstanceOf(Date);
+      expect(signup?.activatedAt).toBeNull();
     } finally {
       await server.close();
     }

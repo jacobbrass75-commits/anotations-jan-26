@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, isNull, sql } from "drizzle-orm";
+import { claimCampaignSignupForUser } from "./campaignAttribution";
 
 const EMAIL_MIGRATION_REQUIRES_VERIFICATION = "Account email must be verified before migration";
 
@@ -49,6 +50,7 @@ export async function getOrCreateUser(
   if (existing) {
     const synced = await syncUserFromClerk(existing, tier, emailVerified);
     await claimLegacyUserData(synced.id, emailVerified);
+    await claimCampaignSignupForUser({ id: synced.id, email: synced.email });
     return synced;
   }
 
@@ -59,6 +61,7 @@ export async function getOrCreateUser(
     }
     const synced = await syncUserFromClerk(existingByEmail, tier, emailVerified);
     await claimLegacyUserData(synced.id, emailVerified);
+    await claimCampaignSignupForUser({ id: synced.id, email: synced.email });
     return synced;
   }
 
@@ -82,9 +85,10 @@ export async function getOrCreateUser(
       billingCycleStart: now,
       createdAt: now,
       updatedAt: now,
-    } as any)
+  } as any)
     .returning();
   await claimLegacyUserData(created.id, emailVerified);
+  await claimCampaignSignupForUser({ id: created.id, email: created.email });
   return created;
 }
 

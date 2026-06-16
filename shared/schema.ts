@@ -942,6 +942,7 @@ export const campaignSignups = sqliteTable("campaign_signups", {
   referredBy: text("referred_by"),
   referralCode: text("referral_code").notNull().unique(),
   userId: text("user_id"),
+  accountCreatedAt: integer("account_created_at", { mode: "timestamp" }),
   activatedAt: integer("activated_at", { mode: "timestamp" }),
   firstAction: text("first_action"),
   createdAt: integer("created_at", { mode: "timestamp" })

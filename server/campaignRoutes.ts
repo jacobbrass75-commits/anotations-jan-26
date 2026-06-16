@@ -1,6 +1,6 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { randomBytes } from "crypto";
-import { count, eq, sql } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { db } from "./db";
 import {
   campaignSignups,
@@ -14,6 +14,7 @@ import {
 import { requireAuth } from "./auth";
 import { requireAdmin } from "./analyticsRoutes";
 import { authLimiter } from "./rateLimits";
+import { markCampaignActivation } from "./campaignAttribution";
 import { createLogger } from "./logger";
 
 const logger = createLogger("campaignRoutes");
@@ -45,32 +46,6 @@ async function generateUniqueReferralCode(name: string): Promise<string> {
   }
   // Five collisions in a row means the slug space is crowded; go fully random.
   return `student-${randomBytes(4).toString("hex")}`;
-}
-
-/**
- * Marks the campaign lead matching this user's email as activated.
- * Activation = first real product action (upload, project creation) after
- * signing up, which is the campaign's key metric. Never throws.
- */
-export async function markCampaignActivation(
-  user: { userId: string; email: string } | undefined,
-  action: string,
-): Promise<void> {
-  if (!user?.email) return;
-  try {
-    await db
-      .update(campaignSignups)
-      .set({
-        userId: user.userId,
-        activatedAt: new Date(),
-        firstAction: action,
-      })
-      .where(
-        sql`${campaignSignups.email} = ${user.email.toLowerCase()} AND ${campaignSignups.activatedAt} IS NULL`,
-      );
-  } catch (error) {
-    logger.warn({ err: error, action }, "Failed to mark campaign activation (non-blocking)");
-  }
 }
 
 /**
@@ -206,6 +181,7 @@ export function registerCampaignRoutes(app: Express): void {
         const isPaidSignup = (signup: CampaignSignup) => isActivePaidUser(userForSignup(signup));
 
         const totalSignups = signups.length;
+        const registered = signups.filter((s) => s.accountCreatedAt || userForSignup(s)).length;
         const activated = signups.filter((s) => s.activatedAt).length;
         const referredSignups = signups.filter((s) => s.referredBy).length;
         const paid = signups.filter(isPaidSignup).length;
@@ -229,6 +205,7 @@ export function registerCampaignRoutes(app: Express): void {
           totals: {
             visits,
             signups: totalSignups,
+            registered,
             activated,
             paid,
             activatedPaid,
@@ -237,6 +214,7 @@ export function registerCampaignRoutes(app: Express): void {
           },
           rates: {
             signupRate: visits > 0 ? totalSignups / visits : null,
+            registrationRate: totalSignups > 0 ? registered / totalSignups : null,
             activationRate: totalSignups > 0 ? activated / totalSignups : null,
             paidRate: totalSignups > 0 ? paid / totalSignups : null,
             activatedPaidRate: activated > 0 ? activatedPaid / activated : null,
@@ -268,10 +246,12 @@ export function registerCampaignRoutes(app: Express): void {
                 referredBy: s.referredBy,
                 referralCode: s.referralCode,
                 activated: Boolean(s.activatedAt),
+                registered: Boolean(s.accountCreatedAt || matchedUser),
                 firstAction: s.firstAction,
                 paid: isActivePaidUser(matchedUser),
                 plan: matchedUser?.tier ?? null,
                 subscriptionStatus: matchedUser?.subscriptionStatus ?? null,
+                accountCreatedAt: s.accountCreatedAt?.getTime() ?? null,
                 signupDate: s.createdAt.getTime(),
               };
             }),

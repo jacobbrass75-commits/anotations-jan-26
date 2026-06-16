@@ -4,11 +4,11 @@ import { isLocalDevAuthEnabled } from "@/lib/auth";
 import { getSafeRedirectUrl, withRedirectUrl } from "@/lib/redirects";
 
 export default function Register() {
-  if (isLocalDevAuthEnabled()) {
-    return <Redirect to="/" />;
-  }
-
   const redirectUrl = getSafeRedirectUrl();
+
+  if (isLocalDevAuthEnabled()) {
+    return <Redirect to={redirectUrl} />;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

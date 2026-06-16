@@ -16,6 +16,7 @@ interface CampaignMetrics {
   totals: {
     visits: number;
     signups: number;
+    registered: number;
     activated: number;
     paid: number;
     activatedPaid: number;
@@ -24,6 +25,7 @@ interface CampaignMetrics {
   };
   rates: {
     signupRate: number | null;
+    registrationRate: number | null;
     activationRate: number | null;
     paidRate: number | null;
     activatedPaidRate: number | null;
@@ -47,11 +49,13 @@ interface CampaignMetrics {
     channel: string | null;
     referredBy: string | null;
     referralCode: string;
+    registered: boolean;
     activated: boolean;
     firstAction: string | null;
     paid: boolean;
     plan: string | null;
     subscriptionStatus: string | null;
+    accountCreatedAt: number | null;
     signupDate: number;
   }>;
 }
@@ -148,6 +152,11 @@ export default function AdminCampaign() {
               <StatCard label="Link clicks" value={String(data.totals.visits)} />
               <StatCard label="Signups" value={String(data.totals.signups)} />
               <StatCard
+                label="Accounts"
+                value={String(data.totals.registered)}
+                hint={formatRate(data.rates.registrationRate)}
+              />
+              <StatCard
                 label="Signup rate"
                 value={formatRate(data.rates.signupRate)}
                 hint="signups / clicks"
@@ -232,6 +241,7 @@ export default function AdminCampaign() {
                         <th className="pb-2 pr-4 font-medium">Year</th>
                         <th className="pb-2 pr-4 font-medium">Channel</th>
                         <th className="pb-2 pr-4 font-medium">Referred by</th>
+                        <th className="pb-2 pr-4 font-medium">Account</th>
                         <th className="pb-2 pr-4 font-medium">Activated</th>
                         <th className="pb-2 pr-4 font-medium">Paid</th>
                         <th className="pb-2 pr-4 font-medium">Plan</th>
@@ -248,6 +258,7 @@ export default function AdminCampaign() {
                           <td className="py-1.5 pr-4">{signup.classYear}</td>
                           <td className="py-1.5 pr-4">{signup.channel ?? "—"}</td>
                           <td className="py-1.5 pr-4">{signup.referredBy ?? "—"}</td>
+                          <td className="py-1.5 pr-4">{signup.registered ? "Yes" : "No"}</td>
                           <td className="py-1.5 pr-4">{signup.activated ? "Yes" : "No"}</td>
                           <td className="py-1.5 pr-4">
                             {signup.paid ? "Yes" : signup.subscriptionStatus ?? "No"}

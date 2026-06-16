@@ -273,6 +273,7 @@ CREATE TABLE IF NOT EXISTS campaign_signups (
   referred_by TEXT,
   referral_code TEXT NOT NULL UNIQUE,
   user_id TEXT,
+  account_created_at INTEGER,
   activated_at INTEGER,
   first_action TEXT,
   created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000)
@@ -285,6 +286,8 @@ CREATE INDEX IF NOT EXISTS idx_campaign_signups_referral_code
 ON campaign_signups(referral_code);
 CREATE INDEX IF NOT EXISTS idx_campaign_signups_referred_by
 ON campaign_signups(referred_by);
+CREATE INDEX IF NOT EXISTS idx_campaign_signups_user_id
+ON campaign_signups(user_id);
 `);
 
 ensureColumn("project_documents", "source_role", "source_role TEXT DEFAULT 'evidence'");
@@ -303,6 +306,7 @@ ensureColumn("users", "stripe_price_id", "stripe_price_id TEXT");
 ensureColumn("users", "subscription_status", "subscription_status TEXT");
 ensureColumn("users", "subscription_current_period_end", "subscription_current_period_end INTEGER");
 ensureColumn("users", "cancel_at_period_end", "cancel_at_period_end INTEGER DEFAULT 0");
+ensureColumn("campaign_signups", "account_created_at", "account_created_at INTEGER");
 
 // Export the raw sqlite connection for direct queries if needed
 export { sqlite };
