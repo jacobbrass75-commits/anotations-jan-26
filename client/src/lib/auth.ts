@@ -15,6 +15,12 @@ export interface AuthUser {
   storageLimit: number;
   emailVerified: boolean | null;
   billingCycleStart: string | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripePriceId: string | null;
+  subscriptionStatus: string | null;
+  subscriptionCurrentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,7 +36,9 @@ interface AuthContextType {
 
 const LOCAL_DEV_AUTH = import.meta.env.VITE_LOCAL_DEV_AUTH === "true";
 
-async function fetchServerAuthUser(options: { allowUnauthorized: boolean }): Promise<AuthUser | null> {
+async function fetchServerAuthUser(options: {
+  allowUnauthorized: boolean;
+}): Promise<AuthUser | null> {
   const response = await fetch("/api/auth/me", {
     credentials: "include",
   });
@@ -72,26 +80,37 @@ function useLocalDevAuth(): AuthContextType {
 
 function useClerkBackedAuth(): AuthContextType {
   const { user: clerkUser, isLoaded: isUserLoaded } = useUser();
-  const { isLoaded: isAuthLoaded, isSignedIn, userId: clerkAuthUserId } = useClerkAuth();
+  const {
+    isLoaded: isAuthLoaded,
+    isSignedIn,
+    userId: clerkAuthUserId,
+  } = useClerkAuth();
   const { signOut } = useClerk();
 
   const clerkLoading = !isUserLoaded || !isAuthLoaded;
   const activeClerkUserId = clerkUser?.id ?? clerkAuthUserId ?? null;
-  const shouldLoadServerUser = !clerkLoading && !!isSignedIn && !!activeClerkUserId;
+  const shouldLoadServerUser =
+    !clerkLoading && !!isSignedIn && !!activeClerkUserId;
   const {
     data: serverUser = null,
     isLoading: isServerUserLoading,
     isError: isServerUserError,
   } = useQuery<AuthUser | null>({
-    queryKey: ["/api/auth/me", "clerk-backed", activeClerkUserId ?? "signed-out"],
+    queryKey: [
+      "/api/auth/me",
+      "clerk-backed",
+      activeClerkUserId ?? "signed-out",
+    ],
     queryFn: () => fetchServerAuthUser({ allowUnauthorized: false }),
     enabled: shouldLoadServerUser,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
-  const isLoading = clerkLoading || (shouldLoadServerUser && isServerUserLoading);
+  const isLoading =
+    clerkLoading || (shouldLoadServerUser && isServerUserLoading);
 
-  const tier = serverUser?.tier || (clerkUser?.publicMetadata?.tier as string) || "free";
+  const tier =
+    serverUser?.tier || (clerkUser?.publicMetadata?.tier as string) || "free";
   const user: AuthUser | null = serverUser;
   const effectiveSignedIn = !!isSignedIn && !!serverUser && !isServerUserError;
 

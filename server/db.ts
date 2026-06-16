@@ -20,11 +20,28 @@ const sqlite = new Database(DB_PATH);
 sqlite.pragma("foreign_keys = ON");
 
 function getExistingColumnNames(tableName: string): Set<string> {
-  const columns = sqlite.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  const columns = sqlite
+    .prepare(`PRAGMA table_info(${tableName})`)
+    .all() as Array<{ name: string }>;
   return new Set(columns.map((column) => column.name));
 }
 
-function ensureColumn(tableName: string, columnName: string, columnDefinition: string): void {
+function tableExists(tableName: string): boolean {
+  const row = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName);
+  return Boolean(row);
+}
+
+function ensureColumn(
+  tableName: string,
+  columnName: string,
+  columnDefinition: string,
+): void {
+  if (!tableExists(tableName)) {
+    return;
+  }
+
   const existingColumns = getExistingColumnNames(tableName);
   if (existingColumns.has(columnName)) {
     return;
@@ -231,16 +248,38 @@ CREATE INDEX IF NOT EXISTS idx_billing_payments_status
 ON billing_payments(status);
 `);
 
-ensureColumn("project_documents", "source_role", "source_role TEXT DEFAULT 'evidence'");
+ensureColumn(
+  "project_documents",
+  "source_role",
+  "source_role TEXT DEFAULT 'evidence'",
+);
 ensureColumn("project_documents", "style_analysis", "style_analysis TEXT");
 ensureColumn("conversations", "evidence_clipboard", "evidence_clipboard TEXT");
 ensureColumn("conversations", "compaction_summary", "compaction_summary TEXT");
-ensureColumn("conversations", "compacted_at_turn", "compacted_at_turn INTEGER DEFAULT 0");
+ensureColumn(
+  "conversations",
+  "compacted_at_turn",
+  "compacted_at_turn INTEGER DEFAULT 0",
+);
 ensureColumn("conversations", "writing_style_id", "writing_style_id TEXT");
 ensureColumn("api_keys", "label", "label TEXT");
 ensureColumn("api_keys", "scope", "scope TEXT");
 ensureColumn("projects", "voice_profile", "voice_profile TEXT");
 ensureColumn("projects", "voice_profile_samples", "voice_profile_samples TEXT");
+ensureColumn("users", "stripe_customer_id", "stripe_customer_id TEXT");
+ensureColumn("users", "stripe_subscription_id", "stripe_subscription_id TEXT");
+ensureColumn("users", "stripe_price_id", "stripe_price_id TEXT");
+ensureColumn("users", "subscription_status", "subscription_status TEXT");
+ensureColumn(
+  "users",
+  "subscription_current_period_end",
+  "subscription_current_period_end INTEGER",
+);
+ensureColumn(
+  "users",
+  "cancel_at_period_end",
+  "cancel_at_period_end INTEGER DEFAULT 0",
+);
 
 // Export the raw sqlite connection for direct queries if needed
 export { sqlite };

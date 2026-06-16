@@ -1,4 +1,10 @@
-import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -13,10 +19,10 @@ export const annotationCategories = [
   "argument",
   "evidence",
   "methodology",
-  "user_added"
+  "user_added",
 ] as const;
 
-export type AnnotationCategory = typeof annotationCategories[number];
+export type AnnotationCategory = (typeof annotationCategories)[number];
 
 // Documents table
 export const documents = sqliteTable("documents", {
@@ -24,7 +30,9 @@ export const documents = sqliteTable("documents", {
   userId: text("user_id"),
   filename: text("filename").notNull(),
   fullText: text("full_text").notNull(),
-  uploadDate: integer("upload_date", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  uploadDate: integer("upload_date", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
   userIntent: text("user_intent"),
   summary: text("summary"),
   mainArguments: text("main_arguments", { mode: "json" }).$type<string[]>(),
@@ -42,7 +50,9 @@ export const documentsRelations = relations(documents, ({ many }) => ({
 // Text chunks table
 export const textChunks = sqliteTable("text_chunks", {
   id: text("id").primaryKey().$defaultFn(genId),
-  documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  documentId: text("document_id")
+    .notNull()
+    .references(() => documents.id, { onDelete: "cascade" }),
   text: text("text").notNull(),
   startPosition: integer("start_position").notNull(),
   endPosition: integer("end_position").notNull(),
@@ -60,21 +70,27 @@ export const textChunksRelations = relations(textChunks, ({ one }) => ({
 // Annotations table
 export const annotations = sqliteTable("annotations", {
   id: text("id").primaryKey().$defaultFn(genId),
-  documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  documentId: text("document_id")
+    .notNull()
+    .references(() => documents.id, { onDelete: "cascade" }),
   chunkId: text("chunk_id"),
   startPosition: integer("start_position").notNull(),
   endPosition: integer("end_position").notNull(),
   highlightedText: text("highlighted_text").notNull(),
   category: text("category").notNull().$type<AnnotationCategory>(),
   note: text("note").notNull(),
-  isAiGenerated: integer("is_ai_generated", { mode: "boolean" }).default(false).notNull(),
+  isAiGenerated: integer("is_ai_generated", { mode: "boolean" })
+    .default(false)
+    .notNull(),
   confidenceScore: real("confidence_score"),
   // Multi-prompt support
   promptText: text("prompt_text"),
   promptIndex: integer("prompt_index"),
   promptColor: text("prompt_color"),
   analysisRunId: text("analysis_run_id"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 export const annotationsRelations = relations(annotations, ({ one }) => ({
@@ -95,13 +111,15 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
 
-export const insertTextChunkSchema = createInsertSchema(textChunks).omit({ id: true });
+export const insertTextChunkSchema = createInsertSchema(textChunks).omit({
+  id: true,
+});
 export type InsertTextChunk = z.infer<typeof insertTextChunkSchema>;
 export type TextChunk = typeof textChunks.$inferSelect;
 
 export const insertAnnotationSchema = createInsertSchema(annotations).omit({
   id: true,
-  createdAt: true
+  createdAt: true,
 });
 export type InsertAnnotation = z.infer<typeof insertAnnotationSchema>;
 export type Annotation = typeof annotations.$inferSelect;
@@ -220,8 +238,22 @@ export const users = sqliteTable("users", {
   storageLimit: integer("storage_limit").notNull().default(52428800), // 50MB for free
   emailVerified: integer("email_verified", { mode: "boolean" }).default(false),
   billingCycleStart: integer("billing_cycle_start", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripePriceId: text("stripe_price_id"),
+  subscriptionStatus: text("subscription_status"),
+  subscriptionCurrentPeriodEnd: integer("subscription_current_period_end", {
+    mode: "timestamp",
+  }),
+  cancelAtPeriodEnd: integer("cancel_at_period_end", {
+    mode: "boolean",
+  }).default(false),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -252,11 +284,18 @@ export type User = typeof users.$inferSelect;
 
 // Citation style types
 export const citationStyles = ["chicago", "mla", "apa"] as const;
-export type CitationStyle = typeof citationStyles[number];
+export type CitationStyle = (typeof citationStyles)[number];
 
 // Citation data type for Chicago-style citations
 export interface CitationData {
-  sourceType: 'book' | 'journal' | 'website' | 'newspaper' | 'chapter' | 'thesis' | 'other';
+  sourceType:
+    | "book"
+    | "journal"
+    | "website"
+    | "newspaper"
+    | "chapter"
+    | "thesis"
+    | "other";
   authors: Array<{
     firstName: string;
     lastName: string;
@@ -283,12 +322,22 @@ export interface CitationData {
 }
 
 export const citationDataSchema = z.object({
-  sourceType: z.enum(['book', 'journal', 'website', 'newspaper', 'chapter', 'thesis', 'other']),
-  authors: z.array(z.object({
-    firstName: z.string(),
-    lastName: z.string(),
-    suffix: z.string().optional(),
-  })),
+  sourceType: z.enum([
+    "book",
+    "journal",
+    "website",
+    "newspaper",
+    "chapter",
+    "thesis",
+    "other",
+  ]),
+  authors: z.array(
+    z.object({
+      firstName: z.string(),
+      lastName: z.string(),
+      suffix: z.string().optional(),
+    }),
+  ),
   title: z.string(),
   subtitle: z.string().optional(),
   containerTitle: z.string().optional(),
@@ -303,10 +352,14 @@ export const citationDataSchema = z.object({
   accessDate: z.string().optional(),
   doi: z.string().optional(),
   edition: z.string().optional(),
-  editors: z.array(z.object({
-    firstName: z.string(),
-    lastName: z.string(),
-  })).optional(),
+  editors: z
+    .array(
+      z.object({
+        firstName: z.string(),
+        lastName: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 export const voiceProfileSchema = z.object({
@@ -335,11 +388,17 @@ export const projects = sqliteTable("projects", {
   thesis: text("thesis"),
   scope: text("scope"),
   contextSummary: text("context_summary"),
-  contextEmbedding: text("context_embedding", { mode: "json" }).$type<number[]>(),
+  contextEmbedding: text("context_embedding", { mode: "json" }).$type<
+    number[]
+  >(),
   voiceProfile: text("voice_profile"),
   voiceProfileSamples: text("voice_profile_samples"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 // User-owned reusable writing style profiles
@@ -350,54 +409,82 @@ export const writingStyles = sqliteTable("writing_styles", {
   description: text("description"),
   voiceProfile: text("voice_profile").notNull(),
   samples: text("samples", { mode: "json" }).$type<string[]>().notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 // Prompt templates table (project-scoped prompt sets)
 export const promptTemplates = sqliteTable("prompt_templates", {
   id: text("id").primaryKey().$defaultFn(genId),
-  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  prompts: text("prompts", { mode: "json" }).$type<Array<{ text: string; color: string }>>().notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  prompts: text("prompts", { mode: "json" })
+    .$type<Array<{ text: string; color: string }>>()
+    .notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 // Folders table (for nested sub-folders)
 export const folders = sqliteTable("folders", {
   id: text("id").primaryKey().$defaultFn(genId),
-  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
   parentFolderId: text("parent_folder_id"),
   name: text("name").notNull(),
   description: text("description"),
   contextSummary: text("context_summary"),
-  contextEmbedding: text("context_embedding", { mode: "json" }).$type<number[]>(),
+  contextEmbedding: text("context_embedding", { mode: "json" }).$type<
+    number[]
+  >(),
   sortOrder: integer("sort_order").default(0),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 // Project documents table (links documents to projects with project-specific context)
 export const projectDocuments = sqliteTable("project_documents", {
   id: text("id").primaryKey().$defaultFn(genId),
-  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
-  documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
-  folderId: text("folder_id").references(() => folders.id, { onDelete: "set null" }),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  documentId: text("document_id")
+    .notNull()
+    .references(() => documents.id, { onDelete: "cascade" }),
+  folderId: text("folder_id").references(() => folders.id, {
+    onDelete: "set null",
+  }),
   projectContext: text("project_context"),
   roleInProject: text("role_in_project"),
   retrievalContext: text("retrieval_context"),
-  retrievalEmbedding: text("retrieval_embedding", { mode: "json" }).$type<number[]>(),
+  retrievalEmbedding: text("retrieval_embedding", { mode: "json" }).$type<
+    number[]
+  >(),
   citationData: text("citation_data", { mode: "json" }).$type<CitationData>(),
   lastViewedAt: integer("last_viewed_at", { mode: "timestamp" }),
   scrollPosition: integer("scroll_position"),
   sourceRole: text("source_role").default("evidence"),
   styleAnalysis: text("style_analysis"),
-  addedAt: integer("added_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  addedAt: integer("added_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 // Project annotations table (project-specific annotations)
 export const projectAnnotations = sqliteTable("project_annotations", {
   id: text("id").primaryKey().$defaultFn(genId),
-  projectDocumentId: text("project_document_id").notNull().references(() => projectDocuments.id, { onDelete: "cascade" }),
+  projectDocumentId: text("project_document_id")
+    .notNull()
+    .references(() => projectDocuments.id, { onDelete: "cascade" }),
   startPosition: integer("start_position").notNull(),
   endPosition: integer("end_position").notNull(),
   highlightedText: text("highlighted_text").notNull(),
@@ -412,7 +499,9 @@ export const projectAnnotations = sqliteTable("project_annotations", {
   analysisRunId: text("analysis_run_id"),
   searchableContent: text("searchable_content"),
   searchEmbedding: text("search_embedding", { mode: "json" }).$type<number[]>(),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 // Web clips table (saved browser highlights with source metadata + citations)
@@ -430,11 +519,18 @@ export const webClips = sqliteTable("web_clips", {
   citationData: text("citation_data", { mode: "json" }).$type<CitationData>(),
   footnote: text("footnote"),
   bibliography: text("bibliography"),
-  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
-  projectDocumentId: text("project_document_id").references(() => projectDocuments.id, { onDelete: "set null" }),
+  projectId: text("project_id").references(() => projects.id, {
+    onDelete: "set null",
+  }),
+  projectDocumentId: text("project_document_id").references(
+    () => projectDocuments.id,
+    { onDelete: "set null" },
+  ),
   surroundingContext: text("surrounding_context"),
   tags: text("tags", { mode: "json" }).$type<string[]>(),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 // Relations declared after all tables to avoid reference errors
@@ -445,12 +541,15 @@ export const projectsRelations = relations(projects, ({ many }) => ({
   webClips: many(webClips),
 }));
 
-export const promptTemplatesRelations = relations(promptTemplates, ({ one }) => ({
-  project: one(projects, {
-    fields: [promptTemplates.projectId],
-    references: [projects.id],
+export const promptTemplatesRelations = relations(
+  promptTemplates,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [promptTemplates.projectId],
+      references: [projects.id],
+    }),
   }),
-}));
+);
 
 export const foldersRelations = relations(folders, ({ one, many }) => ({
   project: one(projects, {
@@ -466,29 +565,35 @@ export const foldersRelations = relations(folders, ({ one, many }) => ({
   projectDocuments: many(projectDocuments),
 }));
 
-export const projectDocumentsRelations = relations(projectDocuments, ({ one, many }) => ({
-  project: one(projects, {
-    fields: [projectDocuments.projectId],
-    references: [projects.id],
+export const projectDocumentsRelations = relations(
+  projectDocuments,
+  ({ one, many }) => ({
+    project: one(projects, {
+      fields: [projectDocuments.projectId],
+      references: [projects.id],
+    }),
+    document: one(documents, {
+      fields: [projectDocuments.documentId],
+      references: [documents.id],
+    }),
+    folder: one(folders, {
+      fields: [projectDocuments.folderId],
+      references: [folders.id],
+    }),
+    projectAnnotations: many(projectAnnotations),
+    webClips: many(webClips),
   }),
-  document: one(documents, {
-    fields: [projectDocuments.documentId],
-    references: [documents.id],
-  }),
-  folder: one(folders, {
-    fields: [projectDocuments.folderId],
-    references: [folders.id],
-  }),
-  projectAnnotations: many(projectAnnotations),
-  webClips: many(webClips),
-}));
+);
 
-export const projectAnnotationsRelations = relations(projectAnnotations, ({ one }) => ({
-  projectDocument: one(projectDocuments, {
-    fields: [projectAnnotations.projectDocumentId],
-    references: [projectDocuments.id],
+export const projectAnnotationsRelations = relations(
+  projectAnnotations,
+  ({ one }) => ({
+    projectDocument: one(projectDocuments, {
+      fields: [projectAnnotations.projectDocumentId],
+      references: [projectDocuments.id],
+    }),
   }),
-}));
+);
 
 export const webClipsRelations = relations(webClips, ({ one }) => ({
   project: one(projects, {
@@ -520,7 +625,9 @@ export const insertWritingStyleSchema = createInsertSchema(writingStyles).omit({
 export type InsertWritingStyle = z.infer<typeof insertWritingStyleSchema>;
 export type WritingStyle = typeof writingStyles.$inferSelect;
 
-export const insertPromptTemplateSchema = createInsertSchema(promptTemplates).omit({
+export const insertPromptTemplateSchema = createInsertSchema(
+  promptTemplates,
+).omit({
   id: true,
   createdAt: true,
 });
@@ -536,7 +643,9 @@ export const insertFolderSchema = createInsertSchema(folders).omit({
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
 export type Folder = typeof folders.$inferSelect;
 
-export const insertProjectDocumentSchema = createInsertSchema(projectDocuments).omit({
+export const insertProjectDocumentSchema = createInsertSchema(
+  projectDocuments,
+).omit({
   id: true,
   addedAt: true,
   retrievalContext: true,
@@ -545,13 +654,17 @@ export const insertProjectDocumentSchema = createInsertSchema(projectDocuments).
 export type InsertProjectDocument = z.infer<typeof insertProjectDocumentSchema>;
 export type ProjectDocument = typeof projectDocuments.$inferSelect;
 
-export const insertProjectAnnotationSchema = createInsertSchema(projectAnnotations).omit({
+export const insertProjectAnnotationSchema = createInsertSchema(
+  projectAnnotations,
+).omit({
   id: true,
   createdAt: true,
   searchableContent: true,
   searchEmbedding: true,
 });
-export type InsertProjectAnnotation = z.infer<typeof insertProjectAnnotationSchema>;
+export type InsertProjectAnnotation = z.infer<
+  typeof insertProjectAnnotationSchema
+>;
 export type ProjectAnnotation = typeof projectAnnotations.$inferSelect;
 
 export const insertWebClipSchema = createInsertSchema(webClips).omit({
@@ -566,7 +679,7 @@ export type WebClip = typeof webClips.$inferSelect;
 
 // Global search result type
 export const globalSearchResultSchema = z.object({
-  type: z.enum(['annotation', 'document_context', 'folder_context']),
+  type: z.enum(["annotation", "document_context", "folder_context"]),
   documentId: z.string().optional(),
   documentFilename: z.string().optional(),
   folderId: z.string().optional(),
@@ -579,32 +692,39 @@ export const globalSearchResultSchema = z.object({
   citationData: citationDataSchema.optional(),
   pageNumber: z.string().optional(),
   similarityScore: z.number(),
-  relevanceLevel: z.enum(['high', 'medium', 'low']),
+  relevanceLevel: z.enum(["high", "medium", "low"]),
   startPosition: z.number().optional(),
 });
 export type GlobalSearchResult = z.infer<typeof globalSearchResultSchema>;
 
 // Thoroughness levels for document analysis
-export const thoroughnessLevels = ['quick', 'standard', 'thorough', 'exhaustive'] as const;
-export type ThoroughnessLevel = typeof thoroughnessLevels[number];
+export const thoroughnessLevels = [
+  "quick",
+  "standard",
+  "thorough",
+  "exhaustive",
+] as const;
+export type ThoroughnessLevel = (typeof thoroughnessLevels)[number];
 
 // Batch analysis schemas
 export const batchAnalysisRequestSchema = z.object({
   projectDocumentIds: z.array(z.string()).min(1).max(50),
   intent: z.string().min(1).max(2000),
-  thoroughness: z.enum(thoroughnessLevels).optional().default('standard'),
-  constraints: z.object({
-    categories: z.array(z.enum(annotationCategories)).optional(),
-    maxAnnotationsPerDoc: z.number().int().min(1).max(50).optional(),
-    minConfidence: z.number().min(0).max(1).optional(),
-  }).optional(),
+  thoroughness: z.enum(thoroughnessLevels).optional().default("standard"),
+  constraints: z
+    .object({
+      categories: z.array(z.enum(annotationCategories)).optional(),
+      maxAnnotationsPerDoc: z.number().int().min(1).max(50).optional(),
+      minConfidence: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
 });
 export type BatchAnalysisRequest = z.infer<typeof batchAnalysisRequestSchema>;
 
 export const batchDocumentResultSchema = z.object({
   projectDocumentId: z.string(),
   filename: z.string(),
-  status: z.enum(['pending', 'processing', 'completed', 'failed']),
+  status: z.enum(["pending", "processing", "completed", "failed"]),
   annotationsCreated: z.number().int().default(0),
   error: z.string().optional(),
 });
@@ -612,7 +732,7 @@ export type BatchDocumentResult = z.infer<typeof batchDocumentResultSchema>;
 
 export const batchAnalysisResponseSchema = z.object({
   jobId: z.string(),
-  status: z.enum(['completed', 'partial', 'failed']),
+  status: z.enum(["completed", "partial", "failed"]),
   totalDocuments: z.number().int(),
   successfulDocuments: z.number().int(),
   failedDocuments: z.number().int(),
@@ -627,16 +747,20 @@ export const batchAddDocumentsRequestSchema = z.object({
   documentIds: z.array(z.string()).min(1).max(50),
   folderId: z.string().nullable().optional(),
 });
-export type BatchAddDocumentsRequest = z.infer<typeof batchAddDocumentsRequestSchema>;
+export type BatchAddDocumentsRequest = z.infer<
+  typeof batchAddDocumentsRequestSchema
+>;
 
 export const batchAddDocumentResultSchema = z.object({
   documentId: z.string(),
   filename: z.string(),
-  status: z.enum(['added', 'already_exists', 'failed']),
+  status: z.enum(["added", "already_exists", "failed"]),
   projectDocumentId: z.string().optional(),
   error: z.string().optional(),
 });
-export type BatchAddDocumentResult = z.infer<typeof batchAddDocumentResultSchema>;
+export type BatchAddDocumentResult = z.infer<
+  typeof batchAddDocumentResultSchema
+>;
 
 export const batchAddDocumentsResponseSchema = z.object({
   totalRequested: z.number().int(),
@@ -645,20 +769,27 @@ export const batchAddDocumentsResponseSchema = z.object({
   failed: z.number().int(),
   results: z.array(batchAddDocumentResultSchema),
 });
-export type BatchAddDocumentsResponse = z.infer<typeof batchAddDocumentsResponseSchema>;
-
+export type BatchAddDocumentsResponse = z.infer<
+  typeof batchAddDocumentsResponseSchema
+>;
 
 // === CHAT TABLES ===
 
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey().$defaultFn(genId),
   userId: text("user_id"), // nullable until auth is merged
-  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+  projectId: text("project_id").references(() => projects.id, {
+    onDelete: "set null",
+  }),
   title: text("title").notNull().default("New Chat"),
   model: text("model").notNull().default("claude-opus-4-1-20250805"),
   writingModel: text("writing_model").default("precision"),
-  selectedSourceIds: text("selected_source_ids", { mode: "json" }).$type<string[]>(),
-  writingStyleId: text("writing_style_id").references(() => writingStyles.id, { onDelete: "set null" }),
+  selectedSourceIds: text("selected_source_ids", { mode: "json" }).$type<
+    string[]
+  >(),
+  writingStyleId: text("writing_style_id").references(() => writingStyles.id, {
+    onDelete: "set null",
+  }),
   citationStyle: text("citation_style").default("chicago"),
   tone: text("tone").default("academic"),
   humanize: integer("humanize", { mode: "boolean" }).default(true),
@@ -666,26 +797,37 @@ export const conversations = sqliteTable("conversations", {
   evidenceClipboard: text("evidence_clipboard"),
   compactionSummary: text("compaction_summary"),
   compactedAtTurn: integer("compacted_at_turn").default(0),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
 export const messages = sqliteTable("messages", {
   id: text("id").primaryKey().$defaultFn(genId),
-  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  conversationId: text("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
   role: text("role").notNull(), // "user" | "assistant" | "system"
   content: text("content").notNull(),
   tokensUsed: integer("tokens_used").default(0),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .$defaultFn(() => new Date())
+    .notNull(),
 });
 
-export const conversationsRelations = relations(conversations, ({ one, many }) => ({
-  project: one(projects, {
-    fields: [conversations.projectId],
-    references: [projects.id],
+export const conversationsRelations = relations(
+  conversations,
+  ({ one, many }) => ({
+    project: one(projects, {
+      fields: [conversations.projectId],
+      references: [projects.id],
+    }),
+    messages: many(messages),
   }),
-  messages: many(messages),
-}));
+);
 
 export const messagesRelations = relations(messages, ({ one }) => ({
   conversation: one(conversations, {
@@ -695,13 +837,16 @@ export const messagesRelations = relations(messages, ({ one }) => ({
 }));
 
 export const insertConversationSchema = createInsertSchema(conversations).omit({
-  id: true, createdAt: true, updatedAt: true,
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type Conversation = typeof conversations.$inferSelect;
 
 export const insertMessageSchema = createInsertSchema(messages).omit({
-  id: true, createdAt: true,
+  id: true,
+  createdAt: true,
 });
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
@@ -710,7 +855,9 @@ export type Message = typeof messages.$inferSelect;
 
 export const apiKeys = sqliteTable("api_keys", {
   id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   label: text("label"),
   keyHash: text("key_hash").notNull().unique(),
   keyPrefix: text("key_prefix").notNull(),
@@ -733,8 +880,12 @@ export const mcpOauthClients = sqliteTable("mcp_oauth_clients", {
 
 export const mcpAuthCodes = sqliteTable("mcp_auth_codes", {
   codeHash: text("code_hash").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  clientId: text("client_id").notNull().references(() => mcpOauthClients.clientId, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => mcpOauthClients.clientId, { onDelete: "cascade" }),
   redirectUri: text("redirect_uri").notNull(),
   scope: text("scope").notNull(),
   codeChallenge: text("code_challenge").notNull(),
@@ -746,8 +897,12 @@ export const mcpAuthCodes = sqliteTable("mcp_auth_codes", {
 
 export const mcpTokens = sqliteTable("mcp_tokens", {
   id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  clientId: text("client_id").notNull().references(() => mcpOauthClients.clientId, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => mcpOauthClients.clientId, { onDelete: "cascade" }),
   keyHash: text("key_hash").notNull().unique(),
   keyPrefix: text("key_prefix").notNull(),
   scope: text("scope").notNull(),
@@ -773,17 +928,20 @@ export const analyticsToolCalls = sqliteTable("analytics_tool_calls", {
   timestamp: integer("timestamp").notNull(),
 });
 
-export const analyticsContextSnapshots = sqliteTable("analytics_context_snapshots", {
-  id: text("id").primaryKey(),
-  conversationId: text("conversation_id").notNull(),
-  turnNumber: integer("turn_number").notNull(),
-  escalationRound: integer("escalation_round").notNull(),
-  estimatedTokens: integer("estimated_tokens").notNull(),
-  warningLevel: text("warning_level").notNull(),
-  trigger: text("trigger"),
-  metadata: text("metadata"),
-  timestamp: integer("timestamp").notNull(),
-});
+export const analyticsContextSnapshots = sqliteTable(
+  "analytics_context_snapshots",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id").notNull(),
+    turnNumber: integer("turn_number").notNull(),
+    escalationRound: integer("escalation_round").notNull(),
+    estimatedTokens: integer("estimated_tokens").notNull(),
+    warningLevel: text("warning_level").notNull(),
+    trigger: text("trigger"),
+    metadata: text("metadata"),
+    timestamp: integer("timestamp").notNull(),
+  },
+);
 
 // OCR jobs queue (runtime-managed, registered here so db:push doesn't drop it)
 export const ocrJobs = sqliteTable("ocr_jobs", {
@@ -802,14 +960,21 @@ export const ocrJobs = sqliteTable("ocr_jobs", {
 });
 
 // OCR page-level results (runtime-managed, registered here so db:push doesn't drop it)
-export const ocrPageResults = sqliteTable("ocr_page_results", {
-  id: text("id").primaryKey().$defaultFn(genId),
-  jobId: text("job_id").notNull(),
-  documentId: text("document_id").notNull(),
-  pageNumber: integer("page_number").notNull(),
-  text: text("text").notNull(),
-  createdAt: integer("created_at").notNull().default(0),
-  updatedAt: integer("updated_at").notNull().default(0),
-}, (table) => [
-  uniqueIndex("idx_ocr_page_results_job_page").on(table.jobId, table.pageNumber),
-]);
+export const ocrPageResults = sqliteTable(
+  "ocr_page_results",
+  {
+    id: text("id").primaryKey().$defaultFn(genId),
+    jobId: text("job_id").notNull(),
+    documentId: text("document_id").notNull(),
+    pageNumber: integer("page_number").notNull(),
+    text: text("text").notNull(),
+    createdAt: integer("created_at").notNull().default(0),
+    updatedAt: integer("updated_at").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("idx_ocr_page_results_job_page").on(
+      table.jobId,
+      table.pageNumber,
+    ),
+  ],
+);

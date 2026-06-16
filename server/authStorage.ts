@@ -10,9 +10,13 @@ import {
 import { db } from "./db";
 import { eq, isNull, sql } from "drizzle-orm";
 
-const EMAIL_MIGRATION_REQUIRES_VERIFICATION = "Account email must be verified before migration";
+const EMAIL_MIGRATION_REQUIRES_VERIFICATION =
+  "Account email must be verified before migration";
 
-const TIER_LIMITS: Record<string, { tokenLimit: number; storageLimit: number }> = {
+const TIER_LIMITS: Record<
+  string,
+  { tokenLimit: number; storageLimit: number }
+> = {
   free: { tokenLimit: 50_000, storageLimit: 52_428_800 },
   pro: { tokenLimit: 500_000, storageLimit: 524_288_000 },
   max: { tokenLimit: 2_000_000, storageLimit: 5_368_709_120 },
@@ -57,7 +61,11 @@ export async function getOrCreateUser(
     if (!emailVerified || existingByEmail.emailVerified !== true) {
       throw new Error(EMAIL_MIGRATION_REQUIRES_VERIFICATION);
     }
-    const synced = await syncUserFromClerk(existingByEmail, tier, emailVerified);
+    const synced = await syncUserFromClerk(
+      existingByEmail,
+      tier,
+      emailVerified,
+    );
     await claimLegacyUserData(synced.id, emailVerified);
     return synced;
   }
@@ -92,7 +100,10 @@ function normalizeUserEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function getTierLimits(tier: string): { tokenLimit: number; storageLimit: number } {
+function getTierLimits(tier: string): {
+  tokenLimit: number;
+  storageLimit: number;
+} {
   return TIER_LIMITS[tier] ?? TIER_LIMITS.free;
 }
 
@@ -100,7 +111,11 @@ export function isValidUserTier(tier: string): boolean {
   return tier in TIER_LIMITS;
 }
 
-async function syncUserFromClerk(user: User, tier: string | null, emailVerified: boolean): Promise<User> {
+async function syncUserFromClerk(
+  user: User,
+  tier: string | null,
+  emailVerified: boolean,
+): Promise<User> {
   const updates: Partial<User> = {};
   const resolvedTier = tier ?? user.tier;
   const tierLimits = getTierLimits(resolvedTier);
@@ -147,7 +162,20 @@ export async function getUserByEmail(email: string): Promise<User | null> {
   return user || null;
 }
 
-export async function updateUser(id: string, data: Partial<User>): Promise<User> {
+export async function getUserByStripeCustomerId(
+  stripeCustomerId: string,
+): Promise<User | null> {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.stripeCustomerId, stripeCustomerId));
+  return user || null;
+}
+
+export async function updateUser(
+  id: string,
+  data: Partial<User>,
+): Promise<User> {
   const [updated] = await db
     .update(users)
     .set({ ...data, updatedAt: new Date() } as any)
@@ -156,22 +184,43 @@ export async function updateUser(id: string, data: Partial<User>): Promise<User>
   return updated;
 }
 
-export async function setUserTier(id: string, tier: string): Promise<User> {
+export async function updateUserBillingMetadata(
+  id: string,
+  data: Partial<User>,
+): Promise<User> {
+  return updateUser(id, data);
+}
+
+export async function setUserTier(
+  id: string,
+  tier: string,
+  options: { resetUsage?: boolean; billing?: Partial<User> } = {},
+): Promise<User> {
   if (!isValidUserTier(tier)) {
     throw new Error(`Invalid user tier: ${tier}`);
   }
 
   const tierLimits = getTierLimits(tier);
-  return updateUser(id, {
+  const resetUsage = options.resetUsage ?? true;
+  const updates: Partial<User> = {
     tier,
     tokenLimit: tierLimits.tokenLimit,
     storageLimit: tierLimits.storageLimit,
-    tokensUsed: 0,
-    billingCycleStart: new Date(),
-  } as Partial<User>);
+    ...(options.billing ?? {}),
+  };
+
+  if (resetUsage) {
+    updates.tokensUsed = 0;
+    updates.billingCycleStart = new Date();
+  }
+
+  return updateUser(id, updates);
 }
 
-export async function incrementTokenUsage(id: string, tokens: number): Promise<void> {
+export async function incrementTokenUsage(
+  id: string,
+  tokens: number,
+): Promise<void> {
   if (!Number.isFinite(tokens) || tokens <= 0) return;
   const usedTokens = Math.floor(tokens);
   const [updated] = await db
@@ -185,14 +234,20 @@ export async function incrementTokenUsage(id: string, tokens: number): Promise<v
   if (!updated) throw new Error("User not found");
 }
 
-async function claimLegacyUserData(userId: string, emailVerified: boolean): Promise<void> {
+async function claimLegacyUserData(
+  userId: string,
+  emailVerified: boolean,
+): Promise<void> {
   if (!emailVerified) return;
 
   const now = new Date();
   const isSingleUserInstall = await hasExactlyOneUser();
 
   if (isSingleUserInstall) {
-    await db.update(documents).set({ userId } as any).where(isNull(documents.userId));
+    await db
+      .update(documents)
+      .set({ userId } as any)
+      .where(isNull(documents.userId));
     await db
       .update(projects)
       .set({ userId, updatedAt: now } as any)
@@ -201,7 +256,10 @@ async function claimLegacyUserData(userId: string, emailVerified: boolean): Prom
       .update(conversations)
       .set({ userId, updatedAt: now } as any)
       .where(isNull(conversations.userId));
-    await db.update(webClips).set({ userId } as any).where(isNull(webClips.userId));
+    await db
+      .update(webClips)
+      .set({ userId } as any)
+      .where(isNull(webClips.userId));
     return;
   }
 
@@ -209,10 +267,7 @@ async function claimLegacyUserData(userId: string, emailVerified: boolean): Prom
   // relationship proves the target user. Otherwise the safe action is to leave
   // the orphan for explicit admin migration instead of exposing it to the next
   // verified account that signs in.
-  await db
-    .update(documents)
-    .set({ userId } as any)
-    .where(sql`
+  await db.update(documents).set({ userId } as any).where(sql`
       ${documents.userId} IS NULL
       AND ${documents.id} IN (
         SELECT ${projectDocuments.documentId}
@@ -221,9 +276,7 @@ async function claimLegacyUserData(userId: string, emailVerified: boolean): Prom
         WHERE ${projects.userId} = ${userId}
       )
     `);
-  await db
-    .update(conversations)
-    .set({ userId, updatedAt: now } as any)
+  await db.update(conversations).set({ userId, updatedAt: now } as any)
     .where(sql`
       ${conversations.userId} IS NULL
       AND ${conversations.projectId} IN (
@@ -232,10 +285,7 @@ async function claimLegacyUserData(userId: string, emailVerified: boolean): Prom
         WHERE ${projects.userId} = ${userId}
       )
     `);
-  await db
-    .update(webClips)
-    .set({ userId } as any)
-    .where(sql`
+  await db.update(webClips).set({ userId } as any).where(sql`
       ${webClips.userId} IS NULL
       AND (
         ${webClips.projectId} IN (
@@ -258,10 +308,17 @@ async function hasExactlyOneUser(): Promise<boolean> {
   return Number(row?.count ?? 0) === 1;
 }
 
-export async function incrementStorageUsage(id: string, bytes: number): Promise<void> {
+export async function incrementStorageUsage(
+  id: string,
+  bytes: number,
+): Promise<void> {
   const result = await reserveStorageUsage(id, bytes);
   if (!result.ok) {
-    throw new Error(result.reason === "not_found" ? "User not found" : "Storage budget exceeded");
+    throw new Error(
+      result.reason === "not_found"
+        ? "User not found"
+        : "Storage budget exceeded",
+    );
   }
 }
 
@@ -288,13 +345,15 @@ export async function reserveStorageUsage(
       storageUsed: sql`${users.storageUsed} + ${requestedBytes}`,
       updatedAt: new Date(),
     } as any)
-    .where(sql`
+    .where(
+      sql`
       ${users.id} = ${id}
       AND (
         ${users.storageLimit} <= 0
         OR ${users.storageUsed} + ${requestedBytes} <= ${users.storageLimit}
       )
-    `)
+    `,
+    )
     .returning({ id: users.id });
 
   if (updated) {
@@ -315,7 +374,10 @@ export async function reserveStorageUsage(
   };
 }
 
-export async function decrementStorageUsage(id: string, bytes: number): Promise<void> {
+export async function decrementStorageUsage(
+  id: string,
+  bytes: number,
+): Promise<void> {
   if (!Number.isFinite(bytes) || bytes <= 0) return;
   const releasedBytes = Math.floor(bytes);
   await db
@@ -330,6 +392,10 @@ export async function decrementStorageUsage(id: string, bytes: number): Promise<
 export async function resetTokenUsage(id: string): Promise<void> {
   await db
     .update(users)
-    .set({ tokensUsed: 0, billingCycleStart: new Date(), updatedAt: new Date() } as any)
+    .set({
+      tokensUsed: 0,
+      billingCycleStart: new Date(),
+      updatedAt: new Date(),
+    } as any)
     .where(eq(users.id, id));
 }

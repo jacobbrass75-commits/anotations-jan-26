@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { UserButton, useClerk } from "@clerk/clerk-react";
 import { Link } from "wouter";
 import {
   ArrowLeft,
   BookOpen,
+  CreditCard,
   HardDrive,
   Link2,
   LogOut,
@@ -22,9 +23,16 @@ import {
   formatUsagePercent,
 } from "@/lib/accountUtils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { apiRequest } from "@/lib/queryClient";
 
 interface UsageSnapshot {
   tokensUsed: number;
@@ -87,6 +95,10 @@ export default function Account() {
   const localDevAuth = isLocalDevAuthEnabled();
   const { user, isLoading, logout } = useAuth();
   const { can } = useUserTier();
+  const [billingPortalLoading, setBillingPortalLoading] = useState(false);
+  const [billingPortalError, setBillingPortalError] = useState<string | null>(
+    null,
+  );
 
   const { data: usage, isLoading: usageLoading } = useQuery<UsageSnapshot>({
     queryKey: ["/api/auth/usage"],
@@ -105,7 +117,10 @@ export default function Account() {
 
   const displayName = useMemo(() => {
     if (!user) return "ScholarMark User";
-    const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+    const fullName = [user.firstName, user.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
     return fullName || user.username || user.email;
   }, [user]);
 
@@ -114,14 +129,42 @@ export default function Account() {
   const tokensUsed = usage?.tokensUsed ?? user?.tokensUsed ?? 0;
   const storageLimit = usage?.storageLimit ?? user?.storageLimit ?? 0;
   const storageUsed = usage?.storageUsed ?? user?.storageUsed ?? 0;
-  const tokenPercent = usage?.tokenPercent ?? formatUsagePercent(tokensUsed, tokenLimit);
-  const storagePercent = usage?.storagePercent ?? formatUsagePercent(storageUsed, storageLimit);
-  const billingCycleStart = usage?.billingCycleStart ?? user?.billingCycleStart ?? null;
+  const tokenPercent =
+    usage?.tokenPercent ?? formatUsagePercent(tokensUsed, tokenLimit);
+  const storagePercent =
+    usage?.storagePercent ?? formatUsagePercent(storageUsed, storageLimit);
+  const billingCycleStart =
+    usage?.billingCycleStart ?? user?.billingCycleStart ?? null;
   const hasUnlimitedTokens = tokenLimit <= 0;
-  const tokenLimitLabel = hasUnlimitedTokens ? "Unlimited" : tokenLimit.toLocaleString();
+  const tokenLimitLabel = hasUnlimitedTokens
+    ? "Unlimited"
+    : tokenLimit.toLocaleString();
   const remainingTokensLabel = hasUnlimitedTokens
     ? "Unlimited"
     : Math.max(tokenLimit - tokensUsed, 0).toLocaleString();
+  const hasStripeCustomer = Boolean(user?.stripeCustomerId);
+
+  async function openBillingPortal() {
+    if (!hasStripeCustomer) return;
+
+    setBillingPortalLoading(true);
+    setBillingPortalError(null);
+
+    try {
+      const response = await apiRequest("POST", "/api/billing/stripe/portal");
+      const body = (await response.json()) as { url?: string };
+      if (!body.url) {
+        throw new Error("Stripe portal did not return a URL");
+      }
+      window.location.assign(body.url);
+    } catch (error) {
+      console.error("[billing] failed to open Stripe portal", error);
+      setBillingPortalError(
+        "Could not open Stripe billing. Try again from pricing or contact support.",
+      );
+      setBillingPortalLoading(false);
+    }
+  }
 
   if (isLoading || usageLoading || !user) {
     return (
@@ -142,7 +185,11 @@ export default function Account() {
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link href="/dashboard">
-              <Button variant="ghost" size="icon" data-testid="button-back-home">
+              <Button
+                variant="ghost"
+                size="icon"
+                data-testid="button-back-home"
+              >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
@@ -159,12 +206,20 @@ export default function Account() {
 
           <div className="flex items-center gap-2">
             <Link href="/pricing">
-              <Button variant="outline" size="sm" className="uppercase tracking-wider text-xs font-mono" data-testid="button-manage-plan">
+              <Button
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-manage-plan"
+              >
                 Manage Plan
               </Button>
             </Link>
             {localDevAuth ? (
-              <Badge variant="secondary" className="uppercase tracking-wider text-[10px] font-mono">
+              <Badge
+                variant="secondary"
+                className="uppercase tracking-wider text-[10px] font-mono"
+              >
                 Local Dev Auth
               </Badge>
             ) : (
@@ -198,7 +253,11 @@ export default function Account() {
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <ShieldCheck className="h-4 w-4 text-primary" />
-                  <span>{user.emailVerified ? "Email verified" : "Verification pending"}</span>
+                  <span>
+                    {user.emailVerified
+                      ? "Email verified"
+                      : "Verification pending"}
+                  </span>
                 </div>
                 <div className="text-sm text-muted-foreground">
                   Member since {formatAccountDate(user.createdAt)}
@@ -214,19 +273,31 @@ export default function Account() {
                 </div>
                 <div className="grid gap-2">
                   <Link href="/projects">
-                    <Button variant="outline" className="w-full justify-start uppercase tracking-wider text-xs font-mono" data-testid="button-open-projects">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start uppercase tracking-wider text-xs font-mono"
+                      data-testid="button-open-projects"
+                    >
                       <UserRound className="mr-2 h-4 w-4" />
                       Open Projects
                     </Button>
                   </Link>
                   <Link href="/write">
-                    <Button variant="outline" className="w-full justify-start uppercase tracking-wider text-xs font-mono" data-testid="button-open-writing">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start uppercase tracking-wider text-xs font-mono"
+                      data-testid="button-open-writing"
+                    >
                       <PenTool className="mr-2 h-4 w-4" />
                       Writing Studio
                     </Button>
                   </Link>
                   <Link href="/web-clips">
-                    <Button variant="outline" className="w-full justify-start uppercase tracking-wider text-xs font-mono" data-testid="button-open-web-clips">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start uppercase tracking-wider text-xs font-mono"
+                      data-testid="button-open-web-clips"
+                    >
                       <Link2 className="mr-2 h-4 w-4" />
                       Web Clips
                     </Button>
@@ -243,7 +314,8 @@ export default function Account() {
                 Feature Access
               </CardTitle>
               <CardDescription>
-                This reflects the current plan and feature gates enforced in the app.
+                This reflects the current plan and feature gates enforced in the
+                app.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
@@ -273,7 +345,8 @@ export default function Account() {
                 Token Budget
               </CardTitle>
               <CardDescription>
-                {tokensUsed.toLocaleString()} of {tokenLimitLabel} output tokens used this cycle.
+                {tokensUsed.toLocaleString()} of {tokenLimitLabel} output tokens
+                used this cycle.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -295,14 +368,18 @@ export default function Account() {
                 Document Capacity
               </CardTitle>
               <CardDescription>
-                {formatAccountBytes(storageUsed)} of {formatAccountBytes(storageLimit)} currently in use.
+                {formatAccountBytes(storageUsed)} of{" "}
+                {formatAccountBytes(storageLimit)} currently in use.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Progress value={storagePercent} className="h-3" />
               <div className="flex items-center justify-between text-xs font-mono uppercase tracking-[0.18em] text-muted-foreground">
                 <span>{storagePercent}% Allocated</span>
-                <span>{formatAccountBytes(Math.max(storageLimit - storageUsed, 0))} Free</span>
+                <span>
+                  {formatAccountBytes(Math.max(storageLimit - storageUsed, 0))}{" "}
+                  Free
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -315,26 +392,53 @@ export default function Account() {
               Account Controls
             </CardTitle>
             <CardDescription>
-              Use pricing for plan changes, the extension auth flow for browser access, and chat for active research work.
+              Use pricing for plan changes, the extension auth flow for browser
+              access, and chat for active research work.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
             <Link href="/pricing">
-              <Button className="uppercase tracking-wider text-xs font-mono" data-testid="button-go-pricing">
+              <Button
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-go-pricing"
+              >
                 Manage Pricing
               </Button>
             </Link>
+            <Button
+              variant="outline"
+              className="uppercase tracking-wider text-xs font-mono"
+              onClick={() => void openBillingPortal()}
+              disabled={!hasStripeCustomer || billingPortalLoading}
+              data-testid="button-open-stripe-portal"
+            >
+              <CreditCard className="mr-2 h-4 w-4" />
+              {billingPortalLoading ? "Opening Billing" : "Stripe Billing"}
+            </Button>
             <Link href="/extension-auth">
-              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-go-extension-auth">
+              <Button
+                variant="outline"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-go-extension-auth"
+              >
                 Extension Access
               </Button>
             </Link>
             <Link href="/chat">
-              <Button variant="outline" className="uppercase tracking-wider text-xs font-mono" data-testid="button-go-chat">
+              <Button
+                variant="outline"
+                className="uppercase tracking-wider text-xs font-mono"
+                data-testid="button-go-chat"
+              >
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Open Chat
               </Button>
             </Link>
+            {billingPortalError ? (
+              <p className="basis-full text-sm text-destructive">
+                {billingPortalError}
+              </p>
+            ) : null}
           </CardContent>
         </Card>
 

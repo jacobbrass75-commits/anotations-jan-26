@@ -2,12 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isLocalDevAuthEnabled, useAuth } from "@/lib/auth";
 import { UserButton } from "@clerk/clerk-react";
 import { useLocation } from "wouter";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 const VENMO_HANDLE = normalizeVenmoHandle(import.meta.env.VITE_VENMO_HANDLE);
-const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
+const SUPPORT_EMAIL =
+  import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
 
 interface TierFeature {
   label: string;
@@ -20,6 +28,11 @@ interface PayPalBillingConfig {
   enabled: boolean;
   clientId: string | null;
   environment: "sandbox" | "live";
+  currency: string;
+}
+
+interface StripeBillingConfig {
+  enabled: boolean;
   currency: string;
 }
 
@@ -46,11 +59,26 @@ const features: TierFeature[] = [
   { label: "Documents", free: "5 active", pro: "50 active", max: "Unlimited" },
   { label: "Projects", free: "1", pro: "10", max: "Unlimited" },
   { label: "Storage", free: "50 MB", pro: "500 MB", max: "5 GB" },
-  { label: "Citations", free: "10/day (Chicago)", pro: "Unlimited (all formats)", max: "Unlimited (all formats)" },
-  { label: "OCR", free: "PaddleOCR", pro: "GPT-4o-mini Vision", max: "GPT-4o Vision" },
+  {
+    label: "Citations",
+    free: "10/day (Chicago)",
+    pro: "Unlimited (all formats)",
+    max: "Unlimited (all formats)",
+  },
+  {
+    label: "OCR",
+    free: "PaddleOCR",
+    pro: "GPT-4o-mini Vision",
+    max: "GPT-4o Vision",
+  },
   { label: "Chat History", free: "Last 5", pro: "Unlimited", max: "Unlimited" },
   { label: "Output Tokens/mo", free: "50K", pro: "500K", max: "2M" },
-  { label: "AI Writing", free: "---", pro: "Quick Draft (Haiku 4.5)", max: "Quick + Deep Write (Sonnet 4.5)" },
+  {
+    label: "AI Writing",
+    free: "---",
+    pro: "Quick Draft (Haiku 4.5)",
+    max: "Quick + Deep Write (Sonnet 4.5)",
+  },
   { label: "Source Verified", free: "---", pro: "---", max: "Yes" },
   { label: "Export", free: "---", pro: "DOCX / PDF", max: "Bulk Export" },
   { label: "Chrome Extension", free: "---", pro: "Yes", max: "Yes" },
@@ -70,7 +98,11 @@ function normalizeVenmoHandle(value: unknown): string {
     .trim();
 }
 
-function buildVenmoUrl(amount: string, label: string, accountRef: string): string {
+function buildVenmoUrl(
+  amount: string,
+  label: string,
+  accountRef: string,
+): string {
   const params = new URLSearchParams({
     txn: "pay",
     amount,
@@ -103,14 +135,20 @@ function VenmoButton({
   if (!VENMO_HANDLE) {
     return (
       <Button asChild className="w-full" variant="outline">
-        <a href={`mailto:${SUPPORT_EMAIL}?subject=ScholarMark%20${label}%20Upgrade`}>
+        <a
+          href={`mailto:${SUPPORT_EMAIL}?subject=ScholarMark%20${label}%20Upgrade`}
+        >
           Contact support to upgrade
         </a>
       </Button>
     );
   }
 
-  const venmoUrl = buildVenmoUrl(amount, label, accountRef || "account email missing");
+  const venmoUrl = buildVenmoUrl(
+    amount,
+    label,
+    accountRef || "account email missing",
+  );
   return (
     <Button asChild className="w-full">
       <a href={venmoUrl} target="_blank" rel="noopener noreferrer">
@@ -171,7 +209,9 @@ function AutomatedVenmoButton({
   onComplete: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "processing" | "error">("loading");
+  const [status, setStatus] = useState<
+    "loading" | "ready" | "processing" | "error"
+  >("loading");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -196,7 +236,11 @@ function AutomatedVenmoButton({
             shape: "rect",
           },
           createOrder: async () => {
-            const response = await apiRequest("POST", "/api/billing/paypal/orders", { tier });
+            const response = await apiRequest(
+              "POST",
+              "/api/billing/paypal/orders",
+              { tier },
+            );
             const body = (await response.json()) as { orderId?: string };
             if (!body.orderId) {
               throw new Error("PayPal order was not created");
@@ -212,9 +256,14 @@ function AutomatedVenmoButton({
               "POST",
               `/api/billing/paypal/orders/${encodeURIComponent(data.orderID)}/capture`,
             );
-            const body = (await response.json()) as { completed?: boolean; status?: string };
+            const body = (await response.json()) as {
+              completed?: boolean;
+              status?: string;
+            };
             if (!body.completed) {
-              throw new Error(`Payment was not completed (${body.status ?? "unknown"})`);
+              throw new Error(
+                `Payment was not completed (${body.status ?? "unknown"})`,
+              );
             }
             await queryClient.invalidateQueries();
             onComplete();
@@ -227,7 +276,9 @@ function AutomatedVenmoButton({
         });
 
         if (buttons.isEligible && !buttons.isEligible()) {
-          setError("Venmo checkout is not available on this device/browser. Use manual Venmo instead.");
+          setError(
+            "Venmo checkout is not available on this device/browser. Use manual Venmo instead.",
+          );
           setStatus("error");
           return;
         }
@@ -241,7 +292,9 @@ function AutomatedVenmoButton({
           .catch((err) => {
             console.error("[billing] PayPal button render error", err);
             if (!cancelled) {
-              setError("Could not show Venmo checkout. Use manual Venmo instead.");
+              setError(
+                "Could not show Venmo checkout. Use manual Venmo instead.",
+              );
               setStatus("error");
             }
           });
@@ -289,12 +342,64 @@ function AutomatedVenmoButton({
   );
 }
 
+function StripeCheckoutButton({
+  tier,
+  label,
+  isSignedIn,
+  onSignIn,
+}: {
+  tier: "pro" | "max";
+  label: string;
+  isSignedIn: boolean;
+  onSignIn: () => void;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startCheckout = useCallback(async () => {
+    if (!isSignedIn) {
+      onSignIn();
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiRequest(
+        "POST",
+        "/api/billing/stripe/checkout",
+        { tier },
+      );
+      const body = (await response.json()) as { url?: string };
+      if (!body.url) {
+        throw new Error("Stripe checkout did not return a URL");
+      }
+      window.location.assign(body.url);
+    } catch (checkoutError) {
+      console.error("[billing] Stripe checkout failed", checkoutError);
+      setError("Stripe checkout failed. Try again or contact support.");
+      setIsLoading(false);
+    }
+  }, [isSignedIn, onSignIn, tier]);
+
+  return (
+    <div className="w-full space-y-2">
+      <Button className="w-full" onClick={startCheckout} disabled={isLoading}>
+        {isLoading ? "Opening Stripe checkout..." : `Upgrade to ${label}`}
+      </Button>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
 function PlanCheckoutButton({
   tier,
   amount,
   label,
   accountRef,
   isSignedIn,
+  stripeConfig,
   paypalConfig,
   onSignIn,
   onComplete,
@@ -304,15 +409,27 @@ function PlanCheckoutButton({
   label: string;
   accountRef: string | null;
   isSignedIn: boolean;
+  stripeConfig: StripeBillingConfig | null;
   paypalConfig: PayPalBillingConfig | null;
   onSignIn: () => void;
   onComplete: () => void;
 }) {
-  if (paypalConfig === null) {
+  if (stripeConfig === null || paypalConfig === null) {
     return (
       <Button className="w-full" disabled>
         Loading checkout...
       </Button>
+    );
+  }
+
+  if (stripeConfig.enabled) {
+    return (
+      <StripeCheckoutButton
+        tier={tier}
+        label={label}
+        isSignedIn={isSignedIn}
+        onSignIn={onSignIn}
+      />
     );
   }
 
@@ -345,28 +462,63 @@ export default function Pricing() {
   const [, setLocation] = useLocation();
   const currentTier = user?.tier ?? "free";
   const accountRef = user?.email || user?.id || null;
-  const [paypalConfig, setPayPalConfig] = useState<PayPalBillingConfig | null>(null);
-  const handleSignIn = useCallback(() => setLocation("/sign-in"), [setLocation]);
-  const handleCheckoutComplete = useCallback(() => setLocation("/account"), [setLocation]);
+  const [stripeConfig, setStripeConfig] = useState<StripeBillingConfig | null>(
+    null,
+  );
+  const [paypalConfig, setPayPalConfig] = useState<PayPalBillingConfig | null>(
+    null,
+  );
+  const handleSignIn = useCallback(
+    () => setLocation("/sign-in"),
+    [setLocation],
+  );
+  const handleCheckoutComplete = useCallback(
+    () => setLocation("/account"),
+    [setLocation],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/billing/paypal/config", { credentials: "include" })
-      .then((response) => response.json())
-      .then((config: PayPalBillingConfig) => {
-        if (!cancelled) setPayPalConfig(config);
-      })
-      .catch((error) => {
-        console.error("[billing] failed to load PayPal config", error);
-        if (!cancelled) {
-          setPayPalConfig({
-            enabled: false,
-            clientId: null,
-            environment: "live",
-            currency: "USD",
-          });
-        }
-      });
+
+    async function loadBillingConfig() {
+      const [stripeResult, paypalResult] = await Promise.allSettled([
+        fetch("/api/billing/stripe/config", { credentials: "include" }).then(
+          (response) => response.json() as Promise<StripeBillingConfig>,
+        ),
+        fetch("/api/billing/paypal/config", { credentials: "include" }).then(
+          (response) => response.json() as Promise<PayPalBillingConfig>,
+        ),
+      ]);
+
+      if (cancelled) return;
+
+      if (stripeResult.status === "fulfilled") {
+        setStripeConfig(stripeResult.value);
+      } else {
+        console.error(
+          "[billing] failed to load Stripe config",
+          stripeResult.reason,
+        );
+        setStripeConfig({ enabled: false, currency: "USD" });
+      }
+
+      if (paypalResult.status === "fulfilled") {
+        setPayPalConfig(paypalResult.value);
+      } else {
+        console.error(
+          "[billing] failed to load PayPal config",
+          paypalResult.reason,
+        );
+        setPayPalConfig({
+          enabled: false,
+          clientId: null,
+          environment: "live",
+          currency: "USD",
+        });
+      }
+    }
+
+    void loadBillingConfig();
 
     return () => {
       cancelled = true;
@@ -379,7 +531,9 @@ export default function Pricing() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">ScholarMark Pricing</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              ScholarMark Pricing
+            </h1>
             <p className="text-muted-foreground mt-1">
               Choose the plan that fits your research needs
             </p>
@@ -387,10 +541,17 @@ export default function Pricing() {
           <div className="flex items-center gap-3">
             {isSignedIn ? (
               <>
-                <Button variant="ghost" onClick={() => setLocation("/account")} data-testid="button-open-account">
+                <Button
+                  variant="ghost"
+                  onClick={() => setLocation("/account")}
+                  data-testid="button-open-account"
+                >
                   Account
                 </Button>
-                <Button variant="ghost" onClick={() => setLocation("/dashboard")}>
+                <Button
+                  variant="ghost"
+                  onClick={() => setLocation("/dashboard")}
+                >
                   Dashboard
                 </Button>
                 {!localDevAuth ? <UserButton /> : null}
@@ -408,7 +569,12 @@ export default function Pricing() {
             <CardHeader>
               <CardTitle>Free</CardTitle>
               <CardDescription>Get started with the basics</CardDescription>
-              <div className="text-3xl font-bold mt-2">$0<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+              <div className="text-3xl font-bold mt-2">
+                $0
+                <span className="text-sm font-normal text-muted-foreground">
+                  /mo
+                </span>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>5 active documents</p>
@@ -420,9 +586,15 @@ export default function Pricing() {
             </CardContent>
             <CardFooter>
               {currentTier === "free" ? (
-                <Button className="w-full" variant="outline" disabled>Current Plan</Button>
+                <Button className="w-full" variant="outline" disabled>
+                  Current Plan
+                </Button>
               ) : (
-                <Button className="w-full" variant="outline" onClick={() => setLocation("/sign-up")}>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => setLocation("/sign-up")}
+                >
                   Sign Up Free
                 </Button>
               )}
@@ -430,12 +602,21 @@ export default function Pricing() {
           </Card>
 
           {/* Pro */}
-          <Card className={`border-2 ${currentTier === "pro" ? "border-primary" : "border-primary/50"}`}>
+          <Card
+            className={`border-2 ${currentTier === "pro" ? "border-primary" : "border-primary/50"}`}
+          >
             <CardHeader>
-              <div className="text-xs font-semibold uppercase text-primary mb-1">Most Popular</div>
+              <div className="text-xs font-semibold uppercase text-primary mb-1">
+                Most Popular
+              </div>
               <CardTitle>Pro</CardTitle>
               <CardDescription>For serious researchers</CardDescription>
-              <div className="text-3xl font-bold mt-2">$14<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+              <div className="text-3xl font-bold mt-2">
+                $14
+                <span className="text-sm font-normal text-muted-foreground">
+                  /mo
+                </span>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>50 active documents</p>
@@ -451,7 +632,9 @@ export default function Pricing() {
             </CardContent>
             <CardFooter>
               {currentTier === "pro" ? (
-                <Button className="w-full" disabled>Current Plan</Button>
+                <Button className="w-full" disabled>
+                  Current Plan
+                </Button>
               ) : (
                 <PlanCheckoutButton
                   tier="pro"
@@ -459,6 +642,7 @@ export default function Pricing() {
                   label="Pro"
                   accountRef={accountRef}
                   isSignedIn={isSignedIn}
+                  stripeConfig={stripeConfig}
                   paypalConfig={paypalConfig}
                   onSignIn={handleSignIn}
                   onComplete={handleCheckoutComplete}
@@ -472,7 +656,12 @@ export default function Pricing() {
             <CardHeader>
               <CardTitle>Max</CardTitle>
               <CardDescription>Unlimited power for your thesis</CardDescription>
-              <div className="text-3xl font-bold mt-2">$50<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+              <div className="text-3xl font-bold mt-2">
+                $50
+                <span className="text-sm font-normal text-muted-foreground">
+                  /mo
+                </span>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>Unlimited documents</p>
@@ -488,7 +677,9 @@ export default function Pricing() {
             </CardContent>
             <CardFooter>
               {currentTier === "max" ? (
-                <Button className="w-full" disabled>Current Plan</Button>
+                <Button className="w-full" disabled>
+                  Current Plan
+                </Button>
               ) : (
                 <PlanCheckoutButton
                   tier="max"
@@ -496,6 +687,7 @@ export default function Pricing() {
                   label="Max"
                   accountRef={accountRef}
                   isSignedIn={isSignedIn}
+                  stripeConfig={stripeConfig}
                   paypalConfig={paypalConfig}
                   onSignIn={handleSignIn}
                   onComplete={handleCheckoutComplete}
@@ -519,9 +711,14 @@ export default function Pricing() {
             </thead>
             <tbody>
               {features.map((f, i) => (
-                <tr key={f.label} className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}>
+                <tr
+                  key={f.label}
+                  className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                >
                   <td className="p-3 font-medium">{f.label}</td>
-                  <td className="p-3 text-center text-muted-foreground">{f.free}</td>
+                  <td className="p-3 text-center text-muted-foreground">
+                    {f.free}
+                  </td>
                   <td className="p-3 text-center">{f.pro}</td>
                   <td className="p-3 text-center">{f.max}</td>
                 </tr>

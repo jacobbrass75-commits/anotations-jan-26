@@ -48,16 +48,21 @@ export function getProductionConfigErrors(
 
   const errors: string[] = [];
   const allowTestClerkKeys = env.CLERK_ALLOW_TEST_KEYS_IN_PRODUCTION === "true";
-  const clerkPublishableKey = env.VITE_CLERK_PUBLISHABLE_KEY || env.CLERK_PUBLISHABLE_KEY || "";
+  const clerkPublishableKey =
+    env.VITE_CLERK_PUBLISHABLE_KEY || env.CLERK_PUBLISHABLE_KEY || "";
   const clerkSecretKey = env.CLERK_SECRET_KEY || "";
   const extensionCorsMode = env.EXTENSION_CORS_MODE?.trim() || "enabled";
 
   if (env.LOCAL_DEV_AUTH === "true" || env.VITE_LOCAL_DEV_AUTH === "true") {
-    errors.push("LOCAL_DEV_AUTH and VITE_LOCAL_DEV_AUTH must be disabled in production.");
+    errors.push(
+      "LOCAL_DEV_AUTH and VITE_LOCAL_DEV_AUTH must be disabled in production.",
+    );
   }
 
   if (!allowTestClerkKeys && !clerkPublishableKey.startsWith("pk_live_")) {
-    errors.push("Production requires a Clerk publishable key prefixed with pk_live_.");
+    errors.push(
+      "Production requires a Clerk publishable key prefixed with pk_live_.",
+    );
   }
 
   if (phase === "build") {
@@ -65,22 +70,34 @@ export function getProductionConfigErrors(
   }
 
   if (!allowTestClerkKeys && !clerkSecretKey.startsWith("sk_live_")) {
-    errors.push("Production requires a Clerk secret key prefixed with sk_live_.");
+    errors.push(
+      "Production requires a Clerk secret key prefixed with sk_live_.",
+    );
   }
 
   const jwtSecret = env.JWT_SECRET?.trim() ?? "";
-  if (!hasValue(jwtSecret) || jwtSecret === DEFAULT_JWT_SECRET || jwtSecret.length < 32) {
-    errors.push("JWT_SECRET must be set to a unique production secret with at least 32 characters.");
+  if (
+    !hasValue(jwtSecret) ||
+    jwtSecret === DEFAULT_JWT_SECRET ||
+    jwtSecret.length < 32
+  ) {
+    errors.push(
+      "JWT_SECRET must be set to a unique production secret with at least 32 characters.",
+    );
   }
 
   const appBaseUrl = env.APP_BASE_URL || env.PUBLIC_BASE_URL;
   if (!isHttpsUrl(appBaseUrl)) {
-    errors.push("APP_BASE_URL or PUBLIC_BASE_URL must be set to the public HTTPS app URL.");
+    errors.push(
+      "APP_BASE_URL or PUBLIC_BASE_URL must be set to the public HTTPS app URL.",
+    );
   }
 
   const allowedOrigins = splitCsv(env.ALLOWED_ORIGINS);
   if (allowedOrigins.length === 0) {
-    errors.push("ALLOWED_ORIGINS must list the public HTTPS origins allowed to call the API.");
+    errors.push(
+      "ALLOWED_ORIGINS must list the public HTTPS origins allowed to call the API.",
+    );
   }
   if (allowedOrigins.some((origin) => origin === "*" || origin.includes("*"))) {
     errors.push("ALLOWED_ORIGINS must not contain wildcard origins.");
@@ -90,30 +107,54 @@ export function getProductionConfigErrors(
   }
 
   if (!["enabled", "disabled"].includes(extensionCorsMode)) {
-    errors.push("EXTENSION_CORS_MODE must be either enabled or disabled when set.");
+    errors.push(
+      "EXTENSION_CORS_MODE must be either enabled or disabled when set.",
+    );
   }
 
   const chromeExtensionIds = splitCsv(env.CHROME_EXTENSION_IDS);
   if (extensionCorsMode !== "disabled" && chromeExtensionIds.length === 0) {
-    errors.push("CHROME_EXTENSION_IDS must list the production Chrome extension ID allowed to call the API.");
+    errors.push(
+      "CHROME_EXTENSION_IDS must list the production Chrome extension ID allowed to call the API.",
+    );
   }
-  if (chromeExtensionIds.some((extensionId) => !isValidChromeExtensionId(extensionId))) {
-    errors.push("CHROME_EXTENSION_IDS must contain only valid 32-character Chrome extension IDs.");
+  if (
+    chromeExtensionIds.some(
+      (extensionId) => !isValidChromeExtensionId(extensionId),
+    )
+  ) {
+    errors.push(
+      "CHROME_EXTENSION_IDS must contain only valid 32-character Chrome extension IDs.",
+    );
   }
 
   const mcpResourceUrl = env.MCP_RESOURCE_URL;
   if (hasValue(mcpResourceUrl) && !isHttpsUrl(mcpResourceUrl)) {
     errors.push("MCP_RESOURCE_URL must be an HTTPS URL when set.");
   }
-  if (hasValue(mcpResourceUrl) && mcpResourceUrl!.replace(/\/+$/, "").endsWith("/mcp")) {
-    errors.push("MCP_RESOURCE_URL should be the MCP origin without a trailing /mcp path.");
+  if (
+    hasValue(mcpResourceUrl) &&
+    mcpResourceUrl!.replace(/\/+$/, "").endsWith("/mcp")
+  ) {
+    errors.push(
+      "MCP_RESOURCE_URL should be the MCP origin without a trailing /mcp path.",
+    );
   }
 
   if (!hasValue(env.ANTHROPIC_API_KEY)) {
-    errors.push("ANTHROPIC_API_KEY must be set for chat, writing, compile, verify, and fallback humanizer.");
+    errors.push(
+      "ANTHROPIC_API_KEY must be set for chat, writing, compile, verify, and fallback humanizer.",
+    );
   }
   if (!hasValue(env.OPENAI_API_KEY)) {
-    errors.push("OPENAI_API_KEY must be set for embeddings, analysis, summaries, and OCR vision.");
+    errors.push(
+      "OPENAI_API_KEY must be set for embeddings, analysis, summaries, and OCR vision.",
+    );
+  }
+  if (hasValue(env.STRIPE_SECRET_KEY) && !hasValue(env.STRIPE_WEBHOOK_SECRET)) {
+    errors.push(
+      "STRIPE_WEBHOOK_SECRET must be set when STRIPE_SECRET_KEY is configured.",
+    );
   }
 
   return errors;
@@ -126,5 +167,7 @@ export function assertProductionConfig(
   const errors = getProductionConfigErrors(env, options);
   if (errors.length === 0) return;
 
-  throw new Error(`Invalid production configuration:\n- ${errors.join("\n- ")}`);
+  throw new Error(
+    `Invalid production configuration:\n- ${errors.join("\n- ")}`,
+  );
 }
