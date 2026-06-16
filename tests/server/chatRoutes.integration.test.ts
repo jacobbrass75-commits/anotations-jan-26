@@ -62,7 +62,7 @@ describe("chat route integration", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createApp() {
+  async function createApp(options: { tier?: "pro" | "max" } = {}) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
     const { users, conversations } = await import("../../shared/schema");
     const { registerChatRoutes } = await import("../../server/chatRoutes");
@@ -76,7 +76,7 @@ describe("chat route integration", () => {
       email: "chat@example.com",
       username: "chat@example.com",
       password: "",
-      tier: "pro",
+      tier: options.tier ?? "pro",
       tokensUsed: 0,
       tokenLimit: 1000,
       storageUsed: 0,
@@ -105,9 +105,42 @@ describe("chat route integration", () => {
       db,
       sqlite: importedSqlite,
       server: await startHttpServer(app),
-      token: generateToken({ id: "chat-user", email: "chat@example.com", tier: "pro" }),
+      token: generateToken({
+        id: "chat-user",
+        email: "chat@example.com",
+        tier: options.tier ?? "pro",
+      }),
     };
   }
+
+  it("requires Max for source verification", async () => {
+    const { server, token } = await createApp({ tier: "pro" });
+
+    try {
+      const response = await fetch(
+        `${server.baseUrl}/api/chat/conversations/conversation-1/verify`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ compiledContent: "# Draft\nA sourced argument." }),
+        },
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body).toMatchObject({
+        message: "This feature requires the max plan",
+        requiredTier: "max",
+        currentTier: "pro",
+      });
+      expect(anthropicStream).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
 
   it("increments the user token budget after a chat response reports usage", async () => {
     const { server, sqlite, token } = await createApp();

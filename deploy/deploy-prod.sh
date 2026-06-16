@@ -7,11 +7,12 @@ APP_REF="${APP_REF:-origin/master}"
 SKIP_PREDEPLOY_BACKUP="${SKIP_PREDEPLOY_BACKUP:-0}"
 APP_REF_FILE="${APP_REF_FILE:-/tmp/scholarmark-app-ref}"
 printf -v REMOTE_INNER \
-  "set -euo pipefail; cd %q; git fetch origin; git reset --hard %q; printf '%%s\n' %q > %q; sudo -n /bin/bash %q" \
+  "set -euo pipefail; cd %q; git fetch origin; git reset --hard %q; printf '%%s\n' %q > %q; sudo -n /usr/bin/env SKIP_PREDEPLOY_BACKUP=%q /bin/bash %q" \
   "$APP_DIR" \
   "$APP_REF" \
   "$APP_REF" \
   "$APP_REF_FILE" \
+  "$SKIP_PREDEPLOY_BACKUP" \
   "$APP_DIR/deploy/refresh-prod.sh"
 REMOTE_COMMAND="/bin/bash -lc $(printf "%q" "$REMOTE_INNER")"
 

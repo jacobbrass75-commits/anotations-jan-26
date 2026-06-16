@@ -198,6 +198,7 @@ async function runRestoredAppSmoke() {
       env: {
         ...env,
         APP_BASE_URL: appBaseUrl,
+        SKIP_BILLING_SMOKE: "1",
         SKIP_MCP_SMOKE: "1",
         SMOKE_TIMEOUT_MS: "5000",
       },

@@ -24,7 +24,8 @@ Production configuration is validated by [server/productionConfig.ts](server/pro
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
 - Clerk publishable and secret keys (`VITE_CLERK_PUBLISHABLE_KEY` or `CLERK_PUBLISHABLE_KEY`, plus `CLERK_SECRET_KEY`)
-- Stripe billing keys (`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`) when card subscriptions are enabled. Stripe prices are resolved by the lookup keys `scholarmark_pro_monthly` and `scholarmark_max_monthly` unless `STRIPE_PRO_PRICE_ID` and `STRIPE_MAX_PRICE_ID` are set.
+- Stripe billing keys (`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`) for paid subscriptions. Stripe prices are resolved by the lookup keys `scholarmark_pro_monthly` and `scholarmark_max_monthly` unless `STRIPE_PRO_PRICE_ID` and `STRIPE_MAX_PRICE_ID` are set.
+- `ADMIN_USER_IDS` with at least one production admin user ID for launch dashboards.
 
 Production also validates additional settings such as `JWT_SECRET`, public app origins, Chrome extension IDs, and MCP URLs. Treat `server/productionConfig.ts` as the authoritative list.
 

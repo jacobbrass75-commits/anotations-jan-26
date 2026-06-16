@@ -7,7 +7,9 @@ import {
   campaignSignupFormSchema,
   campaignVisits,
   campaignVisitSchema,
+  users,
   type CampaignSignup,
+  type User,
 } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { requireAdmin } from "./analyticsRoutes";
@@ -90,18 +92,21 @@ interface BreakdownRow {
   value: string;
   signups: number;
   activated: number;
+  paid: number;
 }
 
 function buildBreakdown(
   signups: CampaignSignup[],
   pick: (signup: CampaignSignup) => string | null,
+  isPaidSignup: (signup: CampaignSignup) => boolean = () => false,
 ): BreakdownRow[] {
-  const groups = new Map<string, { signups: number; activated: number }>();
+  const groups = new Map<string, { signups: number; activated: number; paid: number }>();
   for (const signup of signups) {
     const value = pick(signup)?.trim().toLowerCase() || "(unknown)";
-    const group = groups.get(value) ?? { signups: 0, activated: 0 };
+    const group = groups.get(value) ?? { signups: 0, activated: 0, paid: 0 };
     group.signups += 1;
     if (signup.activatedAt) group.activated += 1;
+    if (isPaidSignup(signup)) group.paid += 1;
     groups.set(value, group);
   }
   return Array.from(groups.entries())
@@ -117,6 +122,17 @@ function isoWeekKey(date: Date): string {
   const yearStart = Date.UTC(utc.getUTCFullYear(), 0, 1);
   const week = Math.ceil(((utc.getTime() - yearStart) / 86400000 + 1) / 7);
   return `${utc.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function isActivePaidUser(user: User | undefined): boolean {
+  if (!user) return false;
+  if (user.tier !== "pro" && user.tier !== "max") return false;
+  if (!user.stripeCustomerId || !user.stripeSubscriptionId) return false;
+  return user.subscriptionStatus === "active";
 }
 
 export function registerCampaignRoutes(app: Express): void {
@@ -181,9 +197,19 @@ export function registerCampaignRoutes(app: Express): void {
         const visits = visitRow?.total ?? 0;
 
         const signups = await db.select().from(campaignSignups);
+        const appUsers = await db.select().from(users);
+        const usersById = new Map(appUsers.map((user) => [user.id, user]));
+        const usersByEmail = new Map(appUsers.map((user) => [normalizeEmail(user.email), user]));
+        const userForSignup = (signup: CampaignSignup) =>
+          (signup.userId ? usersById.get(signup.userId) : undefined) ??
+          usersByEmail.get(normalizeEmail(signup.email));
+        const isPaidSignup = (signup: CampaignSignup) => isActivePaidUser(userForSignup(signup));
+
         const totalSignups = signups.length;
         const activated = signups.filter((s) => s.activatedAt).length;
         const referredSignups = signups.filter((s) => s.referredBy).length;
+        const paid = signups.filter(isPaidSignup).length;
+        const activatedPaid = signups.filter((s) => s.activatedAt && isPaidSignup(s)).length;
 
         // Referrers = leads whose own code shows up in someone else's referredBy.
         const codesUsed = new Set(
@@ -204,20 +230,24 @@ export function registerCampaignRoutes(app: Express): void {
             visits,
             signups: totalSignups,
             activated,
+            paid,
+            activatedPaid,
             referredSignups,
             referrers,
           },
           rates: {
             signupRate: visits > 0 ? totalSignups / visits : null,
             activationRate: totalSignups > 0 ? activated / totalSignups : null,
+            paidRate: totalSignups > 0 ? paid / totalSignups : null,
+            activatedPaidRate: activated > 0 ? activatedPaid / activated : null,
             referralRate: activated > 0 ? referrers / activated : null,
           },
           breakdowns: {
-            channel: buildBreakdown(signups, (s) => s.channel),
-            school: buildBreakdown(signups, (s) => s.school),
-            major: buildBreakdown(signups, (s) => s.major),
-            classYear: buildBreakdown(signups, (s) => s.classYear),
-            paperType: buildBreakdown(signups, (s) => s.paperType),
+            channel: buildBreakdown(signups, (s) => s.channel, isPaidSignup),
+            school: buildBreakdown(signups, (s) => s.school, isPaidSignup),
+            major: buildBreakdown(signups, (s) => s.major, isPaidSignup),
+            classYear: buildBreakdown(signups, (s) => s.classYear, isPaidSignup),
+            paperType: buildBreakdown(signups, (s) => s.paperType, isPaidSignup),
           },
           weeklySignups: Array.from(weeklySignups.entries())
             .map(([week, total]) => ({ week, signups: total }))
@@ -225,20 +255,26 @@ export function registerCampaignRoutes(app: Express): void {
           recentSignups: signups
             .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
             .slice(0, 100)
-            .map((s) => ({
-              name: s.name,
-              email: s.email,
-              school: s.school,
-              major: s.major,
-              classYear: s.classYear,
-              paperType: s.paperType,
-              channel: s.channel,
-              referredBy: s.referredBy,
-              referralCode: s.referralCode,
-              activated: Boolean(s.activatedAt),
-              firstAction: s.firstAction,
-              signupDate: s.createdAt.getTime(),
-            })),
+            .map((s) => {
+              const matchedUser = userForSignup(s);
+              return {
+                name: s.name,
+                email: s.email,
+                school: s.school,
+                major: s.major,
+                classYear: s.classYear,
+                paperType: s.paperType,
+                channel: s.channel,
+                referredBy: s.referredBy,
+                referralCode: s.referralCode,
+                activated: Boolean(s.activatedAt),
+                firstAction: s.firstAction,
+                paid: isActivePaidUser(matchedUser),
+                plan: matchedUser?.tier ?? null,
+                subscriptionStatus: matchedUser?.subscriptionStatus ?? null,
+                signupDate: s.createdAt.getTime(),
+              };
+            }),
         });
       } catch (error) {
         logger.error({ err: error }, "Campaign metrics failed");

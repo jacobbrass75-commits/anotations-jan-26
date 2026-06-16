@@ -4,6 +4,7 @@ import "dotenv/config";
 const appBaseUrl = trimSlash(process.env.APP_BASE_URL || "http://127.0.0.1:5001");
 const mcpBaseUrl = trimSlash(process.env.MCP_BASE_URL || "http://127.0.0.1:5002");
 const skipApp = process.env.SKIP_APP_SMOKE === "1";
+const skipBilling = process.env.SKIP_BILLING_SMOKE === "1";
 const skipMcp = process.env.SKIP_MCP_SMOKE === "1";
 const chromeExtensionId = (process.env.CHROME_EXTENSION_IDS || "")
   .split(",")
@@ -71,6 +72,26 @@ async function runAppSmoke() {
 
   const protectedApi = await expectStatus("auth-required API", "/api/auth/me", 401);
   assert(protectedApi.json?.message, "auth-required API did not return a JSON error");
+
+  if (!skipBilling) {
+    const stripeConfig = await expectStatus(
+      "Stripe billing config",
+      "/api/billing/stripe/config",
+      200,
+    );
+    assert(stripeConfig.json?.enabled === true, "Stripe billing config is not enabled");
+    assert(stripeConfig.json?.currency === "USD", "Stripe billing config did not report USD");
+    assert(
+      stripeConfig.json?.plans?.pro?.amountCents === 1400,
+      "Stripe Pro price did not report 1400 cents",
+    );
+    assert(
+      stripeConfig.json?.plans?.max?.amountCents === 5000,
+      "Stripe Max price did not report 5000 cents",
+    );
+  } else {
+    console.log("[smoke] Stripe billing config check skipped");
+  }
 
   if (chromeExtensionId && extensionCorsEnabled) {
     const extensionOrigin = `chrome-extension://${chromeExtensionId}`;

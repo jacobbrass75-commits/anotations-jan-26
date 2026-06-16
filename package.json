@@ -13,7 +13,7 @@
     "test": "node scripts/run-vitest-sequential.mjs",
     "test:coverage": "node scripts/run-vitest-coverage-sequential.mjs",
     "smoke:prod": "node scripts/smoke-prod.mjs",
-    "smoke:local": "cross-env SKIP_MCP_SMOKE=1 node scripts/smoke-prod.mjs",
+    "smoke:local": "cross-env SKIP_MCP_SMOKE=1 SKIP_BILLING_SMOKE=1 node scripts/smoke-prod.mjs",
     "smoke:mcp": "cross-env SKIP_APP_SMOKE=1 node scripts/smoke-prod.mjs",
     "restore:drill": "node scripts/restore-drill.mjs",
     "extension:package": "node scripts/package-extension.mjs",

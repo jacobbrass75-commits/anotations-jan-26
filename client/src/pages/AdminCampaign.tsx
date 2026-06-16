@@ -9,6 +9,7 @@ interface BreakdownRow {
   value: string;
   signups: number;
   activated: number;
+  paid: number;
 }
 
 interface CampaignMetrics {
@@ -16,12 +17,16 @@ interface CampaignMetrics {
     visits: number;
     signups: number;
     activated: number;
+    paid: number;
+    activatedPaid: number;
     referredSignups: number;
     referrers: number;
   };
   rates: {
     signupRate: number | null;
     activationRate: number | null;
+    paidRate: number | null;
+    activatedPaidRate: number | null;
     referralRate: number | null;
   };
   breakdowns: {
@@ -44,6 +49,9 @@ interface CampaignMetrics {
     referralCode: string;
     activated: boolean;
     firstAction: string | null;
+    paid: boolean;
+    plan: string | null;
+    subscriptionStatus: string | null;
     signupDate: number;
   }>;
 }
@@ -85,6 +93,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: BreakdownRow[] }
                 <th className="pb-2 font-medium">Value</th>
                 <th className="pb-2 font-medium text-right">Signups</th>
                 <th className="pb-2 font-medium text-right">Activated</th>
+                <th className="pb-2 font-medium text-right">Paid</th>
               </tr>
             </thead>
             <tbody>
@@ -93,6 +102,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: BreakdownRow[] }
                   <td className="py-1.5">{row.value}</td>
                   <td className="py-1.5 text-right">{row.signups}</td>
                   <td className="py-1.5 text-right">{row.activated}</td>
+                  <td className="py-1.5 text-right">{row.paid}</td>
                 </tr>
               ))}
             </tbody>
@@ -134,7 +144,7 @@ export default function AdminCampaign() {
           </p>
         ) : data ? (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatCard label="Link clicks" value={String(data.totals.visits)} />
               <StatCard label="Signups" value={String(data.totals.signups)} />
               <StatCard
@@ -147,6 +157,21 @@ export default function AdminCampaign() {
                 label="Activation rate"
                 value={formatRate(data.rates.activationRate)}
                 hint="used the tool / signups"
+              />
+              <StatCard
+                label="Paid"
+                value={String(data.totals.paid)}
+                hint="active Stripe subscriptions"
+              />
+              <StatCard
+                label="Paid rate"
+                value={formatRate(data.rates.paidRate)}
+                hint="paid / signups"
+              />
+              <StatCard
+                label="Activated paid"
+                value={String(data.totals.activatedPaid)}
+                hint={formatRate(data.rates.activatedPaidRate)}
               />
               <StatCard
                 label="Referral rate"
@@ -208,6 +233,8 @@ export default function AdminCampaign() {
                         <th className="pb-2 pr-4 font-medium">Channel</th>
                         <th className="pb-2 pr-4 font-medium">Referred by</th>
                         <th className="pb-2 pr-4 font-medium">Activated</th>
+                        <th className="pb-2 pr-4 font-medium">Paid</th>
+                        <th className="pb-2 pr-4 font-medium">Plan</th>
                         <th className="pb-2 font-medium">First action</th>
                       </tr>
                     </thead>
@@ -222,6 +249,10 @@ export default function AdminCampaign() {
                           <td className="py-1.5 pr-4">{signup.channel ?? "—"}</td>
                           <td className="py-1.5 pr-4">{signup.referredBy ?? "—"}</td>
                           <td className="py-1.5 pr-4">{signup.activated ? "Yes" : "No"}</td>
+                          <td className="py-1.5 pr-4">
+                            {signup.paid ? "Yes" : signup.subscriptionStatus ?? "No"}
+                          </td>
+                          <td className="py-1.5 pr-4">{signup.plan ?? "-"}</td>
                           <td className="py-1.5">{signup.firstAction ?? "—"}</td>
                         </tr>
                       ))}

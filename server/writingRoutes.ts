@@ -128,6 +128,13 @@ export function registerWritingRoutes(app: Express): void {
         if (!body.topic || typeof body.topic !== "string" || body.topic.trim().length === 0) {
           return res.status(400).json({ error: "Topic is required" });
         }
+        if (body.deepWrite === true && req.user!.tier !== "max") {
+          return res.status(403).json({
+            error: "Deep Write requires the Max plan",
+            requiredTier: "max",
+            currentTier: req.user!.tier,
+          });
+        }
 
         const hasSourceSelection = Array.isArray(body.sourceDocumentIds);
         const sourceDocumentIds = hasSourceSelection

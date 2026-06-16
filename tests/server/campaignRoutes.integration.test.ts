@@ -92,6 +92,18 @@ describe("summer campaign routes", () => {
         createdAt: now,
         updatedAt: now,
       } as any,
+      {
+        id: "paid-user",
+        email: "paid@example.com",
+        username: "paid@example.com",
+        password: "",
+        tier: "pro",
+        stripeCustomerId: "cus_paid",
+        stripeSubscriptionId: "sub_paid",
+        subscriptionStatus: "active",
+        createdAt: now,
+        updatedAt: now,
+      } as any,
     ]);
 
     const app = express();
@@ -181,19 +193,59 @@ describe("summer campaign routes", () => {
         referralCode: signup.body?.referralCode,
       });
 
+      const paidVisit = await requestJson(server.baseUrl, "/api/campaign/visit", {
+        method: "POST",
+        body: {
+          campus: "ucla",
+          major: "history",
+          channel: "discord",
+          landingPath: "/summer",
+        },
+      });
+      expect(paidVisit.status).toBe(204);
+
+      const paidSignup = await requestJson<{ alreadySignedUp: boolean; referralCode: string }>(
+        server.baseUrl,
+        "/api/campaign/signup",
+        {
+          method: "POST",
+          body: {
+            name: "Paid Student",
+            email: "paid@example.com",
+            school: "UCLA",
+            major: "History",
+            classYear: "rising_senior",
+            paperType: "senior_thesis",
+            hasTopic: "yes",
+            channel: "discord",
+          },
+        },
+      );
+      expect(paidSignup.status).toBe(201);
+
       const metrics = await requestJson<{
-        totals: { visits: number; signups: number; activated: number };
-        rates: { signupRate: number | null };
+        totals: { visits: number; signups: number; activated: number; paid: number };
+        rates: { signupRate: number | null; paidRate: number | null };
+        breakdowns: { channel: Array<{ value: string; paid: number }> };
+        recentSignups: Array<{ email: string; paid: boolean; plan: string | null }>;
       }>(server.baseUrl, "/api/admin/campaign/metrics", {
         headers: { authorization: `Bearer ${adminToken}` },
       });
       expect(metrics.status).toBe(200);
       expect(metrics.body?.totals).toMatchObject({
-        visits: 1,
-        signups: 1,
+        visits: 2,
+        signups: 2,
         activated: 0,
+        paid: 1,
       });
       expect(metrics.body?.rates.signupRate).toBe(1);
+      expect(metrics.body?.rates.paidRate).toBe(0.5);
+      expect(metrics.body?.breakdowns.channel.find((row) => row.value === "discord")?.paid).toBe(
+        1,
+      );
+      expect(metrics.body?.recentSignups.find((row) => row.email === "paid@example.com")).toEqual(
+        expect.objectContaining({ paid: true, plan: "pro" }),
+      );
     } finally {
       await server.close();
     }

@@ -121,11 +121,18 @@ export function getProductionConfigErrors(
     errors.push("OPENAI_API_KEY must be set for embeddings, analysis, summaries, and OCR vision.");
   }
 
-  if (hasValue(env.STRIPE_SECRET_KEY) && !hasValue(env.STRIPE_WEBHOOK_SECRET)) {
-    errors.push("STRIPE_WEBHOOK_SECRET must be set when STRIPE_SECRET_KEY is configured.");
-  }
-  if (hasValue(env.STRIPE_SECRET_KEY) && !env.STRIPE_SECRET_KEY!.trim().startsWith("sk_live_")) {
+  if (!hasValue(env.STRIPE_SECRET_KEY)) {
+    errors.push("STRIPE_SECRET_KEY must be set to a live sk_live_ key for paid launch.");
+  } else if (!env.STRIPE_SECRET_KEY!.trim().startsWith("sk_live_")) {
     errors.push("STRIPE_SECRET_KEY must use a live sk_live_ key in production.");
+  }
+  if (!hasValue(env.STRIPE_WEBHOOK_SECRET)) {
+    errors.push("STRIPE_WEBHOOK_SECRET must be set for paid launch.");
+  } else if (!env.STRIPE_WEBHOOK_SECRET!.trim().startsWith("whsec_")) {
+    errors.push("STRIPE_WEBHOOK_SECRET must use a whsec_ webhook signing secret.");
+  }
+  if (!hasValue(env.ADMIN_USER_IDS)) {
+    errors.push("ADMIN_USER_IDS must list at least one production admin user ID.");
   }
 
   return errors;

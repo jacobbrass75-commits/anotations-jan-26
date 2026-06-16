@@ -1198,7 +1198,7 @@ ${chunkContext}`;
     "/api/chat/conversations/:id/verify",
     requireAuth,
     aiLimiter,
-    requireTier("pro"),
+    requireTier("max"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;

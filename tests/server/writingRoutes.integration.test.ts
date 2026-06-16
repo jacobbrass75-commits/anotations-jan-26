@@ -46,7 +46,7 @@ describe("writing route integration", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createApp(options: { existingDocuments?: number } = {}) {
+  async function createApp(options: { existingDocuments?: number; tier?: "pro" | "max" } = {}) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
     const { documents, users } = await import("../../shared/schema");
     const { registerWritingRoutes } = await import("../../server/writingRoutes");
@@ -60,7 +60,7 @@ describe("writing route integration", () => {
       email: "writing@example.com",
       username: "writing@example.com",
       password: "",
-      tier: "pro",
+      tier: options.tier ?? "pro",
       tokensUsed: 90,
       tokenLimit: 1000,
       storageUsed: 0,
@@ -86,10 +86,46 @@ describe("writing route integration", () => {
     return {
       db,
       sqlite: importedSqlite,
-      token: generateToken({ id: "writing-user", email: "writing@example.com", tier: "pro" }),
+      token: generateToken({
+        id: "writing-user",
+        email: "writing@example.com",
+        tier: options.tier ?? "pro",
+      }),
       server: await startHttpServer(app),
     };
   }
+
+  it("requires Max for Deep Write before calling Anthropic", async () => {
+    const { server, token } = await createApp({ tier: "pro" });
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/write`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          topic: "Premium deep write",
+          citationStyle: "chicago",
+          tone: "academic",
+          targetLength: "short",
+          deepWrite: true,
+        }),
+      });
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body).toMatchObject({
+        error: "Deep Write requires the Max plan",
+        requiredTier: "max",
+        currentTier: "pro",
+      });
+      expect(anthropicCreate).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
 
   it("records Anthropic token usage for completed writing jobs", async () => {
     const { server, sqlite, token } = await createApp();

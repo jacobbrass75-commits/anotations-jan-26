@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { getProductionConfigErrors } from "../../server/productionConfig";
 
 describe("production config validation", () => {
+  const paidLaunchEnv = {
+    STRIPE_SECRET_KEY: "sk_live_example",
+    STRIPE_WEBHOOK_SECRET: "whsec_example",
+    ADMIN_USER_IDS: "admin-user",
+  };
+
   it("does not run runtime checks outside production", () => {
     expect(getProductionConfigErrors({ NODE_ENV: "development" } as NodeJS.ProcessEnv)).toEqual([]);
   });
@@ -31,6 +37,9 @@ describe("production config validation", () => {
         expect.stringContaining("without a trailing /mcp"),
         expect.stringContaining("ANTHROPIC_API_KEY"),
         expect.stringContaining("OPENAI_API_KEY"),
+        expect.stringContaining("STRIPE_SECRET_KEY"),
+        expect.stringContaining("STRIPE_WEBHOOK_SECRET"),
+        expect.stringContaining("ADMIN_USER_IDS"),
       ]),
     );
   });
@@ -59,6 +68,7 @@ describe("production config validation", () => {
       MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
       ANTHROPIC_API_KEY: "anthropic-key",
       OPENAI_API_KEY: "openai-key",
+      ...paidLaunchEnv,
     } as NodeJS.ProcessEnv);
 
     expect(errors).toEqual([
@@ -78,6 +88,7 @@ describe("production config validation", () => {
       MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
       ANTHROPIC_API_KEY: "anthropic-key",
       OPENAI_API_KEY: "openai-key",
+      ...paidLaunchEnv,
     } as NodeJS.ProcessEnv);
 
     expect(errors).toEqual([
@@ -97,6 +108,7 @@ describe("production config validation", () => {
       MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
       ANTHROPIC_API_KEY: "anthropic-key",
       OPENAI_API_KEY: "openai-key",
+      ...paidLaunchEnv,
     } as NodeJS.ProcessEnv);
 
     expect(errors).toEqual([]);
@@ -114,6 +126,7 @@ describe("production config validation", () => {
       MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
       ANTHROPIC_API_KEY: "anthropic-key",
       OPENAI_API_KEY: "openai-key",
+      ...paidLaunchEnv,
     } as NodeJS.ProcessEnv);
 
     expect(errors).toEqual(
@@ -136,6 +149,7 @@ describe("production config validation", () => {
       MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
       ANTHROPIC_API_KEY: "anthropic-key",
       OPENAI_API_KEY: "openai-key",
+      ...paidLaunchEnv,
     } as NodeJS.ProcessEnv);
 
     expect(errors).toEqual([]);
@@ -153,6 +167,7 @@ describe("production config validation", () => {
       MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
       ANTHROPIC_API_KEY: "anthropic-key",
       OPENAI_API_KEY: "openai-key",
+      ...paidLaunchEnv,
       STRIPE_SECRET_KEY: "sk_test_not_live",
       STRIPE_WEBHOOK_SECRET: "whsec_test",
     } as NodeJS.ProcessEnv);
