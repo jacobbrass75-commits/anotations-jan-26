@@ -28,6 +28,40 @@ ON writing_styles(user_id, name);
 CREATE INDEX IF NOT EXISTS idx_writing_styles_user_updated
 ON writing_styles(user_id, updated_at DESC);
 `);
+
+const hasCampaignSignups = bootstrapSqlite
+  .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'campaign_signups'")
+  .get();
+
+if (hasCampaignSignups) {
+  const duplicateCampaignRows = bootstrapSqlite
+    .prepare(
+      `
+      SELECT 'email' AS field, lower(email) AS value, count(*) AS total
+      FROM campaign_signups
+      GROUP BY lower(email)
+      HAVING count(*) > 1
+      UNION ALL
+      SELECT 'referral_code' AS field, lower(referral_code) AS value, count(*) AS total
+      FROM campaign_signups
+      GROUP BY lower(referral_code)
+      HAVING count(*) > 1
+    `,
+    )
+    .all() as Array<{ field: string; value: string; total: number }>;
+
+  if (duplicateCampaignRows.length > 0) {
+    const duplicateSummary = duplicateCampaignRows
+      .map((row) => `${row.field}:${row.value} (${row.total})`)
+      .join(", ");
+    throw new Error(`[bootstrap-db] duplicate campaign signup keys block schema push: ${duplicateSummary}`);
+  }
+
+  bootstrapSqlite.exec(`
+    DROP INDEX IF EXISTS campaign_signups_email_unique;
+    DROP INDEX IF EXISTS campaign_signups_referral_code_unique;
+  `);
+}
 bootstrapSqlite.close();
 
 const drizzleResult = spawnSync(
