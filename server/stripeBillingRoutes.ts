@@ -8,6 +8,7 @@ import {
   setUserTier,
   updateUserBillingMetadata,
 } from "./authStorage";
+import { markCampaignCheckoutStarted, markCampaignPaidConversion } from "./campaignAttribution";
 import { createLogger } from "./logger";
 
 const logger = createLogger("stripeBillingRoutes");
@@ -271,7 +272,8 @@ async function syncSubscriptionToUser(
   const nextPeriodEndMs = currentPeriodEnd?.getTime() ?? null;
   const shouldResetUsage =
     options.resetUsage === true &&
-    (existingUser?.stripeSubscriptionId !== subscription.id || storedPeriodEndMs !== nextPeriodEndMs);
+    (existingUser?.stripeSubscriptionId !== subscription.id ||
+      storedPeriodEndMs !== nextPeriodEndMs);
 
   await setUserTier(userId, nextTier, {
     resetUsage: shouldResetUsage,
@@ -283,6 +285,16 @@ async function syncSubscriptionToUser(
       subscriptionCurrentPeriodEnd: currentPeriodEnd,
       cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
     } as Partial<User>,
+  });
+
+  const campaignUser = existingUser ?? (await getUserById(userId));
+  await markCampaignPaidConversion(campaignUser ?? undefined, {
+    provider: "stripe",
+    plan: tier,
+    status: subscription.status,
+    paidAt: hasPaidAccess ? new Date() : null,
+    stripeSubscriptionId: subscription.id,
+    stripePriceId: price?.id ?? null,
   });
 }
 
@@ -401,6 +413,12 @@ export function registerStripeBillingRoutes(app: ExpressApp): void {
         return res.status(502).json({ message: "Stripe checkout did not return a URL" });
       }
 
+      await markCampaignCheckoutStarted(user, {
+        plan: tier,
+        checkoutSessionId: session.id,
+        provider: "stripe",
+      });
+
       return res.json({ url: session.url });
     } catch (error) {
       logger.error({ err: error }, "[billing] failed to create Stripe checkout session");
@@ -432,9 +450,8 @@ export function registerStripeBillingRoutes(app: ExpressApp): void {
           expand: ["customer", "subscription", "subscription.items.data.price"],
         });
         const sessionUserId =
-          session.client_reference_id || (typeof session.metadata?.userId === "string"
-            ? session.metadata.userId
-            : "");
+          session.client_reference_id ||
+          (typeof session.metadata?.userId === "string" ? session.metadata.userId : "");
         if (sessionUserId && sessionUserId !== user.id) {
           return res.status(403).json({ message: "Checkout session belongs to another account" });
         }

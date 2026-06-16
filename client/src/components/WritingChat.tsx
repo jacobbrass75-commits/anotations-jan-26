@@ -77,11 +77,29 @@ import {
 interface WritingChatProps {
   initialProjectId?: string;
   lockProject?: boolean;
+  summerMode?: boolean;
 }
 
 const NO_PROJECT_VALUE = "__no_project__";
 const NO_STYLE_VALUE = "__no_style__";
 const DEFAULT_SOURCE_ROLE: SourceRole = "evidence";
+const SUMMER_STARTERS = [
+  {
+    label: "Find my research question",
+    prompt:
+      "Help me turn my broad interests into 5 viable research questions for a thesis, capstone, or major research paper. Ask me up to 3 clarifying questions first if needed.",
+  },
+  {
+    label: "Build my source plan",
+    prompt:
+      "Build a practical source plan for my thesis or capstone. Include source types to look for, search terms, databases or archives to try, and what I should collect this week.",
+  },
+  {
+    label: "Draft my outline",
+    prompt:
+      "Help me create a working outline for my thesis, capstone, or major research paper. Keep it flexible and show what evidence each section will need.",
+  },
+] as const;
 
 function getGeneratedPaperTitle(prompt: string, fallback?: string): string {
   const firstLine = prompt
@@ -98,7 +116,11 @@ function normalizeSourceRole(value: string | null | undefined): SourceRole {
     : DEFAULT_SOURCE_ROLE;
 }
 
-export default function WritingChat({ initialProjectId, lockProject }: WritingChatProps) {
+export default function WritingChat({
+  initialProjectId,
+  lockProject,
+  summerMode,
+}: WritingChatProps) {
   const { toast } = useToast();
 
   // Project selection
@@ -866,7 +888,7 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
   );
 
   return (
-    <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-[250px_1fr_380px] border border-border rounded-xl overflow-auto lg:overflow-hidden bg-[#F5F0E8] dark:bg-background">
+    <div className="h-full min-h-0 w-full max-w-full grid grid-cols-1 lg:grid-cols-[250px_1fr_380px] border border-border rounded-xl overflow-auto lg:overflow-hidden bg-[#F5F0E8] dark:bg-background">
       {/* Left Sidebar - Conversations */}
       <ChatSidebar
         conversations={conversations}
@@ -929,6 +951,37 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
             )}
           </div>
         </div>
+
+        {summerMode && messages.length === 0 && !pendingUserMessage && !isStreaming ? (
+          <div className="border-b border-border bg-primary/5 px-5 py-3">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-xs font-mono uppercase tracking-widest text-primary">
+                  Summer Head Start
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Start with a planning move before drafting. You can add sources later, or ask for a
+                source plan first.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SUMMER_STARTERS.map((starter) => (
+                  <Button
+                    key={starter.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => handleSuggestedPrompt(starter.prompt)}
+                  >
+                    {starter.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* Messages */}
         <ChatMessages
@@ -1116,9 +1169,34 @@ export default function WritingChat({ initialProjectId, lockProject }: WritingCh
                         {sourcesLoading ? (
                           <p className="text-xs text-muted-foreground">Loading...</p>
                         ) : hasSelectedProject && projectSources.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            No source documents in this project.
-                          </p>
+                          <div className="space-y-2 rounded-md border border-dashed border-border p-3">
+                            <p className="text-xs text-muted-foreground">
+                              No sources yet. Add a PDF or clip later, or start with a topic and
+                              source plan now.
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              <Button asChild variant="outline" size="sm" className="justify-start">
+                                <Link href={`/projects/${selectedProjectId}`}>
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  Add first source
+                                </Link>
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="justify-start"
+                                onClick={() =>
+                                  handleSuggestedPrompt(
+                                    "I do not have sources uploaded yet. Help me create a first-week source plan for this project, including what to search for and how to judge whether sources are useful.",
+                                  )
+                                }
+                              >
+                                <Sparkles className="mr-2 h-4 w-4" />
+                                Plan sources first
+                              </Button>
+                            </div>
+                          </div>
                         ) : !hasSelectedProject && standaloneWebClips.length === 0 ? (
                           <p className="text-xs text-muted-foreground">
                             No web clips yet. You can still write in standalone mode without

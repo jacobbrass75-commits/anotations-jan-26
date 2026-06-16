@@ -2,6 +2,9 @@
 
 Last updated: June 16, 2026
 
+Operator pack: use `docs/launch/summer-thesis-campaign-ops-pack.md` for the daily
+CRM, follow-up, referral, and scorecard workflow.
+
 ## Goal
 
 Get 10 activated paid students into ScholarMark through the Summer Thesis Head Start campaign.
@@ -40,18 +43,18 @@ Definition of activated: the student signs up, creates an account, and either cr
 
 ## Scoreboard
 
-| Slot | Segment | Channel | Plan | Activation target |
-| --- | --- | --- | --- | --- |
-| 1 | Warm thesis student | Friend/alumni intro | Pro | 3 sources + 1 citation |
-| 2 | Honors thesis senior | Honors program/LinkedIn | Pro | project + annotations |
-| 3 | Master's capstone | LinkedIn/direct ask | Pro | lit review source bank |
-| 4 | Summer researcher | REU/McNair/SURF | Pro | web clips + PDF upload |
-| 5 | Humanities thesis | department/community post | Pro | quote bank |
-| 6 | Education/public health grad | program coordinator | Pro | citations + draft |
-| 7 | Heavy-source user | demo/referral | Max | OCR/source verification |
-| 8 | Writing center referral | advisor forward | Pro | setup call complete |
-| 9 | Workshop attendee | source sprint | Pro | paid during call |
-| 10 | Referral from paid user | manual reward | Pro/Max | referral recorded |
+| Slot | Segment                      | Channel                   | Plan    | Activation target       |
+| ---- | ---------------------------- | ------------------------- | ------- | ----------------------- |
+| 1    | Warm thesis student          | Friend/alumni intro       | Pro     | 3 sources + 1 citation  |
+| 2    | Honors thesis senior         | Honors program/LinkedIn   | Pro     | project + annotations   |
+| 3    | Master's capstone            | LinkedIn/direct ask       | Pro     | lit review source bank  |
+| 4    | Summer researcher            | REU/McNair/SURF           | Pro     | web clips + PDF upload  |
+| 5    | Humanities thesis            | department/community post | Pro     | quote bank              |
+| 6    | Education/public health grad | program coordinator       | Pro     | citations + draft       |
+| 7    | Heavy-source user            | demo/referral             | Max     | OCR/source verification |
+| 8    | Writing center referral      | advisor forward           | Pro     | setup call complete     |
+| 9    | Workshop attendee            | source sprint             | Pro     | paid during call        |
+| 10   | Referral from paid user      | manual reward             | Pro/Max | referral recorded       |
 
 Target revenue: 8 Pro + 2 Max = $212 MRR.
 Minimum revenue: 10 Pro = $140 MRR.
@@ -62,35 +65,42 @@ Real win: 10 activated users, 10 objection notes, 10 referral asks, and 3 usable
 ### Week 1: Get the first 3 paid users
 
 Day 1:
+
 - Create the CRM sheet.
 - Record a 2-minute Loom using one PDF and one web source.
 - Prepare the student DM, advisor email, and campus post.
 - Build a list of 100 warm leads, student communities, advisors, writing centers, libraries, honors programs, and research programs.
 
 Day 2:
+
 - Send 25 personalized student DMs/emails.
 - Send 10 campus channel-owner emails.
 - Ask 10 friends/alumni for thesis-student intros.
 
 Day 3:
+
 - Post in 3 communities where promotion is allowed.
 - Send 25 more student DMs.
 - Book 5 setup calls.
 
 Day 4:
+
 - Run setup calls.
 - Close live: "If this helped, start Pro now and I will finish setting up your first project with you."
 
 Day 5:
+
 - Follow up every reply.
 - Ask paid users for one referral each.
 - Goal: 1-2 paid users.
 
 Day 6:
+
 - Run a 25-minute Thesis Source Sprint workshop.
 - Goal: 5 attendees, 1 paid user.
 
 Day 7:
+
 - Review channel performance.
 - Kill channels with no replies.
 - Double down on the highest-reply source.
@@ -98,28 +108,35 @@ Day 7:
 ### Week 2: Add 7 more paid users
 
 Day 8:
+
 - Second campus wave: 15 advisors/librarians/coordinators and 30 student leads.
 
 Day 9:
+
 - Publish "How to build your thesis source bank in 45 minutes."
 - CTA: book a setup call.
 
 Day 10:
+
 - Run 6-8 setup calls.
 - Goal: 2 paid users.
 
 Day 11:
+
 - Referral push to paid users and warm leads.
 - Manual reward: $10 Venmo/Amazon card after referred paid signup, or manual next-month reimbursement.
 
 Day 12:
+
 - Follow up campus staff with a ready-to-forward blurb and workshop invite.
 
 Day 13:
+
 - Send "last 3 cohort spots" close to every warm lead.
 - Goal: 2 paid users.
 
 Day 14:
+
 - Close remaining calls.
 - Document objections.
 - Ask every paid user for a testimonial and one referral.
@@ -164,6 +181,7 @@ Avoid "write your thesis with AI." Lead with research workflow, source grounding
 ## Daily Founder Loop
 
 Each day:
+
 1. Add 20 qualified leads or channel owners.
 2. Send 20 personalized first touches.
 3. Send all due follow-ups.

@@ -274,6 +274,14 @@ CREATE TABLE IF NOT EXISTS campaign_signups (
   referral_code TEXT NOT NULL UNIQUE,
   user_id TEXT,
   account_created_at INTEGER,
+  checkout_started_at INTEGER,
+  last_checkout_session_id TEXT,
+  paid_at INTEGER,
+  paid_provider TEXT,
+  paid_plan TEXT,
+  paid_status TEXT,
+  stripe_subscription_id TEXT,
+  stripe_price_id TEXT,
   activated_at INTEGER,
   first_action TEXT,
   created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000)
@@ -307,6 +315,19 @@ ensureColumn("users", "subscription_status", "subscription_status TEXT");
 ensureColumn("users", "subscription_current_period_end", "subscription_current_period_end INTEGER");
 ensureColumn("users", "cancel_at_period_end", "cancel_at_period_end INTEGER DEFAULT 0");
 ensureColumn("campaign_signups", "account_created_at", "account_created_at INTEGER");
+ensureColumn("campaign_signups", "checkout_started_at", "checkout_started_at INTEGER");
+ensureColumn("campaign_signups", "last_checkout_session_id", "last_checkout_session_id TEXT");
+ensureColumn("campaign_signups", "paid_at", "paid_at INTEGER");
+ensureColumn("campaign_signups", "paid_provider", "paid_provider TEXT");
+ensureColumn("campaign_signups", "paid_plan", "paid_plan TEXT");
+ensureColumn("campaign_signups", "paid_status", "paid_status TEXT");
+ensureColumn("campaign_signups", "stripe_subscription_id", "stripe_subscription_id TEXT");
+ensureColumn("campaign_signups", "stripe_price_id", "stripe_price_id TEXT");
+
+sqlite.exec(`
+CREATE INDEX IF NOT EXISTS idx_campaign_signups_paid_at
+ON campaign_signups(paid_at);
+`);
 
 // Export the raw sqlite connection for direct queries if needed
 export { sqlite };

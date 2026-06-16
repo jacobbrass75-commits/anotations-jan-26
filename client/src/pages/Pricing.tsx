@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { withRedirectUrl } from "@/lib/redirects";
 
 const VENMO_HANDLE = normalizeVenmoHandle(import.meta.env.VITE_VENMO_HANDLE);
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
@@ -129,7 +130,7 @@ function VenmoButton({
   if (!isSignedIn) {
     return (
       <Button className="w-full" onClick={onSignIn}>
-        Sign in to upgrade
+        Create account to upgrade
       </Button>
     );
   }
@@ -301,7 +302,7 @@ function AutomatedVenmoButton({
   if (!isSignedIn) {
     return (
       <Button className="w-full" onClick={onSignIn}>
-        Sign in to upgrade
+        Create account to upgrade
       </Button>
     );
   }
@@ -354,7 +355,7 @@ function StripeCheckoutButton({
   if (!isSignedIn) {
     return (
       <Button className="w-full" onClick={onSignIn}>
-        Sign in to upgrade
+        Create account to start {label}
       </Button>
     );
   }
@@ -440,7 +441,7 @@ function PlanCheckoutButton({
   hasActiveStripeSubscription: boolean;
   stripeConfig: StripeBillingConfig | null;
   paypalConfig: PayPalBillingConfig | null;
-  onSignIn: () => void;
+  onSignIn: (tier: "pro" | "max") => void;
   onComplete: () => void;
 }) {
   if (stripeConfig === null || paypalConfig === null) {
@@ -459,7 +460,7 @@ function PlanCheckoutButton({
         label={label}
         isSignedIn={isSignedIn}
         hasActiveStripeSubscription={hasActiveStripeSubscription}
-        onSignIn={onSignIn}
+        onSignIn={() => onSignIn(tier)}
       />
     );
   }
@@ -470,7 +471,7 @@ function PlanCheckoutButton({
         tier={tier}
         config={paypalConfig}
         isSignedIn={isSignedIn}
-        onSignIn={onSignIn}
+        onSignIn={() => onSignIn(tier)}
         onComplete={onComplete}
       />
     );
@@ -482,7 +483,7 @@ function PlanCheckoutButton({
       label={label}
       accountRef={accountRef}
       isSignedIn={isSignedIn}
-      onSignIn={onSignIn}
+      onSignIn={() => onSignIn(tier)}
     />
   );
 }
@@ -494,15 +495,23 @@ export default function Pricing() {
   const currentTier = user?.tier ?? "free";
   const hasActiveStripeSubscription = Boolean(
     user?.stripeCustomerId &&
-      user?.stripeSubscriptionId &&
-      ["active", "trialing", "past_due"].includes(user.subscriptionStatus || ""),
+    user?.stripeSubscriptionId &&
+    ["active", "trialing", "past_due"].includes(user.subscriptionStatus || ""),
   );
   const accountRef = user?.email || user?.id || null;
   const checkoutStatus =
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("checkout") : null;
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("checkout")
+      : null;
   const [stripeConfig, setStripeConfig] = useState<StripeBillingConfig | null>(null);
   const [paypalConfig, setPayPalConfig] = useState<PayPalBillingConfig | null>(null);
-  const handleSignIn = useCallback(() => setLocation("/sign-in"), [setLocation]);
+  const handleSignIn = useCallback(
+    (tier: "pro" | "max" = "pro") => {
+      const redirectUrl = `/pricing?tier=${tier}&source=upgrade`;
+      setLocation(withRedirectUrl("/sign-in", redirectUrl));
+    },
+    [setLocation],
+  );
   const handleCheckoutComplete = useCallback(() => setLocation("/account"), [setLocation]);
 
   useEffect(() => {
@@ -567,7 +576,9 @@ export default function Pricing() {
                 {!localDevAuth ? <UserButton /> : null}
               </>
             ) : (
-              <Button onClick={() => setLocation("/sign-in")}>Sign In</Button>
+              <Button onClick={() => setLocation(withRedirectUrl("/sign-in", "/pricing"))}>
+                Sign In
+              </Button>
             )}
           </div>
         </div>
@@ -575,7 +586,10 @@ export default function Pricing() {
         {checkoutStatus === "cancelled" ? (
           <div className="mb-6 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             Checkout was cancelled. No plan change was made. You can retry below or email{" "}
-            <a className="text-primary underline-offset-4 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
+            <a
+              className="text-primary underline-offset-4 hover:underline"
+              href={`mailto:${SUPPORT_EMAIL}`}
+            >
               {SUPPORT_EMAIL}
             </a>
             .

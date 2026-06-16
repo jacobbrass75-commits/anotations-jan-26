@@ -84,6 +84,9 @@ function buildScope({
     "Summer Thesis Head Start plan",
     `Project type: ${paperTypeLabel(paperType)}`,
     topic ? `Working topic: ${topic}` : null,
+    !topic && !prompt
+      ? "Starting point: discover a viable topic and turn it into a research question."
+      : null,
     prompt ? `Assignment or advisor prompt: ${prompt}` : null,
     targetDate ? `Target date: ${targetDate}` : null,
     "",
@@ -120,17 +123,14 @@ export default function SummerOnboarding() {
 
     const projectTopic = form.topic.trim();
     const projectQuestion = form.workingQuestion.trim();
-    if (!projectTopic && !projectQuestion) {
-      setError("Add a working topic or research question to start the plan.");
-      return;
-    }
-
     const label = paperTypeLabel(form.paperType);
-    const name = `${label} Head Start`;
+    const isDiscoveryStart = !projectTopic && !projectQuestion;
+    const name = isDiscoveryStart ? "Topic Discovery Head Start" : `${label} Head Start`;
     const project = await createProject.mutateAsync({
       name,
       description: `Summer Thesis Head Start${leadContext ? ` for ${leadContext}` : ""}.`,
-      thesis: projectQuestion || projectTopic,
+      thesis:
+        projectQuestion || projectTopic || "Topic discovery and research question development",
       scope: buildScope({
         paperType: form.paperType,
         topic: projectTopic,
@@ -149,7 +149,7 @@ export default function SummerOnboarding() {
   const submitDisabled = createProject.isPending;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       <header className="border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <Link href="/summer">
@@ -269,7 +269,7 @@ export default function SummerOnboarding() {
                     id="summer-topic"
                     value={form.topic}
                     onChange={(event) => setField("topic")(event.target.value)}
-                    placeholder="Example: labor organizing in 1970s Los Angeles"
+                    placeholder="Optional: labor organizing in 1970s Los Angeles"
                     maxLength={180}
                   />
                 </div>
@@ -280,7 +280,7 @@ export default function SummerOnboarding() {
                     id="summer-question"
                     value={form.workingQuestion}
                     onChange={(event) => setField("workingQuestion")(event.target.value)}
-                    placeholder="If you have one, paste it here. If not, write the rough question you want to explore."
+                    placeholder="Optional: paste a question, or leave blank and start with topic discovery."
                     className="min-h-24 resize-none"
                     maxLength={1000}
                   />
@@ -321,7 +321,13 @@ export default function SummerOnboarding() {
                     )}
                   </Button>
                   <Button type="button" variant="outline" asChild>
-                    <Link href={projects.length > 0 ? `/projects/${projects[0].id}` : "/projects"}>
+                    <Link
+                      href={
+                        projects.length > 0
+                          ? `/write?projectId=${projects[0].id}&summer=1`
+                          : "/projects"
+                      }
+                    >
                       <BookOpen className="mr-2 h-4 w-4" />
                       Use existing
                     </Link>
@@ -341,7 +347,7 @@ export default function SummerOnboarding() {
         </div>
 
         <div className="mt-8 flex justify-center">
-          <Link href="/write">
+          <Link href="/write?summer=1">
             <Button variant="ghost">
               <PenLine className="mr-2 h-4 w-4" />
               Open writing workspace without setup

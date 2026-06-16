@@ -107,7 +107,7 @@ function isActivePaidUser(user: User | undefined): boolean {
   if (!user) return false;
   if (user.tier !== "pro" && user.tier !== "max") return false;
   if (!user.stripeCustomerId || !user.stripeSubscriptionId) return false;
-  return user.subscriptionStatus === "active";
+  return ["active", "trialing", "past_due"].includes(user.subscriptionStatus ?? "");
 }
 
 export function registerCampaignRoutes(app: Express): void {
@@ -178,7 +178,8 @@ export function registerCampaignRoutes(app: Express): void {
         const userForSignup = (signup: CampaignSignup) =>
           (signup.userId ? usersById.get(signup.userId) : undefined) ??
           usersByEmail.get(normalizeEmail(signup.email));
-        const isPaidSignup = (signup: CampaignSignup) => isActivePaidUser(userForSignup(signup));
+        const isPaidSignup = (signup: CampaignSignup) =>
+          Boolean(signup.paidAt) || isActivePaidUser(userForSignup(signup));
 
         const totalSignups = signups.length;
         const registered = signups.filter((s) => s.accountCreatedAt || userForSignup(s)).length;
@@ -188,12 +189,8 @@ export function registerCampaignRoutes(app: Express): void {
         const activatedPaid = signups.filter((s) => s.activatedAt && isPaidSignup(s)).length;
 
         // Referrers = leads whose own code shows up in someone else's referredBy.
-        const codesUsed = new Set(
-          signups.map((s) => s.referredBy?.toLowerCase()).filter(Boolean),
-        );
-        const referrers = signups.filter((s) =>
-          codesUsed.has(s.referralCode.toLowerCase()),
-        ).length;
+        const codesUsed = new Set(signups.map((s) => s.referredBy?.toLowerCase()).filter(Boolean));
+        const referrers = signups.filter((s) => codesUsed.has(s.referralCode.toLowerCase())).length;
 
         const weeklySignups = new Map<string, number>();
         for (const signup of signups) {
@@ -242,15 +239,21 @@ export function registerCampaignRoutes(app: Express): void {
                 major: s.major,
                 classYear: s.classYear,
                 paperType: s.paperType,
+                campus: s.campus,
                 channel: s.channel,
+                inviteCode: s.inviteCode,
                 referredBy: s.referredBy,
                 referralCode: s.referralCode,
                 activated: Boolean(s.activatedAt),
                 registered: Boolean(s.accountCreatedAt || matchedUser),
                 firstAction: s.firstAction,
-                paid: isActivePaidUser(matchedUser),
-                plan: matchedUser?.tier ?? null,
-                subscriptionStatus: matchedUser?.subscriptionStatus ?? null,
+                paid: isPaidSignup(s),
+                paidEver: Boolean(s.paidAt),
+                plan: s.paidPlan ?? matchedUser?.tier ?? null,
+                subscriptionStatus: s.paidStatus ?? matchedUser?.subscriptionStatus ?? null,
+                paidProvider: s.paidProvider,
+                paidAt: s.paidAt?.getTime() ?? null,
+                checkoutStartedAt: s.checkoutStartedAt?.getTime() ?? null,
                 accountCreatedAt: s.accountCreatedAt?.getTime() ?? null,
                 signupDate: s.createdAt.getTime(),
               };

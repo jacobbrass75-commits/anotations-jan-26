@@ -66,9 +66,8 @@ describe("summer campaign routes", () => {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
     const { campaignSignups, users } = await import("../../shared/schema");
     const { generateToken, requireAuth } = await import("../../server/auth");
-    const { registerCampaignRoutes, trackCampaignActivation } = await import(
-      "../../server/campaignRoutes"
-    );
+    const { registerCampaignRoutes, trackCampaignActivation } =
+      await import("../../server/campaignRoutes");
 
     sqlite = importedSqlite;
 
@@ -257,9 +256,7 @@ describe("summer campaign routes", () => {
       expect(metrics.body?.rates.signupRate).toBe(1);
       expect(metrics.body?.rates.registrationRate).toBe(0.5);
       expect(metrics.body?.rates.paidRate).toBe(0.5);
-      expect(metrics.body?.breakdowns.channel.find((row) => row.value === "discord")?.paid).toBe(
-        1,
-      );
+      expect(metrics.body?.breakdowns.channel.find((row) => row.value === "discord")?.paid).toBe(1);
       expect(metrics.body?.recentSignups.find((row) => row.email === "paid@example.com")).toEqual(
         expect.objectContaining({ registered: true, paid: true, plan: "pro" }),
       );
@@ -311,6 +308,104 @@ describe("summer campaign routes", () => {
     }
   });
 
+  it("records durable checkout and paid conversion attribution", async () => {
+    const { adminToken, campaignSignups, db, server } = await createCampaignApp();
+
+    try {
+      await db.insert(campaignSignups).values({
+        name: "Lead User",
+        email: "lead@example.com",
+        school: "Test U",
+        major: "History",
+        classYear: "rising_senior",
+        paperType: "senior_thesis",
+        hasTopic: "yes",
+        referralCode: "lead-0001",
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+      });
+
+      const { markCampaignCheckoutStarted, markCampaignPaidConversion } =
+        await import("../../server/campaignAttribution");
+
+      await markCampaignCheckoutStarted(
+        { id: "lead-user", email: "lead@example.com" },
+        {
+          provider: "stripe",
+          plan: "pro",
+          checkoutSessionId: "cs_test_123",
+        },
+      );
+
+      const paidAt = new Date("2026-06-02T12:00:00.000Z");
+      await markCampaignPaidConversion(
+        { id: "lead-user", email: "lead@example.com" },
+        {
+          provider: "stripe",
+          plan: "pro",
+          status: "active",
+          paidAt,
+          stripeSubscriptionId: "sub_test_123",
+          stripePriceId: "price_test_pro",
+        },
+      );
+
+      await markCampaignPaidConversion(
+        { id: "lead-user", email: "lead@example.com" },
+        {
+          provider: "stripe",
+          plan: "pro",
+          status: "canceled",
+          paidAt: null,
+          stripeSubscriptionId: "sub_test_123",
+          stripePriceId: "price_test_pro",
+        },
+      );
+
+      const rows = await db.select().from(campaignSignups);
+      expect(rows[0]).toMatchObject({
+        userId: "lead-user",
+        lastCheckoutSessionId: "cs_test_123",
+        paidProvider: "stripe",
+        paidPlan: "pro",
+        paidStatus: "canceled",
+        stripeSubscriptionId: "sub_test_123",
+        stripePriceId: "price_test_pro",
+      });
+      expect(rows[0].checkoutStartedAt).toBeInstanceOf(Date);
+      expect(rows[0].paidAt?.getTime()).toBe(paidAt.getTime());
+
+      const metrics = await requestJson<{
+        totals: { paid: number };
+        recentSignups: Array<{
+          email: string;
+          paid: boolean;
+          paidEver: boolean;
+          plan: string | null;
+          subscriptionStatus: string | null;
+          paidProvider: string | null;
+          paidAt: number | null;
+          checkoutStartedAt: number | null;
+        }>;
+      }>(server.baseUrl, "/api/admin/campaign/metrics", {
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(metrics.status).toBe(200);
+      expect(metrics.body?.totals.paid).toBe(1);
+      expect(metrics.body?.recentSignups[0]).toMatchObject({
+        email: "lead@example.com",
+        paid: true,
+        paidEver: true,
+        plan: "pro",
+        subscriptionStatus: "canceled",
+        paidProvider: "stripe",
+        paidAt: paidAt.getTime(),
+      });
+      expect(metrics.body?.recentSignups[0].checkoutStartedAt).toEqual(expect.any(Number));
+    } finally {
+      await server.close();
+    }
+  });
+
   it("claims a campaign lead when the matching account is created", async () => {
     const { campaignSignups, db, server } = await createCampaignApp();
 
@@ -334,8 +429,7 @@ describe("summer campaign routes", () => {
 
       const rows = await waitFor(
         () => db.select().from(campaignSignups).all(),
-        (latestRows) =>
-          latestRows.some((row) => row.email === "newlead@example.com" && row.userId),
+        (latestRows) => latestRows.some((row) => row.email === "newlead@example.com" && row.userId),
       );
       const signup = rows.find((row) => row.email === "newlead@example.com");
       expect(signup?.userId).toBe("clerk-new-lead");

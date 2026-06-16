@@ -1,9 +1,13 @@
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, Megaphone } from "lucide-react";
+import { ArrowLeft, Copy, Download, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { getQueryFn } from "@/lib/queryClient";
+
+const CAMPAIGN_URL = "https://scholarmark.ai/summer";
 
 interface BreakdownRow {
   value: string;
@@ -46,23 +50,48 @@ interface CampaignMetrics {
     major: string;
     classYear: string;
     paperType: string;
+    campus: string | null;
     channel: string | null;
+    inviteCode: string | null;
     referredBy: string | null;
     referralCode: string;
     registered: boolean;
     activated: boolean;
     firstAction: string | null;
     paid: boolean;
+    paidEver: boolean;
+    paidProvider: string | null;
     plan: string | null;
     subscriptionStatus: string | null;
     accountCreatedAt: number | null;
+    checkoutStartedAt: number | null;
+    paidAt: number | null;
     signupDate: number;
   }>;
 }
 
 function formatRate(rate: number | null): string {
-  if (rate === null) return "—";
+  if (rate === null) return "-";
   return `${(rate * 100).toFixed(1)}%`;
+}
+
+function formatDate(timestamp: number | null): string {
+  if (!timestamp) return "-";
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function normalizeLinkValue(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -118,10 +147,109 @@ function BreakdownTable({ title, rows }: { title: string; rows: BreakdownRow[] }
 }
 
 export default function AdminCampaign() {
+  const [linkFields, setLinkFields] = useState({
+    campus: "general",
+    major: "history",
+    channel: "friend",
+    code: "SUMMERTHESIS",
+  });
+  const [copyState, setCopyState] = useState("Copy link");
   const { data, isLoading, error } = useQuery<CampaignMetrics>({
     queryKey: ["/api/admin/campaign/metrics"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
+
+  const trackedLink = useMemo(() => {
+    const url = new URL(CAMPAIGN_URL);
+    const params: Array<[string, string]> = [
+      ["campus", linkFields.campus],
+      ["major", linkFields.major],
+      ["channel", linkFields.channel],
+      ["code", linkFields.code],
+    ];
+    for (const [key, value] of params) {
+      const normalized = normalizeLinkValue(value);
+      if (normalized) url.searchParams.set(key, normalized);
+    }
+    return url.toString();
+  }, [linkFields]);
+
+  function updateLinkField(field: keyof typeof linkFields, value: string) {
+    setCopyState("Copy link");
+    setLinkFields((current) => ({ ...current, [field]: value }));
+  }
+
+  async function copyTrackedLink() {
+    try {
+      await navigator.clipboard.writeText(trackedLink);
+      setCopyState("Copied");
+    } catch {
+      setCopyState("Copy failed");
+    }
+  }
+
+  function exportRecentSignups() {
+    if (!data?.recentSignups.length) return;
+
+    const headers = [
+      "name",
+      "email",
+      "school",
+      "major",
+      "classYear",
+      "paperType",
+      "campus",
+      "channel",
+      "inviteCode",
+      "referralCode",
+      "referredBy",
+      "registered",
+      "activated",
+      "firstAction",
+      "checkoutStartedAt",
+      "paid",
+      "paidEver",
+      "paidProvider",
+      "plan",
+      "subscriptionStatus",
+      "paidAt",
+      "signupDate",
+      "accountCreatedAt",
+    ];
+    const rows = data.recentSignups.map((signup) => [
+      signup.name,
+      signup.email,
+      signup.school,
+      signup.major,
+      signup.classYear,
+      signup.paperType,
+      signup.campus,
+      signup.channel,
+      signup.inviteCode,
+      signup.referralCode,
+      signup.referredBy,
+      signup.registered,
+      signup.activated,
+      signup.firstAction,
+      signup.checkoutStartedAt ? new Date(signup.checkoutStartedAt).toISOString() : "",
+      signup.paid,
+      signup.paidEver,
+      signup.paidProvider,
+      signup.plan,
+      signup.subscriptionStatus,
+      signup.paidAt ? new Date(signup.paidAt).toISOString() : "",
+      new Date(signup.signupDate).toISOString(),
+      signup.accountCreatedAt ? new Date(signup.accountCreatedAt).toISOString() : "",
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `scholarmark-campaign-signups-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(objectUrl);
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -136,6 +264,16 @@ export default function AdminCampaign() {
           <h1 className="font-sans uppercase tracking-[0.2em] font-bold text-primary text-sm">
             Summer Campaign
           </h1>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto gap-2"
+            onClick={exportRecentSignups}
+            disabled={!data?.recentSignups.length}
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
         </div>
       </header>
 
@@ -170,7 +308,7 @@ export default function AdminCampaign() {
               <StatCard
                 label="Paid"
                 value={String(data.totals.paid)}
-                hint="active Stripe subscriptions"
+                hint="durable paid conversions"
               />
               <StatCard
                 label="Paid rate"
@@ -188,6 +326,49 @@ export default function AdminCampaign() {
                 hint="referrers / activated"
               />
             </div>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Tracked link builder</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Input
+                    aria-label="Campus"
+                    value={linkFields.campus}
+                    onChange={(event) => updateLinkField("campus", event.target.value)}
+                    placeholder="campus"
+                  />
+                  <Input
+                    aria-label="Major"
+                    value={linkFields.major}
+                    onChange={(event) => updateLinkField("major", event.target.value)}
+                    placeholder="major"
+                  />
+                  <Input
+                    aria-label="Channel"
+                    value={linkFields.channel}
+                    onChange={(event) => updateLinkField("channel", event.target.value)}
+                    placeholder="channel"
+                  />
+                  <Input
+                    aria-label="Invite code"
+                    value={linkFields.code}
+                    onChange={(event) => updateLinkField("code", event.target.value)}
+                    placeholder="code"
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <code className="flex-1 rounded-md border border-border bg-muted px-3 py-2 text-xs overflow-x-auto">
+                    {trackedLink}
+                  </code>
+                  <Button variant="secondary" className="gap-2" onClick={copyTrackedLink}>
+                    <Copy className="h-4 w-4" />
+                    {copyState}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <BreakdownTable title="By channel" rows={data.breakdowns.channel} />
@@ -240,11 +421,15 @@ export default function AdminCampaign() {
                         <th className="pb-2 pr-4 font-medium">Major</th>
                         <th className="pb-2 pr-4 font-medium">Year</th>
                         <th className="pb-2 pr-4 font-medium">Channel</th>
+                        <th className="pb-2 pr-4 font-medium">Invite</th>
+                        <th className="pb-2 pr-4 font-medium">Referral</th>
                         <th className="pb-2 pr-4 font-medium">Referred by</th>
                         <th className="pb-2 pr-4 font-medium">Account</th>
                         <th className="pb-2 pr-4 font-medium">Activated</th>
+                        <th className="pb-2 pr-4 font-medium">Checkout</th>
                         <th className="pb-2 pr-4 font-medium">Paid</th>
                         <th className="pb-2 pr-4 font-medium">Plan</th>
+                        <th className="pb-2 pr-4 font-medium">Paid date</th>
                         <th className="pb-2 font-medium">First action</th>
                       </tr>
                     </thead>
@@ -256,15 +441,19 @@ export default function AdminCampaign() {
                           <td className="py-1.5 pr-4">{signup.school}</td>
                           <td className="py-1.5 pr-4">{signup.major}</td>
                           <td className="py-1.5 pr-4">{signup.classYear}</td>
-                          <td className="py-1.5 pr-4">{signup.channel ?? "—"}</td>
-                          <td className="py-1.5 pr-4">{signup.referredBy ?? "—"}</td>
+                          <td className="py-1.5 pr-4">{signup.channel ?? "-"}</td>
+                          <td className="py-1.5 pr-4">{signup.inviteCode ?? "-"}</td>
+                          <td className="py-1.5 pr-4 font-mono text-xs">{signup.referralCode}</td>
+                          <td className="py-1.5 pr-4">{signup.referredBy ?? "-"}</td>
                           <td className="py-1.5 pr-4">{signup.registered ? "Yes" : "No"}</td>
                           <td className="py-1.5 pr-4">{signup.activated ? "Yes" : "No"}</td>
+                          <td className="py-1.5 pr-4">{formatDate(signup.checkoutStartedAt)}</td>
                           <td className="py-1.5 pr-4">
-                            {signup.paid ? "Yes" : signup.subscriptionStatus ?? "No"}
+                            {signup.paid ? "Yes" : (signup.subscriptionStatus ?? "No")}
                           </td>
                           <td className="py-1.5 pr-4">{signup.plan ?? "-"}</td>
-                          <td className="py-1.5">{signup.firstAction ?? "—"}</td>
+                          <td className="py-1.5 pr-4">{formatDate(signup.paidAt)}</td>
+                          <td className="py-1.5">{signup.firstAction ?? "-"}</td>
                         </tr>
                       ))}
                     </tbody>
