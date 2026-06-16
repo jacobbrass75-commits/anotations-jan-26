@@ -54,7 +54,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [ocrMode, setOcrMode] = useState<string>("standard");
-  const [ocrModel, setOcrModel] = useState<string>("gpt-4o");
+  const [ocrModel, setOcrModel] = useState<string>("gpt-4o-mini");
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -98,7 +98,7 @@ export function FileUpload({ onUpload, isUploading, uploadProgress }: FileUpload
       await onUpload(selectedFile, ocrMode, ocrModel);
       setSelectedFile(null);
       setOcrMode("standard");
-      setOcrModel("gpt-4o");
+      setOcrModel("gpt-4o-mini");
     }
   };
 

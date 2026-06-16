@@ -140,4 +140,23 @@ describe("production config validation", () => {
 
     expect(errors).toEqual([]);
   });
+
+  it("rejects test Stripe keys in production", () => {
+    const errors = getProductionConfigErrors({
+      NODE_ENV: "production",
+      VITE_CLERK_PUBLISHABLE_KEY: "pk_live_example",
+      CLERK_SECRET_KEY: "sk_live_example",
+      JWT_SECRET: "a-very-long-production-secret-that-is-unique",
+      APP_BASE_URL: "https://app.scholarmark.ai",
+      ALLOWED_ORIGINS: "https://app.scholarmark.ai,https://mcp.scholarmark.ai",
+      CHROME_EXTENSION_IDS: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
+      ANTHROPIC_API_KEY: "anthropic-key",
+      OPENAI_API_KEY: "openai-key",
+      STRIPE_SECRET_KEY: "sk_test_not_live",
+      STRIPE_WEBHOOK_SECRET: "whsec_test",
+    } as NodeJS.ProcessEnv);
+
+    expect(errors).toEqual(["STRIPE_SECRET_KEY must use a live sk_live_ key in production."]);
+  });
 });

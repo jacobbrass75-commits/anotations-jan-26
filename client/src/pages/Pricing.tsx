@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isLocalDevAuthEnabled, useAuth } from "@/lib/auth";
 import { UserButton } from "@clerk/clerk-react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Card,
   CardContent,
@@ -30,6 +30,11 @@ interface PayPalBillingConfig {
   currency: string;
 }
 
+interface StripeBillingConfig {
+  enabled: boolean;
+  currency: string;
+}
+
 interface PayPalButtonsInstance {
   render: (element: HTMLElement) => Promise<void>;
   close?: () => void;
@@ -50,26 +55,26 @@ declare global {
 }
 
 const features: TierFeature[] = [
-  { label: "Documents", free: "5 active", pro: "50 active", max: "Unlimited" },
-  { label: "Projects", free: "1", pro: "10", max: "Unlimited" },
+  { label: "Documents", free: "5 active", pro: "50 active", max: "No set count limit" },
+  { label: "Projects", free: "1", pro: "10", max: "No set count limit" },
   { label: "Storage", free: "50 MB", pro: "500 MB", max: "5 GB" },
   {
     label: "Citations",
-    free: "10/day (Chicago)",
-    pro: "Unlimited (all formats)",
-    max: "Unlimited (all formats)",
+    free: "Chicago",
+    pro: "Chicago, MLA 9, APA 7",
+    max: "Chicago, MLA 9, APA 7",
   },
   { label: "OCR", free: "PaddleOCR", pro: "GPT-4o-mini Vision", max: "GPT-4o Vision" },
-  { label: "Chat History", free: "Last 5", pro: "Unlimited", max: "Unlimited" },
-  { label: "Output Tokens/mo", free: "50K", pro: "500K", max: "2M" },
+  { label: "Chat", free: "---", pro: "Yes", max: "Yes" },
+  { label: "AI token budget/mo", free: "50K", pro: "500K", max: "2M" },
   {
     label: "AI Writing",
     free: "---",
-    pro: "Quick Draft (Haiku 4.5)",
-    max: "Quick + Deep Write (Sonnet 4.5)",
+    pro: "Quick Draft",
+    max: "Quick Draft + Deep Write",
   },
-  { label: "Source Verified", free: "---", pro: "---", max: "Yes" },
-  { label: "Export", free: "---", pro: "DOCX / PDF", max: "Bulk Export" },
+  { label: "Source-grounded drafting", free: "---", pro: "---", max: "Paper check" },
+  { label: "Export", free: "---", pro: "DOCX / PDF", max: "DOCX / PDF" },
   { label: "Chrome Extension", free: "---", pro: "Yes", max: "Yes" },
   { label: "Bibliography Gen", free: "---", pro: "Yes", max: "Yes" },
   { label: "En-dash Toggle", free: "---", pro: "Yes", max: "Yes" },
@@ -307,12 +312,66 @@ function AutomatedVenmoButton({
   );
 }
 
+function StripeCheckoutButton({
+  tier,
+  amount,
+  label,
+  isSignedIn,
+  onSignIn,
+}: {
+  tier: "pro" | "max";
+  amount: string;
+  label: string;
+  isSignedIn: boolean;
+  onSignIn: () => void;
+}) {
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isSignedIn) {
+    return (
+      <Button className="w-full" onClick={onSignIn}>
+        Sign in to upgrade
+      </Button>
+    );
+  }
+
+  return (
+    <div className="w-full space-y-2">
+      <Button
+        className="w-full"
+        disabled={status === "loading"}
+        onClick={async () => {
+          try {
+            setStatus("loading");
+            setError(null);
+            const response = await apiRequest("POST", "/api/billing/stripe/checkout", { tier });
+            const body = (await response.json()) as { url?: string };
+            if (!body.url) {
+              throw new Error("Stripe checkout did not return a URL");
+            }
+            window.location.assign(body.url);
+          } catch (err) {
+            console.error("[billing] Stripe checkout error", err);
+            setError(`Checkout could not open. Try again or email ${SUPPORT_EMAIL}.`);
+            setStatus("error");
+          }
+        }}
+      >
+        {status === "loading" ? "Opening checkout..." : `Subscribe to ${label} for $${amount}/mo`}
+      </Button>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
 function PlanCheckoutButton({
   tier,
   amount,
   label,
   accountRef,
   isSignedIn,
+  stripeConfig,
   paypalConfig,
   onSignIn,
   onComplete,
@@ -322,15 +381,28 @@ function PlanCheckoutButton({
   label: string;
   accountRef: string | null;
   isSignedIn: boolean;
+  stripeConfig: StripeBillingConfig | null;
   paypalConfig: PayPalBillingConfig | null;
   onSignIn: () => void;
   onComplete: () => void;
 }) {
-  if (paypalConfig === null) {
+  if (stripeConfig === null || paypalConfig === null) {
     return (
       <Button className="w-full" disabled>
         Loading checkout...
       </Button>
+    );
+  }
+
+  if (stripeConfig.enabled) {
+    return (
+      <StripeCheckoutButton
+        tier={tier}
+        amount={amount}
+        label={label}
+        isSignedIn={isSignedIn}
+        onSignIn={onSignIn}
+      />
     );
   }
 
@@ -363,28 +435,42 @@ export default function Pricing() {
   const [, setLocation] = useLocation();
   const currentTier = user?.tier ?? "free";
   const accountRef = user?.email || user?.id || null;
+  const checkoutStatus =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("checkout") : null;
+  const [stripeConfig, setStripeConfig] = useState<StripeBillingConfig | null>(null);
   const [paypalConfig, setPayPalConfig] = useState<PayPalBillingConfig | null>(null);
   const handleSignIn = useCallback(() => setLocation("/sign-in"), [setLocation]);
   const handleCheckoutComplete = useCallback(() => setLocation("/account"), [setLocation]);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/billing/paypal/config", { credentials: "include" })
-      .then((response) => response.json())
-      .then((config: PayPalBillingConfig) => {
-        if (!cancelled) setPayPalConfig(config);
-      })
-      .catch((error) => {
-        console.error("[billing] failed to load PayPal config", error);
-        if (!cancelled) {
-          setPayPalConfig({
+    Promise.all([
+      fetch("/api/billing/stripe/config", { credentials: "include" })
+        .then((response) => response.json())
+        .catch((error) => {
+          console.error("[billing] failed to load Stripe config", error);
+          return {
+            enabled: false,
+            currency: "USD",
+          } satisfies StripeBillingConfig;
+        }),
+      fetch("/api/billing/paypal/config", { credentials: "include" })
+        .then((response) => response.json())
+        .catch((error) => {
+          console.error("[billing] failed to load PayPal config", error);
+          return {
             enabled: false,
             clientId: null,
             environment: "live",
             currency: "USD",
-          });
-        }
-      });
+          } satisfies PayPalBillingConfig;
+        }),
+    ]).then(([stripe, paypal]: [StripeBillingConfig, PayPalBillingConfig]) => {
+      if (!cancelled) {
+        setStripeConfig(stripe);
+        setPayPalConfig(paypal);
+      }
+    });
 
     return () => {
       cancelled = true;
@@ -423,6 +509,16 @@ export default function Pricing() {
           </div>
         </div>
 
+        {checkoutStatus === "cancelled" ? (
+          <div className="mb-6 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            Checkout was cancelled. No plan change was made. You can retry below or email{" "}
+            <a className="text-primary underline-offset-4 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
+              {SUPPORT_EMAIL}
+            </a>
+            .
+          </div>
+        ) : null}
+
         {/* Tier Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           {/* Free */}
@@ -438,9 +534,9 @@ export default function Pricing() {
               <p>5 active documents</p>
               <p>1 project</p>
               <p>50 MB storage</p>
-              <p>10 citations/day (Chicago)</p>
+              <p>Chicago citation formatting</p>
               <p>PaddleOCR</p>
-              <p>50K output tokens/mo</p>
+              <p>50K AI token budget/mo</p>
             </CardContent>
             <CardFooter>
               {currentTier === "free" ? (
@@ -475,10 +571,10 @@ export default function Pricing() {
               <p>50 active documents</p>
               <p>10 projects</p>
               <p>500 MB storage</p>
-              <p>Unlimited citations (all formats)</p>
+              <p>Chicago, MLA 9, and APA 7 citation formatting</p>
               <p>GPT-4o-mini Vision OCR</p>
-              <p>500K output tokens/mo</p>
-              <p>AI Writing: Quick Draft (Haiku 4.5)</p>
+              <p>500K AI token budget/mo</p>
+              <p>AI writing: Quick Draft</p>
               <p>DOCX/PDF export</p>
               <p>Chrome extension</p>
               <p>Bibliography generation</p>
@@ -495,6 +591,7 @@ export default function Pricing() {
                   label="Pro"
                   accountRef={accountRef}
                   isSignedIn={isSignedIn}
+                  stripeConfig={stripeConfig}
                   paypalConfig={paypalConfig}
                   onSignIn={handleSignIn}
                   onComplete={handleCheckoutComplete}
@@ -507,21 +604,20 @@ export default function Pricing() {
           <Card className={currentTier === "max" ? "border-primary" : ""}>
             <CardHeader>
               <CardTitle>Max</CardTitle>
-              <CardDescription>Unlimited power for your thesis</CardDescription>
+              <CardDescription>Higher limits for your thesis</CardDescription>
               <div className="text-3xl font-bold mt-2">
                 $50<span className="text-sm font-normal text-muted-foreground">/mo</span>
               </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>Unlimited documents</p>
-              <p>Unlimited projects</p>
+              <p>No set document/project count limit</p>
               <p>5 GB storage</p>
-              <p>All citation formats</p>
+              <p>Chicago, MLA 9, and APA 7 citation formatting</p>
               <p>GPT-4o Vision OCR</p>
-              <p>2M output tokens/mo</p>
-              <p>Quick Draft + Deep Write (Sonnet 4.5)</p>
-              <p>Source Verified pipeline</p>
-              <p>Bulk export</p>
+              <p>2M AI token budget/mo</p>
+              <p>Quick Draft + Deep Write</p>
+              <p>Source-grounded drafting and paper check</p>
+              <p>DOCX/PDF export</p>
               <p>Everything in Pro</p>
             </CardContent>
             <CardFooter>
@@ -536,6 +632,7 @@ export default function Pricing() {
                   label="Max"
                   accountRef={accountRef}
                   isSignedIn={isSignedIn}
+                  stripeConfig={stripeConfig}
                   paypalConfig={paypalConfig}
                   onSignIn={handleSignIn}
                   onComplete={handleCheckoutComplete}
@@ -568,6 +665,20 @@ export default function Pricing() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-6 rounded-lg border border-border bg-muted/30 px-4 py-4 text-xs leading-6 text-muted-foreground">
+          Prices are in USD. Stripe checkout starts a monthly subscription that renews until
+          canceled. Venmo or PayPal payments, when offered, provide one month of access unless
+          ScholarMark confirms otherwise. By subscribing, you agree to the{" "}
+          <Link href="/terms" className="text-primary underline-offset-4 hover:underline">
+            Terms
+          </Link>{" "}
+          and acknowledge the{" "}
+          <Link href="/privacy" className="text-primary underline-offset-4 hover:underline">
+            Privacy Policy
+          </Link>
+          .
         </div>
       </div>
     </div>

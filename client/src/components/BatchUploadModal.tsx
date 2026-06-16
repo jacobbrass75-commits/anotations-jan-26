@@ -122,7 +122,7 @@ export function BatchUploadModal({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [batchOcrMode, setBatchOcrMode] = useState<string>("standard");
-  const [batchOcrModel, setBatchOcrModel] = useState<string>("gpt-4o");
+  const [batchOcrModel, setBatchOcrModel] = useState<string>("gpt-4o-mini");
 
   const hasPdfFiles = filesToUpload.some((file) => isPdfFile(file));
   const hasImageFiles = filesToUpload.some((file) => isImageFile(file));
@@ -147,7 +147,7 @@ export function BatchUploadModal({
       setIsUploading(false);
       setUploadProgress(0);
       setBatchOcrMode("standard");
-      setBatchOcrModel("gpt-4o");
+      setBatchOcrModel("gpt-4o-mini");
     }
   }, [open]);
 

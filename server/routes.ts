@@ -23,7 +23,9 @@ import { registerHumanizerRoutes } from "./humanizerRoutes";
 import { registerExtensionRoutes } from "./extensionRoutes";
 import { registerWebClipRoutes } from "./webClipRoutes";
 import { registerAnalyticsRoutes } from "./analyticsRoutes";
+import { registerCampaignRoutes, trackCampaignActivation } from "./campaignRoutes";
 import { registerPayPalBillingRoutes } from "./paypalBillingRoutes";
+import { registerStripeBillingRoutes } from "./stripeBillingRoutes";
 import type { AnnotationCategory, Document } from "@shared/schema";
 import {
   createZipFromImageUploads,
@@ -63,6 +65,12 @@ import { decrementStorageUsage, reserveStorageUsage } from "./authStorage";
 import { createTokenUsageAccumulator } from "./aiUsage";
 import { createTextBackedDocument, normalizePastedSourceFilename } from "./documentIngestion";
 import { createLogger } from "./logger";
+import {
+  defaultVisionModelForTier,
+  getDocumentLimit,
+  requiredTierForVisionModel,
+  tierMeetsMinimum,
+} from "./planLimits";
 
 const logger = createLogger("routes");
 const MAX_COMBINED_UPLOAD_FILES = Number.isFinite(Number(process.env.MAX_COMBINED_UPLOAD_FILES))
@@ -178,6 +186,48 @@ async function releaseReservedStorage(userId: string, bytes: number): Promise<vo
       "Failed to release reserved storage usage",
     );
   }
+}
+
+async function enforceDocumentLimit(req: Request, res: Response): Promise<boolean> {
+  const limit = getDocumentLimit(req.user!.tier);
+  if (limit === null) return true;
+
+  const existingDocuments = await storage.getAllDocumentMeta(req.user!.userId);
+  if (existingDocuments.length < limit) return true;
+
+  res.status(403).json({
+    message: `This plan supports up to ${limit} active documents. Upgrade to add more.`,
+    current: existingDocuments.length,
+    limit,
+    requiredTier: req.user!.tier === "free" ? "pro" : "max",
+  });
+  return false;
+}
+
+function resolveVisionOcrModel(
+  req: Request,
+  res: Response,
+  requestedModel: string,
+): VisionOcrModel | null {
+  const normalized = requestedModel.toLowerCase();
+  const model = SUPPORTED_VISION_OCR_MODELS.includes(normalized as VisionOcrModel)
+    ? (normalized as VisionOcrModel)
+    : defaultVisionModelForTier(req.user!.tier);
+  const requiredTier = requiredTierForVisionModel(model);
+
+  if (!tierMeetsMinimum(req.user!.tier, requiredTier)) {
+    res.status(403).json({
+      message:
+        model === "gpt-4o"
+          ? "GPT-4o Vision OCR requires the Max plan."
+          : "Vision OCR requires the Pro plan.",
+      currentTier: req.user!.tier,
+      requiredTier,
+    });
+    return null;
+  }
+
+  return model;
 }
 
 function enforceContentLengthLimit(maxBytes: number) {
@@ -344,6 +394,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     requireAuth,
     aiLimiter,
     checkTokenBudget,
+    trackCampaignActivation("uploaded_document"),
     upload.single("file"),
     async (req: Request, res: Response) => {
       let reservedStorageBytes = 0;
@@ -362,11 +413,6 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
               ? requestedOcrMode
               : "standard";
         const requestedOcrModel = ((req.body.ocrModel as string) || "").toLowerCase();
-        const ocrModel: VisionOcrModel = SUPPORTED_VISION_OCR_MODELS.includes(
-          requestedOcrModel as VisionOcrModel,
-        )
-          ? (requestedOcrModel as VisionOcrModel)
-          : "gpt-4o";
         const fileExtension = getFileExtension(file.originalname);
         const isPdf = file.mimetype === "application/pdf" || fileExtension === ".pdf";
         const isTxt = file.mimetype === "text/plain" || fileExtension === ".txt";
@@ -378,6 +424,14 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
               "Unsupported file type. Please upload a PDF, TXT, or image file (including HEIC/HEIF).",
           });
         }
+
+        if (!(await enforceDocumentLimit(req, res))) return;
+
+        const requiresVisionOcr = isImage || ocrMode === "vision" || ocrMode === "vision_batch";
+        const ocrModel = requiresVisionOcr
+          ? resolveVisionOcrModel(req, res, requestedOcrModel)
+          : defaultVisionModelForTier(req.user!.tier);
+        if (!ocrModel) return;
 
         // For TXT files and standard PDF mode, use synchronous processing
         if (isTxt || (isPdf && ocrMode === "standard")) {
@@ -482,6 +536,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     requireAuth,
     aiLimiter,
     checkTokenBudget,
+    trackCampaignActivation("uploaded_document"),
     textUpload.none(),
     async (req: Request, res: Response) => {
       let reservedStorageBytes = 0;
@@ -495,6 +550,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
             message: "Paste at least a few sentences so ScholarMark can create a usable source.",
           });
         }
+        if (!(await enforceDocumentLimit(req, res))) return;
         const reservation = await reserveStorageBudget(req, res, textBytes);
         if (reservation === null) return;
         reservedStorageBytes = reservation;
@@ -526,6 +582,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     requireAuth,
     aiLimiter,
     checkTokenBudget,
+    trackCampaignActivation("uploaded_document"),
     enforceContentLengthLimit(MAX_COMBINED_UPLOAD_TOTAL_BYTES),
     groupUpload.array("files", MAX_COMBINED_UPLOAD_FILES),
     async (req: Request, res: Response) => {
@@ -562,11 +619,6 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
               ? requestedOcrMode
               : "standard";
         const requestedOcrModel = ((req.body.ocrModel as string) || "").toLowerCase();
-        const ocrModel: VisionOcrModel = SUPPORTED_VISION_OCR_MODELS.includes(
-          requestedOcrModel as VisionOcrModel,
-        )
-          ? (requestedOcrModel as VisionOcrModel)
-          : "gpt-4o";
 
         const supportedCombinedExtensions = new Set([".png", ".jpg", ".jpeg", ".heic", ".heif"]);
         for (const file of files) {
@@ -583,6 +635,11 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
             });
           }
         }
+
+        if (!(await enforceDocumentLimit(req, res))) return;
+
+        const ocrModel = resolveVisionOcrModel(req, res, requestedOcrModel);
+        if (!ocrModel) return;
 
         const primaryName = files[0].originalname || "image-upload";
         const baseName = primaryName.replace(/\.[^/.]+$/, "");
@@ -1034,6 +1091,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
   registerProjectRoutes(app);
   registerWritingStyleRoutes(app);
   registerWebClipRoutes(app);
+  registerStripeBillingRoutes(app);
   registerPayPalBillingRoutes(app);
 
   // Register chat routes
@@ -1050,6 +1108,9 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
 
   // Register admin analytics routes
   registerAnalyticsRoutes(app);
+
+  // Register summer campaign routes (invite tracking, signups, metrics)
+  registerCampaignRoutes(app);
 
   // Register A/B test routes
   // registerABTestRoutes(app); // TODO: Not implemented yet

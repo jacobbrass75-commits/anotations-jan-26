@@ -1,9 +1,11 @@
 import type { Express, Request, Response } from "express";
 import { hasTokenBudgetAvailable, requireAuth } from "../auth";
+import { trackCampaignActivation } from "../campaignRoutes";
 import { aiLimiter } from "../rateLimits";
 import { projectStorage } from "../projectStorage";
 import { generateProjectContextSummary } from "../contextGenerator";
 import { createTokenUsageAccumulator } from "../aiUsage";
+import { getProjectLimit } from "../planLimits";
 import { registerProjectAnalysisRoutes } from "./analysisHandlers";
 import { registerCitationRoutes } from "./citationHandlers";
 import {
@@ -35,44 +37,62 @@ const updateProjectSchema = insertProjectSchema
 export function registerProjectRoutes(app: Express): void {
   // === PROJECTS ===
 
-  app.post("/api/projects", requireAuth, aiLimiter, async (req: Request, res: Response) => {
-    try {
-      const validated = insertProjectSchema.parse(req.body);
-      const thesis = typeof validated.thesis === "string" ? validated.thesis : "";
-      const scope = typeof validated.scope === "string" ? validated.scope : "";
-      const shouldGenerateContext = Boolean(thesis && scope);
-      const canGenerateContext = shouldGenerateContext && (await hasTokenBudgetAvailable(req));
-
-      const project = await projectStorage.createProject({
-        ...validated,
-        userId: req.user!.userId,
-      } as any);
-
-      // Context generation is optional - don't block project creation
-      if (canGenerateContext) {
-        const tokenUsage = createTokenUsageAccumulator();
-        try {
-          const contextSummary = await generateProjectContextSummary(
-            thesis,
-            scope,
-            [],
-            tokenUsage.add,
-          );
-          // Embeddings may not be available, store context summary without embedding
-          await projectStorage.updateProject(project.id, { contextSummary });
-        } catch (contextError) {
-          logger.warn({ err: contextError }, "Context generation failed (non-blocking):");
-        } finally {
-          await tokenUsage.flush(req.user!.userId, "project_context_create");
+  app.post(
+    "/api/projects",
+    requireAuth,
+    aiLimiter,
+    trackCampaignActivation("created_project"),
+    async (req: Request, res: Response) => {
+      try {
+        const validated = insertProjectSchema.parse(req.body);
+        const projectLimit = getProjectLimit(req.user!.tier);
+        if (projectLimit !== null) {
+          const existingProjects = await projectStorage.getAllProjects(req.user!.userId);
+          if (existingProjects.length >= projectLimit) {
+            return res.status(403).json({
+              error: `This plan supports up to ${projectLimit} active projects. Upgrade to add more.`,
+              current: existingProjects.length,
+              limit: projectLimit,
+              requiredTier: req.user!.tier === "free" ? "pro" : "max",
+            });
+          }
         }
-      }
+        const thesis = typeof validated.thesis === "string" ? validated.thesis : "";
+        const scope = typeof validated.scope === "string" ? validated.scope : "";
+        const shouldGenerateContext = Boolean(thesis && scope);
+        const canGenerateContext = shouldGenerateContext && (await hasTokenBudgetAvailable(req));
 
-      res.status(201).json(project);
-    } catch (error) {
-      logger.error({ err: error }, "Error creating project:");
-      res.status(400).json({ error: "Failed to create project" });
-    }
-  });
+        const project = await projectStorage.createProject({
+          ...validated,
+          userId: req.user!.userId,
+        } as any);
+
+        // Context generation is optional - don't block project creation
+        if (canGenerateContext) {
+          const tokenUsage = createTokenUsageAccumulator();
+          try {
+            const contextSummary = await generateProjectContextSummary(
+              thesis,
+              scope,
+              [],
+              tokenUsage.add,
+            );
+            // Embeddings may not be available, store context summary without embedding
+            await projectStorage.updateProject(project.id, { contextSummary });
+          } catch (contextError) {
+            logger.warn({ err: contextError }, "Context generation failed (non-blocking):");
+          } finally {
+            await tokenUsage.flush(req.user!.userId, "project_context_create");
+          }
+        }
+
+        res.status(201).json(project);
+      } catch (error) {
+        logger.error({ err: error }, "Error creating project:");
+        res.status(400).json({ error: "Failed to create project" });
+      }
+    },
+  );
 
   app.get("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {

@@ -74,21 +74,27 @@ describe("upload route hardening", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createUploadApp() {
+  async function createUploadApp(
+    options: {
+      tier?: "free" | "pro" | "max";
+      existingDocumentCount?: number;
+    } = {},
+  ) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
-    const { users } = await import("../../shared/schema");
+    const { documents, users } = await import("../../shared/schema");
     const { registerRoutes } = await import("../../server/routes");
     const { generateToken } = await import("../../server/auth");
 
     sqlite = importedSqlite;
 
     const now = new Date("2026-05-05T00:00:00.000Z");
+    const tier = options.tier ?? "pro";
     await db.insert(users).values({
       id: "upload-user",
       email: "upload@example.com",
       username: "upload@example.com",
       password: "",
-      tier: "pro",
+      tier,
       tokensUsed: 0,
       tokenLimit: 50000,
       storageUsed: 0,
@@ -96,6 +102,19 @@ describe("upload route hardening", () => {
       createdAt: now,
       updatedAt: now,
     } as any);
+    if (options.existingDocumentCount) {
+      await db.insert(documents).values(
+        Array.from({ length: options.existingDocumentCount }, (_, index) => ({
+          id: `existing-doc-${index + 1}`,
+          userId: "upload-user",
+          filename: `existing-${index + 1}.txt`,
+          fullText: "already uploaded text",
+          uploadDate: now,
+          chunkCount: 0,
+          status: "ready",
+        })) as any,
+      );
+    }
 
     const app = express();
     await registerRoutes(createServer(app), app);
@@ -115,7 +134,7 @@ describe("upload route hardening", () => {
 
     return {
       server: await startHttpServer(app),
-      token: generateToken({ id: "upload-user", email: "upload@example.com", tier: "pro" }),
+      token: generateToken({ id: "upload-user", email: "upload@example.com", tier }),
       sqlite: importedSqlite,
     };
   }
@@ -264,6 +283,91 @@ describe("upload route hardening", () => {
       expect(response.status).toBe(500);
       expect(userAfterUpload.storage_used).toBe(pdfBytes.length);
       expect(persistedDoc).toMatchObject({ filename: "scan.pdf" });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects new uploads once the account document limit is reached", async () => {
+    const { server, token } = await createUploadApp({
+      tier: "free",
+      existingDocumentCount: 5,
+    });
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob(["This is enough plain text to create a document."], { type: "text/plain" }),
+      "notes.txt",
+    );
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/upload`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body).toMatchObject({
+        limit: 5,
+        requiredTier: "pro",
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("requires Pro for Vision OCR", async () => {
+    const { server, token } = await createUploadApp({ tier: "free" });
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" }),
+      "scan.png",
+    );
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/upload`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body).toMatchObject({
+        currentTier: "free",
+        requiredTier: "pro",
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("requires Max for GPT-4o Vision OCR", async () => {
+    const { server, token } = await createUploadApp({ tier: "pro" });
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" }),
+      "scan.png",
+    );
+    form.append("ocrModel", "gpt-4o");
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/upload`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body).toMatchObject({
+        currentTier: "pro",
+        requiredTier: "max",
+      });
     } finally {
       await server.close();
     }

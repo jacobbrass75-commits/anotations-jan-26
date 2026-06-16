@@ -26,7 +26,18 @@ function getExistingColumnNames(tableName: string): Set<string> {
   return new Set(columns.map((column) => column.name));
 }
 
+function tableExists(tableName: string): boolean {
+  const row = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName);
+  return Boolean(row);
+}
+
 function ensureColumn(tableName: string, columnName: string, columnDefinition: string): void {
+  if (!tableExists(tableName)) {
+    return;
+  }
+
   const existingColumns = getExistingColumnNames(tableName);
   if (existingColumns.has(columnName)) {
     return;
@@ -231,6 +242,49 @@ CREATE INDEX IF NOT EXISTS idx_billing_payments_user_created
 ON billing_payments(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_payments_status
 ON billing_payments(status);
+
+CREATE TABLE IF NOT EXISTS campaign_visits (
+  id TEXT PRIMARY KEY,
+  campus TEXT,
+  major TEXT,
+  channel TEXT,
+  invite_code TEXT,
+  referred_by TEXT,
+  landing_path TEXT,
+  created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000)
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_visits_created_at
+ON campaign_visits(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_campaign_visits_channel
+ON campaign_visits(channel);
+
+CREATE TABLE IF NOT EXISTS campaign_signups (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  school TEXT NOT NULL,
+  major TEXT NOT NULL,
+  class_year TEXT NOT NULL,
+  paper_type TEXT NOT NULL,
+  has_topic TEXT NOT NULL DEFAULT 'no',
+  campus TEXT,
+  channel TEXT,
+  invite_code TEXT,
+  referred_by TEXT,
+  referral_code TEXT NOT NULL UNIQUE,
+  user_id TEXT,
+  activated_at INTEGER,
+  first_action TEXT,
+  created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000)
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_signups_created_at
+ON campaign_signups(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_campaign_signups_channel
+ON campaign_signups(channel);
+CREATE INDEX IF NOT EXISTS idx_campaign_signups_referral_code
+ON campaign_signups(referral_code);
+CREATE INDEX IF NOT EXISTS idx_campaign_signups_referred_by
+ON campaign_signups(referred_by);
 `);
 
 ensureColumn("project_documents", "source_role", "source_role TEXT DEFAULT 'evidence'");
@@ -243,6 +297,12 @@ ensureColumn("api_keys", "label", "label TEXT");
 ensureColumn("api_keys", "scope", "scope TEXT");
 ensureColumn("projects", "voice_profile", "voice_profile TEXT");
 ensureColumn("projects", "voice_profile_samples", "voice_profile_samples TEXT");
+ensureColumn("users", "stripe_customer_id", "stripe_customer_id TEXT");
+ensureColumn("users", "stripe_subscription_id", "stripe_subscription_id TEXT");
+ensureColumn("users", "stripe_price_id", "stripe_price_id TEXT");
+ensureColumn("users", "subscription_status", "subscription_status TEXT");
+ensureColumn("users", "subscription_current_period_end", "subscription_current_period_end INTEGER");
+ensureColumn("users", "cancel_at_period_end", "cancel_at_period_end INTEGER DEFAULT 0");
 
 // Export the raw sqlite connection for direct queries if needed
 export { sqlite };

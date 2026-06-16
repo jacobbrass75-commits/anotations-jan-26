@@ -404,7 +404,7 @@ export default function ProjectWorkspace() {
     label: string;
   } | null>(null);
   const [uploadOcrMode, setUploadOcrMode] = useState<string>("standard");
-  const [uploadOcrModel, setUploadOcrModel] = useState<string>("gpt-4o");
+  const [uploadOcrModel, setUploadOcrModel] = useState<string>("gpt-4o-mini");
   const [pastedSourceTitle, setPastedSourceTitle] = useState("");
   const [pastedSourceText, setPastedSourceText] = useState("");
   const [isUploadingAndAdding, setIsUploadingAndAdding] = useState(false);
@@ -1365,7 +1365,7 @@ export default function ProjectWorkspace() {
           if (!open) {
             setUploadFiles([]);
             setUploadOcrMode("standard");
-            setUploadOcrModel("gpt-4o");
+            setUploadOcrModel("gpt-4o-mini");
             setIsUploadingAndAdding(false);
             setCombineImageUploads(true);
             setSelectedDocId("");

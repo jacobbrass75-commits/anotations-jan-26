@@ -17,6 +17,8 @@ const Register = lazy(() => import("@/pages/Register"));
 const SsoCallback = lazy(() => import("@/pages/SsoCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
+const Terms = lazy(() => import("@/pages/Terms"));
+const Support = lazy(() => import("@/pages/Support"));
 const Account = lazy(() => import("@/pages/Account"));
 const Chat = lazy(() => import("@/pages/Chat"));
 const WritingPage = lazy(() => import("@/pages/WritingPage"));
@@ -24,7 +26,18 @@ const WritingStyles = lazy(() => import("@/pages/WritingStyles"));
 const WebClips = lazy(() => import("@/pages/WebClips"));
 const ExtensionAuth = lazy(() => import("@/pages/ExtensionAuth"));
 const AdminAnalytics = lazy(() => import("@/pages/AdminAnalytics"));
+const AdminCampaign = lazy(() => import("@/pages/AdminCampaign"));
+const SummerCampaign = lazy(() => import("@/pages/SummerCampaign"));
+const LocalWritingStudio = lazy(() => import("@/pages/LocalWritingStudio"));
 const NotFound = lazy(() => import("@/pages/not-found"));
+
+const LOCAL_PREVIEW_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
+function isLocalPreviewEnabled() {
+  if (import.meta.env.DEV) return true;
+  if (typeof window === "undefined") return false;
+  return LOCAL_PREVIEW_HOSTS.has(window.location.hostname);
+}
 
 function RouteFallback() {
   return (
@@ -42,6 +55,8 @@ function RouteFallback() {
 }
 
 function Router() {
+  const localPreviewEnabled = isLocalPreviewEnabled();
+
   return (
     <Switch>
       <Route path="/sign-in" component={Login} />
@@ -51,6 +66,12 @@ function Router() {
       <Route path="/sso-callback" component={SsoCallback} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/privacy" component={Privacy} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/support" component={Support} />
+      <Route path="/summer" component={SummerCampaign} />
+      <Route path="/invite" component={SummerCampaign} />
+      <Route path="/invite/:code" component={SummerCampaign} />
+      {localPreviewEnabled && <Route path="/dev/writing-studio" component={LocalWritingStudio} />}
       <Route path="/account">
         {() => (
           <ProtectedRoute>
@@ -146,6 +167,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <AdminAnalytics />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/admin/campaign">
+        {() => (
+          <ProtectedRoute>
+            <AdminCampaign />
           </ProtectedRoute>
         )}
       </Route>

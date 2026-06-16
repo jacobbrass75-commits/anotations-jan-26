@@ -50,9 +50,9 @@ export function UpgradeModal({ open, onClose, requiredTier, feature }: UpgradeMo
             <>
               <p>Max includes everything in Pro, plus:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>Unlimited documents, projects, 5 GB storage</li>
-                <li>Deep Write (Sonnet 4.5 with extended thinking)</li>
-                <li>Source Verified pipeline &amp; bulk export</li>
+                <li>No set document/project count limit, with 5 GB storage</li>
+                <li>Deep Write</li>
+                <li>Source-grounded drafting and paper check</li>
                 <li>GPT-4o Vision OCR &amp; 2M tokens/mo</li>
               </ul>
             </>

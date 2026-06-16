@@ -15,6 +15,12 @@ export interface AuthUser {
   storageLimit: number;
   emailVerified: boolean | null;
   billingCycleStart: string | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripePriceId: string | null;
+  subscriptionStatus: string | null;
+  subscriptionCurrentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean | null;
   createdAt: string;
   updatedAt: string;
 }

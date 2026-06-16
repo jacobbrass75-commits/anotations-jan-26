@@ -107,21 +107,29 @@ describe("project route integration", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createApp(options: { tokensUsed?: number; tokenLimit?: number } = {}) {
+  async function createApp(
+    options: {
+      tokensUsed?: number;
+      tokenLimit?: number;
+      tier?: "free" | "pro" | "max";
+      existingProjectCount?: number;
+    } = {},
+  ) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
-    const { users } = await import("../../shared/schema");
+    const { projects, users } = await import("../../shared/schema");
     const { registerProjectRoutes } = await import("../../server/projectRoutes");
     const { generateToken } = await import("../../server/auth");
 
     sqlite = importedSqlite;
 
     const now = new Date("2026-05-05T00:00:00.000Z");
+    const tier = options.tier ?? "pro";
     await db.insert(users).values({
       id: "quota-user",
       email: "quota@example.com",
       username: "quota@example.com",
       password: "",
-      tier: "pro",
+      tier,
       tokensUsed: options.tokensUsed ?? 100,
       tokenLimit: options.tokenLimit ?? 100,
       storageUsed: 0,
@@ -129,6 +137,17 @@ describe("project route integration", () => {
       createdAt: now,
       updatedAt: now,
     } as any);
+    if (options.existingProjectCount) {
+      await db.insert(projects).values(
+        Array.from({ length: options.existingProjectCount }, (_, index) => ({
+          id: `existing-project-${index + 1}`,
+          userId: "quota-user",
+          name: `Existing Project ${index + 1}`,
+          createdAt: now,
+          updatedAt: now,
+        })) as any,
+      );
+    }
 
     const app = express();
     app.use(express.json());
@@ -137,7 +156,7 @@ describe("project route integration", () => {
     return {
       db,
       server: await startHttpServer(app),
-      token: generateToken({ id: "quota-user", email: "quota@example.com", tier: "pro" }),
+      token: generateToken({ id: "quota-user", email: "quota@example.com", tier }),
     };
   }
 
@@ -217,6 +236,30 @@ describe("project route integration", () => {
         id: bareProject.body?.id,
         thesis: "Updating context should consume token budget",
         scope: "Budgeted context update",
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects project creation once the account project limit is reached", async () => {
+    const { server, token } = await createApp({
+      tier: "free",
+      existingProjectCount: 1,
+    });
+
+    try {
+      const response = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/projects", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: { name: "Second Project" },
+      });
+
+      expect(response.status).toBe(403);
+      expect(response.body).toMatchObject({
+        current: 1,
+        limit: 1,
+        requiredTier: "pro",
       });
     } finally {
       await server.close();

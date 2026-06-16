@@ -17,6 +17,7 @@ import { generateChicagoBibliography, generateChicagoFootnote } from "./citation
 import { storage } from "./storage";
 import { projectStorage } from "./projectStorage";
 import { createLogger } from "./logger";
+import { DocumentQuotaError, reserveDocumentCapacity } from "./documentQuota";
 
 const logger = createLogger("webClipRoutes");
 
@@ -587,60 +588,74 @@ export function registerWebClipRoutes(app: Express): void {
         targetDocumentText = sourceDocument?.fullText || "";
       } else {
         const { fullText, startPosition, endPosition } = buildClipDocumentText(clip);
+        const reservation = await reserveDocumentCapacity(
+          req.user!.userId,
+          Buffer.byteLength(fullText, "utf8"),
+        );
+        let createdDocumentId: string | null = null;
 
-        const doc = await storage.createDocument({
-          filename: buildClipDocumentFilename(clip.pageTitle),
-          fullText,
-          userId: req.user!.userId,
-          summary: null,
-          mainArguments: [],
-          keyConcepts: [],
-        });
+        try {
+          const doc = await storage.createDocument({
+            filename: buildClipDocumentFilename(clip.pageTitle),
+            fullText,
+            userId: req.user!.userId,
+            summary: null,
+            mainArguments: [],
+            keyConcepts: [],
+          });
+          createdDocumentId = doc.id;
 
-        await storage.createChunk({
-          documentId: doc.id,
-          text: fullText,
-          startPosition: 0,
-          endPosition: fullText.length,
-        });
+          await storage.createChunk({
+            documentId: doc.id,
+            text: fullText,
+            startPosition: 0,
+            endPosition: fullText.length,
+          });
 
-        await storage.updateDocument(doc.id, { chunkCount: 1 });
+          await storage.updateDocument(doc.id, { chunkCount: 1 });
 
-        const citationData = clip.citationData || buildCitationData(clip);
+          const citationData = clip.citationData || buildCitationData(clip);
 
-        const projectDoc = await projectStorage.addDocumentToProject({
-          projectId: resolvedProjectId,
-          documentId: doc.id,
-          citationData,
-        });
-
-        targetProjectDocumentId = projectDoc.id;
-        targetDocumentText = fullText;
-
-        // Preserve known quote range when new document is created from the clip.
-        const initialRange = { startPosition, endPosition };
-        const annotation = await projectStorage.createProjectAnnotation({
-          projectDocumentId: targetProjectDocumentId,
-          startPosition: initialRange.startPosition,
-          endPosition: initialRange.endPosition,
-          highlightedText: clip.highlightedText,
-          category: normalizeAnnotationCategory(parsed.data.category || clip.category),
-          note: parsed.data.note || clip.note || `Web clip from ${clip.sourceUrl}`,
-          isAiGenerated: false,
-          confidenceScore: null,
-        });
-
-        await db
-          .update(webClips)
-          .set({
+          const projectDoc = await projectStorage.addDocumentToProject({
             projectId: resolvedProjectId,
-            projectDocumentId: targetProjectDocumentId,
-            category: normalizeWebClipCategory(parsed.data.category || clip.category),
-            note: parsed.data.note ?? clip.note,
-          })
-          .where(and(eq(webClips.id, clip.id), eq(webClips.userId, req.user!.userId)));
+            documentId: doc.id,
+            citationData,
+          });
 
-        return res.status(201).json({ annotation, projectDocumentId: targetProjectDocumentId });
+          targetProjectDocumentId = projectDoc.id;
+          targetDocumentText = fullText;
+
+          // Preserve known quote range when new document is created from the clip.
+          const initialRange = { startPosition, endPosition };
+          const annotation = await projectStorage.createProjectAnnotation({
+            projectDocumentId: targetProjectDocumentId,
+            startPosition: initialRange.startPosition,
+            endPosition: initialRange.endPosition,
+            highlightedText: clip.highlightedText,
+            category: normalizeAnnotationCategory(parsed.data.category || clip.category),
+            note: parsed.data.note || clip.note || `Web clip from ${clip.sourceUrl}`,
+            isAiGenerated: false,
+            confidenceScore: null,
+          });
+
+          await db
+            .update(webClips)
+            .set({
+              projectId: resolvedProjectId,
+              projectDocumentId: targetProjectDocumentId,
+              category: normalizeWebClipCategory(parsed.data.category || clip.category),
+              note: parsed.data.note ?? clip.note,
+            })
+            .where(and(eq(webClips.id, clip.id), eq(webClips.userId, req.user!.userId)));
+
+          return res.status(201).json({ annotation, projectDocumentId: targetProjectDocumentId });
+        } catch (error) {
+          if (createdDocumentId) {
+            await storage.deleteDocument(createdDocumentId);
+          }
+          await reservation.release();
+          throw error;
+        }
       }
 
       const range = findHighlightRangeInText(targetDocumentText, clip.highlightedText);
@@ -668,6 +683,9 @@ export function registerWebClipRoutes(app: Express): void {
       return res.status(201).json({ annotation, projectDocumentId: targetProjectDocumentId });
     } catch (error) {
       logger.error({ err: error }, "Error promoting web clip:");
+      if (error instanceof DocumentQuotaError) {
+        return res.status(error.status).json({ error: error.message });
+      }
       return res
         .status(500)
         .json({ error: error instanceof Error ? error.message : "Failed to promote web clip" });

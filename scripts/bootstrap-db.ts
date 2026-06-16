@@ -58,6 +58,8 @@ const requiredTables = [
   "mcp_tokens",
   "analytics_tool_calls",
   "ocr_jobs",
+  "campaign_visits",
+  "campaign_signups",
 ];
 
 const existingTables = new Set(

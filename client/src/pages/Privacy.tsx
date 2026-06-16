@@ -8,7 +8,10 @@ const sections = [
     body: [
       "Account information such as your user identifier, email address, and subscription tier.",
       "Research content you add to ScholarMark, including uploaded source files, pasted text, notes, annotations, writing drafts, web clips, and generated citation metadata.",
+      "Campaign and early access information you choose to provide, such as name, email, school, major, class year, paper type, topic status, invite code, referral source, and activation status.",
+      "Campaign attribution data from invite links, such as campus, major, channel, referral code, landing path, and visit timestamps.",
       "Chrome extension clip data when you choose to save selected text, including the selected text, surrounding context, page URL, page title, site name, author metadata, publication date metadata, selected category, and default project destination.",
+      "Billing metadata such as customer IDs, subscription status, plan tier, payment status, and billing period dates. ScholarMark does not store full card numbers.",
       "Basic operational data needed to secure, debug, and improve the service, such as authentication state, API key identifiers, request timestamps, and error logs.",
     ],
   },
@@ -16,6 +19,7 @@ const sections = [
     title: "How Data Is Used",
     body: [
       "ScholarMark uses your data to save research materials, organize projects, generate citations, support annotation and writing workflows, authenticate users, prevent abuse, and provide account support.",
+      "Campaign data is used to manage early access, measure which invite links and channels are working, follow up with interested students, and understand whether a lead becomes an active user.",
       "The Chrome extension sends page content to ScholarMark only after you intentionally connect your account and use the save action from the extension, context menu, or keyboard shortcut.",
       "ScholarMark does not sell personal information or extension-collected browsing content.",
     ],
@@ -33,20 +37,32 @@ const sections = [
     title: "Service Providers",
     body: [
       "ScholarMark may use service providers for hosting, authentication, storage, analytics, payment, email, and AI-assisted research features. These providers are used to operate ScholarMark and are not permitted to use your data for unrelated purposes.",
-      "Some AI features may send user-selected research content to model providers when you ask ScholarMark to summarize, analyze, cite, or draft with that content.",
+      "Payment information is processed by Stripe, PayPal, or Venmo. ScholarMark stores billing metadata such as customer IDs, subscription status, plan tier, and payment status, but not full card numbers.",
+      "Some AI, OCR, citation, drafting, and style-analysis features may send user-selected research content to AI/model providers such as OpenAI, Anthropic, or Google/Gemini.",
+      "ScholarMark may keep backups, logs, and security records for a limited period after information is removed from the active app, unless a longer retention period is required for legal, billing, security, or abuse-prevention reasons.",
     ],
   },
   {
     title: "Your Controls",
     body: [
-      "You can delete web clips, annotations, documents, projects, and drafts from within ScholarMark.",
+      "You can remove or edit many saved materials from within ScholarMark. For account deletion, billing records, or data requests that are not available in-app, contact support@scholarmark.ai.",
       "You can disconnect the Chrome extension by logging out from the extension popup. ScholarMark stores an extension-scoped API key locally and attempts to revoke it during logout.",
       "You can uninstall the Chrome extension at any time from Chrome settings.",
     ],
   },
   {
+    title: "Students And Schools",
+    body: [
+      "ScholarMark is not intended for children under 13.",
+      "ScholarMark is a direct-to-user research workspace unless a school separately signs a written agreement with ScholarMark. Users are responsible for following school privacy and academic integrity rules.",
+      "ScholarMark does not guarantee that AI-generated outputs, citations, quotations, summaries, or source references are accurate. Users should check all outputs against the original sources.",
+    ],
+  },
+  {
     title: "Contact",
-    body: ["For privacy, support, or account deletion requests, contact support@scholarmark.ai."],
+    body: [
+      "For privacy, support, billing, cancellation, refund, or account deletion requests, contact support@scholarmark.ai.",
+    ],
   },
 ];
 
@@ -61,9 +77,14 @@ export default function Privacy() {
               SCHOLARMARK
             </span>
           </Link>
-          <div className="text-xs font-mono uppercase tracking-[0.18em] text-muted-foreground">
-            Privacy Policy
-          </div>
+          <nav className="flex items-center gap-4 text-xs font-mono uppercase tracking-[0.18em] text-muted-foreground">
+            <Link href="/terms" className="hover:text-primary">
+              Terms
+            </Link>
+            <Link href="/support" className="hover:text-primary">
+              Support
+            </Link>
+          </nav>
         </div>
       </header>
 
@@ -74,7 +95,7 @@ export default function Privacy() {
             ScholarMark Privacy Policy
           </h1>
           <p className="text-sm text-muted-foreground">
-            Last updated May 16, 2026. This policy explains how ScholarMark handles data for the web
+            Last updated June 16, 2026. This policy explains how ScholarMark handles data for the web
             app and Chrome extension.
           </p>
         </div>

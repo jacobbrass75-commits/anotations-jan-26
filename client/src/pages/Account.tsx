@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { UserButton, useClerk } from "@clerk/clerk-react";
 import { Link } from "wouter";
@@ -21,6 +21,7 @@ import {
   formatAccountTier,
   formatUsagePercent,
 } from "@/lib/accountUtils";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,8 @@ interface UsageSnapshot {
   tier: string;
   billingCycleStart: string | null;
 }
+
+const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
 
 const featureChecks = [
   { label: "Research chat", feature: "chat" as const },
@@ -83,10 +86,34 @@ function ClerkAccountCenterButton() {
   );
 }
 
+function formatSubscriptionStatus(status: string | null | undefined): string {
+  if (!status) return "No active Stripe subscription";
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function Account() {
   const localDevAuth = isLocalDevAuthEnabled();
   const { user, isLoading, logout } = useAuth();
   const { can } = useUserTier();
+  const [billingPortalLoading, setBillingPortalLoading] = useState(false);
+  const [checkoutConfirmState, setCheckoutConfirmState] = useState<
+    "idle" | "confirming" | "confirmed" | "error"
+  >("idle");
+  const [checkoutConfirmMessage, setCheckoutConfirmMessage] = useState("");
+  const checkoutConfirmStartedRef = useRef(false);
+  const checkoutReturn = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { status: null, sessionId: null };
+    }
+    const params = new URLSearchParams(window.location.search);
+    return {
+      status: params.get("checkout"),
+      sessionId: params.get("session_id"),
+    };
+  }, []);
 
   const { data: usage, isLoading: usageLoading } = useQuery<UsageSnapshot>({
     queryKey: ["/api/auth/usage"],
@@ -117,6 +144,81 @@ export default function Account() {
   const tokenPercent = usage?.tokenPercent ?? formatUsagePercent(tokensUsed, tokenLimit);
   const storagePercent = usage?.storagePercent ?? formatUsagePercent(storageUsed, storageLimit);
   const billingCycleStart = usage?.billingCycleStart ?? user?.billingCycleStart ?? null;
+  const hasStripeCustomer = Boolean(user?.stripeCustomerId);
+  const subscriptionStatus = formatSubscriptionStatus(user?.subscriptionStatus);
+  const subscriptionPeriodLabel = user?.subscriptionCurrentPeriodEnd
+    ? user.cancelAtPeriodEnd
+      ? `Paid access ends ${formatAccountDate(user.subscriptionCurrentPeriodEnd)}`
+      : `Renews ${formatAccountDate(user.subscriptionCurrentPeriodEnd)}`
+    : "Period end not available";
+
+  useEffect(() => {
+    if (
+      checkoutReturn.status !== "success" ||
+      checkoutConfirmStartedRef.current ||
+      isLoading ||
+      !user
+    ) {
+      return;
+    }
+
+    checkoutConfirmStartedRef.current = true;
+    if (!checkoutReturn.sessionId) {
+      setCheckoutConfirmState("error");
+      setCheckoutConfirmMessage(
+        `Stripe returned without a session id. Email ${SUPPORT_EMAIL} and we will sync the account.`,
+      );
+      return;
+    }
+
+    let cancelled = false;
+    setCheckoutConfirmState("confirming");
+    setCheckoutConfirmMessage("Confirming your Stripe subscription...");
+
+    async function confirmCheckout() {
+      try {
+        const response = await apiRequest("POST", "/api/billing/stripe/checkout/confirm", {
+          sessionId: checkoutReturn.sessionId,
+        });
+        const body = (await response.json()) as { tier?: string; subscriptionStatus?: string | null };
+        await queryClient.invalidateQueries();
+        await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/auth/usage"] });
+        if (!cancelled) {
+          setCheckoutConfirmState("confirmed");
+          setCheckoutConfirmMessage(
+            `Subscription confirmed${body.tier ? `: ${formatAccountTier(body.tier)} plan` : ""}.`,
+          );
+        }
+      } catch (error) {
+        console.error("[billing] checkout confirmation failed", error);
+        if (!cancelled) {
+          setCheckoutConfirmState("error");
+          setCheckoutConfirmMessage(
+            `Checkout completed, but automatic sync failed. Email ${SUPPORT_EMAIL} and we will fix access.`,
+          );
+        }
+      }
+    }
+
+    void confirmCheckout();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkoutReturn.sessionId, checkoutReturn.status, isLoading, user]);
+
+  async function openBillingPortal() {
+    try {
+      setBillingPortalLoading(true);
+      const response = await apiRequest("POST", "/api/billing/stripe/portal");
+      const body = (await response.json()) as { url?: string };
+      if (body.url) {
+        window.location.assign(body.url);
+      }
+    } finally {
+      setBillingPortalLoading(false);
+    }
+  }
 
   if (isLoading || usageLoading || !user) {
     return (
@@ -175,6 +277,18 @@ export default function Account() {
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-6 pb-8 space-y-6 eva-grid-bg">
+        {checkoutConfirmState !== "idle" ? (
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm ${
+              checkoutConfirmState === "error"
+                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                : "border-primary/30 bg-primary/10 text-foreground"
+            }`}
+          >
+            {checkoutConfirmMessage}
+          </div>
+        ) : null}
+
         <section className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
           <Card className="eva-clip-panel eva-corner-decor border-border bg-card/80">
             <CardHeader>
@@ -204,6 +318,12 @@ export default function Account() {
                 <div className="text-sm text-muted-foreground">
                   Billing cycle started {formatAccountDate(billingCycleStart)}
                 </div>
+                <div className="text-sm text-muted-foreground">
+                  Stripe status: {subscriptionStatus}
+                </div>
+                {hasStripeCustomer ? (
+                  <div className="text-sm text-muted-foreground">{subscriptionPeriodLabel}</div>
+                ) : null}
               </div>
 
               <div className="rounded-lg border border-border bg-background/50 p-4 space-y-3">
@@ -283,7 +403,7 @@ export default function Account() {
                 Token Budget
               </CardTitle>
               <CardDescription>
-                {tokensUsed.toLocaleString()} of {tokenLimit.toLocaleString()} output tokens used
+                {tokensUsed.toLocaleString()} of {tokenLimit.toLocaleString()} AI tokens used
                 this cycle.
               </CardDescription>
             </CardHeader>
@@ -327,38 +447,55 @@ export default function Account() {
               Account Controls
             </CardTitle>
             <CardDescription>
-              Use pricing for plan changes, the extension auth flow for browser access, and chat for
-              active research work.
+              Use the Billing Portal to update payment details, change plans, or cancel Stripe
+              subscriptions. Cancellation stops future renewals; paid access continues through the
+              current billing period unless a refund is issued.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            <Link href="/pricing">
-              <Button
-                className="uppercase tracking-wider text-xs font-mono"
-                data-testid="button-go-pricing"
-              >
-                Manage Pricing
-              </Button>
-            </Link>
-            <Link href="/extension-auth">
-              <Button
-                variant="outline"
-                className="uppercase tracking-wider text-xs font-mono"
-                data-testid="button-go-extension-auth"
-              >
-                Extension Access
-              </Button>
-            </Link>
-            <Link href="/chat">
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-3">
+              <Link href="/pricing">
+                <Button
+                  className="uppercase tracking-wider text-xs font-mono"
+                  data-testid="button-go-pricing"
+                >
+                  Manage Pricing
+                </Button>
+              </Link>
               <Button
                 variant="outline"
                 className="uppercase tracking-wider text-xs font-mono"
-                data-testid="button-go-chat"
+                disabled={!hasStripeCustomer || billingPortalLoading}
+                onClick={() => void openBillingPortal()}
+                data-testid="button-open-billing-portal"
               >
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Open Chat
+                {billingPortalLoading ? "Opening Billing" : "Billing Portal"}
               </Button>
-            </Link>
+              <Link href="/extension-auth">
+                <Button
+                  variant="outline"
+                  className="uppercase tracking-wider text-xs font-mono"
+                  data-testid="button-go-extension-auth"
+                >
+                  Extension Access
+                </Button>
+              </Link>
+              <Link href="/chat">
+                <Button
+                  variant="outline"
+                  className="uppercase tracking-wider text-xs font-mono"
+                  data-testid="button-go-chat"
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Open Chat
+                </Button>
+              </Link>
+            </div>
+            {!hasStripeCustomer ? (
+              <div className="rounded-lg border border-border bg-background/50 p-4 text-sm text-muted-foreground">
+                Paid with Venmo or PayPal? Email support@scholarmark.ai to cancel or adjust access.
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

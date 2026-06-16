@@ -46,9 +46,9 @@ describe("writing route integration", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createApp() {
+  async function createApp(options: { existingDocuments?: number } = {}) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
-    const { users } = await import("../../shared/schema");
+    const { documents, users } = await import("../../shared/schema");
     const { registerWritingRoutes } = await import("../../server/writingRoutes");
     const { generateToken } = await import("../../server/auth");
 
@@ -68,6 +68,16 @@ describe("writing route integration", () => {
       createdAt: now,
       updatedAt: now,
     } as any);
+    if (options.existingDocuments) {
+      await db.insert(documents).values(
+        Array.from({ length: options.existingDocuments }, (_, index) => ({
+          id: `existing-doc-${index}`,
+          userId: "writing-user",
+          filename: `Existing ${index}.txt`,
+          fullText: `Existing document ${index}`,
+        })) as any,
+      );
+    }
 
     const app = express();
     app.use(express.json());
@@ -390,6 +400,47 @@ describe("writing route integration", () => {
       expect(modelParams.every((params) => params.model === "claude-fable-5")).toBe(true);
       expect(modelParams.every((params) => params.output_config?.effort === "medium")).toBe(true);
       expect(modelParams.every((params) => params.thinking === undefined)).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects project saves at the document limit before calling Anthropic", async () => {
+    const { db, server, sqlite, token } = await createApp({ existingDocuments: 50 });
+    const { projects } = await import("../../shared/schema");
+    const now = new Date("2026-05-05T00:00:00.000Z");
+    await db.insert(projects).values({
+      id: "limit-project",
+      userId: "writing-user",
+      name: "Limit Project",
+      createdAt: now,
+      updatedAt: now,
+    } as any);
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/write`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          topic: "Should not generate",
+          projectId: "limit-project",
+          citationStyle: "chicago",
+          tone: "academic",
+          targetLength: "short",
+        }),
+      });
+      const body = await response.json();
+      const row = sqlite.prepare("SELECT count(*) AS count FROM documents WHERE user_id = ?").get(
+        "writing-user",
+      ) as { count: number };
+
+      expect(response.status).toBe(403);
+      expect(body).toEqual({ error: "Document limit reached for the pro plan" });
+      expect(anthropicCreate).not.toHaveBeenCalled();
+      expect(row.count).toBe(50);
     } finally {
       await server.close();
     }

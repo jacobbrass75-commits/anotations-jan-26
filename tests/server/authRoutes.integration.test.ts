@@ -564,6 +564,99 @@ describe("auth route integration", () => {
     }
   });
 
+  it("does not let stale Clerk tier metadata override Stripe-managed subscriptions", async () => {
+    const { server, sqlite } = await createAuthApp();
+
+    try {
+      sqlite
+        .prepare(
+          `UPDATE users
+           SET tier = ?, token_limit = ?, storage_limit = ?,
+               stripe_customer_id = ?, stripe_subscription_id = ?,
+               stripe_price_id = ?, subscription_status = ?
+           WHERE id = ?`,
+        )
+        .run(
+          "pro",
+          500_000,
+          524_288_000,
+          "cus_active",
+          "sub_active",
+          "price_pro",
+          "active",
+          "user-1",
+        );
+      clerkGetAuth.mockReturnValue({ userId: "user_new_clerk_instance" });
+      clerkGetUser.mockResolvedValue({
+        primaryEmailAddressId: "email_existing",
+        emailAddresses: [
+          {
+            id: "email_existing",
+            emailAddress: "Researcher@Example.com",
+            verification: { status: "verified" },
+          },
+        ],
+        publicMetadata: { tier: "free" },
+      });
+
+      const activeProfile = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/me",
+      );
+      expect(activeProfile.status).toBe(200);
+      expect(activeProfile.body).toMatchObject({
+        id: "user-1",
+        tier: "pro",
+        tokenLimit: 500_000,
+        storageLimit: 524_288_000,
+      });
+
+      sqlite
+        .prepare(
+          `UPDATE users
+           SET tier = ?, token_limit = ?, storage_limit = ?,
+               stripe_customer_id = ?, stripe_subscription_id = ?,
+               stripe_price_id = ?, subscription_status = ?
+           WHERE id = ?`,
+        )
+        .run(
+          "free",
+          50_000,
+          52_428_800,
+          "cus_canceled",
+          "sub_canceled",
+          "price_pro",
+          "canceled",
+          "user-1",
+        );
+      clerkGetUser.mockResolvedValue({
+        primaryEmailAddressId: "email_existing",
+        emailAddresses: [
+          {
+            id: "email_existing",
+            emailAddress: "Researcher@Example.com",
+            verification: { status: "verified" },
+          },
+        ],
+        publicMetadata: { tier: "pro" },
+      });
+
+      const canceledProfile = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/auth/me",
+      );
+      expect(canceledProfile.status).toBe(200);
+      expect(canceledProfile.body).toMatchObject({
+        id: "user-1",
+        tier: "free",
+        tokenLimit: 50_000,
+        storageLimit: 52_428_800,
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("accepts valid API keys and rejects invalid ones", async () => {
     const { db, server } = await createAuthApp();
     const { apiKeys } = await import("../../shared/schema");

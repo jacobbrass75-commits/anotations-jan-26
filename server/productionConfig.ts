@@ -121,6 +121,13 @@ export function getProductionConfigErrors(
     errors.push("OPENAI_API_KEY must be set for embeddings, analysis, summaries, and OCR vision.");
   }
 
+  if (hasValue(env.STRIPE_SECRET_KEY) && !hasValue(env.STRIPE_WEBHOOK_SECRET)) {
+    errors.push("STRIPE_WEBHOOK_SECRET must be set when STRIPE_SECRET_KEY is configured.");
+  }
+  if (hasValue(env.STRIPE_SECRET_KEY) && !env.STRIPE_SECRET_KEY!.trim().startsWith("sk_live_")) {
+    errors.push("STRIPE_SECRET_KEY must use a live sk_live_ key in production.");
+  }
+
   return errors;
 }
 

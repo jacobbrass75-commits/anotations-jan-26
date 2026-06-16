@@ -11,12 +11,13 @@ import {
   type AnnotationCategory,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Documents
   getDocument(id: string): Promise<Document | undefined>;
   getAllDocuments(userId?: string): Promise<Document[]>;
+  countDocumentsForUser(userId: string): Promise<number>;
   getAllDocumentMeta(
     userId?: string,
   ): Promise<
@@ -61,6 +62,14 @@ export class DatabaseStorage implements IStorage {
       return db.select().from(documents).where(eq(documents.userId, userId));
     }
     return db.select().from(documents);
+  }
+
+  async countDocumentsForUser(userId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(documents)
+      .where(eq(documents.userId, userId));
+    return Number(row?.count ?? 0);
   }
 
   async getAllDocumentMeta(

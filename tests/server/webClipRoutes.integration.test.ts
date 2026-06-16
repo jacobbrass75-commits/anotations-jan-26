@@ -440,6 +440,91 @@ describe("web clip route integration", () => {
     }
   });
 
+  it("prevents web clip promotion from bypassing the document limit", async () => {
+    const { db, server, userOneToken } = await createApp();
+    const { documents, projectDocuments } = await import("../../shared/schema");
+
+    try {
+      await db.insert(documents).values(
+        Array.from({ length: 50 }, (_, index) => ({
+          id: `limit-doc-${index}`,
+          userId: "user-1",
+          filename: `Limit ${index}.txt`,
+          fullText: `Existing document ${index}`,
+        })) as any,
+      );
+
+      const created = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
+        method: "POST",
+        headers: { authorization: `Bearer ${userOneToken}` },
+        body: clipPayload(),
+      });
+      expect(created.status).toBe(201);
+
+      const promoted = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        `/api/web-clips/${created.body?.id}/promote`,
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${userOneToken}` },
+          body: { projectId: "project-1" },
+        },
+      );
+
+      const documentRows = await db.select().from(documents).where(eq(documents.userId, "user-1"));
+      const projectDocumentRows = await db
+        .select()
+        .from(projectDocuments)
+        .where(eq(projectDocuments.projectId, "project-1"));
+
+      expect(promoted.status).toBe(403);
+      expect(promoted.body).toEqual({ error: "Document limit reached for the pro plan" });
+      expect(documentRows).toHaveLength(50);
+      expect(projectDocumentRows).toHaveLength(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("prevents web clip promotion from bypassing the storage limit", async () => {
+    const { db, server, userOneToken } = await createApp();
+    const { documents, users } = await import("../../shared/schema");
+
+    try {
+      await db.update(users).set({ storageLimit: 10, storageUsed: 0 } as any).where(eq(users.id, "user-1"));
+
+      const created = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
+        method: "POST",
+        headers: { authorization: `Bearer ${userOneToken}` },
+        body: clipPayload(),
+      });
+      expect(created.status).toBe(201);
+
+      const promoted = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        `/api/web-clips/${created.body?.id}/promote`,
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${userOneToken}` },
+          body: { projectId: "project-1" },
+        },
+      );
+
+      const documentRows = await db.select().from(documents).where(eq(documents.userId, "user-1"));
+      const [userRow] = await db
+        .select({ storageUsed: users.storageUsed })
+        .from(users)
+        .where(eq(users.id, "user-1"));
+
+      expect(promoted.status).toBe(403);
+      expect(promoted.body).toEqual({ error: "Storage limit reached" });
+      expect(documentRows).toHaveLength(0);
+      expect(userRow?.storageUsed).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("rejects invalid and revoked API keys before creating clips", async () => {
     const { db, server, userOneToken } = await createApp();
     const { webClips } = await import("../../shared/schema");

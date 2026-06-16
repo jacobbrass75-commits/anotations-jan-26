@@ -106,10 +106,11 @@ async function syncUserFromClerk(
   emailVerified: boolean,
 ): Promise<User> {
   const updates: Partial<User> = {};
-  const resolvedTier = tier ?? user.tier;
+  const stripeManaged = Boolean(user.stripeSubscriptionId || user.stripePriceId || user.subscriptionStatus);
+  const resolvedTier = stripeManaged ? user.tier : (tier ?? user.tier);
   const tierLimits = getTierLimits(resolvedTier);
 
-  if (tier && user.tier !== tier) {
+  if (!stripeManaged && tier && user.tier !== tier) {
     updates.tier = tier;
   }
 
@@ -150,6 +151,11 @@ export async function getUserByEmail(email: string): Promise<User | null> {
   return user || null;
 }
 
+export async function getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | null> {
+  const [user] = await db.select().from(users).where(eq(users.stripeCustomerId, stripeCustomerId));
+  return user || null;
+}
+
 export async function updateUser(id: string, data: Partial<User>): Promise<User> {
   const [updated] = await db
     .update(users)
@@ -159,19 +165,34 @@ export async function updateUser(id: string, data: Partial<User>): Promise<User>
   return updated;
 }
 
-export async function setUserTier(id: string, tier: string): Promise<User> {
+export async function updateUserBillingMetadata(id: string, data: Partial<User>): Promise<User> {
+  return updateUser(id, data);
+}
+
+export async function setUserTier(
+  id: string,
+  tier: string,
+  options: { resetUsage?: boolean; billing?: Partial<User> } = {},
+): Promise<User> {
   if (!isValidUserTier(tier)) {
     throw new Error(`Invalid user tier: ${tier}`);
   }
 
   const tierLimits = getTierLimits(tier);
-  return updateUser(id, {
+  const resetUsage = options.resetUsage ?? true;
+  const updates: Partial<User> = {
     tier,
     tokenLimit: tierLimits.tokenLimit,
     storageLimit: tierLimits.storageLimit,
-    tokensUsed: 0,
-    billingCycleStart: new Date(),
-  } as Partial<User>);
+    ...(options.billing ?? {}),
+  };
+
+  if (resetUsage) {
+    updates.tokensUsed = 0;
+    updates.billingCycleStart = new Date();
+  }
+
+  return updateUser(id, updates);
 }
 
 export async function incrementTokenUsage(id: string, tokens: number): Promise<void> {
