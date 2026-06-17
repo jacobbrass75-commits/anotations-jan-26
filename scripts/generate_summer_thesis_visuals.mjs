@@ -475,6 +475,105 @@ function verificationCard() {
 </svg>`;
 }
 
+function quoteContextSquare() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+  ${defs()}
+  <rect width="1080" height="1080" fill="${colors.paper}" />
+  <rect x="72" y="72" width="936" height="936" rx="46" fill="${colors.white}" stroke="${colors.line}" />
+  <text x="126" y="152" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="900" fill="${colors.ink}">ScholarMark</text>
+  <text x="126" y="262" font-family="Source Serif 4, Georgia, serif" font-size="76" font-weight="900" fill="${colors.ink}">Find the quote.</text>
+  <text x="126" y="348" font-family="Source Serif 4, Georgia, serif" font-size="76" font-weight="900" fill="${colors.rose}">Keep the context.</text>
+  <text x="126" y="426" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="30" font-weight="700" fill="${colors.muted}">Write from evidence you can trace back to your sources.</text>
+  <rect x="126" y="520" width="828" height="266" rx="34" fill="${colors.cream}" stroke="${colors.line}" />
+  <text x="176" y="590" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="27" font-weight="900" fill="${colors.ink}">Quote found in your source base</text>
+  <rect x="176" y="626" width="630" height="16" rx="8" fill="${colors.rose}" opacity=".62" />
+  <rect x="176" y="664" width="710" height="14" rx="7" fill="${colors.blue}" opacity=".40" />
+  <rect x="176" y="696" width="560" height="14" rx="7" fill="${colors.green}" opacity=".42" />
+  <text x="176" y="746" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="700" fill="${colors.muted}">Source details, page/section when available, and context stay attached.</text>
+  <rect x="126" y="866" width="392" height="70" rx="35" fill="${colors.ink}" />
+  <text x="162" y="911" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="900" fill="${colors.white}">scholarmark.ai/summer</text>
+  <text x="558" y="910" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="21" font-weight="700" fill="${colors.muted}">For thesis and capstone writing.</text>
+</svg>`;
+}
+
+function largeSourceBaseSquare() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+  ${defs()}
+  <rect width="1080" height="1080" fill="${colors.paper}" />
+  <rect x="72" y="72" width="936" height="936" rx="46" fill="${colors.white}" stroke="${colors.line}" />
+  <text x="126" y="152" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="900" fill="${colors.ink}">ScholarMark</text>
+  <text x="126" y="270" font-family="Source Serif 4, Georgia, serif" font-size="76" font-weight="900" fill="${colors.ink}">Turn a large</text>
+  <text x="126" y="356" font-family="Source Serif 4, Georgia, serif" font-size="76" font-weight="900" fill="${colors.blue}">source base</text>
+  <text x="126" y="442" font-family="Source Serif 4, Georgia, serif" font-size="76" font-weight="900" fill="${colors.ink}">into usable evidence.</text>
+  <rect x="126" y="540" width="252" height="218" rx="32" fill="${colors.cream}" stroke="${colors.line}" />
+  <text x="178" y="632" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="54" font-weight="900" fill="${colors.rose}">many</text>
+  <text x="178" y="684" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="800" fill="${colors.ink}">sources</text>
+  <rect x="414" y="540" width="252" height="218" rx="32" fill="${colors.cream}" stroke="${colors.line}" />
+  <text x="466" y="632" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="54" font-weight="900" fill="${colors.blue}">quotes</text>
+  <text x="466" y="684" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="800" fill="${colors.ink}">with context</text>
+  <rect x="702" y="540" width="252" height="218" rx="32" fill="${colors.cream}" stroke="${colors.line}" />
+  <text x="754" y="632" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="54" font-weight="900" fill="${colors.green}">draft</text>
+  <text x="754" y="684" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="800" fill="${colors.ink}">from evidence</text>
+  <rect x="126" y="862" width="392" height="70" rx="35" fill="${colors.ink}" />
+  <text x="162" y="907" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="900" fill="${colors.white}">scholarmark.ai/summer</text>
+  <text x="126" y="968" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="21" font-weight="650" fill="${colors.muted}">Upload, clip, search, quote, cite, and revise in one workspace.</text>
+</svg>`;
+}
+
+function quoteFinderBanner() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="500" viewBox="0 0 1600 500">
+  ${defs()}
+  <rect width="1600" height="500" fill="${colors.paper}" />
+  <rect x="36" y="36" width="1528" height="428" rx="34" fill="${colors.white}" stroke="${colors.line}" />
+  <text x="86" y="116" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="900" fill="${colors.ink}">ScholarMark</text>
+  <text x="86" y="206" font-family="Source Serif 4, Georgia, serif" font-size="72" font-weight="900" fill="${colors.ink}">The quote finder for</text>
+  <text x="86" y="286" font-family="Source Serif 4, Georgia, serif" font-size="72" font-weight="900" fill="${colors.rose}">serious research writing.</text>
+  <text x="86" y="342" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="${colors.muted}">Search a large source base for passages with context.</text>
+  <text x="86" y="376" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="${colors.muted}">Draft from evidence students can verify.</text>
+  <rect x="86" y="400" width="420" height="54" rx="27" fill="${colors.ink}" />
+  <text x="118" y="435" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="900" fill="${colors.white}">scholarmark.ai/summer</text>
+  <rect x="1090" y="100" width="360" height="288" rx="30" fill="${colors.cream}" stroke="${colors.line}" />
+  <text x="1140" y="172" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="900" fill="${colors.ink}">Quote + context</text>
+  <rect x="1140" y="214" width="250" height="14" rx="7" fill="${colors.rose}" opacity=".62" />
+  <rect x="1140" y="252" width="210" height="12" rx="6" fill="${colors.blue}" opacity=".46" />
+  <rect x="1140" y="284" width="270" height="12" rx="6" fill="${colors.green}" opacity=".45" />
+  <text x="1140" y="342" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="20" font-weight="700" fill="${colors.muted}">source + surrounding context</text>
+</svg>`;
+}
+
+function evidenceToParagraphStory() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  ${defs()}
+  <rect width="1080" height="1920" fill="${colors.paper}" />
+  <rect x="54" y="54" width="972" height="1812" rx="58" fill="${colors.white}" stroke="${colors.line}" />
+  <text x="108" y="146" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="900" fill="${colors.ink}">ScholarMark</text>
+  <text x="108" y="250" font-family="Source Serif 4, Georgia, serif" font-size="90" font-weight="900" fill="${colors.ink}">From source</text>
+  <text x="108" y="350" font-family="Source Serif 4, Georgia, serif" font-size="90" font-weight="900" fill="${colors.rose}">base to</text>
+  <text x="108" y="450" font-family="Source Serif 4, Georgia, serif" font-size="90" font-weight="900" fill="${colors.ink}">paragraph.</text>
+  <rect x="108" y="570" width="864" height="300" rx="38" fill="${colors.cream}" stroke="${colors.line}" />
+  <text x="162" y="648" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="900" fill="${colors.ink}">1. Find the passage</text>
+  <rect x="162" y="700" width="650" height="16" rx="8" fill="${colors.rose}" opacity=".60" />
+  <rect x="162" y="742" width="580" height="14" rx="7" fill="${colors.blue}" opacity=".45" />
+  <rect x="108" y="930" width="864" height="300" rx="38" fill="${colors.cream}" stroke="${colors.line}" />
+  <text x="162" y="1008" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="900" fill="${colors.ink}">2. Keep the context</text>
+  ${lines(["What came before", "What the author means", "Why it matters to your claim"], 204, 1084, 30, 54, { weight: 760 })}
+  <circle cx="166" cy="1072" r="12" fill="${colors.rose}" />
+  <circle cx="166" cy="1126" r="12" fill="${colors.blue}" />
+  <circle cx="166" cy="1180" r="12" fill="${colors.green}" />
+  <rect x="108" y="1290" width="864" height="250" rx="38" fill="${colors.white}" stroke="${colors.line}" />
+  <text x="162" y="1368" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="900" fill="${colors.ink}">3. Draft with evidence</text>
+  <text x="162" y="1430" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="29" font-weight="650" fill="${colors.muted}">Use quotes and notes from your library,</text>
+  <text x="162" y="1474" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="29" font-weight="650" fill="${colors.muted}">then verify citations before submitting.</text>
+  <rect x="108" y="1638" width="472" height="76" rx="38" fill="${colors.ink}" />
+  <text x="154" y="1687" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="900" fill="${colors.white}">scholarmark.ai/summer</text>
+  <text x="108" y="1784" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="650" fill="${colors.muted}">Writing support for student-owned work.</text>
+</svg>`;
+}
+
 function carouselSlide(title, accent, bullets, footer = "scholarmark.ai/summer") {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
@@ -683,6 +782,34 @@ async function makePhonePreview(assets) {
 }
 
 const assets = [
+  {
+    title: "Find the quote, keep the context",
+    base: "summer-thesis-quote-context",
+    size: "1080x1080",
+    use: "Primary social post for quote retrieval and context positioning",
+    svg: quoteContextSquare(),
+  },
+  {
+    title: "Large source base to usable evidence",
+    base: "summer-thesis-large-source-base",
+    size: "1080x1080",
+    use: "Social post for large-library/source-base benefit",
+    svg: largeSourceBaseSquare(),
+  },
+  {
+    title: "Quote finder banner",
+    base: "summer-thesis-quote-finder-banner",
+    size: "1600x500",
+    use: "Newsletter or web banner for quote-finder positioning",
+    svg: quoteFinderBanner(),
+  },
+  {
+    title: "Source base to paragraph story",
+    base: "summer-thesis-evidence-to-paragraph-story",
+    size: "1080x1920",
+    use: "Story/Reel frame for quote-to-writing workflow",
+    svg: evidenceToParagraphStory(),
+  },
   {
     title: "Instagram square",
     base: "summer-thesis-social-square",

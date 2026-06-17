@@ -5,6 +5,30 @@ import { Button } from "@/components/ui/button";
 
 const ASSETS = [
   {
+    title: "Find the quote. Keep the context.",
+    file: "summer-thesis-quote-context",
+    size: "1080 x 1080",
+    use: "Primary social post for quote retrieval and context positioning.",
+  },
+  {
+    title: "Large source base to usable evidence",
+    file: "summer-thesis-large-source-base",
+    size: "1080 x 1080",
+    use: "Social post for the large-library/source-base benefit.",
+  },
+  {
+    title: "Quote finder banner",
+    file: "summer-thesis-quote-finder-banner",
+    size: "1600 x 500",
+    use: "Newsletter or web banner for quote-finder positioning.",
+  },
+  {
+    title: "Source base to paragraph",
+    file: "summer-thesis-evidence-to-paragraph-story",
+    size: "1080 x 1920",
+    use: "Story/Reel frame for the quote-to-writing workflow.",
+  },
+  {
     title: "AI writing with receipts",
     file: "summer-thesis-source-grounded-ai",
     size: "1080 x 1080",
@@ -90,6 +114,25 @@ const CAROUSEL = [
   "summer-thesis-carousel-03-outline",
 ] as const;
 
+const COPY_BLOCKS = [
+  {
+    label: "Core promise",
+    copy: "ScholarMark helps students turn a large source base into quote-backed writing by helping them find relevant passages, keep surrounding context attached, and draft from evidence they can verify.",
+  },
+  {
+    label: "Short ad line",
+    copy: "Find the quote. Keep the context. Write from evidence.",
+  },
+  {
+    label: "Trust line",
+    copy: "ScholarMark is built for student-owned writing: source-grounded feedback, traceable quotes, citation notes, and a reminder to verify final work before submitting.",
+  },
+  {
+    label: "Faculty-safe version",
+    copy: "A research writing workspace that helps students organize sources, locate useful quotes, understand context, and revise their own arguments without positioning AI as a shortcut around the work.",
+  },
+] as const;
+
 function assetUrl(file: string, extension: "png" | "svg") {
   return `/campaign-assets/${file}.${extension}`;
 }
@@ -138,42 +181,42 @@ export default function SummerVisuals() {
               Summer Thesis Head Start
             </div>
             <h1 className="max-w-3xl text-4xl font-bold tracking-tight md:text-6xl">
-              Source-grounded AI writing support students can trust.
+              Find the quote. Keep the context. Write from evidence.
             </h1>
             <p className="max-w-2xl text-muted-foreground md:text-lg">
-              Use these campaign visuals for academic-office outreach, campus newsletters,
-              student org sharing, social posts, and referral pushes.
+              ScholarMark helps students search a large source base for relevant passages, keeps
+              surrounding context attached, and supports source-grounded drafts they can verify.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button asChild>
-                <a href="/campaign-assets/summer-thesis-source-grounded-ai.png">
+                <a href="/campaign-assets/summer-thesis-quote-context.png">
                   <ArrowDownToLine className="mr-2 h-4 w-4" />
                   Download first post
                 </a>
               </Button>
-            <Button variant="outline" asChild>
-              <a href="/campaign-assets/phone-preview.png">Open mobile contact sheet</a>
-            </Button>
-            <Button variant="ghost" asChild>
-              <a href="/campaign-assets/scholarmark-summer-thesis-visuals.zip">
-                Download full pack
-              </a>
-            </Button>
-          </div>
+              <Button variant="outline" asChild>
+                <a href="/campaign-assets/phone-preview.png">Open mobile contact sheet</a>
+              </Button>
+              <Button variant="ghost" asChild>
+                <a href="/campaign-assets/scholarmark-summer-thesis-visuals.zip">
+                  Download full pack
+                </a>
+              </Button>
+            </div>
           </div>
 
           <img
-            src="/campaign-assets/summer-thesis-source-grounded-ai.png"
-            alt="ScholarMark AI writing with receipts campaign visual"
+            src="/campaign-assets/summer-thesis-quote-context.png"
+            alt="ScholarMark quote finder with context campaign visual"
             className="w-full rounded-lg border border-border bg-card shadow-sm"
           />
         </section>
 
         <section className="grid gap-3 sm:grid-cols-3">
           {[
-            ["Source-grounded", "Feedback tied to the sources students add."],
-            ["Citation-aware", "Prompts students to check quotes and citations."],
-            ["Integrity-forward", "No promise that AI is perfect; verification stays visible."],
+            ["Large source base", "Search across the student's library, not a tiny chat window."],
+            ["Quotes with context", "Passages keep source details, available page/section notes, and surrounding ideas attached."],
+            ["Verify before submit", "Citation checks stay visible because AI can still be wrong."],
           ].map(([label, copy]) => (
             <div key={label} className="rounded-lg border border-border bg-card p-4">
               <ShieldCheck className="mb-3 h-5 w-5 text-primary" />
@@ -185,9 +228,29 @@ export default function SummerVisuals() {
 
         <section className="space-y-4">
           <div>
+            <h2 className="text-2xl font-semibold tracking-tight">Distilled message</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Use this language in emails, DMs, student org posts, and campus partner outreach.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {COPY_BLOCKS.map((block) => (
+              <article key={block.label} className="rounded-lg border border-border bg-card p-4">
+                <p className="text-xs font-mono uppercase tracking-[0.25em] text-muted-foreground">
+                  {block.label}
+                </p>
+                <p className="mt-3 text-sm leading-6 text-foreground">{block.copy}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div>
             <h2 className="text-2xl font-semibold tracking-tight">Ready-to-send assets</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              PNG for posting, SVG for editing. Direct links work on the live domain after deploy.
+              PNG for posting, SVG for editing. Use direct links when sharing from the live site.
             </p>
           </div>
 
@@ -256,10 +319,11 @@ export default function SummerVisuals() {
         <section className="rounded-lg border border-border bg-muted/30 p-5">
           <h2 className="font-semibold tracking-tight">Approved wording</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Use source-grounded, citation-aware, verify against original sources, and writing
-            coaching for student-owned work. Avoid absolute claims like "no hallucinations" or
-            "always accurate citations"; AI can be wrong, and the student should verify final
-            citations, quotes, and school-policy fit.
+            Use quote-backed writing, large source base, keep the context, source-grounded,
+            citation-aware, verify against original sources, and writing coaching for
+            student-owned work. Avoid absolute claims like "no hallucinations" or "always
+            accurate citations"; AI can be wrong, and the student should verify final citations,
+            quotes, and school-policy fit.
           </p>
         </section>
       </main>
