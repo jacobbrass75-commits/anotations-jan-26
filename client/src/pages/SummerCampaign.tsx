@@ -32,6 +32,7 @@ import { withRedirectUrl } from "@/lib/redirects";
 const ATTRIBUTION_STORAGE_KEY = "scholarmark_campaign_attribution";
 const ONBOARDING_STORAGE_KEY = "scholarmark_summer_onboarding";
 const VISIT_SESSION_KEY = "scholarmark_campaign_visit_sent";
+const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
 
 interface CampaignAttribution {
   campus?: string;
@@ -593,6 +594,9 @@ export default function SummerCampaign() {
           <Link href="/support" className="hover:text-primary">
             Support
           </Link>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-primary">
+            {SUPPORT_EMAIL}
+          </a>
           <Link href="/summer/visuals" className="hover:text-primary">
             Campaign visuals
           </Link>

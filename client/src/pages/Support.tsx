@@ -46,6 +46,12 @@ export default function Support() {
             Email support for billing, cancellation, privacy, account deletion, or product help.
             ScholarMark aims to respond within three business days.
           </p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Public contact:{" "}
+            <a href={mailto} className="font-medium text-primary underline-offset-4 hover:underline">
+              {SUPPORT_EMAIL}
+            </a>
+          </p>
         </div>
 
         <Card className="eva-clip-panel border-border bg-card/80">

@@ -34,6 +34,7 @@ const LocalWritingStudio = lazy(() => import("@/pages/LocalWritingStudio"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 const LOCAL_PREVIEW_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const MARKETING_ROOT_HOSTS = new Set(["scholarmark.ai", "www.scholarmark.ai"]);
 
 function isLocalPreviewEnabled() {
   if (import.meta.env.DEV) return true;
@@ -41,8 +42,14 @@ function isLocalPreviewEnabled() {
   return LOCAL_PREVIEW_HOSTS.has(window.location.hostname);
 }
 
+function isMarketingRootHost() {
+  if (typeof window === "undefined") return false;
+  return MARKETING_ROOT_HOSTS.has(window.location.hostname);
+}
+
 function usesPublicShell(pathname: string): boolean {
   return (
+    (pathname === "/" && isMarketingRootHost()) ||
     pathname === "/pricing" ||
     pathname === "/privacy" ||
     pathname === "/terms" ||
@@ -72,6 +79,7 @@ function RouteFallback() {
 
 function Router() {
   const localPreviewEnabled = isLocalPreviewEnabled();
+  const marketingRootHost = isMarketingRootHost();
 
   return (
     <Switch>
@@ -118,11 +126,15 @@ function Router() {
         )}
       </Route>
       <Route path="/">
-        {() => (
-          <ProtectedRoute>
-            <Home />
-          </ProtectedRoute>
-        )}
+        {() =>
+          marketingRootHost ? (
+            <SummerCampaign />
+          ) : (
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          )
+        }
       </Route>
       <Route path="/projects">
         {() => (
