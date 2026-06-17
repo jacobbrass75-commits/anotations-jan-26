@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="500" viewBox="0 0 1600 500">
+  
+    <defs>
+      <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+        <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#2D2A26" flood-opacity=".12"/>
+      </filter>
+      <filter id="smallShadow" x="-20%" y="-20%" width="140%" height="150%">
+        <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#2D2A26" flood-opacity=".10"/>
+      </filter>
+    </defs>
+  
+  <rect width="1600" height="500" fill="#FAFAF8" />
+  <rect x="36" y="36" width="1528" height="428" rx="34" fill="#FFFFFF" stroke="#E8E4E0" />
+  <text x="86" y="116" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="900" fill="#2D2A26">ScholarMark</text>
+  <text x="86" y="206" font-family="Source Serif 4, Georgia, serif" font-size="76" font-weight="900" fill="#2D2A26">Summer Thesis Head Start</text>
+  <text x="86" y="278" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="31" font-weight="600" fill="#8A8580">Research question. Source plan. Outline. Feedback before fall.</text>
+  
+    <rect x="86" y="338" width="310" height="54" rx="27" fill="#F5F3F0" stroke="#E8E4E0" />
+    <text x="114" y="373" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="21" font-weight="700" fill="#2D2A26">early access</text>
+  
+  <rect x="430" y="338" width="430" height="54" rx="27" fill="#2D2A26" />
+  <text x="462" y="373" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="900" fill="#FFFFFF">scholarmark.ai/summer</text>
+  
+    <g filter="url(#softShadow)">
+      <rect x="1075" y="96" width="350" height="300" rx="24" fill="#FFFFFF" stroke="#E8E4E0" />
+      <rect x="1075" y="96" width="350" height="72" rx="24" fill="#F5F3F0" />
+      <circle cx="1109" cy="132" r="8" fill="#FF5F57" />
+      <circle cx="1133" cy="132" r="8" fill="#FFBD2E" />
+      <circle cx="1157" cy="132" r="8" fill="#28C840" />
+      <text x="1201" y="140" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="20" font-weight="700" fill="#2D2A26">Paper plan</text>
+      <rect x="1123" y="212" width="254" height="18" rx="9" fill="#E8E4E0" />
+      <rect x="1123" y="256" width="170" height="16" rx="8" fill="#F1ECE2" />
+      <rect x="1123" y="290" width="220" height="16" rx="8" fill="#F1ECE2" />
+      <rect x="1123" y="346" width="254" height="88" rx="18" fill="#FAFAF8" stroke="#E8E4E0" />
+      <text x="1153" y="401" font-family="Source Serif 4, Georgia, serif" font-size="28" font-weight="700" fill="#2D2A26">Working thesis</text>
+      <rect x="1153" y="430" width="140" height="12" rx="6" fill="#D4556B" opacity=".65" />
+      <rect x="1153" y="460" width="180" height="12" rx="6" fill="#5B7FA5" opacity=".55" />
+      <rect x="1153" y="490" width="90" height="12" rx="6" fill="#5A9E8F" opacity=".55" />
+    </g>
+  
+  <rect x="950" y="108" width="66" height="250" rx="33" fill="#D4556B" opacity=".18" />
+  <rect x="996" y="156" width="66" height="250" rx="33" fill="#5B7FA5" opacity=".18" />
+</svg>

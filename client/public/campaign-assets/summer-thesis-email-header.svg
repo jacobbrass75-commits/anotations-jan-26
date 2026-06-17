@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400">
+  
+    <defs>
+      <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+        <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#2D2A26" flood-opacity=".12"/>
+      </filter>
+      <filter id="smallShadow" x="-20%" y="-20%" width="140%" height="150%">
+        <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#2D2A26" flood-opacity=".10"/>
+      </filter>
+    </defs>
+  
+  <rect width="1200" height="400" fill="#FAFAF8" />
+  <rect x="38" y="38" width="1124" height="324" rx="30" fill="#FFFFFF" stroke="#E8E4E0" />
+  <text x="86" y="110" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="900" fill="#2D2A26">ScholarMark</text>
+  <text x="86" y="188" font-family="Source Serif 4, Georgia, serif" font-size="58" font-weight="900" fill="#2D2A26">Summer Thesis Head Start</text>
+  <text x="86" y="248" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="26" font-weight="650" fill="#8A8580">Plan the paper before the semester starts.</text>
+  <rect x="86" y="296" width="312" height="48" rx="24" fill="#2D2A26" />
+  <text x="116" y="328" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="19" font-weight="900" fill="#FFFFFF">scholarmark.ai/summer</text>
+  <rect x="842" y="92" width="62" height="210" rx="31" fill="#D4556B" opacity=".22" />
+  <rect x="900" y="126" width="62" height="210" rx="31" fill="#5B7FA5" opacity=".22" />
+  <rect x="958" y="74" width="62" height="210" rx="31" fill="#5A9E8F" opacity=".20" />
+  <rect x="1016" y="152" width="62" height="160" rx="31" fill="#E9B44C" opacity=".24" />
+</svg>

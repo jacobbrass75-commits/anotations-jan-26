@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1275" height="1650" viewBox="0 0 1275 1650">
+  
+    <defs>
+      <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+        <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#2D2A26" flood-opacity=".12"/>
+      </filter>
+      <filter id="smallShadow" x="-20%" y="-20%" width="140%" height="150%">
+        <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#2D2A26" flood-opacity=".10"/>
+      </filter>
+    </defs>
+  
+  <rect width="1275" height="1650" fill="#FAFAF8" />
+  <rect x="72" y="72" width="1131" height="1506" rx="34" fill="#FFFFFF" stroke="#E8E4E0" />
+  <text x="126" y="154" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="36" font-weight="800" fill="#2D2A26">ScholarMark</text>
+  <rect x="830" y="108" width="290" height="56" rx="28" fill="#F5F3F0" stroke="#E8E4E0" />
+  <text x="865" y="145" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="800" fill="#D4556B">EARLY STUDENT ACCESS</text>
+  <text x="126" y="296" font-family="Source Serif 4, Georgia, serif" font-size="82" font-weight="800" fill="#2D2A26">Get ahead on your</text>
+  <text x="126" y="390" font-family="Source Serif 4, Georgia, serif" font-size="82" font-weight="800" fill="#D4556B">thesis, capstone,</text>
+  <text x="126" y="484" font-family="Source Serif 4, Georgia, serif" font-size="82" font-weight="800" fill="#2D2A26">or big research paper</text>
+  <text x="126" y="560" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="600" fill="#2D2A26">Use the summer to start before fall gets busy.</text>
+  <g filter="url(#smallShadow)">
+    <rect x="126" y="648" width="1023" height="300" rx="30" fill="#F5F3F0" stroke="#E8E4E0" />
+    <text x="176" y="718" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="31" font-weight="900" fill="#2D2A26">In your first week, build:</text>
+    <text x="206" y="790" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="30" font-weight="700" fill="#2D2A26">A focused research question</text>
+<text x="206" y="833" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="30" font-weight="700" fill="#2D2A26">A working outline</text>
+<text x="206" y="876" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="30" font-weight="700" fill="#2D2A26">A source plan</text>
+<text x="206" y="919" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="30" font-weight="700" fill="#2D2A26">Draft feedback and next steps</text>
+    <circle cx="176" cy="779" r="11" fill="#D4556B" />
+    <circle cx="176" cy="822" r="11" fill="#5B7FA5" />
+    <circle cx="176" cy="865" r="11" fill="#5A9E8F" />
+    <circle cx="176" cy="908" r="11" fill="#E9B44C" />
+  </g>
+  <rect x="126" y="1018" width="487" height="260" rx="30" fill="#FFFFFF" stroke="#E8E4E0" />
+  <text x="176" y="1084" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="30" font-weight="900" fill="#2D2A26">Who it is for</text>
+  <text x="176" y="1144" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="600" fill="#8A8580">Rising juniors and seniors</text>
+<text x="176" y="1182" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="600" fill="#8A8580">Honors and thesis students</text>
+<text x="176" y="1220" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="600" fill="#8A8580">Capstone and seminar writers</text>
+<text x="176" y="1258" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="600" fill="#8A8580">Pre-law and grad-school writers</text>
+  <rect x="662" y="1018" width="487" height="260" rx="30" fill="#FFFFFF" stroke="#E8E4E0" />
+  <text x="712" y="1084" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="30" font-weight="900" fill="#2D2A26">Integrity note</text>
+  <text x="712" y="1144" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="600" fill="#8A8580">ScholarMark helps you plan,</text>
+<text x="712" y="1182" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="600" fill="#8A8580">revise, and organize your own</text>
+<text x="712" y="1220" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="600" fill="#8A8580">work. It does not replace</text>
+<text x="712" y="1258" text-anchor="start" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="600" fill="#8A8580">your authorship.</text>
+  <rect x="126" y="1360" width="570" height="86" rx="43" fill="#2D2A26" />
+  <text x="177" y="1416" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="34" font-weight="900" fill="#FFFFFF">scholarmark.ai/summer</text>
+  <text x="126" y="1510" font-family="Libre Franklin, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="25" font-weight="600" fill="#8A8580">Summer Thesis Head Start - planning, sources, outlining, revision.</text>
+</svg>

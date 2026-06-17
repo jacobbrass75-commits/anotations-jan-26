@@ -29,6 +29,7 @@ const AdminAnalytics = lazy(() => import("@/pages/AdminAnalytics"));
 const AdminCampaign = lazy(() => import("@/pages/AdminCampaign"));
 const SummerCampaign = lazy(() => import("@/pages/SummerCampaign"));
 const SummerOnboarding = lazy(() => import("@/pages/SummerOnboarding"));
+const SummerVisuals = lazy(() => import("@/pages/SummerVisuals"));
 const LocalWritingStudio = lazy(() => import("@/pages/LocalWritingStudio"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
@@ -90,6 +91,7 @@ function Router() {
           </ProtectedRoute>
         )}
       </Route>
+      <Route path="/summer/visuals" component={SummerVisuals} />
       <Route path="/summer" component={SummerCampaign} />
       <Route path="/invite" component={SummerCampaign} />
       <Route path="/invite/:code" component={SummerCampaign} />

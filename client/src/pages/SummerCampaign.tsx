@@ -593,6 +593,9 @@ export default function SummerCampaign() {
           <Link href="/support" className="hover:text-primary">
             Support
           </Link>
+          <Link href="/summer/visuals" className="hover:text-primary">
+            Campaign visuals
+          </Link>
         </footer>
       </main>
     </div>
