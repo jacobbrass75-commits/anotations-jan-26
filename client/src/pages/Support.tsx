@@ -26,6 +26,12 @@ export default function Support() {
             </span>
           </Link>
           <nav className="flex items-center gap-4 text-xs font-mono uppercase tracking-[0.18em] text-muted-foreground">
+            <Link href="/blog" className="hover:text-primary">
+              Blog
+            </Link>
+            <Link href="/faq" className="hover:text-primary">
+              FAQ
+            </Link>
             <Link href="/terms" className="hover:text-primary">
               Terms
             </Link>

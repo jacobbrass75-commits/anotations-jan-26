@@ -396,11 +396,21 @@ export default function SummerCampaign() {
               Summer Head Start
             </span>
           </Link>
-          <Link href="/sign-in">
-            <Button variant="ghost" size="sm">
-              Sign in
-            </Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            <nav className="hidden items-center gap-4 text-xs font-mono uppercase tracking-[0.18em] text-muted-foreground sm:flex">
+              <Link href="/blog" className="hover:text-primary">
+                Blog
+              </Link>
+              <Link href="/faq" className="hover:text-primary">
+                FAQ
+              </Link>
+            </nav>
+            <Link href="/sign-in">
+              <Button variant="ghost" size="sm">
+                Sign in
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -593,6 +603,12 @@ export default function SummerCampaign() {
           </Link>
           <Link href="/support" className="hover:text-primary">
             Support
+          </Link>
+          <Link href="/blog" className="hover:text-primary">
+            Blog
+          </Link>
+          <Link href="/faq" className="hover:text-primary">
+            FAQ
           </Link>
           <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-primary">
             {SUPPORT_EMAIL}

@@ -16,6 +16,9 @@ const Login = lazy(() => import("@/pages/Login"));
 const Register = lazy(() => import("@/pages/Register"));
 const SsoCallback = lazy(() => import("@/pages/SsoCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
+const BlogIndex = lazy(() => import("@/pages/BlogIndex"));
+const BlogArticle = lazy(() => import("@/pages/BlogArticle"));
+const FAQ = lazy(() => import("@/pages/FAQ"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const Support = lazy(() => import("@/pages/Support"));
@@ -54,9 +57,11 @@ function usesPublicShell(pathname: string): boolean {
     pathname === "/privacy" ||
     pathname === "/terms" ||
     pathname === "/support" ||
+    pathname === "/faq" ||
     pathname === "/sso-callback" ||
     pathname.startsWith("/sign-in") ||
     pathname.startsWith("/sign-up") ||
+    pathname.startsWith("/blog") ||
     pathname.startsWith("/summer") ||
     pathname.startsWith("/invite")
   );
@@ -89,6 +94,9 @@ function Router() {
       <Route path="/sign-up/*" component={Register} />
       <Route path="/sso-callback" component={SsoCallback} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/blog" component={BlogIndex} />
+      <Route path="/blog/:slug" component={BlogArticle} />
+      <Route path="/faq" component={FAQ} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/terms" component={Terms} />
       <Route path="/support" component={Support} />
