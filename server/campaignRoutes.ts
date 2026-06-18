@@ -15,6 +15,7 @@ import { requireAuth } from "./auth";
 import { requireAdmin } from "./analyticsRoutes";
 import { authLimiter } from "./rateLimits";
 import { markCampaignActivation } from "./campaignAttribution";
+import { sendCampaignSignupEmail } from "./campaignEmail";
 import { createLogger } from "./logger";
 
 const logger = createLogger("campaignRoutes");
@@ -152,6 +153,7 @@ export function registerCampaignRoutes(app: Express): void {
 
       const referralCode = await generateUniqueReferralCode(form.name);
       await db.insert(campaignSignups).values({ ...form, referralCode });
+      await sendCampaignSignupEmail({ form, referralCode });
 
       return res.status(201).json({ alreadySignedUp: false, referralCode });
     } catch (error) {

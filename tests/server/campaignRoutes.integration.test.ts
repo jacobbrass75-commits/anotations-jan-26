@@ -38,12 +38,17 @@ describe("summer campaign routes", () => {
   let sqlite: { close: () => void } | null = null;
   const originalCwd = process.cwd();
   const originalAdminUserIds = process.env.ADMIN_USER_IDS;
+  const originalCampaignEmailDisabled = process.env.CAMPAIGN_EMAIL_DISABLED;
+  const originalResendApiKey = process.env.RESEND_API_KEY;
+  const originalMarketingBaseUrl = process.env.MARKETING_BASE_URL;
+  const originalCampaignEmailFrom = process.env.CAMPAIGN_EMAIL_FROM;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "scholarmark-campaign-routes-"));
     vi.resetModules();
     vi.clearAllMocks();
     process.env.ADMIN_USER_IDS = "campaign-admin";
+    process.env.CAMPAIGN_EMAIL_DISABLED = "1";
     process.chdir(tempDir);
     await bootstrapTempWorkspace(tempDir);
   });
@@ -55,6 +60,26 @@ describe("summer campaign routes", () => {
       delete process.env.ADMIN_USER_IDS;
     } else {
       process.env.ADMIN_USER_IDS = originalAdminUserIds;
+    }
+    if (originalCampaignEmailDisabled === undefined) {
+      delete process.env.CAMPAIGN_EMAIL_DISABLED;
+    } else {
+      process.env.CAMPAIGN_EMAIL_DISABLED = originalCampaignEmailDisabled;
+    }
+    if (originalResendApiKey === undefined) {
+      delete process.env.RESEND_API_KEY;
+    } else {
+      process.env.RESEND_API_KEY = originalResendApiKey;
+    }
+    if (originalMarketingBaseUrl === undefined) {
+      delete process.env.MARKETING_BASE_URL;
+    } else {
+      process.env.MARKETING_BASE_URL = originalMarketingBaseUrl;
+    }
+    if (originalCampaignEmailFrom === undefined) {
+      delete process.env.CAMPAIGN_EMAIL_FROM;
+    } else {
+      process.env.CAMPAIGN_EMAIL_FROM = originalCampaignEmailFrom;
     }
     process.chdir(originalCwd);
     vi.resetModules();
@@ -260,6 +285,77 @@ describe("summer campaign routes", () => {
       expect(metrics.body?.recentSignups.find((row) => row.email === "paid@example.com")).toEqual(
         expect.objectContaining({ registered: true, paid: true, plan: "pro" }),
       );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("sends a Resend welcome email for new campaign signups only", async () => {
+    delete process.env.CAMPAIGN_EMAIL_DISABLED;
+    process.env.RESEND_API_KEY = "re_test_campaign";
+    process.env.MARKETING_BASE_URL = "https://scholarmark.ai";
+    process.env.CAMPAIGN_EMAIL_FROM = "ScholarMark <hello@scholarmark.ai>";
+
+    const originalFetch = globalThis.fetch.bind(globalThis);
+    const resendPayloads: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+      const url =
+        typeof input === "string" || input instanceof URL ? input.toString() : input.url;
+      if (url === "https://api.resend.com/emails") {
+        resendPayloads.push(JSON.parse(String(init?.body ?? "{}")));
+        return new Response(JSON.stringify({ id: "email_test_123" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch);
+
+    const { server } = await createCampaignApp();
+
+    try {
+      const signup = await requestJson<{ referralCode: string }>(
+        server.baseUrl,
+        "/api/campaign/signup",
+        {
+          method: "POST",
+          body: {
+            name: "Summer Writer",
+            email: "summer@example.com",
+            school: "UCLA",
+            major: "History",
+            classYear: "rising_senior",
+            paperType: "senior_thesis",
+            hasTopic: "kind_of",
+            channel: "discord",
+          },
+        },
+      );
+      expect(signup.status).toBe(201);
+      expect(resendPayloads).toHaveLength(1);
+      expect(resendPayloads[0]).toMatchObject({
+        from: "ScholarMark <hello@scholarmark.ai>",
+        to: ["summer@example.com"],
+        subject: "Your ScholarMark summer writing plan is ready",
+      });
+      expect(JSON.stringify(resendPayloads[0])).toContain(
+        `https://scholarmark.ai/invite/${signup.body?.referralCode}`,
+      );
+
+      const duplicate = await requestJson(server.baseUrl, "/api/campaign/signup", {
+        method: "POST",
+        body: {
+          name: "Summer Writer",
+          email: "summer@example.com",
+          school: "UCLA",
+          major: "History",
+          classYear: "rising_senior",
+          paperType: "senior_thesis",
+          hasTopic: "yes",
+        },
+      });
+      expect(duplicate.status).toBe(200);
+      expect(resendPayloads).toHaveLength(1);
     } finally {
       await server.close();
     }
