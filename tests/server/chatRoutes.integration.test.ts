@@ -44,6 +44,7 @@ describe("chat route integration", () => {
   let tempDir = "";
   let sqlite: { close: () => void } | null = null;
   const originalCwd = process.cwd();
+  const originalOpenRouterApiKey = process.env.OPENROUTER_API_KEY;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "scholarmark-chat-routes-"));
@@ -57,12 +58,19 @@ describe("chat route integration", () => {
     sqlite?.close();
     sqlite = null;
     process.chdir(originalCwd);
+    if (originalOpenRouterApiKey === undefined) {
+      delete process.env.OPENROUTER_API_KEY;
+    } else {
+      process.env.OPENROUTER_API_KEY = originalOpenRouterApiKey;
+    }
     vi.resetModules();
     vi.restoreAllMocks();
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createApp(options: { tier?: "free" | "pro" | "max" } = {}) {
+  async function createApp(
+    options: { tier?: "free" | "pro" | "max"; writingModel?: string } = {},
+  ) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
     const { users, conversations } = await import("../../shared/schema");
     const { registerChatRoutes } = await import("../../server/chatRoutes");
@@ -91,7 +99,7 @@ describe("chat route integration", () => {
       userId: "chat-user",
       title: "New Chat",
       model: "claude-opus-4-6",
-      writingModel: "precision",
+      writingModel: options.writingModel ?? "precision",
       selectedSourceIds: null,
       createdAt: now,
       updatedAt: now,
@@ -111,6 +119,48 @@ describe("chat route integration", () => {
         tier: options.tier ?? "pro",
       }),
     };
+  }
+
+  function mockOpenRouterFetch() {
+    const originalFetch = globalThis.fetch.bind(globalThis);
+    const chatBodies: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+      const url =
+        typeof input === "string" || input instanceof URL ? input.toString() : input.url;
+      if (url === "https://openrouter.ai/api/v1/models") {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "deepseek/deepseek-v4-pro",
+                pricing: { prompt: "0.000000435", completion: "0.00000087" },
+                context_length: 1_048_576,
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url === "https://openrouter.ai/api/v1/chat/completions") {
+        chatBodies.push(JSON.parse(String(init?.body ?? "{}")));
+        return new Response(
+          JSON.stringify({
+            id: "or-chat-test",
+            choices: [{ message: { content: "OpenRouter drafted this sentence." } }],
+            usage: {
+              prompt_tokens: 50,
+              completion_tokens: 100,
+              total_tokens: 150,
+              cost: 0.000123,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch);
+
+    return { chatBodies };
   }
 
   it("allows free source verification with the Sonnet verifier model", async () => {
@@ -161,6 +211,53 @@ describe("chat route integration", () => {
       expect(response.status).toBe(200);
       expect(body).toContain('"type":"done"');
       expect(chatCall.model).toBe("claude-haiku-4-5-20251001");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("routes OpenRouter writing model chat turns through OpenRouter", async () => {
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+    const { chatBodies } = mockOpenRouterFetch();
+    const { server, sqlite, token } = await createApp({
+      tier: "max",
+      writingModel: "deepseek/deepseek-v4-pro",
+    });
+
+    try {
+      const response = await fetch(
+        `${server.baseUrl}/api/chat/conversations/conversation-1/messages`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ content: "Draft a sentence with the selected model." }),
+        },
+      );
+      const body = await response.text();
+      const userUsage = sqlite
+        .prepare(
+          "SELECT tokens_used, ai_budget_microdollars_used FROM users WHERE id = ?",
+        )
+        .get("chat-user") as {
+        tokens_used: number;
+        ai_budget_microdollars_used: number;
+      };
+
+      expect(response.status).toBe(200);
+      expect(body).toContain("OpenRouter drafted this sentence.");
+      expect(body).toContain('"type":"done"');
+      expect(anthropicStream).not.toHaveBeenCalled();
+      expect(chatBodies).toHaveLength(1);
+      expect(chatBodies[0]).toMatchObject({
+        model: "deepseek/deepseek-v4-pro",
+        temperature: 0.8,
+        max_tokens: 8192,
+      });
+      expect(userUsage.tokens_used).toBe(150);
+      expect(userUsage.ai_budget_microdollars_used).toBe(123);
     } finally {
       await server.close();
     }

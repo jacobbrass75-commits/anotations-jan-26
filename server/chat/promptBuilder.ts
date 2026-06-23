@@ -10,6 +10,10 @@ import {
   type WritingSource,
 } from "../writingPipeline";
 import { buildStyleSection } from "../sourceRoles";
+import {
+  isOpenRouterWritingModelId,
+  type OpenRouterWritingModelId,
+} from "../openRouterWriting";
 
 export const MAX_SOURCE_EXCERPT_CHARS = 2000;
 export const MAX_SOURCE_FULLTEXT_CHARS = 30000;
@@ -65,6 +69,20 @@ export type WritingProjectContext = Pick<
 export type WritingStyleContext = Pick<WritingStyle, "name" | "description" | "voiceProfile">;
 export type PromptSource = WritingSource | TieredSource;
 export type WritingMode = "precision" | "extended";
+export type WritingModelChoice = WritingMode | OpenRouterWritingModelId;
+export type ConversationModelSet =
+  | {
+      provider: "anthropic";
+      chat: string;
+      compile: string;
+      verify: string;
+    }
+  | {
+      provider: "openrouter";
+      chat: OpenRouterWritingModelId;
+      compile: OpenRouterWritingModelId;
+      verify: OpenRouterWritingModelId;
+    };
 export type ContextWarningLevel = "ok" | "caution" | "critical";
 export type AnthropicHistoryMessage = { role: "user" | "assistant"; content: string };
 
@@ -97,16 +115,36 @@ export function prettyToneLabel(tone?: string): string {
   return tone;
 }
 
+export function normalizeWritingModel(value: string | null | undefined): WritingModelChoice {
+  if (value === "extended") return "extended";
+  if (value && isOpenRouterWritingModelId(value)) return value;
+  return "precision";
+}
+
 export function getWritingMode(conv: Pick<Conversation, "writingModel">): WritingMode {
-  return conv.writingModel === "extended" ? "extended" : "precision";
+  return normalizeWritingModel(conv.writingModel) === "extended" ? "extended" : "precision";
 }
 
 export function getModelsForConversation(
   conv: Pick<Conversation, "writingModel">,
   tier?: string | null,
-) {
-  const mode = getWritingMode(conv);
-  return tier === "free" ? FREE_MODELS[mode] : MODELS[mode];
+): ConversationModelSet {
+  const modelChoice = normalizeWritingModel(conv.writingModel);
+  if (isOpenRouterWritingModelId(modelChoice)) {
+    return {
+      provider: "openrouter",
+      chat: modelChoice,
+      compile: modelChoice,
+      verify: modelChoice,
+    };
+  }
+
+  const mode = modelChoice;
+  const selectedModels = tier === "free" ? FREE_MODELS[mode] : MODELS[mode];
+  return {
+    provider: "anthropic",
+    ...selectedModels,
+  };
 }
 
 function estimateTokens(text: string): number {

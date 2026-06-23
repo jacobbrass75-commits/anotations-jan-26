@@ -12,7 +12,11 @@ import { writingStyleStorage } from "../writingStyleStorage";
 import { storage } from "../storage";
 import { checkTokenBudget, requireAuth } from "../auth";
 import { aiLimiter } from "../rateLimits";
-import { incrementTokenUsage } from "../authStorage";
+import {
+  getUserById,
+  incrementAiBudgetUsage,
+  incrementTokenUsage,
+} from "../authStorage";
 import { logContextSnapshot, logToolCall } from "../analyticsLogger";
 import {
   gatherEvidence,
@@ -59,6 +63,7 @@ import {
   estimateContextUsage,
   getModelsForConversation,
   getWritingMode,
+  normalizeWritingModel,
   isTieredSource,
   planSourceBlock,
   toAnthropicMessages,
@@ -82,6 +87,15 @@ import {
   loadSurroundingChunks,
 } from "./toolRequests";
 import { createLogger } from "../logger";
+import {
+  OpenRouterWritingError,
+  estimateOpenRouterMessagesCostMicrodollars,
+  getOpenRouterBudgetSnapshot,
+  getOpenRouterWritingModel,
+  runOpenRouterChatCompletion,
+  type OpenRouterChatMessage,
+  type OpenRouterWritingModelId,
+} from "../openRouterWriting";
 
 const logger = createLogger("chat/handlers");
 
@@ -131,6 +145,65 @@ async function recordUserTokenUsage(
 
 function getAnthropicClient(): Anthropic {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
+
+function toOpenRouterMessages(
+  systemPrompt: string | null,
+  messages: AnthropicHistoryMessage[],
+): OpenRouterChatMessage[] {
+  const openRouterMessages: OpenRouterChatMessage[] = [];
+  if (systemPrompt) {
+    openRouterMessages.push({ role: "system", content: systemPrompt });
+  }
+  for (const message of messages) {
+    openRouterMessages.push({
+      role: message.role,
+      content: message.content,
+    });
+  }
+  return openRouterMessages;
+}
+
+async function runOpenRouterWithBudget(input: {
+  userId: string;
+  modelId: OpenRouterWritingModelId;
+  messages: OpenRouterChatMessage[];
+  maxTokens: number;
+  title: string;
+}) {
+  const user = await getUserById(input.userId);
+  if (!user) {
+    throw new OpenRouterWritingError(401, "Authentication required");
+  }
+
+  const budget = getOpenRouterBudgetSnapshot(user);
+  if (budget.limitMicrodollars <= 0) {
+    throw new OpenRouterWritingError(
+      403,
+      "OpenRouter writing models require the Pro or Max plan",
+    );
+  }
+
+  const model = await getOpenRouterWritingModel(input.modelId);
+  const estimatedCostMicrodollars = estimateOpenRouterMessagesCostMicrodollars(
+    model,
+    input.messages,
+    input.maxTokens,
+  );
+  if (estimatedCostMicrodollars > budget.remainingMicrodollars) {
+    throw new OpenRouterWritingError(403, "OpenRouter writing model budget exceeded");
+  }
+
+  const result = await runOpenRouterChatCompletion({
+    model,
+    messages: input.messages,
+    maxTokens: input.maxTokens,
+    temperature: 0.8,
+    title: input.title,
+    timeoutMs: 90_000,
+  });
+  await incrementAiBudgetUsage(user.id, result.costMicrodollars);
+  return result;
 }
 
 async function getOwnedWritingStyleOrNull(
@@ -400,7 +473,9 @@ export function registerChatRoutes(app: Express) {
           writingStyleId,
         } = req.body || {};
 
-        const normalizedWritingModel = writingModel === "extended" ? "extended" : "precision";
+        const normalizedWritingModel = normalizeWritingModel(
+          typeof writingModel === "string" ? writingModel : undefined,
+        );
         const defaultModels = getModelsForConversation(
           { writingModel: normalizedWritingModel },
           req.user!.tier,
@@ -491,7 +566,9 @@ export function registerChatRoutes(app: Express) {
         if (title !== undefined) updates.title = title;
         if (model !== undefined) updates.model = model;
         if (writingModel !== undefined)
-          updates.writingModel = writingModel === "extended" ? "extended" : "precision";
+          updates.writingModel = normalizeWritingModel(
+            typeof writingModel === "string" ? writingModel : undefined,
+          );
         if (citationStyle !== undefined) updates.citationStyle = citationStyle;
         if (tone !== undefined) updates.tone = tone;
         if (humanize !== undefined) updates.humanize = humanize;
@@ -763,6 +840,41 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         const runTurn = async (
           messagesForTurn: AnthropicHistoryMessage[],
         ): Promise<StreamTurnResult> => {
+          if (models.provider === "openrouter") {
+            let fullText = "";
+            const detectedRequests: ToolRequest[] = [];
+            const parser = createDocumentStreamParser((event) => {
+              if (closed || res.writableEnded) return;
+              sendEvent(event as Record<string, unknown>);
+            });
+            const toolParser = createToolRequestParser((request) => {
+              detectedRequests.push(request);
+            });
+
+            const result = await runOpenRouterWithBudget({
+              userId: req.user!.userId,
+              modelId: models.chat,
+              messages: toOpenRouterMessages(systemPrompt, messagesForTurn),
+              maxTokens: CHAT_MAX_TOKENS,
+              title: "ScholarMark Writing Chat",
+            });
+
+            fullText = result.output;
+            parser.pushText(fullText);
+            toolParser.pushText(fullText);
+            parser.finish();
+            toolParser.finish();
+
+            return {
+              fullText,
+              usage: {
+                input_tokens: result.usage.promptTokens,
+                output_tokens: result.usage.completionTokens,
+              },
+              toolRequests: detectedRequests,
+            };
+          }
+
           return new Promise<StreamTurnResult>((resolve, reject) => {
             let fullText = "";
             const detectedRequests: ToolRequest[] = [];
@@ -1126,7 +1238,6 @@ ${chunkContext}`;
         res.setHeader("Connection", "keep-alive");
         res.setHeader("X-Accel-Buffering", "no");
 
-        const anthropic = getAnthropicClient();
         let aborted = false;
 
         req.on("close", () => {
@@ -1137,6 +1248,30 @@ ${chunkContext}`;
 
         stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
 
+        if (models.provider === "openrouter") {
+          const result = await runOpenRouterWithBudget({
+            userId: req.user!.userId,
+            modelId: models.compile,
+            messages: [{ role: "user", content: compilePrompt }],
+            maxTokens: COMPILE_MAX_TOKENS,
+            title: "ScholarMark Writing Compile",
+          });
+          await recordUserTokenUsage(
+            req.user!.userId,
+            result.usage.totalTokens,
+            "chat_compile",
+          );
+          if (!aborted) {
+            stopHeartbeat?.();
+            stopHeartbeat = null;
+            res.write(`data: ${JSON.stringify({ type: "text", text: result.output })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+            res.end();
+          }
+          return;
+        }
+
+        const anthropic = getAnthropicClient();
         const stream = anthropic.messages.stream({
           model: models.compile,
           max_tokens: COMPILE_MAX_TOKENS,
@@ -1221,7 +1356,6 @@ ${chunkContext}`;
         res.setHeader("Connection", "keep-alive");
         res.setHeader("X-Accel-Buffering", "no");
 
-        const anthropic = getAnthropicClient();
         let aborted = false;
 
         req.on("close", () => {
@@ -1232,6 +1366,30 @@ ${chunkContext}`;
 
         stopHeartbeat = startSseHeartbeat(res, { isClosed: () => aborted });
 
+        if (models.provider === "openrouter") {
+          const result = await runOpenRouterWithBudget({
+            userId: req.user!.userId,
+            modelId: models.verify,
+            messages: [{ role: "user", content: verifyPrompt }],
+            maxTokens: VERIFY_MAX_TOKENS,
+            title: "ScholarMark Writing Verify",
+          });
+          await recordUserTokenUsage(
+            req.user!.userId,
+            result.usage.totalTokens,
+            "chat_verify",
+          );
+          if (!aborted) {
+            stopHeartbeat?.();
+            stopHeartbeat = null;
+            res.write(`data: ${JSON.stringify({ type: "text", text: result.output })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+            res.end();
+          }
+          return;
+        }
+
+        const anthropic = getAnthropicClient();
         const stream = anthropic.messages.stream({
           model: models.verify,
           max_tokens: VERIFY_MAX_TOKENS,

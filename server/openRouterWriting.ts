@@ -17,9 +17,14 @@ export const OPENROUTER_WRITING_MODEL_IDS = [
   "moonshotai/kimi-k2.6",
   "moonshotai/kimi-k2.5",
   "z-ai/glm-5",
-  "deepseek/deepseek-v4",
+  "deepseek/deepseek-v4-pro",
+  "deepseek/deepseek-v4-flash",
   "openai/gpt-5.5",
-  "google/gemini-3-pro",
+  "google/gemini-3.1-pro-preview",
+  "google/gemini-3.5-flash",
+  "google/gemini-3.1-flash-lite",
+  "google/gemini-2.5-pro",
+  "google/gemini-2.5-flash",
   "anthropic/claude-opus-4.8",
 ] as const;
 
@@ -52,10 +57,45 @@ const STATIC_PRICING: Partial<
     completionUsdPerToken: 0.00000192,
     contextLength: 202_752,
   },
+  "deepseek/deepseek-v4-pro": {
+    promptUsdPerToken: 0.000000435,
+    completionUsdPerToken: 0.00000087,
+    contextLength: 1_048_576,
+  },
+  "deepseek/deepseek-v4-flash": {
+    promptUsdPerToken: 0.00000009,
+    completionUsdPerToken: 0.00000018,
+    contextLength: 1_048_576,
+  },
   "openai/gpt-5.5": {
     promptUsdPerToken: 0.000005,
     completionUsdPerToken: 0.00003,
     contextLength: 1_050_000,
+  },
+  "google/gemini-3.1-pro-preview": {
+    promptUsdPerToken: 0.000002,
+    completionUsdPerToken: 0.000012,
+    contextLength: 1_048_576,
+  },
+  "google/gemini-3.5-flash": {
+    promptUsdPerToken: 0.0000015,
+    completionUsdPerToken: 0.000009,
+    contextLength: 1_048_576,
+  },
+  "google/gemini-3.1-flash-lite": {
+    promptUsdPerToken: 0.00000025,
+    completionUsdPerToken: 0.0000015,
+    contextLength: 1_048_576,
+  },
+  "google/gemini-2.5-pro": {
+    promptUsdPerToken: 0.00000125,
+    completionUsdPerToken: 0.00001,
+    contextLength: 1_048_576,
+  },
+  "google/gemini-2.5-flash": {
+    promptUsdPerToken: 0.0000003,
+    completionUsdPerToken: 0.0000025,
+    contextLength: 1_048_576,
   },
   "anthropic/claude-opus-4.8": {
     promptUsdPerToken: 0.000005,
@@ -178,7 +218,7 @@ async function fetchModelCatalog(): Promise<Map<string, OpenRouterModelInfo>> {
   return models;
 }
 
-function isOpenRouterWritingModelId(value: string): value is OpenRouterWritingModelId {
+export function isOpenRouterWritingModelId(value: string): value is OpenRouterWritingModelId {
   return (OPENROUTER_WRITING_MODEL_IDS as readonly string[]).includes(value);
 }
 
@@ -246,6 +286,23 @@ export function estimateWritingTestCostMicrodollars(
   });
 }
 
+export function estimateOpenRouterMessagesCostMicrodollars(
+  model: OpenRouterModelInfo,
+  messages: OpenRouterChatMessage[],
+  maxTokens: number,
+): number {
+  const pricing = requirePricing(model);
+  const promptTokens = messages.reduce(
+    (total, message) => total + estimateTokens(message.content),
+    0,
+  );
+  return calculateCostMicrodollars({
+    promptTokens,
+    completionTokens: maxTokens,
+    ...pricing,
+  });
+}
+
 function calculateCostMicrodollars(input: {
   promptTokens: number;
   completionTokens: number;
@@ -284,6 +341,42 @@ export async function runOpenRouterWritingTest(input: {
   };
   costMicrodollars: number;
 }> {
+  return runOpenRouterChatCompletion({
+    model: input.model,
+    messages: [
+      { role: "system", content: OPENROUTER_WRITING_TEST_SETTINGS.systemPrompt },
+      { role: "user", content: input.prompt },
+    ],
+    maxTokens: OPENROUTER_WRITING_TEST_SETTINGS.maxTokens,
+    temperature: OPENROUTER_WRITING_TEST_SETTINGS.temperature,
+    title: "ScholarMark Writing Model Test",
+    timeoutMs: 45_000,
+  });
+}
+
+export type OpenRouterChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+export async function runOpenRouterChatCompletion(input: {
+  model: OpenRouterModelInfo;
+  messages: OpenRouterChatMessage[];
+  maxTokens: number;
+  temperature?: number;
+  title?: string;
+  timeoutMs?: number;
+}): Promise<{
+  id: string | null;
+  model: OpenRouterWritingModelId;
+  output: string;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  costMicrodollars: number;
+}> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) {
     throw new OpenRouterWritingError(503, "OPENROUTER_API_KEY is not configured");
@@ -302,18 +395,15 @@ export async function runOpenRouterWritingTest(input: {
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
       "http-referer": process.env.APP_BASE_URL || "https://app.scholarmark.ai",
-      "x-openrouter-title": "ScholarMark Writing Model Test",
+      "x-openrouter-title": input.title || "ScholarMark Writing",
     },
     body: JSON.stringify({
       model: input.model.id,
-      messages: [
-        { role: "system", content: OPENROUTER_WRITING_TEST_SETTINGS.systemPrompt },
-        { role: "user", content: input.prompt },
-      ],
-      temperature: OPENROUTER_WRITING_TEST_SETTINGS.temperature,
-      max_tokens: OPENROUTER_WRITING_TEST_SETTINGS.maxTokens,
+      messages: input.messages,
+      temperature: input.temperature ?? OPENROUTER_WRITING_TEST_SETTINGS.temperature,
+      max_tokens: input.maxTokens,
     }),
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(input.timeoutMs ?? 60_000),
   });
 
   if (!response.ok) {
@@ -350,7 +440,7 @@ export async function runOpenRouterWritingTest(input: {
   const responseCostUsd = parsePrice(body.usage?.cost);
   const costMicrodollars =
     responseCostUsd !== null
-      ? Math.max(1, Math.ceil(responseCostUsd * MICRODOLLARS_PER_DOLLAR))
+      ? Math.max(1, Math.ceil(responseCostUsd * MICRODOLLARS_PER_DOLLAR - 1e-6))
       : calculateCostMicrodollars({ promptTokens, completionTokens, ...pricing });
 
   return {

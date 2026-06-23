@@ -23,6 +23,11 @@ import { useWritingPipeline, type WritingRequest } from "@/hooks/useWriting";
 import { queryClient } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
 import {
+  WRITING_MODEL_OPTIONS,
+  normalizeWritingModelValue,
+  type WritingModelValue,
+} from "@/lib/writingModels";
+import {
   stripMarkdown,
   buildDocxBlob,
   buildPdfBlob,
@@ -210,8 +215,8 @@ export default function WritingChat({
   // Writing settings
   const [citationStyle, setCitationStyle] = useState(conversationData?.citationStyle || "chicago");
   const [tone, setTone] = useState(conversationData?.tone || "academic");
-  const [writingModel, setWritingModel] = useState<"precision" | "extended">(
-    conversationData?.writingModel === "extended" ? "extended" : "precision",
+  const [writingModel, setWritingModel] = useState<WritingModelValue>(
+    normalizeWritingModelValue(conversationData?.writingModel),
   );
   const [humanize, setHumanize] = useState(conversationData?.humanize ?? true);
   const [noEnDashes, setNoEnDashes] = useState(conversationData?.noEnDashes || false);
@@ -228,7 +233,7 @@ export default function WritingChat({
     if (conversationData) {
       if (conversationData.citationStyle) setCitationStyle(conversationData.citationStyle);
       if (conversationData.tone) setTone(conversationData.tone);
-      setWritingModel(conversationData.writingModel === "extended" ? "extended" : "precision");
+      setWritingModel(normalizeWritingModelValue(conversationData.writingModel));
       if (conversationData.humanize !== undefined && conversationData.humanize !== null) {
         setHumanize(conversationData.humanize);
       }
@@ -1058,8 +1063,11 @@ export default function WritingChat({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="precision">Precision (Opus)</SelectItem>
-                      <SelectItem value="extended">Extended (Sonnet)</SelectItem>
+                      {WRITING_MODEL_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <div className="grid grid-cols-[1fr_auto] gap-2">

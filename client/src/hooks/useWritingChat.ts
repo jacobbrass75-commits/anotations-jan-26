@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
+import type { WritingModelValue } from "@/lib/writingModels";
 import type { Conversation, Message } from "@shared/schema";
 
 export interface ConversationWithMessages extends Conversation {
@@ -93,7 +94,7 @@ export function useCreateWritingConversation() {
       projectId?: string | null;
       selectedSourceIds?: string[];
       writingStyleId?: string | null;
-      writingModel?: "precision" | "extended";
+      writingModel?: WritingModelValue;
       citationStyle?: string;
       tone?: string;
       humanize?: boolean;
