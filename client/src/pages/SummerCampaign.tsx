@@ -405,7 +405,7 @@ export default function SummerCampaign() {
                 FAQ
               </Link>
             </nav>
-            <Link href="/sign-in">
+            <Link href={withRedirectUrl("/sign-in", "/dashboard")}>
               <Button variant="ghost" size="sm">
                 Sign in
               </Button>

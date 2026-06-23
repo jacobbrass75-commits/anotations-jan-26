@@ -74,7 +74,7 @@ function labelPaperType(value: CampaignSignupForm["paperType"]): string {
 function buildSignupEmail({ form, referralCode }: CampaignSignupEmailInput): ResendEmailPayload {
   const baseUrl = getMarketingBaseUrl();
   const referralUrl = `${baseUrl}/invite/${encodeURIComponent(referralCode)}`;
-  const planUrl = `${baseUrl}/sign-up?redirect=${encodeURIComponent("/summer/onboarding")}`;
+  const planUrl = `${baseUrl}/sign-up?redirect_url=${encodeURIComponent("/summer/onboarding")}`;
   const firstName = form.name.trim().split(/\s+/)[0] || "there";
   const projectType = labelPaperType(form.paperType);
   const classYear = labelClassYear(form.classYear);

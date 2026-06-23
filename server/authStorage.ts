@@ -79,6 +79,7 @@ export async function getOrCreateUser(
       tier: resolvedTier,
       tokensUsed: 0,
       tokenLimit: tierLimits.tokenLimit,
+      aiBudgetMicrodollarsUsed: 0,
       storageUsed: 0,
       storageLimit: tierLimits.storageLimit,
       emailVerified,
@@ -193,6 +194,7 @@ export async function setUserTier(
 
   if (resetUsage) {
     updates.tokensUsed = 0;
+    updates.aiBudgetMicrodollarsUsed = 0;
     updates.billingCycleStart = new Date();
   }
 
@@ -206,6 +208,20 @@ export async function incrementTokenUsage(id: string, tokens: number): Promise<v
     .update(users)
     .set({
       tokensUsed: sql`${users.tokensUsed} + ${usedTokens}`,
+      updatedAt: new Date(),
+    } as any)
+    .where(eq(users.id, id))
+    .returning({ id: users.id });
+  if (!updated) throw new Error("User not found");
+}
+
+export async function incrementAiBudgetUsage(id: string, microdollars: number): Promise<void> {
+  if (!Number.isFinite(microdollars) || microdollars <= 0) return;
+  const usedMicrodollars = Math.ceil(microdollars);
+  const [updated] = await db
+    .update(users)
+    .set({
+      aiBudgetMicrodollarsUsed: sql`${users.aiBudgetMicrodollarsUsed} + ${usedMicrodollars}`,
       updatedAt: new Date(),
     } as any)
     .where(eq(users.id, id))
@@ -357,6 +373,11 @@ export async function decrementStorageUsage(id: string, bytes: number): Promise<
 export async function resetTokenUsage(id: string): Promise<void> {
   await db
     .update(users)
-    .set({ tokensUsed: 0, billingCycleStart: new Date(), updatedAt: new Date() } as any)
+    .set({
+      tokensUsed: 0,
+      aiBudgetMicrodollarsUsed: 0,
+      billingCycleStart: new Date(),
+      updatedAt: new Date(),
+    } as any)
     .where(eq(users.id, id));
 }

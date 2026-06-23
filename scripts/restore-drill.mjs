@@ -200,6 +200,7 @@ async function runRestoredAppSmoke() {
         APP_BASE_URL: appBaseUrl,
         SKIP_BILLING_SMOKE: "1",
         SKIP_MCP_SMOKE: "1",
+        SKIP_STATIC_ROUTE_SMOKE: "1",
         SMOKE_TIMEOUT_MS: "5000",
       },
       stdio: "pipe",

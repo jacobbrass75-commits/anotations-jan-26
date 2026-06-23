@@ -99,6 +99,72 @@ transport.onclose = () => {
 };
 ```
 
+## Client Compatibility Notes
+
+### Claude
+
+Claude web, Claude Desktop, and Claude Code should use the Streamable HTTP endpoint:
+
+```text
+https://mcp.scholarmark.ai/mcp
+```
+
+Claude Code can be configured with:
+
+```bash
+claude mcp add --transport http scholarmark https://mcp.scholarmark.ai/mcp
+```
+
+Claude hosted connectors connect from Anthropic cloud infrastructure, so the endpoint must remain public HTTPS. Claude Code can complete OAuth through a local callback from the `/mcp` panel.
+
+### Gemini
+
+Gemini CLI supports remote MCP servers through `httpUrl` in `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "scholarmark": {
+      "httpUrl": "https://mcp.scholarmark.ai/mcp",
+      "timeout": 300000
+    }
+  }
+}
+```
+
+Gemini CLI can also add the server directly:
+
+```bash
+gemini mcp add --transport http scholarmark https://mcp.scholarmark.ai/mcp
+```
+
+OAuth discovery depends on the same `401` plus `WWW-Authenticate` behavior used for Claude. Gemini CLI needs a local browser and localhost callback for OAuth.
+
+### OpenAI And ChatGPT
+
+ChatGPT developer mode and ChatGPT Apps use the public `/mcp` endpoint:
+
+```text
+https://mcp.scholarmark.ai/mcp
+```
+
+ChatGPT expects:
+
+- protected resource metadata at `https://mcp.scholarmark.ai/.well-known/oauth-protected-resource`;
+- OAuth metadata at `https://app.scholarmark.ai/.well-known/oauth-authorization-server`;
+- OAuth authorization-code with PKCE;
+- dynamic client registration or another supported client registration path;
+- the `resource` parameter to stay consistent through authorization and token exchange;
+- bearer tokens to be verified for every protected MCP request.
+
+For OpenAI Responses API remote MCP, the developer application passes an access token as MCP tool authorization. ChatGPT connector auth is handled by ChatGPT through ScholarMark OAuth metadata.
+
+Detailed setup docs:
+
+- `../docs/integrations/gemini-mcp.md`
+- `../docs/integrations/claude-mcp.md`
+- `../docs/integrations/openai-chatgpt-mcp.md`
+
 ## Deployment
 
 ```bash

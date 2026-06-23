@@ -2,6 +2,7 @@ import { ArrowRight, BookOpen, FileText, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { withRedirectUrl } from "@/lib/redirects";
 
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
 
@@ -39,7 +40,7 @@ export function PublicSiteHeader({
             ))}
           </nav>
           <Button asChild size="sm" variant="ghost">
-            <Link href="/sign-in">Sign in</Link>
+            <Link href={withRedirectUrl("/sign-in", "/dashboard")}>Sign in</Link>
           </Button>
         </div>
       </div>

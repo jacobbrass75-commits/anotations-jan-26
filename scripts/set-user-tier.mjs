@@ -50,6 +50,7 @@ sqlite
         token_limit = ?,
         storage_limit = ?,
         tokens_used = 0,
+        ai_budget_microdollars_used = 0,
         billing_cycle_start = ?,
         updated_at = ?
     WHERE id = ?

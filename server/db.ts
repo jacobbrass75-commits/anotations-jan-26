@@ -314,6 +314,11 @@ ensureColumn("users", "stripe_price_id", "stripe_price_id TEXT");
 ensureColumn("users", "subscription_status", "subscription_status TEXT");
 ensureColumn("users", "subscription_current_period_end", "subscription_current_period_end INTEGER");
 ensureColumn("users", "cancel_at_period_end", "cancel_at_period_end INTEGER DEFAULT 0");
+ensureColumn(
+  "users",
+  "ai_budget_microdollars_used",
+  "ai_budget_microdollars_used INTEGER NOT NULL DEFAULT 0",
+);
 ensureColumn("campaign_signups", "account_created_at", "account_created_at INTEGER");
 ensureColumn("campaign_signups", "checkout_started_at", "checkout_started_at INTEGER");
 ensureColumn("campaign_signups", "last_checkout_session_id", "last_checkout_session_id TEXT");

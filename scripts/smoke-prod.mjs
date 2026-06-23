@@ -6,6 +6,7 @@ const mcpBaseUrl = trimSlash(process.env.MCP_BASE_URL || "http://127.0.0.1:5002"
 const skipApp = process.env.SKIP_APP_SMOKE === "1";
 const skipBilling = process.env.SKIP_BILLING_SMOKE === "1";
 const skipMcp = process.env.SKIP_MCP_SMOKE === "1";
+const skipStaticRouteSmoke = process.env.SKIP_STATIC_ROUTE_SMOKE === "1";
 const chromeExtensionId = (process.env.CHROME_EXTENSION_IDS || "")
   .split(",")
   .map((value) => value.trim())
@@ -70,8 +71,45 @@ async function runAppSmoke() {
     "static fallback is missing React mount point",
   );
 
+  if (!skipStaticRouteSmoke) {
+    for (const path of ["/summer", "/sign-in", "/sign-up", "/summer/onboarding"]) {
+      const page = await expectStatus(`app static fallback ${path}`, path, 200);
+      assert(
+        page.text.includes('<div id="root"></div>'),
+        `${path} is missing React mount point`,
+      );
+    }
+  } else {
+    console.log("[smoke] static route fallback checks skipped");
+  }
+
   const protectedApi = await expectStatus("auth-required API", "/api/auth/me", 401);
   assert(protectedApi.json?.message, "auth-required API did not return a JSON error");
+
+  const protectedModelList = await expectStatus(
+    "auth-required writing model tests",
+    "/api/write/test-models",
+    401,
+  );
+  assert(
+    protectedModelList.json?.message,
+    "writing model tests did not return a JSON auth error",
+  );
+
+  const invalidCampaignSignup = await expectStatus(
+    "campaign signup validation",
+    "/api/campaign/signup",
+    400,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "not-an-email" }),
+    },
+  );
+  assert(
+    invalidCampaignSignup.json?.message,
+    "campaign signup validation did not return a JSON error",
+  );
 
   if (!skipBilling) {
     const stripeConfig = await expectStatus(

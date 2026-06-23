@@ -1,9 +1,17 @@
+export const DEFAULT_SIGNED_IN_REDIRECT = "/dashboard";
+
 export function getSafeRedirectUrl(search?: string): string {
   const query = search ?? (typeof window === "undefined" ? "" : window.location.search);
-  const redirectUrl = new URLSearchParams(query).get("redirect_url") || "/";
+  const params = new URLSearchParams(query);
+  const redirectUrl =
+    params.get("redirect_url") || params.get("redirect") || DEFAULT_SIGNED_IN_REDIRECT;
 
   if (!redirectUrl.startsWith("/") || redirectUrl.startsWith("//")) {
-    return "/";
+    return DEFAULT_SIGNED_IN_REDIRECT;
+  }
+
+  if (redirectUrl.startsWith("/sign-in") || redirectUrl.startsWith("/sign-up")) {
+    return DEFAULT_SIGNED_IN_REDIRECT;
   }
 
   return redirectUrl;

@@ -341,6 +341,10 @@ describe("summer campaign routes", () => {
       expect(JSON.stringify(resendPayloads[0])).toContain(
         `https://scholarmark.ai/invite/${signup.body?.referralCode}`,
       );
+      expect(JSON.stringify(resendPayloads[0])).toContain(
+        "https://scholarmark.ai/sign-up?redirect_url=%2Fsummer%2Fonboarding",
+      );
+      expect(JSON.stringify(resendPayloads[0])).not.toContain("/sign-up?redirect=");
 
       const duplicate = await requestJson(server.baseUrl, "/api/campaign/signup", {
         method: "POST",

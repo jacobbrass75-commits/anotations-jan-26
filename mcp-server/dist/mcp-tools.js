@@ -139,6 +139,62 @@ function parseOptionalString(input, key) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
 }
+function parseOptionalSourceRole(input) {
+    const sourceRole = parseOptionalString(input, "source_role");
+    if (!sourceRole) {
+        return undefined;
+    }
+    const normalized = sourceRole.toLowerCase();
+    if (["evidence", "background", "style_reference"].includes(normalized)) {
+        return normalized;
+    }
+    throw new Error("source_role must be one of: evidence, background, style_reference");
+}
+function parseOptionalOcrMode(input) {
+    const ocrMode = parseOptionalString(input, "ocr_mode");
+    if (!ocrMode) {
+        return "standard";
+    }
+    const normalized = ocrMode.toLowerCase().replace(/-/g, "_");
+    if (["standard", "advanced", "vision", "vision_batch"].includes(normalized)) {
+        return normalized;
+    }
+    throw new Error("ocr_mode must be one of: standard, advanced, vision, vision_batch");
+}
+function parseBase64FileContent(input) {
+    const raw = parseRequiredString(input, "file_base64");
+    const commaIndex = raw.indexOf(",");
+    const encoded = raw.startsWith("data:") && commaIndex >= 0 ? raw.slice(commaIndex + 1) : raw;
+    const cleaned = encoded.replace(/\s+/g, "");
+    if (cleaned.length === 0) {
+        throw new Error("file_base64 must contain base64-encoded file bytes");
+    }
+    const buffer = Buffer.from(cleaned, "base64");
+    if (buffer.length === 0) {
+        throw new Error("file_base64 decoded to an empty file");
+    }
+    return buffer;
+}
+function buildProjectDocumentPayload(input, documentId) {
+    const payload = { documentId };
+    const folderId = parseOptionalString(input, "folder_id");
+    const projectContext = parseOptionalString(input, "project_context");
+    const roleInProject = parseOptionalString(input, "role_in_project");
+    const sourceRole = parseOptionalSourceRole(input);
+    if (folderId)
+        payload.folderId = folderId;
+    if (projectContext)
+        payload.projectContext = projectContext;
+    if (roleInProject)
+        payload.roleInProject = roleInProject;
+    if (sourceRole)
+        payload.sourceRole = sourceRole;
+    return payload;
+}
+async function addDocumentToProject(client, token, input, documentId) {
+    const projectId = encodeURIComponent(parseRequiredString(input, "project_id"));
+    return await client.requestJson("POST", `/api/projects/${projectId}/documents`, token, buildProjectDocumentPayload(input, documentId));
+}
 function buildQueryString(params) {
     const search = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
@@ -371,6 +427,52 @@ export function registerScholarMarkTools(server, options) {
         const projects = await client.requestJson("GET", "/api/projects", token);
         return asTextResult(projects);
     }));
+    registerTool(server, "create_project", "Create a new ScholarMark project for organizing sources, quote work, and writing", {
+        type: "object",
+        properties: {
+            name: { type: "string", description: "Project name" },
+            description: { type: "string", description: "Optional project description" },
+            thesis: { type: "string", description: "Optional working thesis or research question" },
+            scope: { type: "string", description: "Optional assignment scope, paper type, or constraints" },
+        },
+        required: ["name"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const name = parseRequiredString(input, "name");
+        const project = await client.requestJson("POST", "/api/projects", token, {
+            name,
+            description: parseOptionalString(input, "description"),
+            thesis: parseOptionalString(input, "thesis"),
+            scope: parseOptionalString(input, "scope"),
+        });
+        return asTextResult(project);
+    }));
+    registerTool(server, "get_source_library", "List uploaded ScholarMark sources in your personal library, before or after attaching them to projects", {
+        type: "object",
+        properties: {
+            search: { type: "string", description: "Optional case-insensitive filter over filename or summary" },
+            limit: { type: "integer", description: "Optional result limit (default 100, max 300)" },
+        },
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const rawSources = await client.requestJson("GET", "/api/documents/meta", token);
+        const sources = Array.isArray(rawSources) ? rawSources : [];
+        const search = parseOptionalString(input, "search")?.toLowerCase();
+        const limit = typeof input.limit === "number" && Number.isFinite(input.limit)
+            ? Math.max(1, Math.min(300, Math.floor(input.limit)))
+            : 100;
+        const filtered = search
+            ? sources.filter((source) => {
+                const filename = typeof source?.filename === "string" ? source.filename : "";
+                const summary = typeof source?.summary === "string" ? source.summary : "";
+                return `${filename}\n${summary}`.toLowerCase().includes(search);
+            })
+            : sources;
+        return asTextResult({
+            count: filtered.length,
+            sources: filtered.slice(0, limit),
+        });
+    }));
     registerTool(server, "get_project_sources", "List sources attached to a specific ScholarMark project", {
         type: "object",
         properties: {
@@ -382,6 +484,146 @@ export function registerScholarMarkTools(server, options) {
         const projectId = encodeURIComponent(parseRequiredString(input, "project_id"));
         const sources = await client.requestJson("GET", `/api/projects/${projectId}/documents`, token);
         return asTextResult(sources);
+    }));
+    registerTool(server, "search_project_sources", "Search across all sources and saved evidence in a ScholarMark project", {
+        type: "object",
+        properties: {
+            project_id: { type: "string", description: "ScholarMark project ID" },
+            query: { type: "string", description: "What to search for across the project" },
+            limit: { type: "integer", description: "Optional result limit" },
+        },
+        required: ["project_id", "query"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const projectId = encodeURIComponent(parseRequiredString(input, "project_id"));
+        const query = parseRequiredString(input, "query");
+        const limit = typeof input.limit === "number" && Number.isFinite(input.limit)
+            ? Math.max(1, Math.min(100, Math.floor(input.limit)))
+            : undefined;
+        const results = await client.requestJson("POST", `/api/projects/${projectId}/search`, token, {
+            query,
+            limit,
+        });
+        return asTextResult({
+            projectId: decodeURIComponent(projectId),
+            query,
+            results,
+        });
+    }));
+    registerTool(server, "add_source_to_project", "Attach an existing uploaded source from your library to a ScholarMark project", {
+        type: "object",
+        properties: {
+            project_id: { type: "string", description: "ScholarMark project ID" },
+            document_id: { type: "string", description: "Document ID from get_source_library" },
+            folder_id: { type: "string", description: "Optional project folder ID" },
+            source_role: {
+                type: "string",
+                description: "Optional role: evidence, background, or style_reference",
+            },
+            role_in_project: { type: "string", description: "Optional note about how this source should be used" },
+            project_context: { type: "string", description: "Optional project-specific context for this source" },
+        },
+        required: ["project_id", "document_id"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const documentId = parseRequiredString(input, "document_id");
+        const projectDocument = await addDocumentToProject(client, token, input, documentId);
+        return asTextResult({
+            documentId,
+            projectDocument,
+        });
+    }));
+    registerTool(server, "upload_text_to_project", "Create a ScholarMark source from pasted text and attach it to a project", {
+        type: "object",
+        properties: {
+            project_id: { type: "string", description: "ScholarMark project ID" },
+            title: { type: "string", description: "Source title or filename" },
+            text: { type: "string", description: "Source text to save and index" },
+            folder_id: { type: "string", description: "Optional project folder ID" },
+            source_role: {
+                type: "string",
+                description: "Optional role: evidence, background, or style_reference",
+            },
+            role_in_project: { type: "string", description: "Optional note about how this source should be used" },
+            project_context: { type: "string", description: "Optional project-specific context for this source" },
+        },
+        required: ["project_id", "text"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const text = parseRequiredString(input, "text");
+        const formData = new FormData();
+        const title = parseOptionalString(input, "title");
+        if (title) {
+            formData.append("title", title);
+        }
+        formData.append("text", text);
+        const document = await client.requestFormData("POST", "/api/upload-text", token, formData);
+        const documentId = typeof document?.id === "string" ? document.id : "";
+        if (!documentId) {
+            throw new Error("Text upload did not return a document ID.");
+        }
+        const projectDocument = await addDocumentToProject(client, token, input, documentId);
+        return asTextResult({
+            document,
+            projectDocument,
+        });
+    }));
+    registerTool(server, "upload_file_to_project", "Upload a base64-encoded file as a ScholarMark source and attach it to a project", {
+        type: "object",
+        properties: {
+            project_id: { type: "string", description: "ScholarMark project ID" },
+            filename: { type: "string", description: "Original filename, including extension" },
+            file_base64: { type: "string", description: "Base64 file content, optionally as a data URL" },
+            mime_type: { type: "string", description: "Optional MIME type, for example application/pdf" },
+            ocr_mode: { type: "string", description: "Optional OCR mode: standard, advanced, vision, or vision_batch" },
+            ocr_model: { type: "string", description: "Optional OCR model override for image or vision PDF processing" },
+            folder_id: { type: "string", description: "Optional project folder ID" },
+            source_role: {
+                type: "string",
+                description: "Optional role: evidence, background, or style_reference",
+            },
+            role_in_project: { type: "string", description: "Optional note about how this source should be used" },
+            project_context: { type: "string", description: "Optional project-specific context for this source" },
+        },
+        required: ["project_id", "filename", "file_base64"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const filename = parseRequiredString(input, "filename");
+        const mimeType = parseOptionalString(input, "mime_type") || "application/octet-stream";
+        const fileBuffer = parseBase64FileContent(input);
+        const formData = new FormData();
+        formData.append("file", new Blob([fileBuffer], { type: mimeType }), filename);
+        formData.append("ocrMode", parseOptionalOcrMode(input));
+        const ocrModel = parseOptionalString(input, "ocr_model");
+        if (ocrModel) {
+            formData.append("ocrModel", ocrModel);
+        }
+        const document = await client.requestFormData("POST", "/api/upload", token, formData);
+        const documentId = typeof document?.id === "string" ? document.id : "";
+        if (!documentId) {
+            throw new Error("File upload did not return a document ID.");
+        }
+        const projectDocument = await addDocumentToProject(client, token, input, documentId);
+        return asTextResult({
+            document,
+            projectDocument,
+        });
+    }));
+    registerTool(server, "get_source_status", "Check whether an uploaded ScholarMark source is ready, processing, or errored", {
+        type: "object",
+        properties: {
+            project_document_id: { type: "string", description: "Project document ID from get_project_sources" },
+            document_id: { type: "string", description: "Underlying document ID if you already have it" },
+        },
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const { projectDocumentId, documentId } = await resolveSourceIds(client, token, input);
+        const status = await client.requestJson("GET", `/api/documents/${encodeURIComponent(documentId)}/status`, token);
+        return asTextResult({
+            projectDocumentId: projectDocumentId ?? null,
+            documentId,
+            status,
+        });
     }));
     registerTool(server, "get_source_summary", "Load a source summary, key concepts, and related project-document metadata", {
         type: "object",

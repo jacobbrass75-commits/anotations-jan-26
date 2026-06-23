@@ -22,6 +22,7 @@ export const testFiles = [
   "tests/server/humanizer.test.ts",
   "tests/server/analyticsRoutes.integration.test.ts",
   "tests/server/campaignRoutes.integration.test.ts",
+  "tests/server/openRouterWritingRoutes.integration.test.ts",
   "tests/server/authRoutes.integration.test.ts",
   "tests/server/rateLimits.integration.test.ts",
   "tests/server/chatRoutes.integration.test.ts",

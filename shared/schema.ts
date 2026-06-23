@@ -224,6 +224,7 @@ export const users = sqliteTable("users", {
   tier: text("tier").notNull().default("free"), // "free" | "pro" | "max"
   tokensUsed: integer("tokens_used").notNull().default(0),
   tokenLimit: integer("token_limit").notNull().default(50000), // 50K for free
+  aiBudgetMicrodollarsUsed: integer("ai_budget_microdollars_used").notNull().default(0),
   storageUsed: integer("storage_used").notNull().default(0), // bytes
   storageLimit: integer("storage_limit").notNull().default(52428800), // 50MB for free
   emailVerified: integer("email_verified", { mode: "boolean" }).default(false),

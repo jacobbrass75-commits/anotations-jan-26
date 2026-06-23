@@ -11,6 +11,7 @@ export interface AuthUser {
   tier: string;
   tokensUsed: number;
   tokenLimit: number;
+  aiBudgetMicrodollarsUsed: number;
   storageUsed: number;
   storageLimit: number;
   emailVerified: boolean | null;

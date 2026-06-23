@@ -68,6 +68,28 @@ export class ScholarMarkBackendClient {
         }
         return await response.json();
     }
+    async requestFormData(method, path, bearerToken, formData, timeoutMs = this.requestTimeoutMs) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(`${this.baseUrl}${path}`, {
+                method,
+                headers: {
+                    Authorization: `Bearer ${bearerToken}`,
+                    Accept: "application/json",
+                },
+                body: formData,
+                signal: controller.signal,
+            });
+            if (!response.ok) {
+                throw new BackendHttpError(response.status, await parseResponseBody(response));
+            }
+            return await response.json();
+        }
+        finally {
+            clearTimeout(timeout);
+        }
+    }
     async requestSSE(method, path, bearerToken, body, timeoutMs = this.requestTimeoutMs) {
         const response = await this.request(method, path, bearerToken, body, {
             acceptSse: true,

@@ -19,6 +19,7 @@ import { registerProjectRoutes } from "./projectRoutes";
 import { registerWritingStyleRoutes } from "./writingStyleRoutes";
 import { registerChatRoutes } from "./chatRoutes";
 import { registerWritingRoutes } from "./writingRoutes";
+import { registerOpenRouterWritingRoutes } from "./openRouterWritingRoutes";
 import { registerHumanizerRoutes } from "./humanizerRoutes";
 import { registerExtensionRoutes } from "./extensionRoutes";
 import { registerWebClipRoutes } from "./webClipRoutes";
@@ -1132,6 +1133,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
 
   // Register writing pipeline routes
   registerWritingRoutes(app);
+  registerOpenRouterWritingRoutes(app);
 
   // Register humanizer routes
   registerHumanizerRoutes(app);
