@@ -1,6 +1,6 @@
 # ScholarMark Architecture
 
-Last verified against the local codebase on 2026-06-10.
+Last verified against the local codebase on 2026-06-24.
 
 This document is the future-reference map for the app: what exists, where it lives, how the major flows work, and what still needs to happen before production launch.
 
@@ -309,6 +309,37 @@ Admin access is controlled by `ADMIN_USER_IDS`.
 8. Compile and verify endpoints reuse conversation context to draft and check writing.
 9. `server/quoteJumpLinks.ts` injects source-jump links into compiled markdown.
 
+### Writing Dashboard
+
+`client/src/pages/WritingPage.tsx` renders `client/src/components/WritingChat.tsx`, which is the primary AI writing workspace. It combines conversation history, selected project/web-clip sources, writing settings, generated document preview, compile/verify/humanize actions, and the Quick Generate full-paper modal.
+
+The dashboard uses the shared chat UI primitives in `client/src/components/chat/`:
+
+- `ChatSidebar.tsx` lists conversations, supports create/select/rename/delete, and can show per-conversation background activity.
+- `ChatMessages.tsx` renders user bubbles, assistant markdown, streamed status, and `<document>` artifacts as selectable document cards.
+- `ChatInput.tsx` is the bottom composer. It auto-resizes, preserves the draft area during generation, and swaps the primary Send action for Stop when the active conversation is streaming.
+- `DocumentPanel.tsx` previews the selected or currently streaming artifact and exposes copy/DOCX actions.
+
+The writing-chat stream lifecycle is conversation-scoped. `client/src/hooks/useWritingChat.ts` keeps a stream snapshot map keyed by conversation ID, while `client/src/lib/writingStreamState.ts` owns pure stream-state helpers and regression-testable selection behavior. This prevents a request in one conversation from making a newly created or selected conversation appear busy. Stopping a response uses `AbortController`; the backend already aborts active Anthropic streams when the HTTP request closes in `server/chat/handlers.ts`.
+
+Important behavior constraints:
+
+- A user can create or select another conversation while a prior conversation is still generating.
+- Only the active conversation's stream is rendered in `ChatMessages` and only the active conversation's composer shows Stop.
+- Pending user bubbles are keyed by conversation ID, so switching threads does not leak the pending message into another thread.
+- Stream events are still parsed from SSE-style `data:` lines, including `writing_status`, `chat_text`, `document_start`, `document_text`, `document_end`, `context_loading`, `context_warning`, `done`, and `error`.
+- The model picker values in `client/src/lib/writingModels.ts` are expected to match `server/openRouterWriting.ts` plus the built-in `precision` and `extended` Anthropic modes. `server/chat/promptBuilder.ts` routes all OpenRouter writing model IDs to OpenRouter for chat, compile, and verify.
+- Quick Generate uses `client/src/hooks/useWriting.ts` and `/api/write`, separate from writing-chat streams. The dashboard exposes a Stop control through the hook's client abort path, but server-side abort propagation into `runWritingPipeline` is still a follow-up improvement.
+
+Writing dashboard baseline/current-state test matrix:
+
+- Conversation CRUD: standalone and project-scoped list, create with settings/sources/style, select, rename, delete, and project switch reset.
+- Composer: empty-thread first send, existing-thread send, Enter/Shift+Enter, character limit, pending user bubble, Stop button, and draft preservation while active generation runs.
+- Streaming protocol: `writing_status`, `chat_text`, document artifact start/text/end, context loading/loaded/warning, `done`, `error`, timeout sanitization, and query invalidation.
+- Concurrency regressions: create/select/delete/project-switch during active generation; old streams must not render in the new thread and the new composer must not inherit another conversation's busy state.
+- Writing controls: source selection, source roles, model/style/citation/tone/humanize/no-en-dashes persistence, compile, verify, humanize compiled output, copy, DOCX/PDF export, Quick Generate save.
+- Entitlements/errors: auth, Pro/Max gates, token budget, document quota, OpenRouter model failures, and provider timeout paths.
+
 ### Writing Pipeline
 
 `POST /api/write` is a one-shot SSE-style writing flow for Pro+ users. It assembles sources, runs `server/writingPipeline.ts`, streams plan/section/final events, and stores generated-paper history.
@@ -467,6 +498,8 @@ Current test areas:
 - humanizer tests
 - quote jump link tests
 - source file tests
+- writing stream-state regression tests
+- writing model-routing contract tests
 - backup script tests
 - shared annotation link tests
 

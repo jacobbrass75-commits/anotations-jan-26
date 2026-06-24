@@ -150,7 +150,7 @@ export default function WritingChat({
 
   // Conversation management
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
+  const [pendingUserMessages, setPendingUserMessages] = useState<Record<string, string>>({});
   const { data: projectConversations = [] } = useProjectConversations(
     hasSelectedProject ? selectedProjectId : undefined,
   );
@@ -166,6 +166,7 @@ export default function WritingChat({
   const messages = conversationData?.messages || [];
   const {
     send,
+    stop,
     streamingText,
     streamingChatText,
     documentTitle,
@@ -177,7 +178,11 @@ export default function WritingChat({
     contextWarning,
     streamError,
     streamStatus,
+    streamingConversationIds,
   } = useWritingSendMessage(activeConversationId);
+  const pendingUserMessage = activeConversationId
+    ? (pendingUserMessages[activeConversationId] ?? null)
+    : null;
 
   // Source management
   const { data: projectSources = [], isLoading: projectSourcesLoading } = useProjectDocuments(
@@ -395,17 +400,6 @@ export default function WritingChat({
         humanize,
         noEnDashes,
       });
-      await updateConversation.mutateAsync({
-        id: conv.id,
-        data: {
-          citationStyle,
-          tone,
-          writingModel,
-          humanize,
-          noEnDashes,
-          writingStyleId: selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
-        },
-      });
       setActiveConversationId(conv.id);
       clearCompiled();
     } catch {
@@ -425,7 +419,6 @@ export default function WritingChat({
     humanize,
     noEnDashes,
     createConversation,
-    updateConversation,
     clearCompiled,
     toast,
   ]);
@@ -442,6 +435,12 @@ export default function WritingChat({
     async (id: string) => {
       try {
         await deleteConversation.mutateAsync(id);
+        setPendingUserMessages((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
         if (activeConversationId === id) {
           setActiveConversationId(null);
           clearCompiled();
@@ -470,9 +469,13 @@ export default function WritingChat({
 
   const handleSend = useCallback(
     async (content: string) => {
-      setPendingUserMessage(content);
-      if (!activeConversationId) {
-        // Create a new conversation first
+      let targetConversationId = activeConversationId;
+
+      if (targetConversationId && streamingConversationIds.includes(targetConversationId)) {
+        return;
+      }
+
+      if (!targetConversationId) {
         try {
           const conv = await createConversation.mutateAsync({
             projectId: conversationProjectId,
@@ -486,42 +489,33 @@ export default function WritingChat({
             noEnDashes,
           });
           setActiveConversationId(conv.id);
-
-          // Save settings
-          await updateConversation.mutateAsync({
-            id: conv.id,
-            data: {
-              citationStyle,
-              tone,
-              writingModel,
-              humanize,
-              noEnDashes,
-              writingStyleId:
-                selectedWritingStyleId === NO_STYLE_VALUE ? null : selectedWritingStyleId,
-            },
-          });
-
-          await send(content, conv.id);
+          clearCompiled();
+          targetConversationId = conv.id;
         } catch {
           toast({
             title: "Error",
             description: "Failed to start conversation",
             variant: "destructive",
           });
-        } finally {
-          setPendingUserMessage(null);
+          return;
         }
-        return;
       }
 
+      setPendingUserMessages((prev) => ({ ...prev, [targetConversationId]: content }));
+
       try {
-        await send(content);
+        await send(content, targetConversationId);
       } finally {
-        setPendingUserMessage(null);
+        setPendingUserMessages((prev) => {
+          const next = { ...prev };
+          delete next[targetConversationId];
+          return next;
+        });
       }
     },
     [
       activeConversationId,
+      streamingConversationIds,
       conversationProjectId,
       localSelectedSourceIds,
       selectedWritingStyleId,
@@ -532,10 +526,15 @@ export default function WritingChat({
       noEnDashes,
       send,
       createConversation,
-      updateConversation,
+      clearCompiled,
       toast,
     ],
   );
+
+  const handleStopStreaming = useCallback(() => {
+    if (!activeConversationId) return;
+    stop(activeConversationId);
+  }, [activeConversationId, stop]);
 
   const toggleSource = useCallback(
     (id: string) => {
@@ -893,7 +892,7 @@ export default function WritingChat({
   );
 
   return (
-    <div className="h-full min-h-0 w-full max-w-full grid grid-cols-1 lg:grid-cols-[250px_1fr_380px] border border-border rounded-xl overflow-auto lg:overflow-hidden bg-[#F5F0E8] dark:bg-background">
+    <div className="h-full min-h-0 w-full max-w-full grid grid-cols-1 lg:grid-cols-[250px_1fr_380px] border border-border rounded-lg overflow-auto lg:overflow-hidden bg-background shadow-sm">
       {/* Left Sidebar - Conversations */}
       <ChatSidebar
         conversations={conversations}
@@ -902,10 +901,11 @@ export default function WritingChat({
         onNew={handleNewChat}
         onDelete={handleDeleteConversation}
         onRename={handleRenameConversation}
+        busyConversationIds={streamingConversationIds}
       />
 
       {/* Center - Chat */}
-      <section className="min-h-0 flex flex-col bg-[#FAF7F1] dark:bg-background border-l border-r border-border">
+      <section className="min-h-0 flex flex-col bg-background border-l border-r border-border">
         {/* Project header */}
         <div className="border-b border-border px-5 py-3 bg-background/80 backdrop-blur-sm">
           <div className="flex items-center justify-between gap-3">
@@ -1005,19 +1005,35 @@ export default function WritingChat({
         />
 
         {/* Input */}
-        {contextLoading && (
+        {isStreaming && streamStatus ? (
           <div className="border-t border-border px-5 py-2 text-xs text-muted-foreground bg-background/60">
-            {streamStatus?.message || `Loading source context (Level ${contextLoading.level})...`}
+            <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+              <span className="truncate">{streamStatus.message}</span>
+              {typeof streamStatus.progress === "number" && (
+                <span className="font-mono text-[10px] uppercase tracking-wider">
+                  {Math.round(streamStatus.progress)}%
+                </span>
+              )}
+            </div>
           </div>
-        )}
-        <ChatInput onSend={handleSend} disabled={isStreaming} />
+        ) : contextLoading ? (
+          <div className="border-t border-border px-5 py-2 text-xs text-muted-foreground bg-background/60">
+            {`Loading source context (Level ${contextLoading.level})...`}
+          </div>
+        ) : null}
+        <ChatInput
+          onSend={handleSend}
+          onStop={handleStopStreaming}
+          isStreaming={isStreaming}
+          placeholder="Ask for a draft, revision, outline, citation check..."
+        />
       </section>
 
       {/* Right Panel */}
       <aside
         ref={documentPanelRef}
         tabIndex={-1}
-        className="min-h-[320px] lg:min-h-0 bg-[#F1ECE2] dark:bg-muted/10 focus:outline-none"
+        className="min-h-[320px] lg:min-h-0 bg-muted/20 focus:outline-none"
       >
         <div className="h-full min-h-0 flex flex-col p-4 gap-4">
           {activeDocument && (
@@ -1410,22 +1426,22 @@ export default function WritingChat({
                             Deep Write
                           </label>
                         </div>
-                        <Button
-                          onClick={handleQuickGenerate}
-                          className="w-full"
-                          disabled={quickGenerate.isGenerating}
-                        >
-                          {quickGenerate.isGenerating ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
+                        {quickGenerate.isGenerating ? (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={quickGenerate.cancel}
+                            className="w-full"
+                          >
+                            <StopCircle className="h-4 w-4 mr-2" />
+                            Stop
+                          </Button>
+                        ) : (
+                          <Button onClick={handleQuickGenerate} className="w-full">
                             <FileText className="h-4 w-4 mr-2" />
-                          )}
-                          {quickGenerate.isGenerating
-                            ? "Generating..."
-                            : quickGenerate.fullText
-                              ? "Generate Again"
-                              : "Generate Paper"}
-                        </Button>
+                            {quickGenerate.fullText ? "Generate Again" : "Generate Paper"}
+                          </Button>
+                        )}
                         {(quickGenerate.isGenerating ||
                           quickGenerate.fullText ||
                           quickGenerate.error) && (

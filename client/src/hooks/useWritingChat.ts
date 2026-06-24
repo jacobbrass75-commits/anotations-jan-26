@@ -1,9 +1,20 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
 import type { WritingModelValue } from "@/lib/writingModels";
+import {
+  completeWritingStreamSnapshot,
+  createEmptyWritingStreamSnapshot,
+  createStartingWritingStreamSnapshot,
+  getStreamingConversationIds,
+  selectWritingStreamSnapshot,
+  stopWritingStreamSnapshot,
+  type WritingStreamSnapshot,
+} from "@/lib/writingStreamState";
 import type { Conversation, Message } from "@shared/schema";
+
+export type { WritingStreamStatus } from "@/lib/writingStreamState";
 
 export interface ConversationWithMessages extends Conversation {
   messages: Message[];
@@ -18,12 +29,6 @@ export interface ToolStep {
 }
 
 export type SourceRole = "evidence" | "style_reference" | "background";
-
-export interface WritingStreamStatus {
-  phase: string;
-  message: string;
-  progress?: number;
-}
 
 function sanitizeWritingChatError(value: unknown, fallback = "Writing request failed"): string {
   const raw = String(value || "").trim();
@@ -214,40 +219,52 @@ export function useUpdateSourceRole() {
 // --- Send message (SSE streaming) ---
 
 export function useWritingSendMessage(conversationId: string | null) {
-  const [streamingText, setStreamingText] = useState("");
-  const [streamingChatText, setStreamingChatText] = useState("");
-  const [documentTitle, setDocumentTitle] = useState("");
-  const [streamingDocumentText, setStreamingDocumentText] = useState("");
-  const [isDocumentStreaming, setIsDocumentStreaming] = useState(false);
-  const [isDocumentComplete, setIsDocumentComplete] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [contextLoading, setContextLoading] = useState<{
-    level: number;
-    documentId?: string;
-  } | null>(null);
-  const [contextWarning, setContextWarning] = useState<{
-    id: number;
-    message: string;
-    available?: number;
-  } | null>(null);
-  const [streamError, setStreamError] = useState<{ id: number; message: string } | null>(null);
-  const [streamStatus, setStreamStatus] = useState<WritingStreamStatus | null>(null);
+  const [streams, setStreams] = useState<Record<string, WritingStreamSnapshot>>({});
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const activeRequestIdsRef = useRef<Map<string, string>>(new Map());
+
+  const setConversationStream = useCallback(
+    (
+      targetConversationId: string,
+      updater: WritingStreamSnapshot | ((snapshot: WritingStreamSnapshot) => WritingStreamSnapshot),
+    ) => {
+      setStreams((prev) => {
+        const current = prev[targetConversationId] ?? createEmptyWritingStreamSnapshot();
+        const next = typeof updater === "function" ? updater(current) : updater;
+        return { ...prev, [targetConversationId]: next };
+      });
+    },
+    [],
+  );
+
+  const visibleStream = useMemo(
+    () => selectWritingStreamSnapshot(streams, conversationId),
+    [conversationId, streams],
+  );
+
+  const streamingConversationIds = useMemo(() => getStreamingConversationIds(streams), [streams]);
+  const isAnyStreaming = streamingConversationIds.length > 0;
 
   const send = useCallback(
     async (content: string, targetConversationId = conversationId) => {
       if (!targetConversationId) return;
+      if (abortControllersRef.current.has(targetConversationId)) return;
 
-      setIsStreaming(true);
-      setStreamingText("");
-      setStreamingChatText("");
-      setDocumentTitle("");
-      setStreamingDocumentText("");
-      setIsDocumentStreaming(false);
-      setIsDocumentComplete(false);
-      setContextLoading(null);
-      setContextWarning(null);
-      setStreamError(null);
-      setStreamStatus({ phase: "starting", message: "Starting writing request...", progress: 2 });
+      const abortController = new AbortController();
+      const requestId = `${targetConversationId}:${Date.now()}:${Math.random()}`;
+      abortControllersRef.current.set(targetConversationId, abortController);
+      activeRequestIdsRef.current.set(targetConversationId, requestId);
+
+      const setCurrentStream = (
+        updater:
+          | WritingStreamSnapshot
+          | ((snapshot: WritingStreamSnapshot) => WritingStreamSnapshot),
+      ) => {
+        if (activeRequestIdsRef.current.get(targetConversationId) !== requestId) return;
+        setConversationStream(targetConversationId, updater);
+      };
+
+      setCurrentStream(createStartingWritingStreamSnapshot());
 
       try {
         const response = await fetch(`/api/chat/conversations/${targetConversationId}/messages`, {
@@ -255,6 +272,7 @@ export function useWritingSendMessage(conversationId: string | null) {
           headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({ content }),
           credentials: "include",
+          signal: abortController.signal,
         });
 
         if (!response.ok) {
@@ -276,8 +294,6 @@ export function useWritingSendMessage(conversationId: string | null) {
           throw new Error("No response body");
         }
         const decoder = new TextDecoder();
-        let accumulatedChat = "";
-        let accumulatedDocument = "";
         let buffer = "";
 
         while (true) {
@@ -293,67 +309,97 @@ export function useWritingSendMessage(conversationId: string | null) {
               try {
                 const data = JSON.parse(trimmed.slice(6));
                 if (data.type === "text" || data.type === "chat_text") {
-                  accumulatedChat += String(data.text || "");
-                  setStreamingText(accumulatedChat);
-                  setStreamingChatText(accumulatedChat);
+                  const text = String(data.text || "");
+                  setCurrentStream((snapshot) => {
+                    const streamingChatText = snapshot.streamingChatText + text;
+                    return {
+                      ...snapshot,
+                      streamingText: streamingChatText,
+                      streamingChatText,
+                    };
+                  });
                 } else if (data.type === "document_start") {
-                  accumulatedDocument = "";
-                  setDocumentTitle(String(data.title || "Draft"));
-                  setStreamingDocumentText("");
-                  setIsDocumentStreaming(true);
-                  setIsDocumentComplete(false);
-                  setStreamStatus({
-                    phase: "drafting",
-                    message: "Writing the draft...",
-                    progress: 55,
-                  });
+                  setCurrentStream((snapshot) => ({
+                    ...snapshot,
+                    documentTitle: String(data.title || "Draft"),
+                    streamingDocumentText: "",
+                    isDocumentStreaming: true,
+                    isDocumentComplete: false,
+                    streamStatus: {
+                      phase: "drafting",
+                      message: "Writing the draft...",
+                      progress: 55,
+                    },
+                  }));
                 } else if (data.type === "document_text") {
-                  accumulatedDocument += String(data.text || "");
-                  setStreamingDocumentText(accumulatedDocument);
+                  const text = String(data.text || "");
+                  setCurrentStream((snapshot) => ({
+                    ...snapshot,
+                    streamingDocumentText: snapshot.streamingDocumentText + text,
+                  }));
                 } else if (data.type === "document_end") {
-                  setIsDocumentStreaming(false);
-                  setIsDocumentComplete(true);
-                  setStreamStatus({
-                    phase: "saving",
-                    message: "Saving the generated draft...",
-                    progress: 88,
-                  });
+                  setCurrentStream((snapshot) => ({
+                    ...snapshot,
+                    isDocumentStreaming: false,
+                    isDocumentComplete: true,
+                    streamStatus: {
+                      phase: "saving",
+                      message: "Saving the generated draft...",
+                      progress: 88,
+                    },
+                  }));
                 } else if (data.type === "writing_status") {
-                  setStreamStatus({
-                    phase: String(data.phase || "working"),
-                    message: String(data.message || "Working..."),
-                    progress: typeof data.progress === "number" ? data.progress : undefined,
-                  });
+                  setCurrentStream((snapshot) => ({
+                    ...snapshot,
+                    streamStatus: {
+                      phase: String(data.phase || "working"),
+                      message: String(data.message || "Working..."),
+                      progress: typeof data.progress === "number" ? data.progress : undefined,
+                    },
+                  }));
                 } else if (data.type === "context_loading") {
-                  setContextLoading({
-                    level: Number(data.level) || 2,
-                    documentId: typeof data.documentId === "string" ? data.documentId : undefined,
-                  });
-                  setStreamStatus({
-                    phase: "retrieving",
-                    message: `Loading source context (Level ${Number(data.level) || 2})...`,
-                    progress: 62,
-                  });
+                  const level = Number(data.level) || 2;
+                  setCurrentStream((snapshot) => ({
+                    ...snapshot,
+                    contextLoading: {
+                      level,
+                      documentId: typeof data.documentId === "string" ? data.documentId : undefined,
+                    },
+                    streamStatus: {
+                      phase: "retrieving",
+                      message: `Loading source context (Level ${level})...`,
+                      progress: 62,
+                    },
+                  }));
                 } else if (data.type === "context_loaded") {
-                  setContextLoading(null);
-                  setStreamStatus({
-                    phase: "drafting",
-                    message: "Continuing the draft with source context...",
-                    progress: 72,
-                  });
+                  setCurrentStream((snapshot) => ({
+                    ...snapshot,
+                    contextLoading: null,
+                    streamStatus: {
+                      phase: "drafting",
+                      message: "Continuing the draft with source context...",
+                      progress: 72,
+                    },
+                  }));
                 } else if (data.type === "context_warning") {
-                  setContextWarning({
-                    id: Date.now(),
-                    message: String(data.message || "Context is getting large."),
-                    available: typeof data.available === "number" ? data.available : undefined,
-                  });
+                  setCurrentStream((snapshot) => ({
+                    ...snapshot,
+                    contextWarning: {
+                      id: Date.now(),
+                      message: String(data.message || "Context is getting large."),
+                      available: typeof data.available === "number" ? data.available : undefined,
+                    },
+                  }));
                 } else if (data.type === "done") {
-                  setContextLoading(null);
-                  setStreamStatus({
-                    phase: "complete",
-                    message: "Writing complete.",
-                    progress: 100,
-                  });
+                  setCurrentStream((snapshot) => ({
+                    ...snapshot,
+                    contextLoading: null,
+                    streamStatus: {
+                      phase: "complete",
+                      message: "Writing complete.",
+                      progress: 100,
+                    },
+                  }));
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations", targetConversationId],
                   });
@@ -362,9 +408,12 @@ export function useWritingSendMessage(conversationId: string | null) {
                   });
                 } else if (data.type === "error") {
                   const message = sanitizeWritingChatError(data.error || "Writing failed");
-                  setStreamError({ id: Date.now(), message });
-                  setIsDocumentComplete(false);
-                  setStreamStatus({ phase: "error", message, progress: undefined });
+                  setCurrentStream((snapshot) => ({
+                    ...snapshot,
+                    streamError: { id: Date.now(), message },
+                    isDocumentComplete: false,
+                    streamStatus: { phase: "error", message, progress: undefined },
+                  }));
                   queryClient.invalidateQueries({
                     queryKey: ["/api/chat/conversations", targetConversationId],
                   });
@@ -380,52 +429,75 @@ export function useWritingSendMessage(conversationId: string | null) {
           }
         }
       } catch (error) {
-        console.error("Send message error:", error);
-        setIsDocumentComplete(false);
+        const aborted = error instanceof Error && error.name === "AbortError";
+        if (!aborted) {
+          console.error("Send message error:", error);
+        }
         queryClient.invalidateQueries({
           queryKey: ["/api/chat/conversations", targetConversationId],
         });
         queryClient.invalidateQueries({
           queryKey: ["/api/chat/conversations"],
         });
-        setStreamError({
-          id: Date.now(),
-          message: sanitizeWritingChatError(
+        if (aborted) {
+          setCurrentStream(stopWritingStreamSnapshot);
+        } else {
+          const message = sanitizeWritingChatError(
             error instanceof Error ? error.message : error,
             "Failed to send message",
-          ),
-        });
-        setStreamStatus({
-          phase: "error",
-          message: sanitizeWritingChatError(
-            error instanceof Error ? error.message : error,
-            "Failed to send message",
-          ),
-        });
+          );
+          setCurrentStream((snapshot) => ({
+            ...snapshot,
+            streamError: { id: Date.now(), message },
+            isDocumentComplete: false,
+            streamStatus: {
+              phase: "error",
+              message,
+            },
+          }));
+        }
       } finally {
-        setIsStreaming(false);
-        setStreamingText("");
-        setStreamingChatText("");
-        setIsDocumentStreaming(false);
-        setContextLoading(null);
+        if (activeRequestIdsRef.current.get(targetConversationId) === requestId) {
+          abortControllersRef.current.delete(targetConversationId);
+          activeRequestIdsRef.current.delete(targetConversationId);
+          setConversationStream(targetConversationId, completeWritingStreamSnapshot);
+        }
       }
     },
-    [conversationId],
+    [conversationId, setConversationStream],
+  );
+
+  const stop = useCallback(
+    (targetConversationId = conversationId) => {
+      if (!targetConversationId) return;
+      const controller = abortControllersRef.current.get(targetConversationId);
+      if (!controller) return;
+
+      controller.abort();
+      abortControllersRef.current.delete(targetConversationId);
+      activeRequestIdsRef.current.delete(targetConversationId);
+      setConversationStream(targetConversationId, stopWritingStreamSnapshot);
+    },
+    [conversationId, setConversationStream],
   );
 
   return {
+    stop,
+    streams,
+    streamingConversationIds,
+    isAnyStreaming,
     send,
-    streamingText,
-    streamingChatText,
-    documentTitle,
-    streamingDocumentText,
-    isDocumentStreaming,
-    isDocumentComplete,
-    isStreaming,
-    contextLoading,
-    contextWarning,
-    streamError,
-    streamStatus,
+    streamingText: visibleStream.streamingText,
+    streamingChatText: visibleStream.streamingChatText,
+    documentTitle: visibleStream.documentTitle,
+    streamingDocumentText: visibleStream.streamingDocumentText,
+    isDocumentStreaming: visibleStream.isDocumentStreaming,
+    isDocumentComplete: visibleStream.isDocumentComplete,
+    isStreaming: visibleStream.isStreaming,
+    contextLoading: visibleStream.contextLoading,
+    contextWarning: visibleStream.contextWarning,
+    streamError: visibleStream.streamError,
+    streamStatus: visibleStream.streamStatus,
   };
 }
 

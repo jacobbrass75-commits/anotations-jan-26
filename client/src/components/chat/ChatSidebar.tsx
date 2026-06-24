@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { House, MessageSquare, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
+import {
+  House,
+  Loader2,
+  MessageSquare,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,6 +28,7 @@ interface ChatSidebarProps {
   onNew: () => void;
   onDelete: (id: string) => void;
   onRename: (id: string, newTitle: string) => void;
+  busyConversationIds?: string[];
 }
 
 function groupByDate(conversations: Conversation[]) {
@@ -57,6 +67,7 @@ export function ChatSidebar({
   onNew,
   onDelete,
   onRename,
+  busyConversationIds = [],
 }: ChatSidebarProps) {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -108,34 +119,42 @@ export function ChatSidebar({
               </div>
               {group.items.map((conv) => (
                 <div key={conv.id} className="group relative">
-                  {editingId === conv.id ? (
-                    <Input
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      onBlur={commitRename}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") commitRename();
-                        if (e.key === "Escape") {
-                          setEditingId(null);
-                          setEditTitle("");
-                        }
-                      }}
-                      autoFocus
-                      className="h-8 text-sm"
-                    />
-                  ) : (
-                    <button
-                      onClick={() => onSelect(conv.id)}
-                      className={`w-full text-left px-2 py-1.5 rounded-md text-sm truncate flex items-center gap-2 hover:bg-accent transition-colors ${
-                        activeConversationId === conv.id
-                          ? "bg-accent text-accent-foreground font-medium"
-                          : "text-foreground/80"
-                      }`}
-                    >
-                      <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                      <span className="truncate">{conv.title}</span>
-                    </button>
-                  )}
+                  {(() => {
+                    const isBusy = busyConversationIds.includes(conv.id);
+
+                    return editingId === conv.id ? (
+                      <Input
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename();
+                          if (e.key === "Escape") {
+                            setEditingId(null);
+                            setEditTitle("");
+                          }
+                        }}
+                        autoFocus
+                        className="h-8 text-sm"
+                      />
+                    ) : (
+                      <button
+                        onClick={() => onSelect(conv.id)}
+                        className={`w-full text-left px-2 py-1.5 rounded-md text-sm truncate flex items-center gap-2 hover:bg-accent transition-colors ${
+                          activeConversationId === conv.id
+                            ? "bg-accent text-accent-foreground font-medium"
+                            : "text-foreground/80"
+                        }`}
+                      >
+                        {isBusy ? (
+                          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                        ) : (
+                          <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                        )}
+                        <span className="truncate">{conv.title}</span>
+                      </button>
+                    );
+                  })()}
                   {editingId !== conv.id && (
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center">
                       <DropdownMenu>
