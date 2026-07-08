@@ -7,11 +7,13 @@ The in-product pieces are live in this repo:
 
 | Piece | Where |
 | --- | --- |
-| Campaign landing page | `/summer` (also `/invite` and `/invite/:code`) — `client/src/pages/SummerCampaign.tsx` |
-| Tracked invite links | Query params `campus`, `major`, `channel`, `code`, `ref` are captured and stored with every visit and signup |
-| Referral links | Every signup gets a code; share as `/invite/<code>` |
-| Signup + visit API | `POST /api/campaign/signup`, `POST /api/campaign/visit` — `server/campaignRoutes.ts` |
-| Activation tracking | First document upload or project creation by a signed-up lead marks them activated |
+| Campaign landing page | `/summer` (also `/invite` and `/invite/:code`) — `client/src/pages/SummerCampaign.tsx`. Minimal: one message, one visual, live spot counter, one CTA |
+| One-tap funnel | CTA → account sign-up (enable Google in the Clerk dashboard) → back to `/summer` → spot auto-claimed with attribution (`POST /api/campaign/claim`) |
+| Spot counter | `GET /api/campaign/spots` — live count of real claims against `CAMPAIGN_SPOTS_TOTAL` (default 100). The count shown is always real; never hardcode a fake number (deceptive under FTC rules) |
+| Tracked invite links | Query params `campus`, `major`, `channel`, `code`, `ref` are captured and stored with every visit and claim |
+| Referral links | Every claim gets a code; share as `/invite/<code>` |
+| Long-form lead API | `POST /api/campaign/signup` still exists for manual lead capture (tabling, DMs) |
+| Activation tracking | First document upload or project creation by a lead marks them activated |
 | Metrics dashboard | `/admin/campaign` (requires `ADMIN_USER_IDS`) — clicks, signups, activation rate, referral rate, breakdowns |
 
 Run `npm run db:push` after deploying so the `campaign_visits` and `campaign_signups`

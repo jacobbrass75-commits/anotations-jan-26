@@ -33,12 +33,12 @@ interface CampaignMetrics {
   };
   weeklySignups: Array<{ week: string; signups: number }>;
   recentSignups: Array<{
-    name: string;
+    name: string | null;
     email: string;
-    school: string;
-    major: string;
-    classYear: string;
-    paperType: string;
+    school: string | null;
+    major: string | null;
+    classYear: string | null;
+    paperType: string | null;
     channel: string | null;
     referredBy: string | null;
     referralCode: string;
@@ -214,11 +214,11 @@ export default function AdminCampaign() {
                     <tbody>
                       {data.recentSignups.map((signup) => (
                         <tr key={signup.email} className="border-t border-border/50">
-                          <td className="py-1.5 pr-4">{signup.name}</td>
+                          <td className="py-1.5 pr-4">{signup.name ?? "—"}</td>
                           <td className="py-1.5 pr-4">{signup.email}</td>
-                          <td className="py-1.5 pr-4">{signup.school}</td>
-                          <td className="py-1.5 pr-4">{signup.major}</td>
-                          <td className="py-1.5 pr-4">{signup.classYear}</td>
+                          <td className="py-1.5 pr-4">{signup.school ?? "—"}</td>
+                          <td className="py-1.5 pr-4">{signup.major ?? "—"}</td>
+                          <td className="py-1.5 pr-4">{signup.classYear ?? "—"}</td>
                           <td className="py-1.5 pr-4">{signup.channel ?? "—"}</td>
                           <td className="py-1.5 pr-4">{signup.referredBy ?? "—"}</td>
                           <td className="py-1.5 pr-4">{signup.activated ? "Yes" : "No"}</td>

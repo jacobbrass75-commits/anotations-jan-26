@@ -10,11 +10,18 @@ import {
   type CampaignSignup,
 } from "@shared/schema";
 import { requireAuth } from "./auth";
+import { getUserById } from "./authStorage";
 import { requireAdmin } from "./analyticsRoutes";
 import { authLimiter } from "./rateLimits";
 import { createLogger } from "./logger";
 
 const logger = createLogger("campaignRoutes");
+
+// Real cap on early-access spots. The landing page shows the live count of
+// actual claims against this — never hardcode a fake "taken" number.
+const CAMPAIGN_SPOTS_TOTAL = Number.isFinite(Number(process.env.CAMPAIGN_SPOTS_TOTAL))
+  ? Math.max(1, Math.floor(Number(process.env.CAMPAIGN_SPOTS_TOTAL)))
+  : 100;
 
 /**
  * Builds a shareable referral code like "maya-3f2a" from the lead's name.
@@ -162,6 +169,83 @@ export function registerCampaignRoutes(app: Express): void {
     } catch (error) {
       logger.error({ err: error }, "Campaign signup failed");
       return res.status(500).json({ message: "Signup failed. Please try again." });
+    }
+  });
+
+  // Public: live early-access spot count for the landing page counter.
+  app.get("/api/campaign/spots", async (_req: Request, res: Response) => {
+    try {
+      const [row] = await db.select({ taken: count() }).from(campaignSignups);
+      res.json({ total: CAMPAIGN_SPOTS_TOTAL, taken: row?.taken ?? 0 });
+    } catch (error) {
+      logger.error({ err: error }, "Campaign spots lookup failed");
+      res.status(500).json({ message: "Failed to load spots" });
+    }
+  });
+
+  // Authenticated: one-tap spot claim for the simplified funnel. The lead is
+  // the signed-in account itself — no form. Idempotent per email.
+  app.post("/api/campaign/claim", requireAuth, authLimiter, async (req: Request, res: Response) => {
+    try {
+      const attribution = campaignVisitSchema.parse(req.body ?? {});
+      const email = req.user!.email.toLowerCase();
+
+      const [existing] = await db
+        .select()
+        .from(campaignSignups)
+        .where(eq(campaignSignups.email, email));
+
+      const [countRow] = await db.select({ taken: count() }).from(campaignSignups);
+      let taken = countRow?.taken ?? 0;
+
+      if (existing) {
+        await db
+          .update(campaignSignups)
+          .set({
+            userId: existing.userId ?? req.user!.userId,
+            campus: existing.campus ?? attribution.campus ?? null,
+            channel: existing.channel ?? attribution.channel ?? null,
+            inviteCode: existing.inviteCode ?? attribution.inviteCode ?? null,
+            referredBy: existing.referredBy ?? attribution.referredBy ?? null,
+          })
+          .where(eq(campaignSignups.id, existing.id));
+        return res.json({
+          alreadyClaimed: true,
+          referralCode: existing.referralCode,
+          taken,
+          total: CAMPAIGN_SPOTS_TOTAL,
+        });
+      }
+
+      const account = await getUserById(req.user!.userId);
+      const name =
+        [account?.firstName, account?.lastName].filter(Boolean).join(" ") ||
+        account?.username ||
+        null;
+
+      const referralCode = await generateUniqueReferralCode(name ?? email.split("@")[0]);
+      await db.insert(campaignSignups).values({
+        name,
+        email,
+        major: attribution.major ?? null,
+        campus: attribution.campus ?? null,
+        channel: attribution.channel ?? null,
+        inviteCode: attribution.inviteCode ?? null,
+        referredBy: attribution.referredBy ?? null,
+        referralCode,
+        userId: req.user!.userId,
+      });
+      taken += 1;
+
+      return res.status(201).json({
+        alreadyClaimed: false,
+        referralCode,
+        taken,
+        total: CAMPAIGN_SPOTS_TOTAL,
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Campaign claim failed");
+      return res.status(500).json({ message: "Could not claim a spot. Please try again." });
     }
   });
 

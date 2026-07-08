@@ -922,17 +922,19 @@ export const campaignVisits = sqliteTable("campaign_visits", {
     .notNull(),
 });
 
-// One row per campaign lead. `userId`/`activatedAt` are filled in later when
-// the lead registers an account and performs a first real action in the app.
+// One row per campaign lead. Leads arrive either through the one-tap "claim a
+// spot" flow (account sign-up; profile fields empty until we learn them) or the
+// long-form signup endpoint. `userId`/`activatedAt` are filled in when the lead
+// registers an account and performs a first real action in the app.
 export const campaignSignups = sqliteTable("campaign_signups", {
   id: text("id").primaryKey().$defaultFn(genId),
-  name: text("name").notNull(),
+  name: text("name"),
   email: text("email").notNull().unique(),
-  school: text("school").notNull(),
-  major: text("major").notNull(),
-  classYear: text("class_year").notNull().$type<CampaignClassYear>(),
-  paperType: text("paper_type").notNull().$type<CampaignPaperType>(),
-  hasTopic: text("has_topic").notNull().default("no").$type<CampaignHasTopic>(),
+  school: text("school"),
+  major: text("major"),
+  classYear: text("class_year").$type<CampaignClassYear>(),
+  paperType: text("paper_type").$type<CampaignPaperType>(),
+  hasTopic: text("has_topic").default("no").$type<CampaignHasTopic>(),
   // Attribution captured from the invite link
   campus: text("campus"),
   channel: text("channel"),
