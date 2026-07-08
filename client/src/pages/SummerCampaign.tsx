@@ -7,11 +7,13 @@ import {
   ClipboardCopy,
   Compass,
   FileText,
+  FolderOpen,
   ListChecks,
   MessageSquareQuote,
   PenLine,
   ShieldCheck,
   Sparkles,
+  SlidersHorizontal,
   Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -114,6 +116,167 @@ const SUMMER_PLAN = [
   { week: 7, goal: "Clean up citations and transitions" },
   { week: 8, goal: "Prepare for the fall semester" },
 ] as const;
+
+const SOURCE_BANK_PREVIEW = [
+  { title: "archive-interviews.pdf", meta: "12 quotes", tone: "primary" },
+  { title: "city-budget-1974.pdf", meta: "8 notes", tone: "secondary" },
+  { title: "journal-review.md", meta: "5 claims", tone: "success" },
+  { title: "oral-history-transcript", meta: "19 clips", tone: "muted" },
+  { title: "bibliography-final.ris", meta: "42 refs", tone: "muted" },
+] as const;
+
+const DRAFT_CONTROL_PREVIEW = [
+  "Intro claim",
+  "Source context",
+  "Counterargument",
+  "Quote check",
+  "Revision pass",
+] as const;
+
+function CampaignWorkspaceVisual() {
+  return (
+    <div className="relative w-full select-none" aria-hidden="true">
+      <div className="overflow-hidden rounded-2xl border bg-card shadow-xl">
+        <div className="relative h-56 overflow-hidden border-b sm:h-72 xl:h-80">
+          <img
+            src="/campaign-assets/summer-source-bank-hero.png"
+            alt=""
+            className="h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-background/5 via-background/15 to-background/70" />
+          <div className="absolute bottom-4 right-4 max-w-xs rounded-xl border bg-background/90 p-3 shadow-lg backdrop-blur">
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <FolderOpen className="h-3.5 w-3.5 text-primary" />
+              Pull from your source bank
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Quotes, notes, web clips, and citations stay attached to the draft.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-0 xl:grid-cols-[0.95fr_1.35fr]">
+          <div className="border-b bg-background/40 p-4 xl:border-b-0 xl:border-r">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-semibold">Source organizer</div>
+                <div className="text-[10px] text-muted-foreground">Group, tag, and pull quotes</div>
+              </div>
+              <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">
+                86 items
+              </span>
+            </div>
+            <div className="space-y-2">
+              {SOURCE_BANK_PREVIEW.map((source, index) => (
+                <div
+                  key={source.title}
+                  className="flex items-center justify-between rounded-lg border bg-card/80 px-3 py-2"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        source.tone === "primary"
+                          ? "bg-primary"
+                          : source.tone === "secondary"
+                            ? "bg-sky-500"
+                            : source.tone === "success"
+                              ? "bg-emerald-500"
+                              : "bg-muted-foreground/35"
+                      }`}
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-medium">{source.title}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {index < 2 ? "Evidence" : index === 2 ? "Background" : "Reference"}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{source.meta}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4 p-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border bg-background/60 p-3">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+                  <ListChecks className="h-3.5 w-3.5 text-primary" />
+                  Writing plan
+                </div>
+                <div className="space-y-2">
+                  {DRAFT_CONTROL_PREVIEW.map((section, index) => (
+                    <div key={section} className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px]">
+                        {index + 1}
+                      </span>
+                      <div className="h-2 flex-1 rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary/70"
+                          style={{ width: `${92 - index * 13}%` }}
+                        />
+                      </div>
+                      <span className="w-24 text-[10px] text-muted-foreground">{section}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-background/60 p-3">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+                  Draft controls
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between rounded-lg bg-card px-3 py-2 text-xs">
+                    <span>Remove em dashes</span>
+                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-300">
+                      On
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-card px-3 py-2 text-xs">
+                    <span>Citation style</span>
+                    <span className="font-medium text-primary">Chicago</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-card px-3 py-2 text-xs">
+                    <span>Source-backed only</span>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
+                      Strict
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative rounded-xl border bg-background/70 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                  senior-thesis-draft.docx
+                </div>
+                <div className="flex items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-primary">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  Quote verified - p. 214
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="h-2 w-11/12 rounded bg-muted" />
+                <div className="h-2 w-full rounded bg-muted" />
+                <div className="rounded-lg border border-primary/30 bg-primary/15 px-3 py-2 text-xs leading-relaxed">
+                  "the archive reveals a pattern earlier historians overlooked"
+                </div>
+                <div className="h-2 w-10/12 rounded bg-muted" />
+                <div className="h-2 w-2/3 rounded bg-muted" />
+              </div>
+              <div className="absolute -bottom-3 left-5 rounded-full border border-destructive/40 bg-background px-3 py-1.5 text-xs font-medium text-destructive shadow-md">
+                Fake citation caught
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function readAttribution(): CampaignAttribution {
   const params = new URLSearchParams(window.location.search);
@@ -370,7 +533,7 @@ export default function SummerCampaign() {
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-        {submitting ? "Joining..." : "Start my plan"}
+        {submitting ? "Joining..." : "Start my free trial"}
       </Button>
       <p className="text-xs leading-5 text-muted-foreground">
         By joining, you agree to receive ScholarMark early access and follow-up emails. You can opt
@@ -414,20 +577,30 @@ export default function SummerCampaign() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 lg:py-12 max-w-7xl space-y-12">
-        <section className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] items-start">
-          <div className="space-y-6 pt-2">
+      <main className="mx-auto max-w-7xl space-y-12 px-4 py-8 lg:py-10 xl:max-w-[86rem]">
+        <section className="grid min-h-[calc(100svh-5.5rem)] items-center gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.72fr)] xl:gap-12">
+          <div className="space-y-6">
             <div className="space-y-4">
               <div className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground">
                 Early student access / Summer Thesis Head Start
               </div>
-              <h1 className="text-3xl md:text-5xl font-bold tracking-tight max-w-3xl">
+              <h1 className="max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-5xl xl:text-6xl">
                 Get ahead on your thesis, capstone, or big research paper this summer
               </h1>
               <p className="text-muted-foreground max-w-2xl md:text-lg">
                 ScholarMark helps rising juniors and seniors plan, outline, revise, and strengthen
                 long academic papers before the semester gets busy.
               </p>
+              <div className="grid gap-2 text-left sm:grid-cols-3 lg:max-w-2xl">
+                {["Source bank", "Quote verification", "No em-dash mode"].map((item) => (
+                  <div
+                    key={item}
+                    className="rounded-lg border bg-card/70 px-3 py-2 text-xs font-medium"
+                  >
+                    {item}
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="hidden sm:grid gap-3 sm:grid-cols-3">
@@ -452,9 +625,11 @@ export default function SummerCampaign() {
                 write assignments for you.
               </p>
             </div>
+
+            <CampaignWorkspaceVisual />
           </div>
 
-          <Card id="join" className="scroll-mt-20 shadow-sm">
+          <Card id="join" className="scroll-mt-20 self-center shadow-sm lg:sticky lg:top-20">
             {result ? (
               <>
                 <CardHeader className="text-center">
@@ -465,7 +640,8 @@ export default function SummerCampaign() {
                     {result.alreadySignedUp ? "You're already on the list" : "You're in"}
                   </CardTitle>
                   <CardDescription>
-                    Create your free account and ScholarMark will open your summer writing plan.
+                    Create your free trial account and ScholarMark will open your summer writing
+                    plan.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -494,7 +670,7 @@ export default function SummerCampaign() {
             ) : (
               <>
                 <CardHeader>
-                  <CardTitle>Claim early student access</CardTitle>
+                  <CardTitle>Claim your free trial</CardTitle>
                   <CardDescription>
                     Join the summer program for rising juniors and seniors starting long papers,
                     theses, capstones, or honors writing. Feedback and revision support, not
@@ -505,6 +681,28 @@ export default function SummerCampaign() {
               </>
             )}
           </Card>
+        </section>
+
+        <section className="grid items-center gap-8 rounded-2xl border bg-card/35 p-5 md:p-8 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="space-y-3">
+            <div className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground">
+              How ScholarMark thinks
+            </div>
+            <h2 className="max-w-xl text-2xl font-bold tracking-tight md:text-3xl">
+              Pull evidence from the source bank. Keep the draft honest.
+            </h2>
+            <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
+              Sources, quotes, and citation context stay connected while you organize the paper and
+              tune the writing style.
+            </p>
+          </div>
+          <div className="overflow-hidden rounded-2xl border bg-background shadow-lg">
+            <img
+              src="/campaign-assets/summer-source-flow-symbolic.png"
+              alt="Symbolic source bank flowing into a verified draft"
+              className="h-full max-h-[360px] w-full object-cover"
+            />
+          </div>
         </section>
 
         <section className="space-y-4">
@@ -590,7 +788,7 @@ export default function SummerCampaign() {
             the semester pressure hits.
           </p>
           <Button asChild>
-            <a href="#join">Start my plan</a>
+            <a href="#join">Start my free trial</a>
           </Button>
         </section>
 
