@@ -1,5 +1,6 @@
 import {
   ANNOTATION_PROMPT_TOKEN_BUDGET,
+  buildQuoteJumpTargets,
   buildSourceBlock,
   planSourceBlock,
 } from "../../server/chat/promptBuilder";
@@ -150,5 +151,37 @@ describe("buildSourceBlock", () => {
     const renderedCount = (block.match(/\[ANNOTATION ann-/g) || []).length;
     expect(renderedCount).toBeLessThan(120);
     expect(renderedCount).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("buildQuoteJumpTargets", () => {
+  it("does not create project document links for standalone conversations", () => {
+    const source = makeTieredSource([makeAnnotation({ highlightedText: "A grounded quote." })]);
+
+    expect(buildQuoteJumpTargets(null, [source])).toEqual([]);
+  });
+
+  it("uses project document ids for quote links", () => {
+    const source = makeTieredSource(
+      [
+        makeAnnotation({
+          id: "ann-1",
+          highlightedText: "A grounded quote.",
+          startPosition: 42,
+        }),
+      ],
+      "project-doc-1",
+    );
+
+    const targets = buildQuoteJumpTargets("project-1", [source]);
+
+    expect(targets).toEqual([
+      {
+        quote: "A grounded quote.",
+        jumpPath:
+          "/projects/project-1/documents/project-doc-1?annotationId=ann-1&start=42&anchor=agroundedquote",
+      },
+    ]);
+    expect(targets[0].jumpPath).not.toContain("doc-project-doc-1");
   });
 });
