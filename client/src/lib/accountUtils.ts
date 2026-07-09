@@ -9,6 +9,32 @@ export function formatAccountTier(tier: string): string {
   }
 }
 
+export function hasConfirmedPaidStripeAccess(
+  account:
+    | {
+        stripeSubscriptionId?: string | null;
+        subscriptionStatus?: string | null;
+        tier?: string | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  const paidTier = account?.tier === "pro" || account?.tier === "max";
+  const paidStatus =
+    account?.subscriptionStatus === "active" ||
+    account?.subscriptionStatus === "trialing" ||
+    account?.subscriptionStatus === "past_due";
+  return Boolean(account?.stripeSubscriptionId && paidTier && paidStatus);
+}
+
+export function stripCheckoutReturnParams(href: string): string {
+  const url = new URL(href, "https://scholarmark.local");
+  url.searchParams.delete("checkout");
+  url.searchParams.delete("session_id");
+  const query = url.searchParams.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
+}
+
 export function formatUsagePercent(used: number, limit: number): number {
   if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) {
     return 0;

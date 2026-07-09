@@ -20,6 +20,8 @@ import {
   formatAccountDate,
   formatAccountTier,
   formatUsagePercent,
+  hasConfirmedPaidStripeAccess,
+  stripCheckoutReturnParams,
 } from "@/lib/accountUtils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -94,6 +96,15 @@ function formatSubscriptionStatus(status: string | null | undefined): string {
     .join(" ");
 }
 
+function clearCheckoutReturnParams(): void {
+  if (typeof window === "undefined") return;
+  window.history.replaceState(
+    window.history.state,
+    "",
+    stripCheckoutReturnParams(window.location.href),
+  );
+}
+
 export default function Account() {
   const localDevAuth = isLocalDevAuthEnabled();
   const { user, isLoading, logout } = useAuth();
@@ -163,6 +174,19 @@ export default function Account() {
     }
 
     checkoutConfirmStartedRef.current = true;
+    if (
+      hasConfirmedPaidStripeAccess({
+        stripeSubscriptionId: user.stripeSubscriptionId,
+        subscriptionStatus: user.subscriptionStatus,
+        tier,
+      })
+    ) {
+      setCheckoutConfirmState("confirmed");
+      setCheckoutConfirmMessage(`Subscription confirmed: ${formatAccountTier(tier)} plan.`);
+      clearCheckoutReturnParams();
+      return;
+    }
+
     if (!checkoutReturn.sessionId) {
       setCheckoutConfirmState("error");
       setCheckoutConfirmMessage(
@@ -189,6 +213,7 @@ export default function Account() {
           setCheckoutConfirmMessage(
             `Subscription confirmed${body.tier ? `: ${formatAccountTier(body.tier)} plan` : ""}.`,
           );
+          clearCheckoutReturnParams();
         }
       } catch (error) {
         console.error("[billing] checkout confirmation failed", error);
@@ -205,7 +230,7 @@ export default function Account() {
     return () => {
       cancelled = true;
     };
-  }, [checkoutReturn.sessionId, checkoutReturn.status, isLoading, user]);
+  }, [checkoutReturn.sessionId, checkoutReturn.status, isLoading, tier, user]);
 
   async function openBillingPortal() {
     try {

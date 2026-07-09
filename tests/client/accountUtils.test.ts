@@ -4,6 +4,8 @@ import {
   formatAccountDate,
   formatAccountTier,
   formatUsagePercent,
+  hasConfirmedPaidStripeAccess,
+  stripCheckoutReturnParams,
 } from "../../client/src/lib/accountUtils";
 
 describe("account utilities", () => {
@@ -25,5 +27,45 @@ describe("account utilities", () => {
     expect(formatAccountBytes(1_048_576)).toBe("1.00 MB");
     expect(formatAccountDate("2026-03-30T12:00:00.000Z")).toContain("2026");
     expect(formatAccountDate(null)).toBe("Not available");
+  });
+
+  it("recognizes active paid Stripe access", () => {
+    expect(
+      hasConfirmedPaidStripeAccess({
+        tier: "pro",
+        stripeSubscriptionId: "sub_123",
+        subscriptionStatus: "active",
+      }),
+    ).toBe(true);
+    expect(
+      hasConfirmedPaidStripeAccess({
+        tier: "max",
+        stripeSubscriptionId: "sub_123",
+        subscriptionStatus: "trialing",
+      }),
+    ).toBe(true);
+    expect(
+      hasConfirmedPaidStripeAccess({
+        tier: "free",
+        stripeSubscriptionId: "sub_123",
+        subscriptionStatus: "active",
+      }),
+    ).toBe(false);
+    expect(
+      hasConfirmedPaidStripeAccess({
+        tier: "pro",
+        stripeSubscriptionId: null,
+        subscriptionStatus: "active",
+      }),
+    ).toBe(false);
+  });
+
+  it("removes checkout return params without dropping other URL state", () => {
+    expect(
+      stripCheckoutReturnParams(
+        "https://app.scholarmark.ai/account?checkout=success&session_id=cs_123&tab=billing#usage",
+      ),
+    ).toBe("/account?tab=billing#usage");
+    expect(stripCheckoutReturnParams("/account?checkout=success")).toBe("/account");
   });
 });
