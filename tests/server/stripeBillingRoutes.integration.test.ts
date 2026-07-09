@@ -263,7 +263,7 @@ describe("Stripe billing routes", () => {
     stripeClient.customers.retrieve.mockRejectedValueOnce(
       Object.assign(new Error("No such customer"), {
         code: "resource_missing",
-        param: "customer",
+        param: "id",
       }),
     );
     stripeClient.prices.list.mockResolvedValueOnce({ data: [monthlyPrice()] });

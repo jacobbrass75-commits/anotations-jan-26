@@ -103,12 +103,15 @@ function getCustomerId(customer: string | Stripe.Customer | Stripe.DeletedCustom
 function isMissingStripeCustomerError(error: unknown): boolean {
   const stripeError = error as {
     code?: string;
+    message?: string;
     param?: string;
-    raw?: { code?: string; param?: string };
+    raw?: { code?: string; message?: string; param?: string };
   };
+  const param = stripeError.param ?? stripeError.raw?.param;
+  const message = stripeError.message ?? stripeError.raw?.message ?? "";
   return (
     stripeError?.code === "resource_missing" &&
-    (stripeError.param === "customer" || stripeError.raw?.param === "customer")
+    (param === "customer" || param === "id" || message.includes("No such customer"))
   );
 }
 
