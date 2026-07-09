@@ -100,6 +100,18 @@ function getCustomerId(customer: string | Stripe.Customer | Stripe.DeletedCustom
   return customer?.id ?? "";
 }
 
+function isMissingStripeCustomerError(error: unknown): boolean {
+  const stripeError = error as {
+    code?: string;
+    param?: string;
+    raw?: { code?: string; param?: string };
+  };
+  return (
+    stripeError?.code === "resource_missing" &&
+    (stripeError.param === "customer" || stripeError.raw?.param === "customer")
+  );
+}
+
 function getSubscriptionCurrentPeriodEnd(subscription: Stripe.Subscription): Date | null {
   const unixSeconds = (subscription as Stripe.Subscription & { current_period_end?: number })
     .current_period_end;
@@ -176,7 +188,24 @@ async function ensureStripeCustomer(stripe: Stripe, userId: string): Promise<Use
   }
 
   if (existingUser.stripeCustomerId) {
-    return existingUser;
+    try {
+      const customer = await stripe.customers.retrieve(existingUser.stripeCustomerId);
+      if (!("deleted" in customer && customer.deleted)) {
+        return existingUser;
+      }
+      logger.warn(
+        { userId, stripeCustomerId: existingUser.stripeCustomerId },
+        "[billing] stored Stripe customer is deleted; creating replacement",
+      );
+    } catch (error) {
+      if (!isMissingStripeCustomerError(error)) {
+        throw error;
+      }
+      logger.warn(
+        { userId, stripeCustomerId: existingUser.stripeCustomerId },
+        "[billing] stored Stripe customer is missing; creating replacement",
+      );
+    }
   }
 
   const customer = await stripe.customers.create({
@@ -189,6 +218,11 @@ async function ensureStripeCustomer(stripe: Stripe, userId: string): Promise<Use
 
   return updateUserBillingMetadata(existingUser.id, {
     stripeCustomerId: customer.id,
+    stripeSubscriptionId: null,
+    stripePriceId: null,
+    subscriptionStatus: null,
+    subscriptionCurrentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
   } as Partial<User>);
 }
 

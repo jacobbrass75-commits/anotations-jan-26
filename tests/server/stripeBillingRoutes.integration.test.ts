@@ -16,6 +16,7 @@ const { stripeClient, StripeMock } = vi.hoisted(() => {
   const stripeClient = {
     customers: {
       create: vi.fn(async () => ({ id: "cus_new" })),
+      retrieve: vi.fn(async (id: string) => ({ id })),
     },
     prices: {
       retrieve: vi.fn(),
@@ -253,6 +254,55 @@ describe("Stripe billing routes", () => {
           cancel_url: "https://app.scholarmark.ai/pricing?checkout=cancelled",
         }),
       );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("replaces a missing stored Stripe customer before checkout", async () => {
+    stripeClient.customers.retrieve.mockRejectedValueOnce(
+      Object.assign(new Error("No such customer"), {
+        code: "resource_missing",
+        param: "customer",
+      }),
+    );
+    stripeClient.prices.list.mockResolvedValueOnce({ data: [monthlyPrice()] });
+    const { server, token } = await createStripeApp({
+      stripeSubscriptionId: "sub_stale",
+      subscriptionStatus: null,
+    });
+
+    try {
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/billing/stripe/checkout",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: { tier: "pro" },
+        },
+      );
+      const { getUserById } = await import("../../server/authStorage");
+      const user = await getUserById("stripe-user");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ url: "https://checkout.stripe.test/session" });
+      expect(stripeClient.customers.create).toHaveBeenCalledWith({
+        email: "stripe@example.com",
+        metadata: {
+          app: "scholarmark",
+          userId: "stripe-user",
+        },
+      });
+      expect(stripeClient.checkout.sessions.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customer: "cus_new",
+        }),
+      );
+      expect(user?.stripeCustomerId).toBe("cus_new");
+      expect(user?.stripeSubscriptionId).toBeNull();
+      expect(user?.stripePriceId).toBeNull();
+      expect(user?.subscriptionStatus).toBeNull();
     } finally {
       await server.close();
     }
