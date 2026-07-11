@@ -7,7 +7,8 @@ const sections = [
     title: "Subscriptions And Billing",
     body: [
       "Paid ScholarMark plans are billed monthly in USD unless a checkout page or written agreement says otherwise.",
-      "Stripe checkout starts a monthly subscription that renews until canceled. Venmo or PayPal payments, when offered, provide one month of access unless ScholarMark confirms otherwise.",
+      "The standard Pro offer charges $14 when checkout is completed, starts access immediately, and renews for $14 each month until canceled. It is not a free trial.",
+      "Venmo or PayPal payments, when offered, provide one month of access unless ScholarMark confirms otherwise.",
       "You can cancel Stripe subscriptions from the Account page Billing Portal or by emailing support@scholarmark.ai. Cancellation stops future renewals; paid access continues through the current billing period unless a refund is issued.",
       "Payments are non-refundable except where required by law or for duplicate, mistaken, or unauthorized charges that ScholarMark confirms.",
     ],
@@ -80,7 +81,7 @@ export default function Terms() {
             ScholarMark Terms Of Service
           </h1>
           <p className="text-sm text-muted-foreground">
-            Last updated June 16, 2026. These terms are written for the first paid launch and should
+            Last updated July 11, 2026. These terms are written for the first paid launch and should
             be reviewed by counsel as ScholarMark grows.
           </p>
         </div>

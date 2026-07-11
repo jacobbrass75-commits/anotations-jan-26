@@ -1081,7 +1081,7 @@ export default function WritingChat({
                     <SelectContent>
                       {WRITING_MODEL_OPTIONS.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
-                          {option.label}
+                          {option.label} — {option.description}
                         </SelectItem>
                       ))}
                     </SelectContent>

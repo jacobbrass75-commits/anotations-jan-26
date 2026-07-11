@@ -74,7 +74,7 @@ const features: TierFeature[] = [
   },
   { label: "OCR", free: "PaddleOCR", pro: "GPT-4o-mini Vision", max: "GPT-4o Vision" },
   { label: "AI chat", free: "Limited", pro: "Yes", max: "Yes" },
-  { label: "AI token budget/mo", free: "50K", pro: "500K", max: "2M" },
+  { label: "AI credits/period", free: "60", pro: "600", max: "2,400" },
   {
     label: "AI Writing",
     free: "Quick Draft limited",
@@ -367,7 +367,9 @@ function StripeCheckoutButton({
       : `Change to ${label} in Billing Portal`
     : status === "loading"
       ? "Opening checkout..."
-      : `Subscribe to ${label} for $${amount}/mo`;
+      : tier === "pro"
+        ? `Start Pro — $${amount} today`
+        : `Subscribe to ${label} for $${amount}/mo`;
 
   return (
     <div className="w-full space-y-2">
@@ -416,6 +418,12 @@ function StripeCheckoutButton({
       >
         {buttonText}
       </Button>
+      {!hasActiveStripeSubscription && tier === "pro" ? (
+        <p className="text-xs leading-5 text-muted-foreground">
+          Charged today. Renews monthly at ${amount} until canceled. Cancel online in the billing
+          portal; access continues through the paid period.
+        </p>
+      ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
@@ -503,6 +511,9 @@ export default function Pricing() {
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("checkout")
       : null;
+  const isOnboarding =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("onboarding") === "1";
   const [stripeConfig, setStripeConfig] = useState<StripeBillingConfig | null>(null);
   const [paypalConfig, setPayPalConfig] = useState<PayPalBillingConfig | null>(null);
   const handleSignIn = useCallback(
@@ -596,8 +607,26 @@ export default function Pricing() {
           </div>
         ) : null}
 
+        {isOnboarding && currentTier === "free" ? (
+          <div className="mb-6 rounded-lg border border-primary/30 bg-primary/5 px-5 py-4">
+            <h2 className="font-semibold">Your account is ready</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Start Pro for $14 today, or continue to your dashboard with the limited Starter
+              allowance.
+            </p>
+            <Button
+              className="mt-3"
+              variant="outline"
+              onClick={() => setLocation("/dashboard")}
+              data-testid="button-continue-starter"
+            >
+              Continue with limited Starter
+            </Button>
+          </div>
+        ) : null}
+
         {/* Tier Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2 mb-12">
           {/* Free */}
           <Card className={currentTier === "free" ? "border-primary" : ""}>
             <CardHeader>
@@ -613,8 +642,8 @@ export default function Pricing() {
               <p>50 MB storage</p>
               <p>Chicago citation formatting</p>
               <p>PaddleOCR</p>
-              <p>50K AI token budget/mo</p>
-              <p>Limited Haiku chat and Sonnet Quick Draft</p>
+              <p>Limited monthly AI credits</p>
+              <p>A small premium allowance plus more value-model usage</p>
               <p>Source verification included</p>
             </CardContent>
             <CardFooter>
@@ -652,7 +681,7 @@ export default function Pricing() {
               <p>500 MB storage</p>
               <p>Chicago, MLA 9, and APA 7 citation formatting</p>
               <p>GPT-4o-mini Vision OCR</p>
-              <p>500K AI token budget/mo</p>
+              <p>Higher monthly AI credit allowance</p>
               <p>AI writing: Quick Draft</p>
               <p>Source verification included</p>
               <p>DOCX/PDF export</p>
@@ -681,47 +710,34 @@ export default function Pricing() {
             </CardFooter>
           </Card>
 
-          {/* Max */}
-          <Card className={currentTier === "max" ? "border-primary" : ""}>
-            <CardHeader>
-              <CardTitle>Max</CardTitle>
-              <CardDescription>Higher limits for your thesis</CardDescription>
-              <div className="text-3xl font-bold mt-2">
-                $50<span className="text-sm font-normal text-muted-foreground">/mo</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p>No set source/project count limit</p>
-              <p>5 GB storage</p>
-              <p>Chicago, MLA 9, and APA 7 citation formatting</p>
-              <p>GPT-4o Vision OCR</p>
-              <p>2M AI token budget/mo</p>
-              <p>Quick Draft + Deep Write</p>
-              <p>Higher limits for source-grounded drafting</p>
-              <p>DOCX/PDF export</p>
-              <p>Everything in Pro</p>
-            </CardContent>
-            <CardFooter>
-              {currentTier === "max" ? (
+          {/* Max remains manageable for existing subscribers, but is not an acquisition offer. */}
+          {currentTier === "max" ? (
+            <Card className="border-primary">
+              <CardHeader>
+                <CardTitle>Max</CardTitle>
+                <CardDescription>Higher limits for your thesis</CardDescription>
+                <div className="text-3xl font-bold mt-2">
+                  $50<span className="text-sm font-normal text-muted-foreground">/mo</span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>No set source/project count limit</p>
+                <p>5 GB storage</p>
+                <p>Chicago, MLA 9, and APA 7 citation formatting</p>
+                <p>GPT-4o Vision OCR</p>
+                <p>2M AI token budget/mo</p>
+                <p>Quick Draft + Deep Write</p>
+                <p>Higher limits for source-grounded drafting</p>
+                <p>DOCX/PDF export</p>
+                <p>Everything in Pro</p>
+              </CardContent>
+              <CardFooter>
                 <Button className="w-full" disabled>
-                  Current Plan
+                  Current Legacy Plan
                 </Button>
-              ) : (
-                <PlanCheckoutButton
-                  tier="max"
-                  amount="50"
-                  label="Max"
-                  accountRef={accountRef}
-                  isSignedIn={isSignedIn}
-                  hasActiveStripeSubscription={hasActiveStripeSubscription}
-                  stripeConfig={stripeConfig}
-                  paypalConfig={paypalConfig}
-                  onSignIn={handleSignIn}
-                  onComplete={handleCheckoutComplete}
-                />
-              )}
-            </CardFooter>
-          </Card>
+              </CardFooter>
+            </Card>
+          ) : null}
         </div>
 
         {/* Feature Comparison Table */}
@@ -733,7 +749,9 @@ export default function Pricing() {
                 <th className="text-left p-3 font-medium">Feature</th>
                 <th className="text-center p-3 font-medium">Free</th>
                 <th className="text-center p-3 font-medium">Pro ($14/mo)</th>
-                <th className="text-center p-3 font-medium">Max ($50/mo)</th>
+                {currentTier === "max" ? (
+                  <th className="text-center p-3 font-medium">Legacy Max</th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -742,7 +760,7 @@ export default function Pricing() {
                   <td className="p-3 font-medium">{f.label}</td>
                   <td className="p-3 text-center text-muted-foreground">{f.free}</td>
                   <td className="p-3 text-center">{f.pro}</td>
-                  <td className="p-3 text-center">{f.max}</td>
+                  {currentTier === "max" ? <td className="p-3 text-center">{f.max}</td> : null}
                 </tr>
               ))}
             </tbody>
@@ -750,9 +768,11 @@ export default function Pricing() {
         </div>
 
         <div className="mt-6 rounded-lg border border-border bg-muted/30 px-4 py-4 text-xs leading-6 text-muted-foreground">
-          Prices are in USD. Stripe checkout starts a monthly subscription that renews until
-          canceled. Venmo or PayPal payments, when offered, provide one month of access unless
-          ScholarMark confirms otherwise. By subscribing, you agree to the{" "}
+          Prices are in USD. Pro costs $14 today and starts immediately. Stripe renews the
+          subscription for $14 each month until you cancel in the online billing portal. Canceling
+          stops future renewals; paid access continues through the current billing period. Venmo or
+          PayPal payments, when offered, provide one month of access unless ScholarMark confirms
+          otherwise. By subscribing, you agree to the{" "}
           <Link href="/terms" className="text-primary underline-offset-4 hover:underline">
             Terms
           </Link>{" "}

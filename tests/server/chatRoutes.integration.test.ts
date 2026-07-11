@@ -68,9 +68,7 @@ describe("chat route integration", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createApp(
-    options: { tier?: "free" | "pro" | "max"; writingModel?: string } = {},
-  ) {
+  async function createApp(options: { tier?: "free" | "pro" | "max"; writingModel?: string } = {}) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
     const { users, conversations } = await import("../../shared/schema");
     const { registerChatRoutes } = await import("../../server/chatRoutes");
@@ -125,8 +123,7 @@ describe("chat route integration", () => {
     const originalFetch = globalThis.fetch.bind(globalThis);
     const chatBodies: unknown[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
-      const url =
-        typeof input === "string" || input instanceof URL ? input.toString() : input.url;
+      const url = typeof input === "string" || input instanceof URL ? input.toString() : input.url;
       if (url === "https://openrouter.ai/api/v1/models") {
         return new Response(
           JSON.stringify({
@@ -163,7 +160,7 @@ describe("chat route integration", () => {
     return { chatBodies };
   }
 
-  it("allows free source verification with the Sonnet verifier model", async () => {
+  it("uses the selected Opus allowance for free source verification", async () => {
     const { server, token } = await createApp({ tier: "free" });
 
     try {
@@ -184,13 +181,13 @@ describe("chat route integration", () => {
       expect(response.status).toBe(200);
       expect(body).toContain("Budgeted chat answer.");
       expect(body).toContain('"type":"done"');
-      expect(verifyCall.model).toBe("claude-sonnet-4-6");
+      expect(verifyCall.model).toBe("claude-opus-4-8");
     } finally {
       await server.close();
     }
   });
 
-  it("uses Haiku for free precision chat turns", async () => {
+  it("uses the truthful Opus model for free precision chat turns", async () => {
     const { server, token } = await createApp({ tier: "free" });
 
     try {
@@ -210,7 +207,7 @@ describe("chat route integration", () => {
 
       expect(response.status).toBe(200);
       expect(body).toContain('"type":"done"');
-      expect(chatCall.model).toBe("claude-haiku-4-5-20251001");
+      expect(chatCall.model).toBe("claude-opus-4-8");
     } finally {
       await server.close();
     }
@@ -223,6 +220,7 @@ describe("chat route integration", () => {
       tier: "max",
       writingModel: "deepseek/deepseek-v4-pro",
     });
+    process.env.ENABLE_DEEPSEEK_WRITING = "true";
 
     try {
       const response = await fetch(
@@ -238,9 +236,7 @@ describe("chat route integration", () => {
       );
       const body = await response.text();
       const userUsage = sqlite
-        .prepare(
-          "SELECT tokens_used, ai_budget_microdollars_used FROM users WHERE id = ?",
-        )
+        .prepare("SELECT tokens_used, ai_budget_microdollars_used FROM users WHERE id = ?")
         .get("chat-user") as {
         tokens_used: number;
         ai_budget_microdollars_used: number;

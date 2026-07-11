@@ -437,8 +437,7 @@ describe("writing route integration", () => {
     }
   });
 
-  it("uses Claude Fable only when the writing user is allowlisted", async () => {
-    process.env.ANTHROPIC_FABLE_TEST_USER_REFS = "writing@example.com";
+  it("keeps the standalone writing route on the governed Sonnet default", async () => {
     const { server, token } = await createApp();
 
     anthropicCreate
@@ -491,7 +490,7 @@ describe("writing route integration", () => {
       expect(response.status).toBe(200);
       expect(text).toContain('"type":"complete"');
       expect(modelParams).toHaveLength(3);
-      expect(modelParams.every((params) => params.model === "claude-fable-5")).toBe(true);
+      expect(modelParams.every((params) => params.model === "claude-sonnet-5")).toBe(true);
       expect(modelParams.every((params) => params.output_config?.effort === "medium")).toBe(true);
       expect(modelParams.every((params) => params.thinking === undefined)).toBe(true);
     } finally {
@@ -527,9 +526,9 @@ describe("writing route integration", () => {
         }),
       });
       const body = await response.json();
-      const row = sqlite.prepare("SELECT count(*) AS count FROM documents WHERE user_id = ?").get(
-        "writing-user",
-      ) as { count: number };
+      const row = sqlite
+        .prepare("SELECT count(*) AS count FROM documents WHERE user_id = ?")
+        .get("writing-user") as { count: number };
 
       expect(response.status).toBe(403);
       expect(body).toEqual({ error: "Document limit reached for the pro plan" });

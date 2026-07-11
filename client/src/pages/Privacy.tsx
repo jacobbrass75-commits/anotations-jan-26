@@ -38,7 +38,8 @@ const sections = [
     body: [
       "ScholarMark may use service providers for hosting, authentication, storage, analytics, payment, email, and AI-assisted research features. These providers are used to operate ScholarMark and are not permitted to use your data for unrelated purposes.",
       "Payment information is processed by Stripe, PayPal, or Venmo. ScholarMark stores billing metadata such as customer IDs, subscription status, plan tier, and payment status, but not full card numbers.",
-      "Some AI, OCR, citation, drafting, and style-analysis features may send user-selected research content to AI/model providers such as OpenAI, Anthropic, or Google/Gemini.",
+      "Some AI, OCR, citation, drafting, and style-analysis features may send user-selected research content to AI/model providers such as OpenAI or Anthropic.",
+      "DeepSeek is disabled by default. If ScholarMark enables it after privacy review, the app will identify it clearly before use. DeepSeek states that it processes data in the People's Republic of China and may use inputs to improve its technology unless the applicable user exercises an available opt-out. Do not use that model for sensitive personal data.",
       "ScholarMark may keep backups, logs, and security records for a limited period after information is removed from the active app, unless a longer retention period is required for legal, billing, security, or abuse-prevention reasons.",
     ],
   },
@@ -95,8 +96,8 @@ export default function Privacy() {
             ScholarMark Privacy Policy
           </h1>
           <p className="text-sm text-muted-foreground">
-            Last updated June 16, 2026. This policy explains how ScholarMark handles data for the web
-            app and Chrome extension.
+            Last updated July 11, 2026. This policy explains how ScholarMark handles data for the
+            web app and Chrome extension.
           </p>
         </div>
 

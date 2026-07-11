@@ -36,6 +36,12 @@ interface UsageSnapshot {
   storagePercent: number;
   tier: string;
   billingCycleStart: string | null;
+  creditsUsed: number;
+  creditsLimit: number;
+  creditsRemaining: number;
+  aiCostCentsUsed: number;
+  aiCostCeilingCents: number;
+  creditPeriodEndsAt: string | null;
 }
 
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
@@ -137,11 +143,12 @@ export default function Account() {
   }, [user]);
 
   const tier = usage?.tier ?? user?.tier ?? "free";
-  const tokenLimit = usage?.tokenLimit ?? user?.tokenLimit ?? 0;
-  const tokensUsed = usage?.tokensUsed ?? user?.tokensUsed ?? 0;
   const storageLimit = usage?.storageLimit ?? user?.storageLimit ?? 0;
   const storageUsed = usage?.storageUsed ?? user?.storageUsed ?? 0;
-  const tokenPercent = usage?.tokenPercent ?? formatUsagePercent(tokensUsed, tokenLimit);
+  const creditsUsed = usage?.creditsUsed ?? 0;
+  const creditsLimit = usage?.creditsLimit ?? 0;
+  const creditsRemaining = usage?.creditsRemaining ?? creditsLimit;
+  const creditPercent = formatUsagePercent(creditsUsed, creditsLimit);
   const storagePercent = usage?.storagePercent ?? formatUsagePercent(storageUsed, storageLimit);
   const billingCycleStart = usage?.billingCycleStart ?? user?.billingCycleStart ?? null;
   const hasStripeCustomer = Boolean(user?.stripeCustomerId);
@@ -180,7 +187,10 @@ export default function Account() {
         const response = await apiRequest("POST", "/api/billing/stripe/checkout/confirm", {
           sessionId: checkoutReturn.sessionId,
         });
-        const body = (await response.json()) as { tier?: string; subscriptionStatus?: string | null };
+        const body = (await response.json()) as {
+          tier?: string;
+          subscriptionStatus?: string | null;
+        };
         await queryClient.invalidateQueries();
         await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
         await queryClient.refetchQueries({ queryKey: ["/api/auth/usage"] });
@@ -238,7 +248,7 @@ export default function Account() {
       <header className="border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Link href="/">
+            <Link href="/dashboard">
               <Button variant="ghost" size="icon" data-testid="button-back-home">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -400,18 +410,22 @@ export default function Account() {
                 <div className="eva-section-title">Usage</div>
               </div>
               <CardTitle className="mt-2 text-2xl font-sans uppercase tracking-[0.12em] text-primary">
-                Token Budget
+                AI Credits
               </CardTitle>
               <CardDescription>
-                {tokensUsed.toLocaleString()} of {tokenLimit.toLocaleString()} AI tokens used
-                this cycle.
+                {creditsUsed.toLocaleString()} of {creditsLimit.toLocaleString()} weighted model
+                credits used this period.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Progress value={tokenPercent} className="h-3" />
+              <Progress value={creditPercent} className="h-3" />
               <div className="flex items-center justify-between text-xs font-mono uppercase tracking-[0.18em] text-muted-foreground">
-                <span>{tokenPercent}% Consumed</span>
-                <span>{Math.max(tokenLimit - tokensUsed, 0).toLocaleString()} Remaining</span>
+                <span>{creditPercent}% Consumed</span>
+                <span>{creditsRemaining.toLocaleString()} Remaining</span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Resets {formatAccountDate(usage?.creditPeriodEndsAt ?? null)}. Premium models use
+                more credits than value models.
               </div>
             </CardContent>
           </Card>

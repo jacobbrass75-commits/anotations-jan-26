@@ -39,7 +39,8 @@ describe("OpenRouter writing model test routes", () => {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
     const { users } = await import("../../shared/schema");
     const { generateToken } = await import("../../server/auth");
-    const { registerOpenRouterWritingRoutes } = await import("../../server/openRouterWritingRoutes");
+    const { registerOpenRouterWritingRoutes } =
+      await import("../../server/openRouterWritingRoutes");
 
     sqlite = importedSqlite;
 
@@ -78,23 +79,12 @@ describe("OpenRouter writing model test routes", () => {
     const originalFetch = globalThis.fetch.bind(globalThis);
     const chatBodies: unknown[] = [];
     const models = [
-      catalogModel("moonshotai/kimi-k2.6", "0.00000066", "0.00000341", 262_144),
-      catalogModel("moonshotai/kimi-k2.5", "0.000000375", "0.000002025", 262_144),
-      catalogModel("z-ai/glm-5", "0.0000006", "0.00000192", 202_752),
       catalogModel("deepseek/deepseek-v4-pro", "0.000000435", "0.00000087", 1_048_576),
-      catalogModel("deepseek/deepseek-v4-flash", "0.00000009", "0.00000018", 1_048_576),
-      catalogModel("openai/gpt-5.5", "0.000005", "0.00003", 1_050_000),
-      catalogModel("google/gemini-3.1-pro-preview", "0.000002", "0.000012", 1_048_576),
-      catalogModel("google/gemini-3.5-flash", "0.0000015", "0.000009", 1_048_576),
-      catalogModel("google/gemini-3.1-flash-lite", "0.00000025", "0.0000015", 1_048_576),
-      catalogModel("google/gemini-2.5-pro", "0.00000125", "0.00001", 1_048_576),
-      catalogModel("google/gemini-2.5-flash", "0.0000003", "0.0000025", 1_048_576),
-      catalogModel("anthropic/claude-opus-4.8", "0.000005", "0.000025", 1_000_000),
+      catalogModel("openai/gpt-5.6-sol", "0.000005", "0.00003", 1_050_000),
     ];
 
     vi.spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
-      const url =
-        typeof input === "string" || input instanceof URL ? input.toString() : input.url;
+      const url = typeof input === "string" || input instanceof URL ? input.toString() : input.url;
       if (url === "https://openrouter.ai/api/v1/models") {
         return new Response(JSON.stringify({ data: models }), {
           status: 200,
@@ -106,7 +96,7 @@ describe("OpenRouter writing model test routes", () => {
         return new Response(
           JSON.stringify({
             id: "or-test-generation",
-            model: "openai/gpt-5.5",
+            model: "openai/gpt-5.6-sol",
             choices: [{ message: { content: "A precise, vivid paragraph for the writing test." } }],
             usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
           }),
@@ -127,7 +117,7 @@ describe("OpenRouter writing model test routes", () => {
     };
   }
 
-  it("lists every requested model with the real DeepSeek and Gemini catalog IDs", async () => {
+  it("lists only the governed OpenRouter writing models", async () => {
     mockOpenRouterFetch();
     const { server, token } = await createApp({ tier: "pro" });
 
@@ -148,18 +138,8 @@ describe("OpenRouter writing model test routes", () => {
       });
       expect(response.body?.budget).toMatchObject({ limitUsd: 7, remainingUsd: 7 });
       expect(response.body?.models.map((model) => model.id)).toEqual([
-        "moonshotai/kimi-k2.6",
-        "moonshotai/kimi-k2.5",
-        "z-ai/glm-5",
         "deepseek/deepseek-v4-pro",
-        "deepseek/deepseek-v4-flash",
-        "openai/gpt-5.5",
-        "google/gemini-3.1-pro-preview",
-        "google/gemini-3.5-flash",
-        "google/gemini-3.1-flash-lite",
-        "google/gemini-2.5-pro",
-        "google/gemini-2.5-flash",
-        "anthropic/claude-opus-4.8",
+        "openai/gpt-5.6-sol",
       ]);
       expect(response.body?.models.every((model) => model.available)).toBe(true);
     } finally {
@@ -184,7 +164,7 @@ describe("OpenRouter writing model test routes", () => {
           "content-type": "application/json",
         },
         body: {
-          model: "openai/gpt-5.5",
+          model: "openai/gpt-5.6-sol",
           prompt: "Write one polished paragraph about annotation-backed research confidence.",
         },
       });
@@ -200,7 +180,7 @@ describe("OpenRouter writing model test routes", () => {
       expect(response.body?.budget).toMatchObject({ usedUsd: 0.00325 });
       expect(chatBodies).toHaveLength(1);
       expect(chatBodies[0]).toMatchObject({
-        model: "openai/gpt-5.5",
+        model: "openai/gpt-5.6-sol",
         temperature: 0.8,
         max_tokens: 800,
         messages: [
@@ -231,7 +211,7 @@ describe("OpenRouter writing model test routes", () => {
           "content-type": "application/json",
         },
         body: {
-          model: "openai/gpt-5.5",
+          model: "openai/gpt-5.6-sol",
           prompt: "Write one polished paragraph about budget enforcement for expensive models.",
         },
       });

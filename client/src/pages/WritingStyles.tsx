@@ -214,7 +214,7 @@ export default function WritingStyles() {
             <h1 className="eva-section-title">WRITING STYLES</h1>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/">
+            <Link href="/dashboard">
               <Button
                 variant="outline"
                 size="sm"

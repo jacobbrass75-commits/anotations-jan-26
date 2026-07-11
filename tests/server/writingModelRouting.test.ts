@@ -1,43 +1,31 @@
-import { describe, expect, it } from "vitest";
-import { WRITING_MODEL_OPTIONS } from "../../client/src/lib/writingModels";
-import {
-  isOpenRouterWritingModelId,
-  OPENROUTER_WRITING_MODEL_IDS,
-} from "../../server/openRouterWriting";
+import { afterEach, describe, expect, it } from "vitest";
 import { getModelsForConversation, normalizeWritingModel } from "../../server/chat/promptBuilder";
 
 describe("writing model routing", () => {
-  const clientModelValues = WRITING_MODEL_OPTIONS.map((option) => option.value);
+  afterEach(() => delete process.env.ENABLE_DEEPSEEK_WRITING);
 
-  it("keeps the client model picker in sync with server-supported writing models", () => {
-    expect(clientModelValues).toEqual(["precision", "extended", ...OPENROUTER_WRITING_MODEL_IDS]);
+  it.each([
+    ["opus", "anthropic", "claude-opus-4-8"],
+    ["sonnet", "anthropic", "claude-sonnet-5"],
+    ["gpt56", "openrouter", "openai/gpt-5.6-sol"],
+  ])("routes %s without silently changing its identity", (choice, provider, id) => {
+    const routed = getModelsForConversation({ writingModel: choice });
+    expect(routed.provider).toBe(provider);
+    expect(routed.chat).toBe(id);
   });
 
-  it("routes every exposed writing chat model to a usable provider/model set", () => {
-    for (const modelValue of clientModelValues) {
-      expect(normalizeWritingModel(modelValue)).toBe(modelValue);
-
-      const routed = getModelsForConversation({ writingModel: modelValue }, "max");
-      if (isOpenRouterWritingModelId(modelValue)) {
-        expect(routed).toEqual({
-          provider: "openrouter",
-          chat: modelValue,
-          compile: modelValue,
-          verify: modelValue,
-        });
-      } else {
-        expect(routed.provider).toBe("anthropic");
-        expect(routed.chat).toMatch(/^claude-/);
-        expect(routed.compile).toMatch(/^claude-/);
-        expect(routed.verify).toMatch(/^claude-/);
-      }
-    }
+  it("keeps DeepSeek disabled unless its privacy flag is explicit", () => {
+    expect(normalizeWritingModel("deepseek")).toBe("sonnet");
+    process.env.ENABLE_DEEPSEEK_WRITING = "true";
+    expect(getModelsForConversation({ writingModel: "deepseek" })).toMatchObject({
+      provider: "openrouter",
+      chat: "deepseek/deepseek-v4-pro",
+    });
   });
 
-  it("falls back to precision for unknown writing chat model ids", () => {
-    expect(normalizeWritingModel("not-a-real-model")).toBe("precision");
-    expect(getModelsForConversation({ writingModel: "not-a-real-model" }, "max").provider).toBe(
-      "anthropic",
-    );
+  it("migrates legacy modes and defaults unknown ids to Sonnet", () => {
+    expect(normalizeWritingModel("precision")).toBe("opus");
+    expect(normalizeWritingModel("extended")).toBe("sonnet");
+    expect(normalizeWritingModel("unknown")).toBe("sonnet");
   });
 });

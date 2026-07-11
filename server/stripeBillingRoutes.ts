@@ -384,6 +384,7 @@ export function registerStripeBillingRoutes(app: ExpressApp): void {
 
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
+        payment_method_collection: "always",
         customer: user.stripeCustomerId!,
         client_reference_id: user.id,
         line_items: [
@@ -397,12 +398,14 @@ export function registerStripeBillingRoutes(app: ExpressApp): void {
         cancel_url: buildAppUrl(req, "/pricing", { checkout: "cancelled" }),
         metadata: {
           app: "scholarmark",
+          billingOffer: "paid_first_month",
           tier,
           userId: user.id,
         },
         subscription_data: {
           metadata: {
             app: "scholarmark",
+            billingOffer: "paid_first_month",
             tier,
             userId: user.id,
           },

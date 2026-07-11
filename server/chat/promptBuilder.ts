@@ -10,10 +10,7 @@ import {
   type WritingSource,
 } from "../writingPipeline";
 import { buildStyleSection } from "../sourceRoles";
-import {
-  isOpenRouterWritingModelId,
-  type OpenRouterWritingModelId,
-} from "../openRouterWriting";
+import { isOpenRouterWritingModelId, type OpenRouterWritingModelId } from "../openRouterWriting";
 
 export const MAX_SOURCE_EXCERPT_CHARS = 2000;
 export const MAX_SOURCE_FULLTEXT_CHARS = 30000;
@@ -37,20 +34,6 @@ export const MODELS = {
   research: ANTHROPIC_MODELS.sonnet,
 } as const;
 
-const FREE_MODELS: typeof MODELS = {
-  precision: {
-    chat: ANTHROPIC_MODELS.haiku,
-    compile: ANTHROPIC_MODELS.haiku,
-    verify: ANTHROPIC_MODELS.sonnet,
-  },
-  extended: {
-    chat: ANTHROPIC_MODELS.sonnet,
-    compile: ANTHROPIC_MODELS.sonnet,
-    verify: ANTHROPIC_MODELS.sonnet,
-  },
-  research: ANTHROPIC_MODELS.sonnet,
-};
-
 const TOKEN_LIMITS = {
   precision: 200_000,
   extended: 200_000,
@@ -69,7 +52,7 @@ export type WritingProjectContext = Pick<
 export type WritingStyleContext = Pick<WritingStyle, "name" | "description" | "voiceProfile">;
 export type PromptSource = WritingSource | TieredSource;
 export type WritingMode = "precision" | "extended";
-export type WritingModelChoice = WritingMode | OpenRouterWritingModelId;
+export type WritingModelChoice = "opus" | "sonnet" | "gpt56" | "deepseek";
 export type ConversationModelSet =
   | {
       provider: "anthropic";
@@ -116,31 +99,52 @@ export function prettyToneLabel(tone?: string): string {
 }
 
 export function normalizeWritingModel(value: string | null | undefined): WritingModelChoice {
-  if (value === "extended") return "extended";
-  if (value && isOpenRouterWritingModelId(value)) return value;
-  return "precision";
+  if (value === "opus" || value === "sonnet" || value === "gpt56") return value;
+  if (value === "deepseek" && process.env.ENABLE_DEEPSEEK_WRITING === "true") return value;
+  // Migrate legacy values without pretending that a different model was selected.
+  if (value === "precision") return "opus";
+  if (value === "extended") return "sonnet";
+  if (
+    value === "gpt55" ||
+    value === "openai/gpt-5.5" ||
+    value === "openai/gpt-5.5-2026-04-23" ||
+    value === "openai/gpt-5.6-sol"
+  ) {
+    return "gpt56";
+  }
+  if (value === "deepseek/deepseek-v4-pro" && process.env.ENABLE_DEEPSEEK_WRITING === "true") {
+    return "deepseek";
+  }
+  if (value === "anthropic/claude-opus-4.8") return "opus";
+  return "sonnet";
 }
 
 export function getWritingMode(conv: Pick<Conversation, "writingModel">): WritingMode {
-  return normalizeWritingModel(conv.writingModel) === "extended" ? "extended" : "precision";
+  return normalizeWritingModel(conv.writingModel) === "opus" ? "precision" : "extended";
 }
 
 export function getModelsForConversation(
   conv: Pick<Conversation, "writingModel">,
-  tier?: string | null,
+  _tier?: string | null,
 ): ConversationModelSet {
   const modelChoice = normalizeWritingModel(conv.writingModel);
-  if (isOpenRouterWritingModelId(modelChoice)) {
+  const openRouterModel =
+    modelChoice === "gpt56"
+      ? "openai/gpt-5.6-sol"
+      : modelChoice === "deepseek"
+        ? "deepseek/deepseek-v4-pro"
+        : null;
+  if (openRouterModel && isOpenRouterWritingModelId(openRouterModel)) {
     return {
       provider: "openrouter",
-      chat: modelChoice,
-      compile: modelChoice,
-      verify: modelChoice,
+      chat: openRouterModel,
+      compile: openRouterModel,
+      verify: openRouterModel,
     };
   }
 
-  const mode = modelChoice;
-  const selectedModels = tier === "free" ? FREE_MODELS[mode] : MODELS[mode];
+  const mode = modelChoice === "opus" ? "precision" : "extended";
+  const selectedModels = MODELS[mode];
   return {
     provider: "anthropic",
     ...selectedModels,

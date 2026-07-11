@@ -1,22 +1,19 @@
 import type { Express, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { randomUUID } from "crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   chatStorage,
   updateConversationClipboard,
   updateConversationCompaction,
 } from "../chatStorage";
-import { db } from "../db";
+import { db, usageLedger } from "../db";
 import { projectStorage } from "../projectStorage";
 import { writingStyleStorage } from "../writingStyleStorage";
 import { storage } from "../storage";
 import { checkTokenBudget, requireAuth } from "../auth";
 import { aiLimiter } from "../rateLimits";
-import {
-  getUserById,
-  incrementAiBudgetUsage,
-  incrementTokenUsage,
-} from "../authStorage";
+import { getUserById, incrementAiBudgetUsage, incrementTokenUsage } from "../authStorage";
 import { logContextSnapshot, logToolCall } from "../analyticsLogger";
 import {
   gatherEvidence,
@@ -96,8 +93,70 @@ import {
   type OpenRouterChatMessage,
   type OpenRouterWritingModelId,
 } from "../openRouterWriting";
+import type { WritingCreditModel } from "../planLimits";
 
 const logger = createLogger("chat/handlers");
+
+function creditModelForChoice(value: string | null | undefined): WritingCreditModel {
+  const normalized = normalizeWritingModel(value);
+  if (normalized === "opus") return "opus";
+  if (normalized === "gpt56") return "gpt";
+  if (normalized === "deepseek") return "deepseek";
+  return "sonnet";
+}
+
+function estimatedModelCostCents(
+  model: WritingCreditModel,
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  const rates = {
+    opus: { input: 5, output: 25 },
+    sonnet: { input: 3, output: 15 },
+    gpt: { input: 5, output: 30 },
+    deepseek: { input: 0.435, output: 0.87 },
+  }[model];
+  return Math.ceil(
+    ((Math.max(0, inputTokens) * rates.input + Math.max(0, outputTokens) * rates.output) /
+      1_000_000) *
+      100,
+  );
+}
+
+async function reserveWritingCredits(input: {
+  req: Request;
+  model: WritingCreditModel;
+  operation: string;
+  estimatedInputTokens: number;
+  maxOutputTokens: number;
+}) {
+  const user = await getUserById(input.req.user!.userId);
+  if (!user) throw new OpenRouterWritingError(401, "Authentication required");
+  const clientRequestId = input.req.header("x-request-id")?.trim() || randomUUID();
+  const requestId = `${user.id}:${input.operation}:${clientRequestId}`;
+  const reservation = usageLedger.reserve({
+    userId: user.id,
+    requestId,
+    tier: user.tier,
+    model: input.model,
+    estimatedCostCents: estimatedModelCostCents(
+      input.model,
+      input.estimatedInputTokens,
+      input.maxOutputTokens,
+    ),
+    billingPeriodStart: user.billingCycleStart,
+    billingPeriodEnd: user.subscriptionCurrentPeriodEnd,
+  });
+  if (!reservation.ok) {
+    throw new OpenRouterWritingError(
+      429,
+      reservation.reason === "model_limit"
+        ? `The ${input.model} Starter allowance has been used for this period`
+        : "AI credit allowance reached for this period",
+    );
+  }
+  return requestId;
+}
 
 async function getOwnedConversationOr404(
   req: Request,
@@ -114,12 +173,6 @@ async function getOwnedConversationOr404(
 async function getOwnedProjectOr404(projectId: string, userId: string): Promise<Project | null> {
   const project = await projectStorage.getProject(projectId);
   return project?.userId === userId ? project : null;
-}
-
-function getUsageTokenTotal(
-  usage: { input_tokens?: number; output_tokens?: number } | null | undefined,
-): number {
-  return (usage?.input_tokens || 0) + (usage?.output_tokens || 0);
 }
 
 async function recordUserTokenUsage(
@@ -178,10 +231,7 @@ async function runOpenRouterWithBudget(input: {
 
   const budget = getOpenRouterBudgetSnapshot(user);
   if (budget.limitMicrodollars <= 0) {
-    throw new OpenRouterWritingError(
-      403,
-      "OpenRouter writing models require the Pro or Max plan",
-    );
+    throw new OpenRouterWritingError(403, "OpenRouter writing models require the Pro or Max plan");
   }
 
   const model = await getOpenRouterWritingModel(input.modelId);
@@ -429,172 +479,152 @@ async function loadConversationContext(
 }
 
 export function registerChatRoutes(app: Express) {
-  app.get(
-    "/api/chat/conversations",
-    requireAuth,
-    async (req: Request, res: Response) => {
-      try {
-        const rawProjectId =
-          typeof req.query.projectId === "string" ? req.query.projectId : undefined;
-        const projectId = rawProjectId && rawProjectId !== "null" ? rawProjectId : undefined;
-        const standaloneOnly = req.query.standalone === "true";
-        if (projectId) {
-          const project = await getOwnedProjectOr404(projectId, req.user!.userId);
-          if (!project) {
-            return res.status(404).json({ message: "Project not found" });
-          }
+  app.get("/api/chat/conversations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const rawProjectId =
+        typeof req.query.projectId === "string" ? req.query.projectId : undefined;
+      const projectId = rawProjectId && rawProjectId !== "null" ? rawProjectId : undefined;
+      const standaloneOnly = req.query.standalone === "true";
+      if (projectId) {
+        const project = await getOwnedProjectOr404(projectId, req.user!.userId);
+        if (!project) {
+          return res.status(404).json({ message: "Project not found" });
         }
-        const conversations = standaloneOnly
-          ? await chatStorage.getStandaloneConversations(req.user!.userId)
-          : await chatStorage.getConversationsForUser(req.user!.userId, projectId);
-        res.json(conversations);
-      } catch (error) {
-        logger.error({ err: error }, "Error listing conversations:");
-        res.status(500).json({ message: "Failed to list conversations" });
       }
-    },
-  );
+      const conversations = standaloneOnly
+        ? await chatStorage.getStandaloneConversations(req.user!.userId)
+        : await chatStorage.getConversationsForUser(req.user!.userId, projectId);
+      res.json(conversations);
+    } catch (error) {
+      logger.error({ err: error }, "Error listing conversations:");
+      res.status(500).json({ message: "Failed to list conversations" });
+    }
+  });
 
-  app.post(
-    "/api/chat/conversations",
-    requireAuth,
-    async (req: Request, res: Response) => {
-      try {
-        const {
-          title,
-          model,
-          projectId,
-          selectedSourceIds,
-          citationStyle,
-          tone,
-          humanize,
-          noEnDashes,
-          writingModel,
-          writingStyleId,
-        } = req.body || {};
+  app.post("/api/chat/conversations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const {
+        title,
+        model,
+        projectId,
+        selectedSourceIds,
+        citationStyle,
+        tone,
+        humanize,
+        noEnDashes,
+        writingModel,
+        writingStyleId,
+      } = req.body || {};
 
-        const normalizedWritingModel = normalizeWritingModel(
+      const normalizedWritingModel = normalizeWritingModel(
+        typeof writingModel === "string" ? writingModel : undefined,
+      );
+      const defaultModels = getModelsForConversation(
+        { writingModel: normalizedWritingModel },
+        req.user!.tier,
+      );
+      if (projectId) {
+        const project = await getOwnedProjectOr404(projectId, req.user!.userId);
+        if (!project) {
+          return res.status(404).json({ message: "Project not found" });
+        }
+      }
+      const normalizedWritingStyleId = await assertOwnedWritingStyle(
+        writingStyleId,
+        req.user!.userId,
+        res,
+      );
+      if (writingStyleId !== undefined && normalizedWritingStyleId === undefined) return;
+
+      const conv = await chatStorage.createConversation({
+        title: title || "New Chat",
+        model: model || defaultModels.chat,
+        writingModel: normalizedWritingModel,
+        userId: req.user!.userId,
+        projectId: projectId || null,
+        selectedSourceIds: selectedSourceIds || null,
+        writingStyleId: normalizedWritingStyleId ?? null,
+        citationStyle: citationStyle || "chicago",
+        tone: tone || "academic",
+        humanize: humanize ?? true,
+        noEnDashes: noEnDashes ?? false,
+      });
+      res.json(conv);
+    } catch (error) {
+      logger.error({ err: error }, "Error creating conversation:");
+      res.status(500).json({ message: "Failed to create conversation" });
+    }
+  });
+
+  app.get("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const conv = await getOwnedConversationOr404(req, res);
+      if (!conv) return;
+      const messages = await chatStorage.getMessagesForConversation(conv.id);
+      res.json({ ...conv, messages });
+    } catch (error) {
+      logger.error({ err: error }, "Error fetching conversation:");
+      res.status(500).json({ message: "Failed to fetch conversation" });
+    }
+  });
+
+  app.delete("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const conv = await getOwnedConversationOr404(req, res);
+      if (!conv) return;
+      await chatStorage.deleteConversation(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      logger.error({ err: error }, "Error deleting conversation:");
+      res.status(500).json({ message: "Failed to delete conversation" });
+    }
+  });
+
+  app.put("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const {
+        title,
+        model,
+        writingModel,
+        citationStyle,
+        tone,
+        humanize,
+        noEnDashes,
+        writingStyleId,
+      } = req.body;
+
+      const updates: Record<string, unknown> = {};
+      if (title !== undefined) updates.title = title;
+      if (model !== undefined) updates.model = model;
+      if (writingModel !== undefined)
+        updates.writingModel = normalizeWritingModel(
           typeof writingModel === "string" ? writingModel : undefined,
         );
-        const defaultModels = getModelsForConversation(
-          { writingModel: normalizedWritingModel },
-          req.user!.tier,
-        );
-        if (projectId) {
-          const project = await getOwnedProjectOr404(projectId, req.user!.userId);
-          if (!project) {
-            return res.status(404).json({ message: "Project not found" });
-          }
-        }
+      if (citationStyle !== undefined) updates.citationStyle = citationStyle;
+      if (tone !== undefined) updates.tone = tone;
+      if (humanize !== undefined) updates.humanize = humanize;
+      if (noEnDashes !== undefined) updates.noEnDashes = noEnDashes;
+
+      const existing = await getOwnedConversationOr404(req, res);
+      if (!existing) return;
+
+      if (writingStyleId !== undefined) {
         const normalizedWritingStyleId = await assertOwnedWritingStyle(
           writingStyleId,
           req.user!.userId,
           res,
         );
-        if (writingStyleId !== undefined && normalizedWritingStyleId === undefined) return;
-
-        const conv = await chatStorage.createConversation({
-          title: title || "New Chat",
-          model: model || defaultModels.chat,
-          writingModel: normalizedWritingModel,
-          userId: req.user!.userId,
-          projectId: projectId || null,
-          selectedSourceIds: selectedSourceIds || null,
-          writingStyleId: normalizedWritingStyleId ?? null,
-          citationStyle: citationStyle || "chicago",
-          tone: tone || "academic",
-          humanize: humanize ?? true,
-          noEnDashes: noEnDashes ?? false,
-        });
-        res.json(conv);
-      } catch (error) {
-        logger.error({ err: error }, "Error creating conversation:");
-        res.status(500).json({ message: "Failed to create conversation" });
+        if (normalizedWritingStyleId === undefined) return;
+        updates.writingStyleId = normalizedWritingStyleId;
       }
-    },
-  );
 
-  app.get(
-    "/api/chat/conversations/:id",
-    requireAuth,
-    async (req: Request, res: Response) => {
-      try {
-        const conv = await getOwnedConversationOr404(req, res);
-        if (!conv) return;
-        const messages = await chatStorage.getMessagesForConversation(conv.id);
-        res.json({ ...conv, messages });
-      } catch (error) {
-        logger.error({ err: error }, "Error fetching conversation:");
-        res.status(500).json({ message: "Failed to fetch conversation" });
-      }
-    },
-  );
-
-  app.delete(
-    "/api/chat/conversations/:id",
-    requireAuth,
-    async (req: Request, res: Response) => {
-      try {
-        const conv = await getOwnedConversationOr404(req, res);
-        if (!conv) return;
-        await chatStorage.deleteConversation(req.params.id);
-        res.json({ success: true });
-      } catch (error) {
-        logger.error({ err: error }, "Error deleting conversation:");
-        res.status(500).json({ message: "Failed to delete conversation" });
-      }
-    },
-  );
-
-  app.put(
-    "/api/chat/conversations/:id",
-    requireAuth,
-    async (req: Request, res: Response) => {
-      try {
-        const {
-          title,
-          model,
-          writingModel,
-          citationStyle,
-          tone,
-          humanize,
-          noEnDashes,
-          writingStyleId,
-        } = req.body;
-
-        const updates: Record<string, unknown> = {};
-        if (title !== undefined) updates.title = title;
-        if (model !== undefined) updates.model = model;
-        if (writingModel !== undefined)
-          updates.writingModel = normalizeWritingModel(
-            typeof writingModel === "string" ? writingModel : undefined,
-          );
-        if (citationStyle !== undefined) updates.citationStyle = citationStyle;
-        if (tone !== undefined) updates.tone = tone;
-        if (humanize !== undefined) updates.humanize = humanize;
-        if (noEnDashes !== undefined) updates.noEnDashes = noEnDashes;
-
-        const existing = await getOwnedConversationOr404(req, res);
-        if (!existing) return;
-
-        if (writingStyleId !== undefined) {
-          const normalizedWritingStyleId = await assertOwnedWritingStyle(
-            writingStyleId,
-            req.user!.userId,
-            res,
-          );
-          if (normalizedWritingStyleId === undefined) return;
-          updates.writingStyleId = normalizedWritingStyleId;
-        }
-
-        const conv = await chatStorage.updateConversation(req.params.id, updates);
-        res.json(conv);
-      } catch (error) {
-        logger.error({ err: error }, "Error updating conversation:");
-        res.status(500).json({ message: "Failed to update conversation" });
-      }
-    },
-  );
+      const conv = await chatStorage.updateConversation(req.params.id, updates);
+      res.json(conv);
+    } catch (error) {
+      logger.error({ err: error }, "Error updating conversation:");
+      res.status(500).json({ message: "Failed to update conversation" });
+    }
+  });
 
   app.put(
     "/api/chat/conversations/:id/sources",
@@ -623,6 +653,8 @@ export function registerChatRoutes(app: Express) {
     checkTokenBudget,
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;
+      let usageRequestId: string | null = null;
+      let usageCreditModel: WritingCreditModel;
 
       try {
         const { content } = req.body;
@@ -669,6 +701,17 @@ Do NOT emit <chunk_request> or <context_request> tags.
 Use the gathered evidence, the accumulated clipboard, and the recent conversation context to answer directly.`;
           }
         }
+
+        usageCreditModel = creditModelForChoice(conv.writingModel);
+        usageRequestId = await reserveWritingCredits({
+          req,
+          model: usageCreditModel,
+          operation: `chat:${conv.id}`,
+          estimatedInputTokens: Math.ceil(
+            (systemPrompt.length + JSON.stringify(anthropicMessages).length) / 4,
+          ),
+          maxOutputTokens: CHAT_MAX_TOKENS,
+        });
 
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
@@ -841,7 +884,6 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           messagesForTurn: AnthropicHistoryMessage[],
         ): Promise<StreamTurnResult> => {
           if (models.provider === "openrouter") {
-            let fullText = "";
             const detectedRequests: ToolRequest[] = [];
             const parser = createDocumentStreamParser((event) => {
               if (closed || res.writableEnded) return;
@@ -859,7 +901,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
               title: "ScholarMark Writing Chat",
             });
 
-            fullText = result.output;
+            const fullText = result.output;
             parser.pushText(fullText);
             toolParser.pushText(fullText);
             parser.finish();
@@ -892,9 +934,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
             const stream = anthropic.messages.stream({
               model: models.chat,
               max_tokens: CHAT_MAX_TOKENS,
-              system: [
-                { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
-              ],
+              system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
               messages: messagesForTurn,
             });
 
@@ -1162,6 +1202,18 @@ ${chunkContext}`;
           escalationCount += 1;
         }
 
+        if (usageRequestId) {
+          if (totalInputTokens + totalOutputTokens > 0) {
+            usageLedger.settle(
+              usageRequestId,
+              estimatedModelCostCents(usageCreditModel, totalInputTokens, totalOutputTokens),
+            );
+          } else {
+            usageLedger.refund(usageRequestId);
+          }
+          usageRequestId = null;
+        }
+
         if (!closed && !res.writableEnded) {
           sendWritingStatus("Writing complete.", "complete", 100);
           sendEvent({
@@ -1176,11 +1228,13 @@ ${chunkContext}`;
           res.end();
         }
       } catch (error) {
+        if (usageRequestId) usageLedger.refund(usageRequestId);
         logger.error({ err: error }, "Error sending message:");
         stopHeartbeat?.();
         stopHeartbeat = null;
         if (!res.headersSent) {
-          res.status(500).json({ message: sanitizeSseError(error, "Failed to send message") });
+          const status = error instanceof OpenRouterWritingError ? error.status : 500;
+          res.status(status).json({ message: sanitizeSseError(error, "Failed to send message") });
         } else {
           res.write(
             `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Failed to send message") })}\n\n`,
@@ -1198,6 +1252,8 @@ ${chunkContext}`;
     checkTokenBudget,
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;
+      let usageRequestId: string | null = null;
+      let usageCreditModel: WritingCreditModel;
 
       try {
         const conv = await getOwnedConversationOr404(req, res);
@@ -1233,6 +1289,15 @@ ${chunkContext}`;
           noEnDashes: avoidDashes,
         });
 
+        usageCreditModel = creditModelForChoice(conv.writingModel);
+        usageRequestId = await reserveWritingCredits({
+          req,
+          model: usageCreditModel,
+          operation: `compile:${conv.id}`,
+          estimatedInputTokens: Math.ceil(compilePrompt.length / 4),
+          maxOutputTokens: COMPILE_MAX_TOKENS,
+        });
+
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
@@ -1256,11 +1321,16 @@ ${chunkContext}`;
             maxTokens: COMPILE_MAX_TOKENS,
             title: "ScholarMark Writing Compile",
           });
-          await recordUserTokenUsage(
-            req.user!.userId,
-            result.usage.totalTokens,
-            "chat_compile",
+          await recordUserTokenUsage(req.user!.userId, result.usage.totalTokens, "chat_compile");
+          usageLedger.settle(
+            usageRequestId,
+            estimatedModelCostCents(
+              usageCreditModel,
+              result.usage.promptTokens,
+              result.usage.completionTokens,
+            ),
           );
+          usageRequestId = null;
           if (!aborted) {
             stopHeartbeat?.();
             stopHeartbeat = null;
@@ -1285,11 +1355,16 @@ ${chunkContext}`;
         });
 
         stream.on("message", async (message) => {
-          await recordUserTokenUsage(
-            req.user!.userId,
-            getUsageTokenTotal(message?.usage),
-            "chat_compile",
-          );
+          const inputTokens = message?.usage?.input_tokens || 0;
+          const outputTokens = message?.usage?.output_tokens || 0;
+          await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_compile");
+          if (usageRequestId) {
+            usageLedger.settle(
+              usageRequestId,
+              estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
+            );
+            usageRequestId = null;
+          }
           if (aborted) return;
           stopHeartbeat?.();
           stopHeartbeat = null;
@@ -1298,6 +1373,10 @@ ${chunkContext}`;
         });
 
         stream.on("error", (error) => {
+          if (usageRequestId) {
+            usageLedger.refund(usageRequestId);
+            usageRequestId = null;
+          }
           logger.error({ err: error }, "Compile stream error:");
           if (!aborted) {
             stopHeartbeat?.();
@@ -1309,11 +1388,13 @@ ${chunkContext}`;
           }
         });
       } catch (error) {
+        if (usageRequestId) usageLedger.refund(usageRequestId);
         logger.error({ err: error }, "Compile error:");
         stopHeartbeat?.();
         stopHeartbeat = null;
         if (!res.headersSent) {
-          res.status(500).json({ message: sanitizeSseError(error, "Failed to compile paper") });
+          const status = error instanceof OpenRouterWritingError ? error.status : 500;
+          res.status(status).json({ message: sanitizeSseError(error, "Failed to compile paper") });
         } else {
           res.write(
             `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Compile failed") })}\n\n`,
@@ -1331,6 +1412,8 @@ ${chunkContext}`;
     checkTokenBudget,
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;
+      let usageRequestId: string | null = null;
+      let usageCreditModel: WritingCreditModel;
 
       try {
         const conv = await getOwnedConversationOr404(req, res);
@@ -1349,6 +1432,15 @@ ${chunkContext}`;
           project,
           sources,
           style,
+        });
+
+        usageCreditModel = creditModelForChoice(conv.writingModel);
+        usageRequestId = await reserveWritingCredits({
+          req,
+          model: usageCreditModel,
+          operation: `verify:${conv.id}`,
+          estimatedInputTokens: Math.ceil(verifyPrompt.length / 4),
+          maxOutputTokens: VERIFY_MAX_TOKENS,
         });
 
         res.setHeader("Content-Type", "text/event-stream");
@@ -1374,11 +1466,16 @@ ${chunkContext}`;
             maxTokens: VERIFY_MAX_TOKENS,
             title: "ScholarMark Writing Verify",
           });
-          await recordUserTokenUsage(
-            req.user!.userId,
-            result.usage.totalTokens,
-            "chat_verify",
+          await recordUserTokenUsage(req.user!.userId, result.usage.totalTokens, "chat_verify");
+          usageLedger.settle(
+            usageRequestId,
+            estimatedModelCostCents(
+              usageCreditModel,
+              result.usage.promptTokens,
+              result.usage.completionTokens,
+            ),
           );
+          usageRequestId = null;
           if (!aborted) {
             stopHeartbeat?.();
             stopHeartbeat = null;
@@ -1403,11 +1500,16 @@ ${chunkContext}`;
         });
 
         stream.on("message", async (message) => {
-          await recordUserTokenUsage(
-            req.user!.userId,
-            getUsageTokenTotal(message?.usage),
-            "chat_verify",
-          );
+          const inputTokens = message?.usage?.input_tokens || 0;
+          const outputTokens = message?.usage?.output_tokens || 0;
+          await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_verify");
+          if (usageRequestId) {
+            usageLedger.settle(
+              usageRequestId,
+              estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
+            );
+            usageRequestId = null;
+          }
           if (!aborted) {
             stopHeartbeat?.();
             stopHeartbeat = null;
@@ -1417,6 +1519,10 @@ ${chunkContext}`;
         });
 
         stream.on("error", (error) => {
+          if (usageRequestId) {
+            usageLedger.refund(usageRequestId);
+            usageRequestId = null;
+          }
           logger.error({ err: error }, "Verify stream error:");
           if (!aborted) {
             stopHeartbeat?.();
@@ -1428,11 +1534,13 @@ ${chunkContext}`;
           }
         });
       } catch (error) {
+        if (usageRequestId) usageLedger.refund(usageRequestId);
         logger.error({ err: error }, "Verify error:");
         stopHeartbeat?.();
         stopHeartbeat = null;
         if (!res.headersSent) {
-          res.status(500).json({ message: sanitizeSseError(error, "Failed to verify paper") });
+          const status = error instanceof OpenRouterWritingError ? error.status : 500;
+          res.status(status).json({ message: sanitizeSseError(error, "Failed to verify paper") });
         } else {
           res.write(
             `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Verify failed") })}\n\n`,

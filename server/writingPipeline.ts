@@ -140,7 +140,7 @@ function addUsage(total: TokenUsage, usage: TokenUsage): void {
 }
 
 function usesAdaptiveThinking(model: string): boolean {
-  return /\b(fable|mythos)\b/i.test(model);
+  return /\b(fable|mythos|sonnet-5|opus-4-8)\b/i.test(model);
 }
 
 function applyWritingModelOptions(

@@ -246,8 +246,13 @@ describe("Stripe billing routes", () => {
       expect(stripeClient.checkout.sessions.create).toHaveBeenCalledWith(
         expect.objectContaining({
           mode: "subscription",
+          payment_method_collection: "always",
           customer: "cus_existing",
           line_items: [{ price: "price_pro", quantity: 1 }],
+          metadata: expect.objectContaining({ billingOffer: "paid_first_month" }),
+          subscription_data: expect.objectContaining({
+            metadata: expect.objectContaining({ billingOffer: "paid_first_month" }),
+          }),
           success_url:
             "https://app.scholarmark.ai/account?checkout=success&session_id={CHECKOUT_SESSION_ID}",
           cancel_url: "https://app.scholarmark.ai/pricing?checkout=cancelled",

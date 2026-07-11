@@ -138,8 +138,14 @@ describe("auth route integration", () => {
         storageLimit: 8192,
         storagePercent: 25,
         tier: "pro",
+        creditsUsed: 0,
+        creditsLimit: 600,
+        creditsRemaining: 600,
+        aiCostCentsUsed: 0,
+        aiCostCeilingCents: 450,
       });
       expect(typeof usage.body?.billingCycleStart).toBe("string");
+      expect(typeof usage.body?.creditPeriodEndsAt).toBe("string");
     } finally {
       await server.close();
     }

@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import * as schema from "@shared/schema";
 import { existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
+import { UsageLedger } from "./usageLedger";
 
 // Database file path
 const DB_PATH = "./data/sourceannotator.db";
@@ -48,6 +49,9 @@ function ensureColumn(tableName: string, columnName: string, columnDefinition: s
 
 // Export the drizzle database instance
 export const db = drizzle(sqlite, { schema });
+
+export const usageLedger = new UsageLedger(sqlite);
+usageLedger.initialize();
 
 // Persistent OCR queue for crash-safe background processing.
 sqlite.exec(`

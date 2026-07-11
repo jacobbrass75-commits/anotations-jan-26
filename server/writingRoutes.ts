@@ -1,7 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { checkTokenBudget, requireAuth } from "./auth";
+import { randomUUID } from "crypto";
 import { aiLimiter } from "./rateLimits";
-import { incrementTokenUsage } from "./authStorage";
+import { getUserById, incrementTokenUsage } from "./authStorage";
+import { usageLedger } from "./db";
 import {
   DocumentQuotaError,
   assertDocumentCreationAllowed,
@@ -20,13 +22,11 @@ import { sanitizeSseError, startSseHeartbeat } from "./sseUtils";
 import { buildAuthorLabel, clipText } from "./chat/shared";
 import type { CitationData } from "@shared/schema";
 import { createLogger } from "./logger";
-import { ANTHROPIC_MODELS } from "./aiModels";
 
 const logger = createLogger("writingRoutes");
 
 const MAX_SOURCE_EXCERPT_CHARS = 700;
 const MAX_SOURCE_FULLTEXT_CHARS = 7000;
-const FABLE_TEST_USER_REFS_ENV = "ANTHROPIC_FABLE_TEST_USER_REFS";
 
 function toSafeFilename(topic: string): string {
   const base = topic
@@ -36,27 +36,6 @@ function toSafeFilename(topic: string): string {
     .slice(0, 80);
   const datePart = new Date().toISOString().slice(0, 10);
   return `${base || "generated-paper"}-${datePart}.md`;
-}
-
-function parseCsvRefs(value: string | undefined): Set<string> {
-  return new Set(
-    (value || "")
-      .split(",")
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
-function getWritingModelOverrideForUser(user: Express.User): string | null {
-  const fableUserRefs = parseCsvRefs(process.env[FABLE_TEST_USER_REFS_ENV]);
-  if (fableUserRefs.size === 0) return null;
-
-  const userRefs = [user.userId, user.email].map((value) => value.toLowerCase());
-  if (!fableUserRefs.has("*") && !userRefs.some((value) => fableUserRefs.has(value))) {
-    return null;
-  }
-
-  return ANTHROPIC_MODELS.fable;
 }
 
 export async function savePaperToProject(
@@ -116,6 +95,7 @@ export function registerWritingRoutes(app: Express): void {
     checkTokenBudget,
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;
+      let usageRequestId: string | null = null;
 
       try {
         const body = req.body as Partial<WritingRequest> & {
@@ -183,7 +163,8 @@ export function registerWritingRoutes(app: Express): void {
           noEnDashes: body.noEnDashes ?? false,
           deepWrite: body.deepWrite ?? false,
           voiceProfile,
-          modelOverride: getWritingModelOverrideForUser(req.user!),
+          // /api/write uses the governed Sonnet default in writingPipeline.
+          modelOverride: null,
         };
 
         const sources: WritingSource[] = [];
@@ -296,9 +277,39 @@ export function registerWritingRoutes(app: Express): void {
           }
         }
 
+        const usageUser = await getUserById(req.user!.userId);
+        if (!usageUser) return res.status(401).json({ error: "Authentication required" });
+        usageRequestId = `${usageUser.id}:write:${req.header("x-request-id")?.trim() || randomUUID()}`;
+        const estimatedInputTokens = Math.ceil(
+          (request.topic.length +
+            sources.reduce((sum, source) => sum + source.fullText.length, 0)) /
+            4,
+        );
+        const estimatedCostCents = Math.ceil(
+          ((estimatedInputTokens * 3 + 8_000 * 15) / 1_000_000) * 100,
+        );
+        const usageReservation = usageLedger.reserve({
+          userId: usageUser.id,
+          requestId: usageRequestId,
+          tier: usageUser.tier,
+          model: "sonnet",
+          estimatedCostCents,
+          billingPeriodStart: usageUser.billingCycleStart,
+          billingPeriodEnd: usageUser.subscriptionCurrentPeriodEnd,
+        });
+        if (!usageReservation.ok) {
+          usageRequestId = null;
+          return res.status(429).json({
+            error: "AI credit allowance reached for this period",
+            reason: usageReservation.reason,
+          });
+        }
+
         let aborted = false;
         let completedFullText = "";
         let tokensUsed = 0;
+        let inputTokensUsed = 0;
+        let outputTokensUsed = 0;
 
         req.on("close", () => {
           aborted = true;
@@ -316,7 +327,9 @@ export function registerWritingRoutes(app: Express): void {
         await runWritingPipeline(request, sources, (event) => {
           if (event.type === "complete" && event.fullText) {
             completedFullText = event.fullText;
-            tokensUsed = (event.usage?.inputTokens ?? 0) + (event.usage?.outputTokens ?? 0);
+            inputTokensUsed = event.usage?.inputTokens ?? 0;
+            outputTokensUsed = event.usage?.outputTokens ?? 0;
+            tokensUsed = inputTokensUsed + outputTokensUsed;
           }
           if (!aborted) {
             sendEvent(event);
@@ -325,6 +338,17 @@ export function registerWritingRoutes(app: Express): void {
 
         if (tokensUsed > 0) {
           await incrementTokenUsage(req.user!.userId, tokensUsed);
+        }
+        if (usageRequestId) {
+          if (tokensUsed > 0) {
+            const actualCostCents = Math.ceil(
+              ((inputTokensUsed * 3 + outputTokensUsed * 15) / 1_000_000) * 100,
+            );
+            usageLedger.settle(usageRequestId, actualCostCents);
+          } else {
+            usageLedger.refund(usageRequestId);
+          }
+          usageRequestId = null;
         }
 
         if (!aborted && completedFullText && request.projectId) {
@@ -365,6 +389,7 @@ export function registerWritingRoutes(app: Express): void {
           res.end();
         }
       } catch (error) {
+        if (usageRequestId) usageLedger.refund(usageRequestId);
         logger.error({ err: error }, "Writing pipeline error:");
         stopHeartbeat?.();
         // If headers haven't been sent yet, send a JSON error

@@ -14,18 +14,8 @@ export const OPENROUTER_WRITING_TEST_SETTINGS = {
 } as const;
 
 export const OPENROUTER_WRITING_MODEL_IDS = [
-  "moonshotai/kimi-k2.6",
-  "moonshotai/kimi-k2.5",
-  "z-ai/glm-5",
   "deepseek/deepseek-v4-pro",
-  "deepseek/deepseek-v4-flash",
-  "openai/gpt-5.5",
-  "google/gemini-3.1-pro-preview",
-  "google/gemini-3.5-flash",
-  "google/gemini-3.1-flash-lite",
-  "google/gemini-2.5-pro",
-  "google/gemini-2.5-flash",
-  "anthropic/claude-opus-4.8",
+  "openai/gpt-5.6-sol",
 ] as const;
 
 export type OpenRouterWritingModelId = (typeof OPENROUTER_WRITING_MODEL_IDS)[number];
@@ -42,65 +32,15 @@ const STATIC_PRICING: Partial<
     { promptUsdPerToken: number; completionUsdPerToken: number; contextLength: number }
   >
 > = {
-  "moonshotai/kimi-k2.6": {
-    promptUsdPerToken: 0.00000066,
-    completionUsdPerToken: 0.00000341,
-    contextLength: 262_144,
-  },
-  "moonshotai/kimi-k2.5": {
-    promptUsdPerToken: 0.000000375,
-    completionUsdPerToken: 0.000002025,
-    contextLength: 262_144,
-  },
-  "z-ai/glm-5": {
-    promptUsdPerToken: 0.0000006,
-    completionUsdPerToken: 0.00000192,
-    contextLength: 202_752,
-  },
   "deepseek/deepseek-v4-pro": {
     promptUsdPerToken: 0.000000435,
     completionUsdPerToken: 0.00000087,
     contextLength: 1_048_576,
   },
-  "deepseek/deepseek-v4-flash": {
-    promptUsdPerToken: 0.00000009,
-    completionUsdPerToken: 0.00000018,
-    contextLength: 1_048_576,
-  },
-  "openai/gpt-5.5": {
+  "openai/gpt-5.6-sol": {
     promptUsdPerToken: 0.000005,
     completionUsdPerToken: 0.00003,
     contextLength: 1_050_000,
-  },
-  "google/gemini-3.1-pro-preview": {
-    promptUsdPerToken: 0.000002,
-    completionUsdPerToken: 0.000012,
-    contextLength: 1_048_576,
-  },
-  "google/gemini-3.5-flash": {
-    promptUsdPerToken: 0.0000015,
-    completionUsdPerToken: 0.000009,
-    contextLength: 1_048_576,
-  },
-  "google/gemini-3.1-flash-lite": {
-    promptUsdPerToken: 0.00000025,
-    completionUsdPerToken: 0.0000015,
-    contextLength: 1_048_576,
-  },
-  "google/gemini-2.5-pro": {
-    promptUsdPerToken: 0.00000125,
-    completionUsdPerToken: 0.00001,
-    contextLength: 1_048_576,
-  },
-  "google/gemini-2.5-flash": {
-    promptUsdPerToken: 0.0000003,
-    completionUsdPerToken: 0.0000025,
-    contextLength: 1_048_576,
-  },
-  "anthropic/claude-opus-4.8": {
-    promptUsdPerToken: 0.000005,
-    completionUsdPerToken: 0.000025,
-    contextLength: 1_000_000,
   },
 };
 
@@ -183,7 +123,9 @@ function staticModelInfo(id: OpenRouterWritingModelId): OpenRouterModelInfo {
   };
 }
 
-function mergeCatalogModels(catalogModels: OpenRouterCatalogModel[]): Map<string, OpenRouterModelInfo> {
+function mergeCatalogModels(
+  catalogModels: OpenRouterCatalogModel[],
+): Map<string, OpenRouterModelInfo> {
   const models = new Map<string, OpenRouterModelInfo>();
   for (const id of OPENROUTER_WRITING_MODEL_IDS) {
     models.set(id, staticModelInfo(id));

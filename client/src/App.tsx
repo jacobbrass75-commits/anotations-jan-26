@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from "react";
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DataTicker } from "@/components/DataTicker";
 import { BootSequence } from "@/components/BootSequence";
+import { useAuth } from "@/lib/auth";
 
 const Home = lazy(() => import("@/pages/Home"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -82,6 +83,19 @@ function RouteFallback() {
   );
 }
 
+function RootRoute({ marketingRootHost }: { marketingRootHost: boolean }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  if (!isLoaded) return <RouteFallback />;
+  if (isSignedIn) return <Redirect to="/dashboard" />;
+  return marketingRootHost ? (
+    <SummerCampaign />
+  ) : (
+    <ProtectedRoute>
+      <Home />
+    </ProtectedRoute>
+  );
+}
+
 function Router() {
   const localPreviewEnabled = isLocalPreviewEnabled();
   const marketingRootHost = isMarketingRootHost();
@@ -133,17 +147,7 @@ function Router() {
           </ProtectedRoute>
         )}
       </Route>
-      <Route path="/">
-        {() =>
-          marketingRootHost ? (
-            <SummerCampaign />
-          ) : (
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          )
-        }
-      </Route>
+      <Route path="/">{() => <RootRoute marketingRootHost={marketingRootHost} />}</Route>
       <Route path="/projects">
         {() => (
           <ProtectedRoute>

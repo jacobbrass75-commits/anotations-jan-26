@@ -19,7 +19,7 @@ export default function WritingPage() {
             <h1 className="eva-section-title">AI WRITING</h1>
           </div>
           <div className="flex w-full sm:w-auto items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-            <Link href="/">
+            <Link href="/dashboard">
               <Button
                 variant="outline"
                 size="sm"

@@ -4,9 +4,11 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { apiKeys } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { getUserById, sanitizeUser } from "./authStorage";
-import { db } from "./db";
+import { db, usageLedger } from "./db";
 import { authLimiter } from "./rateLimits";
 import { createLogger } from "./logger";
+import { getAiUsagePlan, normalizePlanTier } from "./planLimits";
+import { resolvePeriod } from "./usageLedger";
 
 const logger = createLogger("authRoutes");
 
@@ -88,6 +90,16 @@ export function registerAuthRoutes(app: Express): void {
         user.tokenLimit > 0 ? Math.round((user.tokensUsed / user.tokenLimit) * 100) : 0;
       const storagePercent =
         user.storageLimit > 0 ? Math.round((user.storageUsed / user.storageLimit) * 100) : 0;
+      const tier = normalizePlanTier(user.tier);
+      const creditPlan = getAiUsagePlan(tier);
+      const creditPeriod = resolvePeriod(
+        tier,
+        new Date(),
+        user.billingCycleStart,
+        user.subscriptionCurrentPeriodEnd,
+        creditPlan.periodDays,
+      );
+      const creditUsage = usageLedger.summary(user.id, creditPeriod.start, creditPeriod.end);
 
       return res.json({
         tokensUsed: user.tokensUsed,
@@ -97,6 +109,12 @@ export function registerAuthRoutes(app: Express): void {
         storageLimit: user.storageLimit,
         storagePercent,
         tier: user.tier,
+        creditsUsed: creditUsage.creditsUsed,
+        creditsLimit: creditPlan.credits,
+        creditsRemaining: Math.max(0, creditPlan.credits - creditUsage.creditsUsed),
+        aiCostCentsUsed: creditUsage.costCentsUsed,
+        aiCostCeilingCents: creditPlan.costCeilingCents,
+        creditPeriodEndsAt: creditPeriod.end.toISOString(),
         billingCycleStart: user.billingCycleStart
           ? ((user.billingCycleStart as any).toISOString?.() ?? user.billingCycleStart)
           : null,
