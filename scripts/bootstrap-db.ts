@@ -29,6 +29,43 @@ CREATE INDEX IF NOT EXISTS idx_writing_styles_user_updated
 ON writing_styles(user_id, updated_at DESC);
 `);
 
+const hasUsers = bootstrapSqlite
+  .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'")
+  .get();
+
+if (hasUsers) {
+  const duplicateUserRows = bootstrapSqlite
+    .prepare(
+      `
+      SELECT 'email' AS field, lower(email) AS value, count(*) AS total
+      FROM users
+      GROUP BY lower(email)
+      HAVING count(*) > 1
+      UNION ALL
+      SELECT 'username' AS field, lower(username) AS value, count(*) AS total
+      FROM users
+      GROUP BY lower(username)
+      HAVING count(*) > 1
+    `,
+    )
+    .all() as Array<{ field: string; value: string; total: number }>;
+
+  if (duplicateUserRows.length > 0) {
+    const duplicateSummary = duplicateUserRows
+      .map((row) => `${row.field}:${row.value} (${row.total})`)
+      .join(", ");
+    throw new Error(`[bootstrap-db] duplicate user keys block schema push: ${duplicateSummary}`);
+  }
+
+  // drizzle-kit recreates inline .unique() indexes during push. Removing the
+  // existing named indexes prevents SQLite from rejecting that idempotent
+  // recreation with "index ... already exists".
+  bootstrapSqlite.exec(`
+    DROP INDEX IF EXISTS users_email_unique;
+    DROP INDEX IF EXISTS users_username_unique;
+  `);
+}
+
 const hasCampaignSignups = bootstrapSqlite
   .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'campaign_signups'")
   .get();
