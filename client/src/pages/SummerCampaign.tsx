@@ -81,8 +81,15 @@ export default function SummerCampaign() {
       /* best effort */
     }
     const visitKey = `${VISIT_SESSION_KEY}:${window.location.pathname}:${window.location.search}`;
-    if (!sessionStorage.getItem(visitKey)) {
-      sessionStorage.setItem(visitKey, "1");
+    let shouldRecordVisit = true;
+    try {
+      shouldRecordVisit = !sessionStorage.getItem(visitKey);
+      if (shouldRecordVisit) sessionStorage.setItem(visitKey, "1");
+    } catch {
+      // Storage can be unavailable in embedded/private browsers. Analytics is
+      // best effort and must never prevent the public page from rendering.
+    }
+    if (shouldRecordVisit) {
       fetch("/api/campaign/visit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

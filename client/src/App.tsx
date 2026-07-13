@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DataTicker } from "@/components/DataTicker";
 import { BootSequence } from "@/components/BootSequence";
 import { useAuth } from "@/lib/auth";
+import SummerCampaign from "@/pages/SummerCampaign";
 
 const Home = lazy(() => import("@/pages/Home"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -31,7 +32,6 @@ const WebClips = lazy(() => import("@/pages/WebClips"));
 const ExtensionAuth = lazy(() => import("@/pages/ExtensionAuth"));
 const AdminAnalytics = lazy(() => import("@/pages/AdminAnalytics"));
 const AdminCampaign = lazy(() => import("@/pages/AdminCampaign"));
-const SummerCampaign = lazy(() => import("@/pages/SummerCampaign"));
 const SummerOnboarding = lazy(() => import("@/pages/SummerOnboarding"));
 const SummerVisuals = lazy(() => import("@/pages/SummerVisuals"));
 const LocalWritingStudio = lazy(() => import("@/pages/LocalWritingStudio"));
@@ -85,11 +85,17 @@ function RouteFallback() {
 
 function RootRoute({ marketingRootHost }: { marketingRootHost: boolean }) {
   const { isLoaded, isSignedIn } = useAuth();
+
+  // Marketing pages must remain usable when an embedded browser blocks Clerk's
+  // bootstrap request. Redirect known signed-in users, but never gate public
+  // content on a third-party authentication script.
+  if (marketingRootHost) {
+    return isLoaded && isSignedIn ? <Redirect to="/dashboard" /> : <SummerCampaign />;
+  }
+
   if (!isLoaded) return <RouteFallback />;
   if (isSignedIn) return <Redirect to="/dashboard" />;
-  return marketingRootHost ? (
-    <SummerCampaign />
-  ) : (
+  return (
     <ProtectedRoute>
       <Home />
     </ProtectedRoute>
