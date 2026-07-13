@@ -116,13 +116,13 @@ export default function SummerCampaign() {
           </div>
         </div>
       </header>
-      <main className="container mx-auto px-4 py-10 max-w-6xl space-y-16">
-        <section className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] items-center">
-          <div className="space-y-5">
+      <main className="container mx-auto max-w-7xl space-y-20 px-4 py-8 md:py-12">
+        <section className="grid items-center gap-10 xl:grid-cols-[minmax(0,0.82fr)_minmax(560px,1.18fr)] xl:gap-12">
+          <div className="space-y-6">
             <div className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground">
               Summer thesis head start
             </div>
-            <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
+            <h1 className="max-w-2xl text-4xl font-bold leading-[1.04] tracking-tight sm:text-5xl xl:text-[3.6rem]">
               Get ahead on your thesis, capstone, or big research paper
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl">
@@ -133,31 +133,54 @@ export default function SummerCampaign() {
               <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
               ScholarMark supports your planning and revision. You remain the author.
             </div>
+
+            <Card id="start" className="max-w-xl border-primary/20 bg-card/80 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xl">Build your paper with a clear plan</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Create an account to open your writing dashboard and start working.
+                </p>
+                <Button size="lg" className="h-12 w-full uppercase tracking-[0.08em]" asChild>
+                  <Link href={signupHref}>Start now</Link>
+                </Button>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  By continuing, you agree to our{" "}
+                  <Link href="/terms" className="underline underline-offset-2">
+                    Terms
+                  </Link>{" "}
+                  and acknowledge our{" "}
+                  <Link href="/privacy" className="underline underline-offset-2">
+                    Privacy Policy
+                  </Link>
+                  .
+                </p>
+              </CardContent>
+            </Card>
           </div>
-          <Card id="start" className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Build your paper with a clear plan</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-muted-foreground">
-                Create an account to open your writing dashboard and start working.
-              </p>
-              <Button size="lg" className="w-full" asChild>
-                <Link href={signupHref}>Start now</Link>
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                By continuing, you agree to our{" "}
-                <Link href="/terms" className="underline">
-                  Terms
-                </Link>{" "}
-                and acknowledge our{" "}
-                <Link href="/privacy" className="underline">
-                  Privacy Policy
-                </Link>
-                .
-              </p>
-            </CardContent>
-          </Card>
+
+          <figure className="min-w-0">
+            <div className="overflow-hidden rounded-[1.75rem] border border-border/80 bg-[#fdf8f1] shadow-[0_26px_80px_-54px_rgba(45,42,38,0.65)]">
+              <img
+                src="/campaign-assets/scholarmark-knowledge-to-outline.webp"
+                alt="Books, source notes, and research flowing through a phone into an organized academic outline"
+                width={1536}
+                height={1024}
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+                className="block h-auto w-full"
+              />
+            </div>
+            <figcaption className="mt-3 flex items-center justify-center gap-3 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground sm:justify-end">
+              <span>Sources</span>
+              <span aria-hidden="true" className="h-px w-5 bg-primary/50" />
+              <span>Structure</span>
+              <span aria-hidden="true" className="h-px w-5 bg-primary/50" />
+              <span>Draft</span>
+            </figcaption>
+          </figure>
         </section>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
