@@ -12,8 +12,12 @@
     <script>
       (() => {
         const storageKey = "sm-theme";
-        const storedTheme = window.localStorage.getItem(storageKey);
-        document.documentElement.classList.toggle("dark", storedTheme === "dark");
+        try {
+          const storedTheme = window.localStorage.getItem(storageKey);
+          document.documentElement.classList.toggle("dark", storedTheme === "dark");
+        } catch {
+          document.documentElement.classList.remove("dark");
+        }
       })();
     </script>
   </head>
