@@ -137,24 +137,46 @@ function normalizeEvidenceBrief(value: Partial<EvidenceBrief> | null): EvidenceB
   return brief;
 }
 
-export function formatEvidenceBrief(brief: EvidenceBrief): string {
+export function formatEvidenceBrief(
+  brief: EvidenceBrief,
+  options: { maxUtf8Bytes?: number } = {},
+): string {
   if (brief.relevantSources.length === 0) return "[No new evidence gathered for this turn]";
 
+  const maxUtf8Bytes = options.maxUtf8Bytes ?? Number.MAX_SAFE_INTEGER;
+  const truncationNotice = "\n[additional gathered evidence remains in the source archive]\n";
+  const usableBytes = Math.max(
+    0,
+    maxUtf8Bytes - Buffer.byteLength(truncationNotice, "utf8"),
+  );
   let output = "## Evidence Gathered This Turn\n";
+  let omittedFindings = 0;
   for (const source of brief.relevantSources) {
-    output += `\n### ${source.title} [${source.role}]\n`;
+    const heading = `\n### ${source.title} [${source.role}] (source: ${source.docId})\n`;
+    let sourceOutput = "";
     for (const finding of source.findings) {
       const prefix = finding.type === "quote" ? `"${finding.text}"` : finding.text;
-      output += `- [${finding.type}] ${prefix}${finding.location ? ` (${finding.location})` : ""}\n  Relevance: ${finding.relevance}\n`;
+      const findingOutput = `- [${finding.type}] ${prefix}${finding.location ? ` (${finding.location})` : ""}\n  Relevance: ${finding.relevance}\n`;
+      const candidate = `${output}${heading}${sourceOutput}${findingOutput}`;
+      if (Buffer.byteLength(candidate, "utf8") <= usableBytes) {
+        sourceOutput += findingOutput;
+      } else {
+        omittedFindings += 1;
+      }
     }
+    if (sourceOutput) output += `${heading}${sourceOutput}`;
   }
 
   if (brief.styleNotes) {
-    output += `\n## Style Notes\n${brief.styleNotes}\n`;
+    const block = `\n## Style Notes\n${brief.styleNotes}\n`;
+    if (Buffer.byteLength(output + block, "utf8") <= usableBytes) output += block;
   }
   if (brief.suggestedApproach) {
-    output += `\n## Suggested Approach\n${brief.suggestedApproach}\n`;
+    const block = `\n## Suggested Approach\n${brief.suggestedApproach}\n`;
+    if (Buffer.byteLength(output + block, "utf8") <= usableBytes) output += block;
   }
+
+  if (omittedFindings > 0) output += truncationNotice;
 
   return output;
 }
@@ -204,7 +226,7 @@ export async function gatherEvidence(
 "${userMessage}"
 Thesis: ${thesis || "Not yet defined"}
 Current evidence collected:
-${formatClipboardForPrompt(clipboard)}
+${formatClipboardForPrompt(clipboard, { query: userMessage })}
 Available sources:
 ${gatherableSources.map((source) => formatGatherableSource(source)).join("\n\n")}
 

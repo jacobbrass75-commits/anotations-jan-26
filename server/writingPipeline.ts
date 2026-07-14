@@ -304,8 +304,12 @@ export function selectAnnotationsForPrompt(
   annotations: ProjectAnnotation[],
   maxAnnotations?: number,
 ): ProjectAnnotation[] {
-  if (!maxAnnotations || annotations.length <= maxAnnotations) {
+  if (maxAnnotations === undefined || annotations.length <= maxAnnotations) {
     return annotations;
+  }
+
+  if (maxAnnotations <= 0) {
+    return [];
   }
 
   const prioritized = [...annotations].sort((a, b) => {

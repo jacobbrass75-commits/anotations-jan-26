@@ -1,10 +1,16 @@
 import {
   ANNOTATION_PROMPT_TOKEN_BUDGET,
+  CHAT_SOURCE_PROMPT_BYTE_BUDGET,
   buildQuoteJumpTargets,
   buildSourceBlock,
+  buildWritingSystemPrompt,
   planSourceBlock,
 } from "../../server/chat/promptBuilder";
-import { selectAnnotationsForPrompt, type TieredSource } from "../../server/writingPipeline";
+import {
+  selectAnnotationsForPrompt,
+  type TieredSource,
+  type WritingSource,
+} from "../../server/writingPipeline";
 import type { ProjectAnnotation } from "../../shared/schema";
 
 function makeAnnotation(overrides: Partial<ProjectAnnotation> = {}): ProjectAnnotation {
@@ -151,6 +157,31 @@ describe("buildSourceBlock", () => {
     const renderedCount = (block.match(/\[ANNOTATION ann-/g) || []).length;
     expect(renderedCount).toBeLessThan(120);
     expect(renderedCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it("bounds five large non-ASCII web clips while retaining every source stub", () => {
+    const sources: WritingSource[] = Array.from({ length: 5 }, (_, index) => ({
+      id: `web-${index + 1}`,
+      kind: "web_clip",
+      title: `Web source ${index + 1}`,
+      author: "Author",
+      excerpt: "A selected excerpt.",
+      fullText: "漢🙂".repeat(15_000),
+      category: "web_clip",
+      note: null,
+      citationData: null,
+      documentFilename: `web-${index + 1}.txt`,
+    }));
+
+    const prompt = buildWritingSystemPrompt(sources, null, null);
+
+    expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(
+      CHAT_SOURCE_PROMPT_BYTE_BUDGET + 10_000,
+    );
+    for (const source of sources) {
+      expect(prompt).toContain(`[SOURCE ${source.id}]`);
+    }
+    expect(prompt).toContain("additional source text omitted");
   });
 });
 

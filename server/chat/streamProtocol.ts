@@ -30,6 +30,7 @@ export interface StreamTurnResult {
   fullText: string;
   usage: { input_tokens?: number; output_tokens?: number };
   toolRequests: ToolRequest[];
+  stopReason?: string | null;
 }
 
 function normalizeTitle(value: string): string {

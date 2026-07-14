@@ -276,6 +276,7 @@ export async function runOpenRouterWritingTest(input: {
   id: string | null;
   model: OpenRouterWritingModelId;
   output: string;
+  finishReason: string | null;
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -312,6 +313,7 @@ export async function runOpenRouterChatCompletion(input: {
   id: string | null;
   model: OpenRouterWritingModelId;
   output: string;
+  finishReason: string | null;
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -358,7 +360,7 @@ export async function runOpenRouterChatCompletion(input: {
 
   const body = (await response.json()) as {
     id?: unknown;
-    choices?: Array<{ message?: { content?: unknown } }>;
+    choices?: Array<{ message?: { content?: unknown }; finish_reason?: unknown }>;
     usage?: {
       prompt_tokens?: unknown;
       completion_tokens?: unknown;
@@ -389,6 +391,10 @@ export async function runOpenRouterChatCompletion(input: {
     id: typeof body.id === "string" ? body.id : null,
     model: input.model.id,
     output,
+    finishReason:
+      typeof body.choices?.[0]?.finish_reason === "string"
+        ? body.choices[0].finish_reason
+        : null,
     usage: {
       promptTokens,
       completionTokens,

@@ -27,9 +27,26 @@ import {
   serializeClipboard,
   formatClipboardForPrompt,
   extractUsedEvidence,
+  boundEvidenceClipboard,
+  preserveStoredEvidenceClipboard,
   type EvidenceClipboard,
 } from "../evidenceClipboard";
-import { compactConversation, buildCompactedHistory } from "../contextCompaction";
+import {
+  applyPromptMemoryPolicy,
+  applyReaderPromptMemoryPolicy,
+  compactReaderConversation,
+  buildCompactedHistory,
+  DEFAULT_PROMPT_MEMORY_TOKEN_BUDGET,
+  getToolResponseLimit,
+  getRequiredCompileMessageIndices,
+  getRequiredTurnMessageIndices,
+  isTruncatedDraftMessage,
+  isSyntheticRetrievalMessage,
+  markTruncatedDraft,
+  normalizeReaderMessages,
+  truncateToolResult,
+  type PromptMemoryDiagnostics,
+} from "../contextCompaction";
 import { type TieredSource, type WritingSource } from "../writingPipeline";
 import { analyzeWritingStyle, isSourceRole, type SourceRole } from "../sourceRoles";
 import { clipText, buildAuthorLabel } from "./shared";
@@ -48,6 +65,7 @@ import {
   BASE_SYSTEM_PROMPT,
   CHAT_MAX_TOKENS,
   COMPILE_MAX_TOKENS,
+  FINALIZATION_SOURCE_PROMPT_BYTE_BUDGET,
   MAX_CONTEXT_ESCALATIONS,
   MAX_SOURCE_EXCERPT_CHARS,
   MAX_SOURCE_FULLTEXT_CHARS,
@@ -55,6 +73,7 @@ import {
   VERIFY_MAX_TOKENS,
   buildCompilePrompt,
   buildQuoteJumpTargets,
+  buildSourceBlock,
   buildVerifyPrompt,
   buildWritingSystemPrompt,
   estimateContextUsage,
@@ -654,7 +673,9 @@ export function registerChatRoutes(app: Express) {
     async (req: Request, res: Response) => {
       let stopHeartbeat: (() => void) | null = null;
       let usageRequestId: string | null = null;
-      let usageCreditModel: WritingCreditModel;
+      let usageCreditModel: WritingCreditModel | null = null;
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
 
       try {
         const { content } = req.body;
@@ -702,13 +723,25 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           }
         }
 
+        const requiredPromptBytes =
+          Buffer.byteLength(systemPrompt, "utf8") + Buffer.byteLength(content, "utf8") + 24;
+        if (requiredPromptBytes > DEFAULT_PROMPT_MEMORY_TOKEN_BUDGET) {
+          return res.status(413).json({
+            message:
+              "The selected source context and this request are too large to send safely in one turn. Shorten the request or select fewer sources; the original sources remain saved.",
+          });
+        }
+
         usageCreditModel = creditModelForChoice(conv.writingModel);
         usageRequestId = await reserveWritingCredits({
           req,
           model: usageCreditModel,
           operation: `chat:${conv.id}`,
           estimatedInputTokens: Math.ceil(
-            (systemPrompt.length + JSON.stringify(anthropicMessages).length) / 4,
+            Math.min(
+              DEFAULT_PROMPT_MEMORY_TOKEN_BUDGET,
+              (systemPrompt.length + JSON.stringify(anthropicMessages).length) / 4,
+            ),
           ),
           maxOutputTokens: CHAT_MAX_TOKENS,
         });
@@ -764,37 +797,49 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         const allowedProjectDocumentIds = new Set(tieredSources.map((source) => source.id));
         const sourceTools = buildSourceTools();
         const executeSourceTool = createSourceToolExecutor(tieredSources);
-        const clipboard: EvidenceClipboard = conv.evidenceClipboard
+        const loadedClipboard: EvidenceClipboard = conv.evidenceClipboard
           ? deserializeClipboard(conv.evidenceClipboard)
           : createEmptyClipboard(project?.thesis || "");
+        const storedClipboardRetention = preserveStoredEvidenceClipboard(loadedClipboard);
+        const clipboard = storedClipboardRetention.clipboard;
         if (!clipboard.thesis && project?.thesis) {
           clipboard.thesis = project.thesis;
+        }
+        const promptClipboardRetention = boundEvidenceClipboard(clipboard, { query: content });
+        const clipboardPromptText = formatClipboardForPrompt(promptClipboardRetention.clipboard);
+        const boundedClipboardJson = serializeClipboard(clipboard);
+        if (boundedClipboardJson !== conv.evidenceClipboard) {
+          await updateConversationClipboard(conv.id, boundedClipboardJson);
         }
 
         let effectiveCompactionSummary = conv.compactionSummary || null;
         let effectiveCompactedAtTurn = conv.compactedAtTurn || 0;
         sendWritingStatus("Preparing selected project sources...", "preparing", 5);
-        if (mode === "precision") {
-          sendWritingStatus("Condensing earlier chat context...", "preparing", 12);
-          const compactionResult = await compactConversation(
-            anthropic,
-            history.map((message) => ({ role: message.role, content: message.content })),
-            effectiveCompactionSummary,
-            effectiveCompactedAtTurn,
-          );
-          if (compactionResult) {
-            effectiveCompactionSummary = compactionResult.summary;
-            effectiveCompactedAtTurn = compactionResult.compactedAtTurn;
-            await updateConversationCompaction(conv.id, {
-              compactionSummary: compactionResult.summary,
-              compactedAtTurn: compactionResult.compactedAtTurn,
-            });
-          }
+        sendWritingStatus("Condensing earlier chat context...", "preparing", 12);
+        const compactionResult = await compactReaderConversation(
+          mode,
+          anthropic,
+          history.map((message) => ({ role: message.role, content: message.content })),
+          effectiveCompactionSummary,
+          effectiveCompactedAtTurn,
+        );
+        if (compactionResult) {
+          effectiveCompactionSummary = compactionResult.summary;
+          effectiveCompactedAtTurn = compactionResult.compactedAtTurn;
+          await updateConversationCompaction(conv.id, {
+            compactionSummary: compactionResult.summary,
+            compactedAtTurn: compactionResult.compactedAtTurn,
+          });
         }
 
         let evidenceBrief: EvidenceBrief | null = null;
         let evidenceBriefText = "[No new evidence gathered for this turn]";
-        let messagesForTurn = anthropicMessages;
+        const retrievedEvidenceThisTurn: string[] = [];
+        const currentUserTurnNumber = history.filter(
+          (message) =>
+            message.role === "user" && !isSyntheticRetrievalMessage(message.content),
+        ).length;
+        let messagesForTurn: AnthropicHistoryMessage[] = [];
         if (mode === "precision") {
           const sourceStubs: SourceStub[] = tieredSources.map((source) => ({
             docId: source.documentId,
@@ -821,34 +866,70 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
             sourceTools,
             executeSourceTool,
           );
-          evidenceBriefText = formatEvidenceBrief(evidenceBrief);
+          const evidenceBriefByteBudget = Math.max(
+            2_000,
+            Math.min(
+              32_000,
+              DEFAULT_PROMPT_MEMORY_TOKEN_BUDGET -
+                Buffer.byteLength(systemPrompt, "utf8") -
+                Buffer.byteLength(content, "utf8") -
+                20_000,
+            ),
+          );
+          evidenceBriefText = formatEvidenceBrief(evidenceBrief, {
+            maxUtf8Bytes: evidenceBriefByteBudget,
+          });
 
-          const compactedHistory = buildCompactedHistory(
-            history
-              .slice(0, -1)
-              .map((message) => ({ role: message.role, content: message.content })),
-            formatClipboardForPrompt(clipboard),
-            effectiveCompactionSummary,
-            effectiveCompactedAtTurn,
-          ).map((message) => ({
-            role: message.role === "system" ? "assistant" : message.role,
-            content: message.content,
-          })) as AnthropicHistoryMessage[];
+        }
 
-          const latestUserMessage = anthropicMessages[anthropicMessages.length - 1];
-          messagesForTurn = latestUserMessage
+        const compactedHistory = buildCompactedHistory(
+          history
+            .slice(0, -1)
+            .map((message) => ({ role: message.role, content: message.content })),
+          clipboardPromptText,
+          effectiveCompactionSummary,
+          effectiveCompactedAtTurn,
+          6,
+          { currentRequest: content },
+        ).map((message) => ({
+          role: message.role === "system" ? "assistant" : message.role,
+          content: message.content,
+        })) as AnthropicHistoryMessage[];
+        const latestUserMessage = anthropicMessages[anthropicMessages.length - 1];
+        const memoryCandidates: AnthropicHistoryMessage[] = [
+          ...compactedHistory,
+          ...(mode === "precision"
             ? [
-                ...compactedHistory,
-                { role: "user", content: `[EVIDENCE GATHERED THIS TURN]\n${evidenceBriefText}` },
+                { role: "user" as const, content: `[EVIDENCE GATHERED THIS TURN]\n${evidenceBriefText}` },
                 {
-                  role: "assistant",
+                  role: "assistant" as const,
                   content:
                     "I have the evidence gathered for this turn and will use it selectively.",
                 },
-                latestUserMessage,
               ]
-            : compactedHistory;
+            : []),
+          ...(latestUserMessage ? [latestUserMessage] : []),
+        ];
+        const requiredMemoryIndices = latestUserMessage ? [memoryCandidates.length - 1] : [];
+        if (mode === "precision") {
+          requiredMemoryIndices.push(compactedHistory.length, compactedHistory.length + 1);
         }
+        let memoryResult = applyReaderPromptMemoryPolicy(mode, {
+          systemPrompt,
+          messages: memoryCandidates,
+          requiredMessageIndices: requiredMemoryIndices,
+          currentRequest: content,
+        });
+        messagesForTurn = normalizeReaderMessages(memoryResult.messages);
+        let memoryDiagnostics: PromptMemoryDiagnostics = memoryResult.diagnostics;
+        sendEvent({
+          type: "context_memory",
+          diagnostics: {
+            ...memoryDiagnostics,
+            clipboard: promptClipboardRetention.diagnostics,
+            clipboardArchive: storedClipboardRetention.diagnostics,
+          },
+        });
 
         sendWritingStatus("Building the draft with project context...", "drafting", 40);
 
@@ -904,7 +985,10 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
             const fullText = result.output;
             parser.pushText(fullText);
             toolParser.pushText(fullText);
-            parser.finish();
+            parser.finish({
+              finalizeDocument:
+                result.finishReason !== "length" && result.finishReason !== "max_tokens",
+            });
             toolParser.finish();
 
             return {
@@ -914,6 +998,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
                 output_tokens: result.usage.completionTokens,
               },
               toolRequests: detectedRequests,
+              stopReason: result.finishReason,
             };
           }
 
@@ -947,7 +1032,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
             });
 
             stream.on("message", (message) => {
-              parser.finish();
+              parser.finish({ finalizeDocument: message.stop_reason !== "max_tokens" });
               toolParser.finish();
               activeStream = null;
 
@@ -955,6 +1040,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
                 fullText,
                 usage: message.usage || {},
                 toolRequests: detectedRequests,
+                stopReason: message.stop_reason,
               });
             });
 
@@ -978,8 +1064,6 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
 
         const isFirstExchange = history.filter((message) => message.role === "user").length === 1;
         let hasAutoTitled = false;
-        let totalInputTokens = 0;
-        let totalOutputTokens = 0;
         let escalationCount = 0;
 
         while (!closed) {
@@ -997,9 +1081,14 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           totalOutputTokens += outputTokens;
 
           sendWritingStatus("Saving the generated draft...", "saving", 88);
-          const assistantContent = wrapGeneratedDocumentIfNeeded(
-            applyJumpLinksToMarkdown(turn.fullText, buildQuoteJumpTargets(conv.projectId, sources)),
+          const linkedAssistantContent = applyJumpLinksToMarkdown(
+            turn.fullText,
+            buildQuoteJumpTargets(conv.projectId, sources),
           );
+          const outputTruncated = turn.stopReason === "max_tokens" || turn.stopReason === "length";
+          const assistantContent = outputTruncated
+            ? markTruncatedDraft(linkedAssistantContent)
+            : wrapGeneratedDocumentIfNeeded(linkedAssistantContent);
 
           await chatStorage.createMessage({
             conversationId: conv.id,
@@ -1008,6 +1097,12 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
             tokensUsed: inputTokens + outputTokens,
           });
           await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_message");
+          if (outputTruncated) {
+            throw new OpenRouterWritingError(
+              502,
+              "The draft reached the model output limit. The partial draft was saved; continue in a new turn to finish it.",
+            );
+          }
 
           if (sourcePlan.totalAnnotations > 0) {
             const annotationsCited = countCitedAnnotations(assistantContent);
@@ -1020,6 +1115,9 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
               trigger: "turn_complete",
               timestamp: Date.now(),
               metadata: {
+                promptMemory: memoryDiagnostics,
+                clipboardRetention: promptClipboardRetention.diagnostics,
+                clipboardArchiveRetention: storedClipboardRetention.diagnostics,
                 annotationsInPrompt: sourcePlan.includedAnnotations,
                 annotationsTotal: sourcePlan.totalAnnotations,
                 annotationsCited,
@@ -1037,25 +1135,39 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
             hasAutoTitled = true;
           }
 
-          if (mode === "precision") {
-            // Evidence extraction only matters when the turn produced document
-            // content - conversational turns (questions, outlines, chatter) cite
-            // nothing worth persisting, so skip the extra Haiku call.
-            if (assistantContent.includes("<document")) {
-              sendWritingStatus("Remembering which evidence was used...", "saving", 92);
+          const request = mode === "precision" ? undefined : turn.toolRequests.at(-1);
+          const willEscalate = Boolean(request && escalationCount < MAX_CONTEXT_ESCALATIONS);
+          // Persist evidence used by every reader model. Extended-mode retrieval
+          // payloads otherwise age out as synthetic turns after compaction.
+          if (assistantContent.includes("<document") && !willEscalate) {
+            sendWritingStatus("Remembering which evidence was used...", "saving", 92);
+            const availableEvidenceForExtraction =
+              mode === "precision"
+                ? evidenceBriefText
+                : [
+                    `[INLINE SOURCE MATERIALS]\n${buildSourceBlock(sources, sourcePlan, {
+                      maxUtf8Bytes: FINALIZATION_SOURCE_PROMPT_BYTE_BUDGET,
+                    })}`,
+                    ...retrievedEvidenceThisTurn,
+                  ].join("\n\n");
+            try {
               const updatedClipboard = await extractUsedEvidence(
                 anthropic,
                 turn.fullText,
-                evidenceBriefText,
+                availableEvidenceForExtraction,
                 clipboard,
-                history.filter((message) => message.role === "user").length,
+                currentUserTurnNumber,
               );
               await updateConversationClipboard(conv.id, serializeClipboard(updatedClipboard));
+            } catch (error) {
+              logger.warn(
+                { err: error, conversationId: conv.id, readerMode: mode },
+                "Evidence memory extraction failed; the completed draft remains saved",
+              );
             }
-            break;
           }
+          if (mode === "precision") break;
 
-          const request = turn.toolRequests[turn.toolRequests.length - 1];
           if (!request || escalationCount >= MAX_CONTEXT_ESCALATIONS) {
             break;
           }
@@ -1173,9 +1285,14 @@ ${chunkContext}`;
             }).catch((err) => logger.warn({ err: err }, "[analytics] logToolCall error:"));
           }
 
+          contextMessage = truncateToolResult(
+            contextMessage,
+            getToolResponseLimit(Math.max(tieredSources.length, 1)),
+          );
           if (!contextMessage.trim()) {
             break;
           }
+          retrievedEvidenceThisTurn.push(contextMessage);
 
           await chatStorage.createMessage({
             conversationId: conv.id,
@@ -1185,7 +1302,25 @@ ${chunkContext}`;
 
           history = await chatStorage.getMessagesForConversation(conv.id);
           anthropicMessages = toAnthropicMessages(history);
-          messagesForTurn = anthropicMessages;
+          const escalationHistory = buildCompactedHistory(
+            history.map((message) => ({ role: message.role, content: message.content })),
+            clipboardPromptText,
+            effectiveCompactionSummary,
+            effectiveCompactedAtTurn,
+            6,
+            { currentRequest: content },
+          ).map((message) => ({
+            role: message.role === "system" ? "assistant" : message.role,
+            content: message.content,
+          })) as AnthropicHistoryMessage[];
+          memoryResult = applyReaderPromptMemoryPolicy(mode, {
+            systemPrompt,
+            messages: escalationHistory,
+            requiredMessageIndices: getRequiredTurnMessageIndices(escalationHistory, content),
+            currentRequest: content,
+          });
+          messagesForTurn = normalizeReaderMessages(memoryResult.messages);
+          memoryDiagnostics = memoryResult.diagnostics;
           usageEstimate = estimateContextUsage(systemPrompt, messagesForTurn, mode);
           void logContextSnapshot({
             conversationId: conv.id,
@@ -1195,7 +1330,12 @@ ${chunkContext}`;
             warningLevel: usageEstimate.warningLevel,
             trigger: request.type,
             timestamp: Date.now(),
-            metadata: { documentId: request.documentId || null },
+            metadata: {
+              documentId: request.documentId || null,
+              promptMemory: memoryDiagnostics,
+              clipboardRetention: promptClipboardRetention.diagnostics,
+              clipboardArchiveRetention: storedClipboardRetention.diagnostics,
+            },
           }).catch((err) => logger.warn({ err: err }, "[analytics] logContextSnapshot error:"));
           sendContextWarningIfNeeded(usageEstimate);
           deepDiveAllowed = usageEstimate.warningLevel !== "critical";
@@ -1203,7 +1343,7 @@ ${chunkContext}`;
         }
 
         if (usageRequestId) {
-          if (totalInputTokens + totalOutputTokens > 0) {
+          if (usageCreditModel && totalInputTokens + totalOutputTokens > 0) {
             usageLedger.settle(
               usageRequestId,
               estimatedModelCostCents(usageCreditModel, totalInputTokens, totalOutputTokens),
@@ -1228,7 +1368,17 @@ ${chunkContext}`;
           res.end();
         }
       } catch (error) {
-        if (usageRequestId) usageLedger.refund(usageRequestId);
+        if (usageRequestId) {
+          if (usageCreditModel && totalInputTokens + totalOutputTokens > 0) {
+            usageLedger.settle(
+              usageRequestId,
+              estimatedModelCostCents(usageCreditModel, totalInputTokens, totalOutputTokens),
+            );
+          } else {
+            usageLedger.refund(usageRequestId);
+          }
+          usageRequestId = null;
+        }
         logger.error({ err: error }, "Error sending message:");
         stopHeartbeat?.();
         stopHeartbeat = null;
@@ -1270,15 +1420,59 @@ ${chunkContext}`;
           return res.status(400).json({ message: "No conversation to compile" });
         }
 
-        const transcript = history
-          .filter((message) => message.role === "user" || message.role === "assistant")
-          .map((message) => `[${message.role.toUpperCase()}]: ${message.content}`)
-          .join("\n\n---\n\n");
-
         const { project, sources, writingStyle } = await loadConversationContext(
           conv,
           req.user!.userId,
         );
+        const compileShell = buildCompilePrompt({
+          transcript: "",
+          project,
+          sources,
+          writingStyle,
+          style,
+          tone: writingTone,
+          noEnDashes: avoidDashes,
+        });
+        const compileHistory = toAnthropicMessages(history).filter(
+          (message) => !isTruncatedDraftMessage(message.content),
+        );
+        const requiredCompileIndices = getRequiredCompileMessageIndices(compileHistory);
+        let compileMemory: ReturnType<typeof applyPromptMemoryPolicy>;
+        try {
+          compileMemory = applyPromptMemoryPolicy({
+            systemPrompt: compileShell,
+            messages: compileHistory,
+            requiredMessageIndices: requiredCompileIndices,
+            currentRequest:
+              "Compile the latest complete academic paper and preserve every current section.",
+            minimumRecentTurns: 2,
+            tokenBudget: Math.max(20_000, DEFAULT_PROMPT_MEMORY_TOKEN_BUDGET - 2_000),
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("exceeds the configured memory budget")) {
+            return res.status(413).json({
+              message:
+                "The current paper is too large to compile safely in one pass. Split it into smaller sections so no drafted section is omitted.",
+            });
+          }
+          throw error;
+        }
+        void logContextSnapshot({
+          conversationId: conv.id,
+          turnNumber: history.filter((message) => message.role === "user").length,
+          escalationRound: 0,
+          estimatedTokens: compileMemory.diagnostics.estimatedTotalTokens,
+          warningLevel: "ok",
+          trigger: "compile_memory",
+          timestamp: Date.now(),
+          metadata: {
+            promptMemory: compileMemory.diagnostics,
+            requiredCurrentDocumentMessages: requiredCompileIndices.length,
+          },
+        }).catch((err) => logger.warn({ err }, "[analytics] compile memory snapshot error:"));
+        const transcript = compileMemory.messages
+          .map((message) => `[${message.role.toUpperCase()}]: ${message.content}`)
+          .join("\n\n---\n\n");
         const compilePrompt = buildCompilePrompt({
           transcript,
           project,
@@ -1288,6 +1482,12 @@ ${chunkContext}`;
           tone: writingTone,
           noEnDashes: avoidDashes,
         });
+        if (Buffer.byteLength(compilePrompt, "utf8") > DEFAULT_PROMPT_MEMORY_TOKEN_BUDGET) {
+          return res.status(413).json({
+            message:
+              "The current paper is too large to compile safely in one pass. Split it into smaller sections so no drafted section is omitted.",
+          });
+        }
 
         usageCreditModel = creditModelForChoice(conv.writingModel);
         usageRequestId = await reserveWritingCredits({
@@ -1335,7 +1535,13 @@ ${chunkContext}`;
             stopHeartbeat?.();
             stopHeartbeat = null;
             res.write(`data: ${JSON.stringify({ type: "text", text: result.output })}\n\n`);
-            res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+            if (result.finishReason === "length" || result.finishReason === "max_tokens") {
+              res.write(
+                `data: ${JSON.stringify({ type: "error", error: "Compilation reached the output limit. The result is incomplete; compile smaller sections." })}\n\n`,
+              );
+            } else {
+              res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+            }
             res.end();
           }
           return;
@@ -1368,7 +1574,13 @@ ${chunkContext}`;
           if (aborted) return;
           stopHeartbeat?.();
           stopHeartbeat = null;
-          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+          if (message.stop_reason === "max_tokens") {
+            res.write(
+              `data: ${JSON.stringify({ type: "error", error: "Compilation reached the output limit. The result is incomplete; compile smaller sections." })}\n\n`,
+            );
+          } else {
+            res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+          }
           res.end();
         });
 
@@ -1433,6 +1645,12 @@ ${chunkContext}`;
           sources,
           style,
         });
+        if (Buffer.byteLength(verifyPrompt, "utf8") > DEFAULT_PROMPT_MEMORY_TOKEN_BUDGET) {
+          return res.status(413).json({
+            message:
+              "This paper is too large to verify safely in one pass. Verify it section by section so no source check is skipped.",
+          });
+        }
 
         usageCreditModel = creditModelForChoice(conv.writingModel);
         usageRequestId = await reserveWritingCredits({

@@ -15,6 +15,19 @@ import { isOpenRouterWritingModelId, type OpenRouterWritingModelId } from "../op
 export const MAX_SOURCE_EXCERPT_CHARS = 2000;
 export const MAX_SOURCE_FULLTEXT_CHARS = 30000;
 export const MAX_SOURCE_TOTAL_FULLTEXT_CHARS = 150000;
+/**
+ * Inline source bytes are capped below the shared prompt-memory ceiling so the
+ * system prompt can never consume the entire reader window before the current
+ * request and managed conversation memory are added.
+ */
+export const CHAT_SOURCE_PROMPT_BYTE_BUDGET = Math.max(
+  20_000,
+  parseInt(process.env.CHAT_SOURCE_PROMPT_BYTE_BUDGET || "70000", 10) || 70_000,
+);
+export const FINALIZATION_SOURCE_PROMPT_BYTE_BUDGET = Math.max(
+  10_000,
+  parseInt(process.env.FINALIZATION_SOURCE_PROMPT_BYTE_BUDGET || "40000", 10) || 40_000,
+);
 export const CHAT_MAX_TOKENS = 8192;
 export const COMPILE_MAX_TOKENS = 8192;
 export const VERIFY_MAX_TOKENS = 8192;
@@ -228,6 +241,91 @@ export interface SourceBlockPlan {
   estimatedAnnotationTokens: number;
 }
 
+export interface SourceBlockOptions {
+  /** Conservative UTF-8 byte ceiling for the complete inline source block. */
+  maxUtf8Bytes?: number;
+}
+
+function clipUtf8AtBoundary(
+  value: string,
+  maxBytes: number,
+  suffix = "\n[additional source text omitted from the inline prompt]",
+): string {
+  if (maxBytes <= 0) return "";
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
+
+  const suffixBytes = Buffer.byteLength(suffix, "utf8");
+  if (suffixBytes >= maxBytes) {
+    return suffix.slice(0, Math.max(0, maxBytes));
+  }
+
+  const bodyBudget = maxBytes - suffixBytes;
+  let low = 0;
+  let high = value.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (Buffer.byteLength(value.slice(0, middle), "utf8") <= bodyBudget) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  let end = low;
+  if (end > 0 && /[\uD800-\uDBFF]/.test(value[end - 1])) end -= 1;
+  const candidate = value.slice(0, end);
+  const boundaries = [candidate.lastIndexOf("\n"), candidate.lastIndexOf(". "), candidate.lastIndexOf(" ")];
+  const boundary = Math.max(...boundaries);
+  const body = candidate.slice(0, boundary >= candidate.length * 0.65 ? boundary + 1 : candidate.length).trimEnd();
+  return `${body}${suffix}`;
+}
+
+function formatSourceWithinBudget(
+  source: PromptSource,
+  sourceIndex: number,
+  plan: SourceBlockPlan,
+  maxUtf8Bytes: number,
+): string {
+  const prefix = `--- Source ${sourceIndex + 1} ---\n`;
+  const contentBudget = Math.max(0, maxUtf8Bytes - Buffer.byteLength(prefix, "utf8"));
+
+  if (isTieredSource(source)) {
+    const plannedLimit = plan.perSourceLimits?.get(source.id) ?? source.annotations.length;
+    let low = 0;
+    let high = plannedLimit;
+    let best = formatSourceForPromptTiered(source, { maxAnnotations: 0 });
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const candidate = formatSourceForPromptTiered(source, { maxAnnotations: middle });
+      if (Buffer.byteLength(candidate, "utf8") <= contentBudget) {
+        best = candidate;
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
+    }
+    return `${prefix}${clipUtf8AtBoundary(best, contentBudget)}`;
+  }
+
+  const compactExcerpt = clipUtf8AtBoundary(source.excerpt || "", Math.min(2_000, contentBudget));
+  const withoutBody = formatSourceForPrompt({
+    ...source,
+    excerpt: compactExcerpt,
+    fullText: "",
+  });
+  const remaining = Math.max(
+    0,
+    contentBudget - Buffer.byteLength(withoutBody, "utf8") - Buffer.byteLength("\n", "utf8"),
+  );
+  const boundedBody = clipUtf8AtBoundary(source.fullText || "", remaining);
+  const formatted = formatSourceForPrompt({
+    ...source,
+    excerpt: compactExcerpt,
+    fullText: boundedBody,
+  });
+  return `${prefix}${clipUtf8AtBoundary(formatted, contentBudget)}`;
+}
+
 export function planSourceBlock(sources: PromptSource[]): SourceBlockPlan {
   const tiered = sources.filter(isTieredSource);
   const totalAnnotations = tiered.reduce((count, source) => count + source.annotations.length, 0);
@@ -281,12 +379,13 @@ export function planSourceBlock(sources: PromptSource[]): SourceBlockPlan {
 export function buildSourceBlock(
   sources: PromptSource[],
   plan: SourceBlockPlan = planSourceBlock(sources),
+  options: SourceBlockOptions = {},
 ): string {
   if (sources.length === 0) {
     return "No explicit source materials are attached to this conversation.";
   }
 
-  return sources
+  const unbounded = sources
     .map((source, i) => {
       const sourceText = isTieredSource(source)
         ? formatSourceForPromptTiered(source, {
@@ -296,6 +395,25 @@ export function buildSourceBlock(
       return `--- Source ${i + 1} ---\n${sourceText}`;
     })
     .join("\n\n");
+
+  const maxUtf8Bytes = options.maxUtf8Bytes;
+  if (
+    !maxUtf8Bytes ||
+    maxUtf8Bytes <= 0 ||
+    Buffer.byteLength(unbounded, "utf8") <= maxUtf8Bytes
+  ) {
+    return unbounded;
+  }
+
+  const separatorBytes = Buffer.byteLength("\n\n", "utf8") * Math.max(0, sources.length - 1);
+  const perSourceBytes = Math.max(
+    256,
+    Math.floor((maxUtf8Bytes - separatorBytes) / Math.max(1, sources.length)),
+  );
+  const bounded = sources
+    .map((source, index) => formatSourceWithinBudget(source, index, plan, perSourceBytes))
+    .join("\n\n");
+  return clipUtf8AtBoundary(bounded, maxUtf8Bytes, "\n[additional sources omitted from the inline prompt]");
 }
 
 export function buildSelectedWritingStyleBlock(writingStyle: WritingStyleContext | null): string {
@@ -358,7 +476,9 @@ ${buildProjectContextBlock(project)}
 You have access to ${sources.length} source document(s).
 
 SOURCE MATERIALS:
-${buildSourceBlock(sources)}${styleSection}${voiceProfileBlock}
+${buildSourceBlock(sources, planSourceBlock(sources), {
+  maxUtf8Bytes: CHAT_SOURCE_PROMPT_BYTE_BUDGET,
+})}${styleSection}${voiceProfileBlock}
 
 CONVERSATION FLOW:
 When a student brings a new writing task, follow this collaborative process:
@@ -409,6 +529,7 @@ QUOTING RULES:
 - Quotes from annotation blocks are pre-verified.
 - If you quote from chunk retrieval or deep dive findings, mention that it came from full-text review.
 - Include annotation ID or character position when citing evidence.
+- Conversation turns and compaction summaries are instructions and memory, not source evidence. Never cite them as sources.
 - Do not fabricate quotes.
 
 OUTPUT FORMAT:
@@ -442,7 +563,11 @@ export function buildCompilePrompt({
   const writingStyleBlock =
     buildSelectedWritingStyleBlock(writingStyle) || buildVoiceProfileBlock(project?.voiceProfile);
   const sourcesBlock =
-    sources.length > 0 ? `\n\nSOURCE MATERIALS:\n${buildSourceBlock(sources)}` : "";
+    sources.length > 0
+      ? `\n\nSOURCE MATERIALS:\n${buildSourceBlock(sources, planSourceBlock(sources), {
+          maxUtf8Bytes: FINALIZATION_SOURCE_PROMPT_BYTE_BUDGET,
+        })}`
+      : "";
 
   const noEnDashesRule = noEnDashes
     ? "\n11. NEVER use em-dashes or en-dashes. Use commas, periods, or semicolons instead."
@@ -487,7 +612,11 @@ export function buildVerifyPrompt({
   const projectContextBlock = buildProjectContextBlock(project);
   const sourcesBlock =
     sources.length > 0
-      ? `\n\nSOURCE MATERIALS FOR VERIFICATION:\n${buildSourceBlock(sources)}`
+      ? `\n\nSOURCE MATERIALS FOR VERIFICATION:\n${buildSourceBlock(
+          sources,
+          planSourceBlock(sources),
+          { maxUtf8Bytes: FINALIZATION_SOURCE_PROMPT_BYTE_BUDGET },
+        )}`
       : "\n\nSOURCE MATERIALS FOR VERIFICATION:\nNo attached source materials were provided.";
 
   return `You are an academic paper reviewer performing strict source and citation verification.

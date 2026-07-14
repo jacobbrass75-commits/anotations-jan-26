@@ -45,6 +45,7 @@ describe("chat route integration", () => {
   let sqlite: { close: () => void } | null = null;
   const originalCwd = process.cwd();
   const originalOpenRouterApiKey = process.env.OPENROUTER_API_KEY;
+  const originalDeepSeekFlag = process.env.ENABLE_DEEPSEEK_WRITING;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "scholarmark-chat-routes-"));
@@ -63,14 +64,25 @@ describe("chat route integration", () => {
     } else {
       process.env.OPENROUTER_API_KEY = originalOpenRouterApiKey;
     }
+    if (originalDeepSeekFlag === undefined) {
+      delete process.env.ENABLE_DEEPSEEK_WRITING;
+    } else {
+      process.env.ENABLE_DEEPSEEK_WRITING = originalDeepSeekFlag;
+    }
     vi.resetModules();
     vi.restoreAllMocks();
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  async function createApp(options: { tier?: "free" | "pro" | "max"; writingModel?: string } = {}) {
+  async function createApp(
+    options: {
+      tier?: "free" | "pro" | "max";
+      writingModel?: string;
+      withGroundedSource?: boolean;
+    } = {},
+  ) {
     const { db, sqlite: importedSqlite } = await import("../../server/db");
-    const { users, conversations } = await import("../../shared/schema");
+    const { users, conversations, webClips } = await import("../../shared/schema");
     const { registerChatRoutes } = await import("../../server/chatRoutes");
     const { generateToken } = await import("../../server/auth");
 
@@ -98,10 +110,24 @@ describe("chat route integration", () => {
       title: "New Chat",
       model: "claude-opus-4-6",
       writingModel: options.writingModel ?? "precision",
-      selectedSourceIds: null,
+      selectedSourceIds: options.withGroundedSource ? ["source-legitimacy"] : null,
       createdAt: now,
       updatedAt: now,
     } as any);
+
+    if (options.withGroundedSource) {
+      await db.insert(webClips).values({
+        id: "source-legitimacy",
+        userId: "chat-user",
+        highlightedText: "Public legitimacy strengthens compliance over time.",
+        surroundingContext: "Public legitimacy strengthens compliance over time.",
+        category: "key_quote",
+        sourceUrl: "https://example.test/legitimacy",
+        pageTitle: "Legitimacy Study",
+        authorName: "Researcher",
+        createdAt: now,
+      } as any);
+    }
 
     const app = express();
     app.use(express.json());
@@ -119,7 +145,10 @@ describe("chat route integration", () => {
     };
   }
 
-  function mockOpenRouterFetch() {
+  function mockOpenRouterFetch(
+    responseContent = "OpenRouter drafted this sentence.",
+    finishReason = "stop",
+  ) {
     const originalFetch = globalThis.fetch.bind(globalThis);
     const chatBodies: unknown[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
@@ -143,7 +172,7 @@ describe("chat route integration", () => {
         return new Response(
           JSON.stringify({
             id: "or-chat-test",
-            choices: [{ message: { content: "OpenRouter drafted this sentence." } }],
+            choices: [{ message: { content: responseContent }, finish_reason: finishReason }],
             usage: {
               prompt_tokens: 50,
               completion_tokens: 100,
@@ -254,6 +283,103 @@ describe("chat route integration", () => {
       });
       expect(userUsage.tokens_used).toBe(150);
       expect(userUsage.ai_budget_microdollars_used).toBe(123);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("persists document evidence memory for OpenRouter reader models", async () => {
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+    process.env.ENABLE_DEEPSEEK_WRITING = "true";
+    const quote = "Public legitimacy strengthens compliance over time.";
+    anthropicCreate.mockResolvedValueOnce({
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            newEvidence: [
+              {
+                sourceId: "source-legitimacy",
+                sourceTitle: "Legitimacy Study",
+                items: [{ type: "direct_quote", text: quote, location: "highlight" }],
+              },
+            ],
+            sectionsWorkedOn: [{ section: "Section", status: "drafted" }],
+          }),
+        },
+      ],
+    });
+    mockOpenRouterFetch(`<document title="Section">A grounded draft uses "${quote}"</document>`);
+    const { server, sqlite, token } = await createApp({
+      tier: "max",
+      writingModel: "deepseek/deepseek-v4-pro",
+      withGroundedSource: true,
+    });
+
+    try {
+      const response = await fetch(
+        `${server.baseUrl}/api/chat/conversations/conversation-1/messages`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ content: "Draft the section." }),
+        },
+      );
+      const stored = sqlite
+        .prepare("SELECT evidence_clipboard FROM conversations WHERE id = ?")
+        .get("conversation-1") as { evidence_clipboard: string | null };
+
+      expect(response.status).toBe(200);
+      expect(anthropicCreate).toHaveBeenCalled();
+      const clipboard = JSON.parse(stored.evidence_clipboard || "{}") as {
+        evidence?: Array<{ sourceId: string; items: Array<{ text: string }> }>;
+      };
+      expect(clipboard.evidence).toEqual([
+        expect.objectContaining({
+          sourceId: "source-legitimacy",
+          items: [expect.objectContaining({ text: quote })],
+        }),
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("marks output-limit drafts as non-canonical continuation context", async () => {
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+    process.env.ENABLE_DEEPSEEK_WRITING = "true";
+    mockOpenRouterFetch('<document title="Methods">This section ends mid-sentence', "length");
+    const { server, sqlite, token } = await createApp({
+      tier: "max",
+      writingModel: "deepseek/deepseek-v4-pro",
+    });
+
+    try {
+      const response = await fetch(
+        `${server.baseUrl}/api/chat/conversations/conversation-1/messages`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ content: "Draft the methods section." }),
+        },
+      );
+      const body = await response.text();
+      const stored = sqlite
+        .prepare(
+          "SELECT content FROM messages WHERE conversation_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
+        )
+        .get("conversation-1") as { content: string };
+
+      expect(response.status).toBe(200);
+      expect(body).toContain("partial draft was saved");
+      expect(stored.content).toMatch(/^\[PARTIAL DRAFT - MODEL OUTPUT LIMIT; NOT CANONICAL\]/);
+      expect(stored.content).not.toContain("</document>");
     } finally {
       await server.close();
     }
