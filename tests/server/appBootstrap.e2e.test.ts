@@ -181,12 +181,12 @@ describe("full app bootstrap smoke", () => {
 
     expect(pricingResponse.status).toBe(200);
     expect(pricingResponse.headers.get("content-type")).toContain("text/html");
-    expect(pricingHtml).toContain('<div id="root"></div>');
+    expect(pricingHtml).toContain('<div id="root">');
     expect(pricingHtml).toContain("/src/main.tsx");
 
     expect(accountResponse.status).toBe(200);
     expect(accountResponse.headers.get("content-type")).toContain("text/html");
-    expect(accountHtml).toContain('<div id="root"></div>');
+    expect(accountHtml).toContain('<div id="root">');
     expect(accountHtml).toContain("/src/main.tsx");
 
     expect(localhostCorsResponse.status).toBe(401);

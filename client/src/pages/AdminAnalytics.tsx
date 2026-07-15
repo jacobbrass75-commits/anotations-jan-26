@@ -87,6 +87,20 @@ export default function AdminAnalytics() {
           ))}
         </section>
 
+        <Card className="bg-card/70 border-border">
+          <CardHeader><CardTitle className="eva-section-title">Acquisition funnel</CardTitle></CardHeader>
+          <CardContent className="space-y-2 font-mono text-xs">
+            {(siteData?.funnel ?? []).map((step) => (
+              <div key={step.eventName} className="grid grid-cols-[1fr_auto_auto] gap-4 border-b border-border/30 pb-2">
+                <span>{step.eventName.replaceAll("_", " ")}</span>
+                <span>{step.uniqueVisitors} visitors</span>
+                <span className="text-muted-foreground">{step.eventCount} events</span>
+              </div>
+            ))}
+            {!siteData?.funnel?.length && <div className="text-muted-foreground">No funnel data yet</div>}
+          </CardContent>
+        </Card>
+
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           {[{ title: "Traffic sources", rows: siteData?.sources ?? [], key: "source" }, { title: "Top pages", rows: siteData?.pages ?? [], key: "path" }].map((table) => (
             <Card key={table.title} className="bg-card/70 border-border">

@@ -1,6 +1,5 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/source-serif-4";
 import "@fontsource-variable/jetbrains-mono";
@@ -21,13 +20,39 @@ if (!LOCAL_DEV_AUTH && !PUBLISHABLE_KEY) {
 }
 
 const root = createRoot(document.getElementById("root")!);
-const app = (
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+
+const MARKETING_HOSTS = new Set(["scholarmark.ai", "www.scholarmark.ai"]);
+const FAST_MARKETING_PATHS = ["/", "/summer", "/invite"];
+
+function isFastMarketingEntry(): boolean {
+  if (!MARKETING_HOSTS.has(window.location.hostname.toLowerCase())) return false;
+  return FAST_MARKETING_PATHS.some(
+    (path) => window.location.pathname === path || window.location.pathname.startsWith(`${path}/`),
+  );
+}
 
 async function renderApp() {
+  if (isFastMarketingEntry()) {
+    const [{ default: SummerCampaign }, { SiteAnalyticsTracker }] = await Promise.all([
+      import("./pages/SummerCampaign"),
+      import("./components/SiteAnalyticsTracker"),
+    ]);
+    root.render(
+      <StrictMode>
+        <SiteAnalyticsTracker />
+        <SummerCampaign />
+      </StrictMode>,
+    );
+    return;
+  }
+
+  const { default: App } = await import("./App");
+  const app = (
+    <StrictMode>
+      <App />
+    </StrictMode>
+  );
+
   if (LOCAL_DEV_AUTH) {
     root.render(app);
     return;

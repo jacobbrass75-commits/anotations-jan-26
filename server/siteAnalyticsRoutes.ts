@@ -19,10 +19,42 @@ const pageViewSchema = z.object({
   utmContent: z.string().max(200).optional().nullable(),
 });
 
+const FUNNEL_EVENTS = [
+  "landing_view",
+  "engaged_10_seconds",
+  "scroll_50_percent",
+  "primary_cta_click",
+  "pricing_view",
+  "signup_started",
+  "signup_completed",
+  "checkout_started",
+  "purchase_completed",
+  "first_project_created",
+] as const;
+
+const siteEventSchema = pageViewSchema.extend({
+  eventName: z.enum(FUNNEL_EVENTS),
+  clientTimestamp: z.number().int().positive().optional().nullable(),
+  ctaOrFeature: z.string().max(200).optional().nullable(),
+  deviceCategory: z.enum(["mobile", "tablet", "desktop", "unknown"]),
+  viewportWidth: z.number().int().min(0).max(10_000).optional().nullable(),
+  viewportHeight: z.number().int().min(0).max(10_000).optional().nullable(),
+});
+
 function referrerHost(value: string | null | undefined): string | null {
   if (!value) return null;
   try {
     return new URL(value).hostname.toLowerCase().slice(0, 255);
+  } catch {
+    return null;
+  }
+}
+
+function safeReferrer(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`.slice(0, 1000);
   } catch {
     return null;
   }
@@ -34,22 +66,52 @@ function epoch(value: unknown, fallback: number): number {
 }
 
 export function registerSiteAnalyticsRoutes(app: Express): void {
+  app.post("/api/site-analytics/event", (req: Request, res: Response) => {
+    const parsed = siteEventSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid analytics event" });
+
+    try {
+      const event = parsed.data;
+      sqlite.prepare(`INSERT INTO site_events (
+        id, event_name, visitor_id, session_id, path, referrer_host,
+        utm_source, utm_medium, utm_campaign, utm_content, cta_or_feature,
+        device_category, viewport_width, viewport_height, client_timestamp, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(
+          randomUUID(), event.eventName, event.visitorId, event.sessionId, event.path,
+          referrerHost(event.referrer), event.utmSource || null, event.utmMedium || null,
+          event.utmCampaign || null, event.utmContent || null, event.ctaOrFeature || null,
+          event.deviceCategory, event.viewportWidth ?? null, event.viewportHeight ?? null,
+          event.clientTimestamp ?? null, Date.now(),
+        );
+      return res.status(204).end();
+    } catch (error) {
+      logger.error({ err: error }, "Site-event ingestion failed");
+      return res.status(503).json({ message: "Analytics temporarily unavailable" });
+    }
+  });
+
   app.post("/api/site-analytics/page-view", (req: Request, res: Response) => {
     const parsed = pageViewSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid page view" });
 
-    const view = parsed.data;
-    sqlite
-      .prepare(`INSERT INTO site_page_views (
-        id, visitor_id, session_id, path, referrer, referrer_host,
-        utm_source, utm_medium, utm_campaign, utm_content, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(
-        randomUUID(), view.visitorId, view.sessionId, view.path,
-        view.referrer || null, referrerHost(view.referrer), view.utmSource || null,
-        view.utmMedium || null, view.utmCampaign || null, view.utmContent || null, Date.now(),
-      );
-    return res.status(204).end();
+    try {
+      const view = parsed.data;
+      sqlite
+        .prepare(`INSERT INTO site_page_views (
+          id, visitor_id, session_id, path, referrer, referrer_host,
+          utm_source, utm_medium, utm_campaign, utm_content, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(
+          randomUUID(), view.visitorId, view.sessionId, view.path,
+          safeReferrer(view.referrer), referrerHost(view.referrer), view.utmSource || null,
+          view.utmMedium || null, view.utmCampaign || null, view.utmContent || null, Date.now(),
+        );
+      return res.status(204).end();
+    } catch (error) {
+      logger.error({ err: error }, "Page-view ingestion failed");
+      return res.status(503).json({ message: "Analytics temporarily unavailable" });
+    }
   });
 
   app.get(
@@ -58,6 +120,7 @@ export function registerSiteAnalyticsRoutes(app: Express): void {
     requireAdmin,
     (req: Request, res: Response) => {
       try {
+        res.setHeader("Cache-Control", "no-store");
         const now = Date.now();
         const from = epoch(req.query.from, now - 7 * 86_400_000);
         const to = epoch(req.query.to, now);
@@ -82,7 +145,22 @@ export function registerSiteAnalyticsRoutes(app: Express): void {
           FROM site_page_views WHERE created_at BETWEEN ? AND ? AND utm_campaign IS NOT NULL
           GROUP BY utm_campaign, utm_source ORDER BY page_views DESC LIMIT 20`).all(from, to);
 
-        return res.json({ period: { from, to }, totals, sources, pages, campaigns });
+        const funnelRows = sqlite.prepare(`SELECT event_name, COUNT(*) AS event_count,
+          COUNT(DISTINCT visitor_id) AS unique_visitors
+          FROM site_events WHERE created_at BETWEEN ? AND ?
+          GROUP BY event_name`).all(from, to) as Array<{
+            event_name: string;
+            event_count: number;
+            unique_visitors: number;
+          }>;
+        const funnelMap = new Map(funnelRows.map((row) => [row.event_name, row]));
+        const funnel = FUNNEL_EVENTS.map((eventName) => ({
+          eventName,
+          eventCount: funnelMap.get(eventName)?.event_count ?? 0,
+          uniqueVisitors: funnelMap.get(eventName)?.unique_visitors ?? 0,
+        }));
+
+        return res.json({ period: { from, to }, totals, sources, pages, campaigns, funnel });
       } catch (error) {
         logger.error({ err: error }, "Site analytics query failed");
         return res.status(500).json({ message: "Failed to fetch site analytics" });

@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { withRedirectUrl } from "@/lib/redirects";
+import { trackSiteEvent } from "@/lib/siteAnalytics";
 
 const VENMO_HANDLE = normalizeVenmoHandle(import.meta.env.VITE_VENMO_HANDLE);
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
@@ -237,6 +238,9 @@ function AutomatedVenmoButton({
             if (!body.orderId) {
               throw new Error("PayPal order was not created");
             }
+            trackSiteEvent("checkout_started", {
+              ctaOrFeature: `paypal_${tier}`,
+            });
             return body.orderId;
           },
           onApprove: async (data: { orderID?: string }) => {
@@ -252,6 +256,9 @@ function AutomatedVenmoButton({
             if (!body.completed) {
               throw new Error(`Payment was not completed (${body.status ?? "unknown"})`);
             }
+            trackSiteEvent("purchase_completed", {
+              ctaOrFeature: `paypal_${tier}`,
+            });
             await queryClient.invalidateQueries();
             onComplete();
           },
@@ -408,6 +415,9 @@ function StripeCheckoutButton({
             if (!body.url) {
               throw new Error("Stripe checkout did not return a URL");
             }
+            trackSiteEvent("checkout_started", {
+              ctaOrFeature: `stripe_${tier}`,
+            });
             window.location.assign(body.url);
           } catch (err) {
             console.error("[billing] Stripe checkout error", err);

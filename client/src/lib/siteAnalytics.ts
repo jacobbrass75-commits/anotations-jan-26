@@ -1,6 +1,18 @@
-import { useEffect } from "react";
-import { useLocation } from "wouter";
-import { trackSiteEvent } from "@/lib/siteAnalytics";
+export type SiteEventName =
+  | "landing_view"
+  | "engaged_10_seconds"
+  | "scroll_50_percent"
+  | "primary_cta_click"
+  | "pricing_view"
+  | "signup_started"
+  | "signup_completed"
+  | "checkout_started"
+  | "purchase_completed"
+  | "first_project_created";
+
+interface SiteEventOptions {
+  ctaOrFeature?: string;
+}
 
 const ATTRIBUTION_KEY = "scholarmark_site_attribution";
 let memoryVisitorId: string | null = null;
@@ -38,7 +50,8 @@ function safeReferrer(): string | null {
   }
 }
 
-function attribution(params: URLSearchParams) {
+function readAttribution() {
+  const params = new URLSearchParams(window.location.search);
   const current = {
     utmSource: params.get("utm_source"),
     utmMedium: params.get("utm_medium"),
@@ -58,54 +71,42 @@ function attribution(params: URLSearchParams) {
   }
 }
 
-export function SiteAnalyticsTracker() {
-  const [pathname] = useLocation();
+function deviceCategory(): "mobile" | "tablet" | "desktop" | "unknown" {
+  const width = window.innerWidth;
+  if (!Number.isFinite(width)) return "unknown";
+  if (width < 768) return "mobile";
+  if (width < 1024) return "tablet";
+  return "desktop";
+}
 
-  useEffect(() => {
-    if (import.meta.env.DEV || pathname.startsWith("/admin/")) return;
+function approximate(value: number): number {
+  return Math.max(0, Math.round(value / 100) * 100);
+}
 
-    const params = new URLSearchParams(window.location.search);
-    const source = attribution(params);
+export function trackSiteEvent(eventName: SiteEventName, options: SiteEventOptions = {}): void {
+  if (import.meta.env.DEV || typeof window === "undefined") return;
+
+  try {
     const body = JSON.stringify({
+      eventName,
       visitorId: storedId(localStorage, "scholarmark_visitor_id"),
       sessionId: storedId(sessionStorage, "scholarmark_session_id"),
-      path: pathname.slice(0, 500),
-      ...source,
+      path: window.location.pathname.slice(0, 500),
+      clientTimestamp: Date.now(),
+      ...readAttribution(),
+      ctaOrFeature: options.ctaOrFeature,
+      deviceCategory: deviceCategory(),
+      viewportWidth: approximate(window.innerWidth),
+      viewportHeight: approximate(window.innerHeight),
     });
-
-    void fetch("/api/site-analytics/page-view", {
+    void fetch("/api/site-analytics/event", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
       keepalive: true,
       credentials: "same-origin",
     }).catch(() => undefined);
-  }, [pathname]);
-
-  useEffect(() => {
-    if (import.meta.env.DEV || pathname.startsWith("/admin/")) return;
-
-    if (pathname === "/" || pathname.startsWith("/summer") || pathname.startsWith("/invite")) {
-      trackSiteEvent("landing_view");
-    } else if (pathname === "/pricing") {
-      trackSiteEvent("pricing_view");
-    }
-
-    const engagedTimer = window.setTimeout(() => trackSiteEvent("engaged_10_seconds"), 10_000);
-    let sentScroll = false;
-    const onScroll = () => {
-      const total = document.documentElement.scrollHeight - window.innerHeight;
-      if (!sentScroll && total > 0 && window.scrollY / total >= 0.5) {
-        sentScroll = true;
-        trackSiteEvent("scroll_50_percent");
-      }
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.clearTimeout(engagedTimer);
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, [pathname]);
-
-  return null;
+  } catch {
+    // Analytics must never block or break the product experience.
+  }
 }

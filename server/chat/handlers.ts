@@ -1351,7 +1351,6 @@ ${chunkContext}`;
           } else {
             usageLedger.refund(usageRequestId);
           }
-          usageRequestId = null;
         }
 
         if (!closed && !res.writableEnded) {
@@ -1377,7 +1376,6 @@ ${chunkContext}`;
           } else {
             usageLedger.refund(usageRequestId);
           }
-          usageRequestId = null;
         }
         logger.error({ err: error }, "Error sending message:");
         stopHeartbeat?.();

@@ -46,8 +46,8 @@ export function registerProjectRoutes(app: Express): void {
       try {
         const validated = insertProjectSchema.parse(req.body);
         const projectLimit = getProjectLimit(req.user!.tier);
+        const existingProjects = await projectStorage.getAllProjects(req.user!.userId);
         if (projectLimit !== null) {
-          const existingProjects = await projectStorage.getAllProjects(req.user!.userId);
           if (existingProjects.length >= projectLimit) {
             return res.status(403).json({
               error: `This plan supports up to ${projectLimit} active projects. Upgrade to add more.`,
@@ -86,6 +86,9 @@ export function registerProjectRoutes(app: Express): void {
           }
         }
 
+        if (existingProjects.length === 0) {
+          res.setHeader("X-Scholarmark-First-Project", "true");
+        }
         res.status(201).json(project);
       } catch (error) {
         logger.error({ err: error }, "Error creating project:");

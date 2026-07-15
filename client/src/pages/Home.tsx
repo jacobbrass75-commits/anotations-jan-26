@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Link2,
   MessageSquare,
+  Mail,
   PenLine,
   PenTool,
   Plus,
@@ -30,6 +31,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateProject, useProjects } from "@/hooks/useProjects";
+import { trackSiteEvent } from "@/lib/siteAnalytics";
+
+const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
+const founderDashboardHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("ScholarMark Founder Help - Dashboard")}`;
 
 interface DashboardStatus {
   counts: {
@@ -107,6 +112,20 @@ export default function Home() {
             <div className="eva-status-active" />
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="uppercase tracking-wider text-xs font-mono"
+              asChild
+            >
+              <a
+                href={founderDashboardHref}
+                onClick={() => trackSiteEvent("primary_cta_click", { ctaOrFeature: "contact_founder_dashboard" })}
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Contact Founder
+              </a>
+            </Button>
             <Link href="/projects">
               <Button
                 variant="outline"

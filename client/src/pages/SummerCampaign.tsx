@@ -7,6 +7,7 @@ import {
   FileText,
   ListChecks,
   MessageSquareQuote,
+  Mail,
   ShieldCheck,
   Sparkles,
   Target,
@@ -14,10 +15,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { withRedirectUrl } from "@/lib/redirects";
+import { trackSiteEvent } from "@/lib/siteAnalytics";
 
 const ATTRIBUTION_STORAGE_KEY = "scholarmark_campaign_attribution";
 const VISIT_SESSION_KEY = "scholarmark_campaign_visit_sent";
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
+const founderEmailHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("ScholarMark Founder Help - Landing Page")}`;
+const founderBookingHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("ScholarMark 15-Minute Setup - Landing Page")}`;
 
 interface CampaignAttribution {
   campus?: string;
@@ -150,7 +154,12 @@ export default function SummerCampaign() {
                   Create an account to open your writing dashboard and start working.
                 </p>
                 <Button size="lg" className="h-12 w-full uppercase tracking-[0.08em]" asChild>
-                  <Link href={signupHref}>Start now</Link>
+                  <Link
+                    href={signupHref}
+                    onClick={() => trackSiteEvent("primary_cta_click", { ctaOrFeature: "hero_start_now" })}
+                  >
+                    Start now
+                  </Link>
                 </Button>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   By continuing, you agree to our{" "}
@@ -188,6 +197,41 @@ export default function SummerCampaign() {
               <span>Draft</span>
             </figcaption>
           </figure>
+        </section>
+        <section className="rounded-2xl border border-primary/20 bg-card/70 p-6 md:p-8">
+          <div className="max-w-3xl space-y-4">
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-primary" />
+              <h2 className="text-2xl font-semibold">Get personal help from ScholarMark’s founder</h2>
+            </div>
+            <p className="text-muted-foreground">
+              Get personal help setting up ScholarMark for your research workflow. I’ll help you
+              organize sources, find supporting evidence, verify citations, and get the most from
+              the app—whether you’re a student, researcher, or research assistant.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild>
+                <a
+                  href={founderEmailHref}
+                  onClick={() => trackSiteEvent("primary_cta_click", { ctaOrFeature: "founder_email_landing" })}
+                >
+                  Email Jacob
+                </a>
+              </Button>
+              <Button variant="outline" asChild>
+                <a
+                  href={founderBookingHref}
+                  onClick={() => trackSiteEvent("primary_cta_click", { ctaOrFeature: "founder_setup_landing" })}
+                >
+                  Book a 15-minute setup
+                </a>
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Free while ScholarMark is new. No sales pitch—just practical setup help and a chance
+              to influence what I build next.
+            </p>
+          </div>
         </section>
         <section className="space-y-5">
           <div className="flex items-center gap-2">

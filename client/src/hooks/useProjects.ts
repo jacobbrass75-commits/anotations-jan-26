@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
+import { trackSiteEvent } from "@/lib/siteAnalytics";
 import type {
   Project,
   Folder,
@@ -32,7 +33,11 @@ export function useCreateProject() {
   return useMutation({
     mutationFn: async (data: InsertProject) => {
       const res = await apiRequest("POST", "/api/projects", data);
-      return res.json();
+      const project = await res.json();
+      if (res.headers.get("X-Scholarmark-First-Project") === "true") {
+        trackSiteEvent("first_project_created", { ctaOrFeature: "project" });
+      }
+      return project;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });

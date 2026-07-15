@@ -78,6 +78,7 @@ export interface SiteAnalyticsOverview {
   sources: Array<{ source: string; page_views: number; unique_visitors: number }>;
   pages: Array<{ path: string; page_views: number; unique_visitors: number }>;
   campaigns: Array<{ campaign: string; source: string; page_views: number; unique_visitors: number }>;
+  funnel: Array<{ eventName: string; eventCount: number; uniqueVisitors: number }>;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {

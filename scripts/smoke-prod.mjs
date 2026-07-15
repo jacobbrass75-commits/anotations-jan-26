@@ -63,11 +63,12 @@ async function runAppSmoke() {
     root.response.headers.get("content-type")?.includes("text/html"),
     "root did not return HTML",
   );
-  assert(root.text.includes('<div id="root"></div>'), "root HTML is missing React mount point");
+  assert(root.text.includes('<div id="root">'), "root HTML is missing React mount point");
+  assert(root.text.includes("Get ahead on your thesis"), "root HTML is missing resilient content");
 
   const staticFallback = await expectStatus("app static fallback", "/pricing", 200);
   assert(
-    staticFallback.text.includes('<div id="root"></div>'),
+    staticFallback.text.includes('<div id="root">'),
     "static fallback is missing React mount point",
   );
 
@@ -75,7 +76,7 @@ async function runAppSmoke() {
     for (const path of ["/summer", "/sign-in", "/sign-up", "/summer/onboarding"]) {
       const page = await expectStatus(`app static fallback ${path}`, path, 200);
       assert(
-        page.text.includes('<div id="root"></div>'),
+        page.text.includes('<div id="root">'),
         `${path} is missing React mount point`,
       );
     }

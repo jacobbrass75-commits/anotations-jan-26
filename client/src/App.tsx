@@ -10,6 +10,7 @@ import { BootSequence } from "@/components/BootSequence";
 import { useAuth } from "@/lib/auth";
 import SummerCampaign from "@/pages/SummerCampaign";
 import { SiteAnalyticsTracker } from "@/components/SiteAnalyticsTracker";
+import { SignupAnalyticsTracker } from "@/components/SignupAnalyticsTracker";
 
 const Home = lazy(() => import("@/pages/Home"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -246,6 +247,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <SiteAnalyticsTracker />
+        <SignupAnalyticsTracker />
         <Toaster />
         {!publicShell && !booted && <BootSequence onComplete={() => setBooted(true)} />}
         <div className={publicShell ? "min-h-screen" : "min-h-screen pb-6 eva-scanlines"}>

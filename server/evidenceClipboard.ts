@@ -82,7 +82,7 @@ function wordSet(text: string): Set<string> {
   const words = normalizeEvidenceText(text).split(" ").filter(Boolean);
   const terms = [...words];
   for (const word of words) {
-    if (!/[^\x00-\x7f]/.test(word)) continue;
+    if (!Array.from(word).some((character) => (character.codePointAt(0) ?? 0) > 127)) continue;
     const characters = Array.from(word);
     for (let index = 0; index < characters.length - 1; index += 1) {
       terms.push(`${characters[index]}${characters[index + 1]}`);
@@ -337,7 +337,13 @@ function lexicalOverlap(left: string, right: string): number {
   const rightWords = wordSet(right);
   let matches = 0;
   for (const word of Array.from(leftWords)) {
-    if ((word.length > 2 || /[^\x00-\x7f]/.test(word)) && rightWords.has(word)) matches += 1;
+    if (
+      (word.length > 2 ||
+        Array.from(word).some((character) => (character.codePointAt(0) ?? 0) > 127)) &&
+      rightWords.has(word)
+    ) {
+      matches += 1;
+    }
   }
   return matches;
 }
@@ -516,7 +522,9 @@ function containsGroundedSourceId(availableEvidence: string, sourceId: string): 
 
 function termCoverage(claim: string, corpus: string): number {
   const claimTerms = Array.from(wordSet(claim)).filter(
-    (term) => term.length > 2 || /[^\x00-\x7f]/.test(term),
+    (term) =>
+      term.length > 2 ||
+      Array.from(term).some((character) => (character.codePointAt(0) ?? 0) > 127),
   );
   if (claimTerms.length === 0) return 0;
   const corpusTerms = wordSet(corpus);

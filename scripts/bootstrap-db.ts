@@ -190,6 +190,8 @@ const requiredTables = [
   "api_keys",
   "mcp_tokens",
   "analytics_tool_calls",
+  "site_page_views",
+  "site_events",
   "ocr_jobs",
   "campaign_visits",
   "campaign_signups",

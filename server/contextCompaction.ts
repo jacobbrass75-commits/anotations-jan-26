@@ -438,7 +438,7 @@ function lexicalTerms(text: string): Set<string> {
     if (term.length > 2 && !stopwords.has(term)) terms.push(term);
     // Whitespace-free scripts need subword features; otherwise an entire CJK
     // sentence becomes one token and semantically overlapping phrases never match.
-    if (/[^\x00-\x7f]/.test(term)) {
+    if (Array.from(term).some((character) => (character.codePointAt(0) ?? 0) > 127)) {
       const characters = Array.from(term);
       for (let index = 0; index < characters.length - 1; index += 1) {
         terms.push(`${characters[index]}${characters[index + 1]}`);

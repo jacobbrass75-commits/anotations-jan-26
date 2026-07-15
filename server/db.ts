@@ -170,6 +170,31 @@ ON site_page_views(utm_source, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_site_page_views_visitor
 ON site_page_views(visitor_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS site_events (
+  id TEXT PRIMARY KEY,
+  event_name TEXT NOT NULL,
+  visitor_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  referrer_host TEXT,
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  utm_content TEXT,
+  cta_or_feature TEXT,
+  device_category TEXT NOT NULL,
+  viewport_width INTEGER,
+  viewport_height INTEGER,
+  client_timestamp INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_site_events_created_at
+ON site_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_site_events_funnel
+ON site_events(event_name, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_site_events_visitor
+ON site_events(visitor_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS web_clips (
   id TEXT PRIMARY KEY,
   highlighted_text TEXT NOT NULL,

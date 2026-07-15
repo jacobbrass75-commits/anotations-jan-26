@@ -22,6 +22,7 @@ import {
   formatUsagePercent,
 } from "@/lib/accountUtils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { trackSiteEvent } from "@/lib/siteAnalytics";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -194,6 +195,19 @@ export default function Account() {
         await queryClient.invalidateQueries();
         await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
         await queryClient.refetchQueries({ queryKey: ["/api/auth/usage"] });
+        try {
+          const purchaseKey = `scholarmark_purchase_tracked:${checkoutReturn.sessionId}`;
+          if (sessionStorage.getItem(purchaseKey) !== "1") {
+            sessionStorage.setItem(purchaseKey, "1");
+            trackSiteEvent("purchase_completed", {
+              ctaOrFeature: body.tier ? `stripe_${body.tier}` : "stripe_subscription",
+            });
+          }
+        } catch {
+          trackSiteEvent("purchase_completed", {
+            ctaOrFeature: body.tier ? `stripe_${body.tier}` : "stripe_subscription",
+          });
+        }
         if (!cancelled) {
           setCheckoutConfirmState("confirmed");
           setCheckoutConfirmMessage(

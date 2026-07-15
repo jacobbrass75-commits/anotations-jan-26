@@ -8,18 +8,24 @@ import { registerRoutes } from "./routes";
 import { registerAuthRoutes } from "./authRoutes";
 import { registerOAuthRoutes } from "./oauthRoutes";
 import { configureClerk } from "./auth";
-import { serveStatic } from "./static";
+import { servePublicStatic, serveStatic } from "./static";
 import { initAnalytics } from "./analyticsLogger";
 import { createServer } from "http";
 import { assertProductionConfig } from "./productionConfig";
 import { globalLimiter } from "./rateLimits";
 import { createLogger } from "./logger";
+import { canonicalRequest } from "./canonicalRequest";
 
 assertProductionConfig(process.env, { phase: "runtime" });
 
 const app = express();
 const httpServer = createServer(app);
+app.disable("x-powered-by");
 app.set("trust proxy", true);
+app.use(canonicalRequest);
+if (process.env.NODE_ENV === "production") {
+  servePublicStatic(app);
+}
 
 function splitCsv(value: string | undefined): string[] {
   return (value ?? "")
