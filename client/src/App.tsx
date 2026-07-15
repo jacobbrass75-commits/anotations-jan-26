@@ -9,6 +9,7 @@ import { DataTicker } from "@/components/DataTicker";
 import { BootSequence } from "@/components/BootSequence";
 import { useAuth } from "@/lib/auth";
 import SummerCampaign from "@/pages/SummerCampaign";
+import { SiteAnalyticsTracker } from "@/components/SiteAnalyticsTracker";
 
 const Home = lazy(() => import("@/pages/Home"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -244,6 +245,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <SiteAnalyticsTracker />
         <Toaster />
         {!publicShell && !booted && <BootSequence onComplete={() => setBooted(true)} />}
         <div className={publicShell ? "min-h-screen" : "min-h-screen pb-6 eva-scanlines"}>

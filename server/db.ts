@@ -150,6 +150,26 @@ ON analytics_context_snapshots(timestamp);
 CREATE INDEX IF NOT EXISTS idx_analytics_context_snapshots_conversation
 ON analytics_context_snapshots(conversation_id, timestamp);
 
+CREATE TABLE IF NOT EXISTS site_page_views (
+  id TEXT PRIMARY KEY,
+  visitor_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  referrer TEXT,
+  referrer_host TEXT,
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  utm_content TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_site_page_views_created_at
+ON site_page_views(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_site_page_views_source
+ON site_page_views(utm_source, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_site_page_views_visitor
+ON site_page_views(visitor_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS web_clips (
   id TEXT PRIMARY KEY,
   highlighted_text TEXT NOT NULL,

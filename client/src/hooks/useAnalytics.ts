@@ -72,6 +72,14 @@ export interface ConversationTimeline {
   timeline: TimelineEvent[];
 }
 
+export interface SiteAnalyticsOverview {
+  period: { from: number; to: number };
+  totals: { page_views: number; unique_visitors: number; sessions: number };
+  sources: Array<{ source: string; page_views: number; unique_visitors: number }>;
+  pages: Array<{ path: string; page_views: number; unique_visitors: number }>;
+  campaigns: Array<{ campaign: string; source: string; page_views: number; unique_visitors: number }>;
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, {
     headers: { ...getAuthHeaders() },
@@ -88,6 +96,14 @@ export function useAnalyticsOverview(from: number, to: number) {
   return useQuery<AnalyticsOverview>({
     queryKey: ["analytics-overview", from, to],
     queryFn: () => fetchJson(`/api/admin/analytics/export?from=${from}&to=${to}`),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useSiteAnalytics(from: number, to: number) {
+  return useQuery<SiteAnalyticsOverview>({
+    queryKey: ["site-analytics", from, to],
+    queryFn: () => fetchJson(`/api/admin/site-analytics?from=${from}&to=${to}`),
     refetchInterval: 30_000,
   });
 }

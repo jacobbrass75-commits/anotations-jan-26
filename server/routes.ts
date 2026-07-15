@@ -24,6 +24,7 @@ import { registerHumanizerRoutes } from "./humanizerRoutes";
 import { registerExtensionRoutes } from "./extensionRoutes";
 import { registerWebClipRoutes } from "./webClipRoutes";
 import { registerAnalyticsRoutes } from "./analyticsRoutes";
+import { registerSiteAnalyticsRoutes } from "./siteAnalyticsRoutes";
 import { registerCampaignRoutes, trackCampaignActivation } from "./campaignRoutes";
 import { registerPayPalBillingRoutes } from "./paypalBillingRoutes";
 import { registerStripeBillingRoutes } from "./stripeBillingRoutes";
@@ -1143,6 +1144,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
 
   // Register admin analytics routes
   registerAnalyticsRoutes(app);
+  registerSiteAnalyticsRoutes(app);
 
   // Register summer campaign routes (invite tracking, signups, metrics)
   registerCampaignRoutes(app);

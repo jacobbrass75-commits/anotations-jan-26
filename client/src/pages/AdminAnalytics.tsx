@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { ArrowLeft, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAnalyticsOverview, useAnalyticsConversations } from "@/hooks/useAnalytics";
+import { useAnalyticsOverview, useAnalyticsConversations, useSiteAnalytics } from "@/hooks/useAnalytics";
 import { OverviewCards } from "@/components/analytics/OverviewCards";
 import { ToolCallChart } from "@/components/analytics/ToolCallChart";
 import { TokenUsageChart } from "@/components/analytics/TokenUsageChart";
@@ -36,6 +36,7 @@ export default function AdminAnalytics() {
 
   const { data: overview, isLoading: overviewLoading } = useAnalyticsOverview(from, now);
   const { data: convData, isLoading: convsLoading } = useAnalyticsConversations(from, now);
+  const { data: siteData } = useSiteAnalytics(from, now);
 
   const conversations = convData?.conversations ?? [];
   const topSources = overview?.topRequestedSources ?? [];
@@ -73,6 +74,35 @@ export default function AdminAnalytics() {
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-6 space-y-6 eva-grid-bg">
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            ["Site views", siteData?.totals.page_views ?? 0],
+            ["Unique visitors", siteData?.totals.unique_visitors ?? 0],
+            ["Sessions", siteData?.totals.sessions ?? 0],
+          ].map(([label, value]) => (
+            <Card key={label} className="bg-card/70 border-border">
+              <CardHeader className="pb-2"><CardTitle className="text-xs uppercase tracking-wider">{label}</CardTitle></CardHeader>
+              <CardContent className="text-3xl font-mono text-primary">{value}</CardContent>
+            </Card>
+          ))}
+        </section>
+
+        <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {[{ title: "Traffic sources", rows: siteData?.sources ?? [], key: "source" }, { title: "Top pages", rows: siteData?.pages ?? [], key: "path" }].map((table) => (
+            <Card key={table.title} className="bg-card/70 border-border">
+              <CardHeader><CardTitle className="eva-section-title">{table.title}</CardTitle></CardHeader>
+              <CardContent className="space-y-2 font-mono text-xs">
+                {table.rows.length === 0 ? <div className="text-muted-foreground">No traffic data yet</div> : table.rows.map((row) => (
+                  <div key={String(row[table.key as keyof typeof row])} className="flex justify-between border-b border-border/30 pb-2">
+                    <span className="truncate pr-4">{String(row[table.key as keyof typeof row])}</span>
+                    <span>{row.page_views} views / {row.unique_visitors} visitors</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+
         <OverviewCards
           overview={overview}
           conversations={conversations}
