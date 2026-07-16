@@ -64,7 +64,7 @@ async function runAppSmoke() {
     "root did not return HTML",
   );
   assert(root.text.includes('<div id="root">'), "root HTML is missing React mount point");
-  assert(root.text.includes("Build your thesis"), "root HTML is missing resilient content");
+  assert(root.text.includes("Get ahead on your thesis"), "root HTML is missing resilient content");
 
   const staticFallback = await expectStatus("app static fallback", "/pricing", 200);
   assert(
