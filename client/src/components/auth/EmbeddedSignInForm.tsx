@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getClerkErrorMessage } from "@/lib/clerkErrors";
 import { activateClerkSession } from "@/lib/clerkSession";
+import { withAuthOperationDelayNotice } from "@/lib/authOperation";
 import { findEmailCodeSecondFactor } from "@/lib/embeddedAuthFlow";
 import { buildClerkAccountPortalUrl, withRedirectUrl } from "@/lib/redirects";
 
@@ -34,6 +35,7 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [delayMessage, setDelayMessage] = useState<string | null>(null);
   const activatingSession = useRef(false);
   const preparingRestoredFactor = useRef(false);
 
@@ -59,12 +61,16 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
       activatingSession.current = true;
       setStep("complete");
       try {
-        await activateClerkSession({
-          setActive,
-          sessionId: result.createdSessionId,
-          redirectUrl,
-          taskFallbackUrl: portalUrl,
-        });
+        await withAuthOperationDelayNotice(
+          activateClerkSession({
+            setActive,
+            sessionId: result.createdSessionId,
+            redirectUrl,
+            taskFallbackUrl: portalUrl,
+          }),
+          "Sign-in completed, but opening the session is still processing. Use the secure hosted sign-in page below if it does not finish.",
+          setDelayMessage,
+        );
         return true;
       } catch (caught) {
         activatingSession.current = false;
@@ -84,10 +90,14 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
         );
         return false;
       }
-      await resource.prepareSecondFactor({
-        strategy: "email_code",
-        emailAddressId: factor.emailAddressId,
-      });
+      await withAuthOperationDelayNotice(
+        resource.prepareSecondFactor({
+          strategy: "email_code",
+          emailAddressId: factor.emailAddressId,
+        }),
+        "The security email is still being requested. Do not resend yet; use the secure hosted sign-in page below if needed.",
+        setDelayMessage,
+      );
       setSecondFactor(factor);
       setStep("second-factor");
       if (announce) setNotice(`We sent a six-digit code to ${factor.safeIdentifier}.`);
@@ -146,11 +156,15 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const result = await signIn.create({
-        identifier: emailAddress.trim(),
-        password,
-        strategy: "password",
-      });
+      const result = await withAuthOperationDelayNotice(
+        signIn.create({
+          identifier: emailAddress.trim(),
+          password,
+          strategy: "password",
+        }),
+        "Secure sign-in is still processing. Do not submit it again; use the secure hosted sign-in page below if it does not finish.",
+        setDelayMessage,
+      );
       setPassword("");
       if (await activateCompletedSignIn(result)) return;
       if (result.status === "needs_second_factor") {
@@ -183,10 +197,14 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const verified = await signIn.attemptSecondFactor({
-        strategy: "email_code",
-        code: normalizedCode,
-      });
+      const verified = await withAuthOperationDelayNotice(
+        signIn.attemptSecondFactor({
+          strategy: "email_code",
+          code: normalizedCode,
+        }),
+        "Your security code is still being verified. Do not submit it again; use the secure hosted sign-in page below if needed.",
+        setDelayMessage,
+      );
       setCode("");
       if (await activateCompletedSignIn(verified)) return;
       setError("The code was accepted, but sign-in needs another secure step.");
@@ -245,6 +263,11 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {delayMessage && (
+          <div className="mb-4">
+            <AuthError>{delayMessage}</AuthError>
+          </div>
+        )}
         {step === "credentials" && (
           <form className="space-y-4" onSubmit={handleCredentialsSubmit} noValidate>
             <div className="space-y-2">
@@ -286,8 +309,16 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
             <div id="clerk-captcha" data-cl-theme="light" data-cl-size="flexible" />
             {error && <AuthError>{error}</AuthError>}
             <Button className="h-12 w-full" type="submit" disabled={!isLoaded || isSubmitting}>
-              {isSubmitting || !isLoaded ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {!isLoaded ? "Preparing secure sign-in" : isSubmitting ? "Signing in" : "Sign in"}
+              {!delayMessage && (isSubmitting || !isLoaded) ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : null}
+              {!isLoaded
+                ? "Preparing secure sign-in"
+                : isSubmitting
+                  ? delayMessage
+                    ? "Sign-in is still processing"
+                    : "Signing in"
+                  : "Sign in"}
             </Button>
           </form>
         )}
@@ -318,8 +349,14 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
               </div>
             )}
             <Button className="h-12 w-full" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {isSubmitting ? "Verifying" : "Verify and sign in"}
+              {isSubmitting && !delayMessage ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : null}
+              {isSubmitting
+                ? delayMessage
+                  ? "Verification is still processing"
+                  : "Verifying"
+                : "Verify and sign in"}
             </Button>
             <button
               type="button"
@@ -334,7 +371,8 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
 
         {step === "complete" && (
           <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-            <LoaderCircle className="h-4 w-4 animate-spin" /> Opening your workspace
+            {!delayMessage && <LoaderCircle className="h-4 w-4 animate-spin" />}
+            {delayMessage ? "Session setup is still processing" : "Opening your workspace"}
           </div>
         )}
 
