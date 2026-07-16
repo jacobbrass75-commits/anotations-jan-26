@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SIGNED_IN_REDIRECT,
+  buildDirectSignupUrl,
   getSafeRedirectUrl,
   withRedirectUrl,
 } from "../../client/src/lib/redirects";
@@ -22,9 +23,7 @@ describe("redirect utilities", () => {
     expect(getSafeRedirectUrl("?redirect_url=https%3A%2F%2Fevil.example")).toBe(
       DEFAULT_SIGNED_IN_REDIRECT,
     );
-    expect(getSafeRedirectUrl("?redirect_url=%2F%2Fevil.example")).toBe(
-      DEFAULT_SIGNED_IN_REDIRECT,
-    );
+    expect(getSafeRedirectUrl("?redirect_url=%2F%2Fevil.example")).toBe(DEFAULT_SIGNED_IN_REDIRECT);
     expect(getSafeRedirectUrl("?redirect_url=%2Fsign-in")).toBe(DEFAULT_SIGNED_IN_REDIRECT);
     expect(getSafeRedirectUrl("?redirect_url=%2Fsign-up")).toBe(DEFAULT_SIGNED_IN_REDIRECT);
   });
@@ -32,6 +31,16 @@ describe("redirect utilities", () => {
   it("builds sign-in URLs with encoded return targets", () => {
     expect(withRedirectUrl("/sign-in", "/account?checkout=success")).toBe(
       "/sign-in?redirect_url=%2Faccount%3Fcheckout%3Dsuccess",
+    );
+  });
+
+  it("builds a short direct-ad signup URL while preserving safe attribution", () => {
+    expect(
+      buildDirectSignupUrl(
+        "?utm_source=ig&utm_medium=paid&utm_campaign=summer&utm_content=reel-2&fbclid=abc123&ignored=secret",
+      ),
+    ).toBe(
+      "/sign-up?redirect_url=%2Fdashboard&utm_source=ig&utm_medium=paid&utm_campaign=summer&utm_content=reel-2&fbclid=abc123",
     );
   });
 });

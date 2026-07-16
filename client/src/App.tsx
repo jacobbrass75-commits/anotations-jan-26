@@ -11,6 +11,8 @@ import { useAuth } from "@/lib/auth";
 import SummerCampaign from "@/pages/SummerCampaign";
 import { SiteAnalyticsTracker } from "@/components/SiteAnalyticsTracker";
 import { SignupAnalyticsTracker } from "@/components/SignupAnalyticsTracker";
+import { MarketingConsentBanner } from "@/components/MarketingConsentBanner";
+import { isMetaMarketingPath } from "@/lib/metaTracking";
 
 const Home = lazy(() => import("@/pages/Home"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -18,6 +20,7 @@ const ProjectWorkspace = lazy(() => import("@/pages/ProjectWorkspace"));
 const ProjectDocument = lazy(() => import("@/pages/ProjectDocument"));
 const Login = lazy(() => import("@/pages/Login"));
 const Register = lazy(() => import("@/pages/Register"));
+const DirectSignup = lazy(() => import("@/pages/DirectSignup"));
 const SsoCallback = lazy(() => import("@/pages/SsoCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
 const BlogIndex = lazy(() => import("@/pages/BlogIndex"));
@@ -62,6 +65,7 @@ function usesPublicShell(pathname: string): boolean {
     pathname === "/support" ||
     pathname === "/faq" ||
     pathname === "/sso-callback" ||
+    pathname === "/start" ||
     pathname.startsWith("/sign-in") ||
     pathname.startsWith("/sign-up") ||
     pathname.startsWith("/blog") ||
@@ -110,6 +114,7 @@ function Router() {
 
   return (
     <Switch>
+      <Route path="/start" component={DirectSignup} />
       <Route path="/sign-in" component={Login} />
       <Route path="/sign-in/*" component={Login} />
       <Route path="/sign-up" component={Register} />
@@ -248,6 +253,7 @@ function App() {
       <TooltipProvider>
         <SiteAnalyticsTracker />
         <SignupAnalyticsTracker />
+        {isMetaMarketingPath(pathname) && <MarketingConsentBanner />}
         <Toaster />
         {!publicShell && !booted && <BootSequence onComplete={() => setBooted(true)} />}
         <div className={publicShell ? "min-h-screen" : "min-h-screen pb-6 eva-scanlines"}>

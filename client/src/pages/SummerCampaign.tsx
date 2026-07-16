@@ -1,8 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { Link, useRoute } from "wouter";
 import {
+  ArrowRight,
   BookOpen,
   CalendarCheck,
+  CheckCircle2,
   Compass,
   FileText,
   ListChecks,
@@ -13,7 +15,7 @@ import {
   Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { withRedirectUrl } from "@/lib/redirects";
 import { trackSiteEvent } from "@/lib/siteAnalytics";
 
@@ -70,12 +72,15 @@ const FEATURES = [
   [MessageSquareQuote, "Use milestones to keep the project moving"],
 ] as const;
 
+const STARTER_PROOF = [
+  "Create up to 3 research projects",
+  "Add 10 sources per project",
+  "Draft, cite, verify, and export",
+] as const;
+
 export default function SummerCampaign() {
   const [, inviteParams] = useRoute("/invite/:code");
-  const signupHref = useMemo(
-    () => withRedirectUrl("/sign-up", "/pricing?onboarding=1&source=summer"),
-    [],
-  );
+  const signupHref = useMemo(() => withRedirectUrl("/sign-up", "/dashboard"), []);
 
   useEffect(() => {
     const attribution = readAttribution(inviteParams?.code);
@@ -103,7 +108,7 @@ export default function SummerCampaign() {
   }, [inviteParams?.code]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-24 md:pb-0">
       <header className="border-b bg-background/95 sticky top-0 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/summer" className="flex items-center gap-3">
@@ -113,10 +118,10 @@ export default function SummerCampaign() {
             </span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link href="/blog" className="text-sm text-muted-foreground">
+            <Link href="/blog" className="hidden text-sm text-muted-foreground sm:inline">
               Blog
             </Link>
-            <Link href="/faq" className="text-sm text-muted-foreground">
+            <Link href="/faq" className="hidden text-sm text-muted-foreground sm:inline">
               FAQ
             </Link>
             <Button variant="ghost" size="sm" asChild>
@@ -131,78 +136,94 @@ export default function SummerCampaign() {
           </div>
         </div>
       </header>
-      <main className="container mx-auto max-w-7xl space-y-20 px-4 py-8 md:py-12">
-        <section className="grid items-center gap-10 xl:grid-cols-[minmax(0,0.82fr)_minmax(560px,1.18fr)] xl:gap-12">
-          <div className="space-y-6">
+      <main className="container mx-auto max-w-7xl space-y-16 px-4 py-6 max-[340px]:py-4 md:space-y-20 md:py-12">
+        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)] lg:gap-12">
+          <div className="min-w-0 space-y-6 max-[340px]:space-y-3">
             <div className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground">
-              Summer thesis head start
+              For thesis, capstone &amp; long research papers
             </div>
-            <h1 className="max-w-2xl text-4xl font-bold leading-[1.04] tracking-tight sm:text-5xl xl:text-[3.6rem]">
-              Get ahead on your thesis, capstone, or big research paper
+            <h1 className="max-w-2xl text-4xl font-bold leading-[1.04] tracking-tight max-[340px]:text-[2rem] max-[340px]:leading-[1.08] sm:text-5xl xl:text-[3.6rem]">
+              Build your thesis without losing track of the sources
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl">
-              Plan, outline, revise, and strengthen long academic papers with source-grounded
-              writing support.
+              Upload your research once. ScholarMark helps you find evidence, keep quote context
+              attached, and move from question to draft in one workspace.
             </p>
+            <div className="space-y-2">
+              <Button
+                size="lg"
+                className="h-12 w-full px-6 text-sm uppercase tracking-[0.08em] sm:w-auto"
+                asChild
+              >
+                <a
+                  href={signupHref}
+                  target="_top"
+                  data-testid="summer-start-now-above-fold"
+                  onClick={() =>
+                    trackSiteEvent("primary_cta_click", {
+                      ctaOrFeature: "hero_above_fold_create_free_account",
+                    })
+                  }
+                >
+                  Create your free account
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+              <p className="text-xs font-medium text-muted-foreground">
+                Free Starter plan. No credit card required.
+              </p>
+            </div>
             <div className="flex items-start gap-3 text-sm text-muted-foreground">
               <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
               ScholarMark supports your planning and revision. You remain the author.
             </div>
-
-            <Card id="start" className="max-w-xl border-primary/20 bg-card/80 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-xl">Build your paper with a clear plan</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Create an account to open your writing dashboard and start working.
-                </p>
-                <Button size="lg" className="h-12 w-full uppercase tracking-[0.08em]" asChild>
-                  <a
-                    href={signupHref}
-                    target="_top"
-                    data-testid="summer-start-now"
-                    onClick={() =>
-                      trackSiteEvent("primary_cta_click", { ctaOrFeature: "hero_start_now" })
-                    }
-                  >
-                    Start now
-                  </a>
-                </Button>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  By continuing, you agree to our{" "}
-                  <Link href="/terms" className="underline underline-offset-2">
-                    Terms
-                  </Link>{" "}
-                  and acknowledge our{" "}
-                  <Link href="/privacy" className="underline underline-offset-2">
-                    Privacy Policy
-                  </Link>
-                  .
-                </p>
-              </CardContent>
-            </Card>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {STARTER_PROOF.map((item) => (
+                <div
+                  key={item}
+                  className="flex items-start gap-2 rounded-lg border border-border/70 bg-card/60 px-3 py-2 text-xs text-muted-foreground"
+                >
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              By continuing, you agree to our{" "}
+              <Link href="/terms" className="underline underline-offset-2">
+                Terms
+              </Link>{" "}
+              and acknowledge our{" "}
+              <Link href="/privacy" className="underline underline-offset-2">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </div>
 
-          <figure className="min-w-0">
-            <div className="overflow-hidden rounded-[1.75rem] border border-border/80 bg-[#fdf8f1] shadow-[0_26px_80px_-54px_rgba(45,42,38,0.65)]">
-              <img
-                src="/campaign-assets/scholarmark-knowledge-to-outline.webp"
-                alt="Books, source notes, and research flowing through a phone into an organized academic outline"
-                width={1536}
-                height={1024}
-                loading="eager"
-                fetchPriority="high"
-                decoding="async"
-                className="block h-auto w-full"
-              />
+          <figure className="mx-auto w-full min-w-0 max-w-md">
+            <div className="rounded-[1.75rem] border border-border/80 bg-card/80 p-3 shadow-[0_26px_80px_-54px_rgba(45,42,38,0.65)] sm:p-4">
+              <div className="mb-3 flex items-center justify-between gap-3 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
+                <span>Real ScholarMark workspace</span>
+                <span className="rounded-full bg-primary/10 px-2 py-1 text-primary">
+                  Source context
+                </span>
+              </div>
+              <div className="mx-auto overflow-hidden rounded-[1.25rem] border border-border bg-background">
+                <img
+                  src="/campaign-assets/scholarmark-source-context-demo.webp"
+                  alt="ScholarMark source reader showing highlighted evidence, source search, and annotations"
+                  width={720}
+                  height={720}
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
+                  className="block h-auto w-full"
+                />
+              </div>
             </div>
-            <figcaption className="mt-3 flex items-center justify-center gap-3 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground sm:justify-end">
-              <span>Sources</span>
-              <span aria-hidden="true" className="h-px w-5 bg-primary/50" />
-              <span>Structure</span>
-              <span aria-hidden="true" className="h-px w-5 bg-primary/50" />
-              <span>Draft</span>
+            <figcaption className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
+              Find evidence → open the source → verify the context.
             </figcaption>
           </figure>
         </section>
@@ -270,6 +291,31 @@ export default function SummerCampaign() {
           <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
         </footer>
       </main>
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_32px_-24px_rgba(0,0,0,0.5)] backdrop-blur md:hidden">
+        <div className="mx-auto flex max-w-md items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold">Start free</div>
+            <div className="truncate text-[11px] text-muted-foreground">
+              No credit card required
+            </div>
+          </div>
+          <Button className="h-12 shrink-0" asChild>
+            <a
+              href={signupHref}
+              target="_top"
+              data-testid="summer-start-now-sticky"
+              onClick={() =>
+                trackSiteEvent("primary_cta_click", {
+                  ctaOrFeature: "sticky_mobile_create_free_account",
+                })
+              }
+            >
+              Create account
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </a>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

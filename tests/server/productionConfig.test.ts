@@ -56,6 +56,38 @@ describe("production config validation", () => {
     expect(errors).toEqual([]);
   });
 
+  it("requires a browser Pixel ID during a Meta-enabled production build", () => {
+    const errors = getProductionConfigErrors(
+      {
+        NODE_ENV: "production",
+        VITE_CLERK_PUBLISHABLE_KEY: "pk_live_example",
+        META_TRACKING_ENABLED: "true",
+        VITE_META_TRACKING_ENABLED: "true",
+      } as NodeJS.ProcessEnv,
+      { phase: "build" },
+    );
+
+    expect(errors).toContain(
+      "VITE_META_PIXEL_ID must be a numeric Meta Pixel ID when Meta tracking is enabled.",
+    );
+  });
+
+  it("rejects a browser-only Meta tracking rollout", () => {
+    const errors = getProductionConfigErrors(
+      {
+        NODE_ENV: "production",
+        VITE_CLERK_PUBLISHABLE_KEY: "pk_live_example",
+        VITE_META_TRACKING_ENABLED: "true",
+        VITE_META_PIXEL_ID: "1234567890",
+      } as NodeJS.ProcessEnv,
+      { phase: "build" },
+    );
+
+    expect(errors).toContain(
+      "VITE_META_TRACKING_ENABLED must be false unless META_TRACKING_ENABLED is true.",
+    );
+  });
+
   it("rejects the trimmed default JWT secret in production", () => {
     const errors = getProductionConfigErrors({
       NODE_ENV: "production",
@@ -149,6 +181,31 @@ describe("production config validation", () => {
       MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
       ANTHROPIC_API_KEY: "anthropic-key",
       OPENAI_API_KEY: "openai-key",
+      ...paidLaunchEnv,
+    } as NodeJS.ProcessEnv);
+
+    expect(errors).toEqual([]);
+  });
+
+  it("accepts a complete Meta tracking configuration", () => {
+    const errors = getProductionConfigErrors({
+      NODE_ENV: "production",
+      VITE_CLERK_PUBLISHABLE_KEY: "pk_live_example",
+      CLERK_SECRET_KEY: "sk_live_example",
+      JWT_SECRET: "a-very-long-production-secret-that-is-unique",
+      APP_BASE_URL: "https://app.scholarmark.ai",
+      ALLOWED_ORIGINS: "https://app.scholarmark.ai,https://mcp.scholarmark.ai",
+      CHROME_EXTENSION_IDS: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
+      ANTHROPIC_API_KEY: "anthropic-key",
+      OPENAI_API_KEY: "openai-key",
+      META_TRACKING_ENABLED: "true",
+      VITE_META_TRACKING_ENABLED: "true",
+      VITE_META_PIXEL_ID: "1234567890",
+      META_PIXEL_ID: "1234567890",
+      META_CONVERSIONS_API_TOKEN: "meta-token",
+      META_GRAPH_API_VERSION: "v25.0",
+      META_ALLOWED_EVENT_ORIGINS: "https://scholarmark.ai,https://app.scholarmark.ai",
       ...paidLaunchEnv,
     } as NodeJS.ProcessEnv);
 

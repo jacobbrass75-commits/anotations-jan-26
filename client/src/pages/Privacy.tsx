@@ -1,6 +1,8 @@
 import { BookOpen } from "lucide-react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { clearMarketingConsent } from "@/lib/metaTracking";
 
 const sections = [
   {
@@ -13,6 +15,7 @@ const sections = [
       "Chrome extension clip data when you choose to save selected text, including the selected text, surrounding context, page URL, page title, site name, author metadata, publication date metadata, selected category, and default project destination.",
       "Billing metadata such as customer IDs, subscription status, plan tier, payment status, and billing period dates. ScholarMark does not store full card numbers.",
       "Basic operational data needed to secure, debug, and improve the service, such as authentication state, API key identifiers, request timestamps, and error logs.",
+      "If you allow optional advertising measurement, ScholarMark and Meta may process campaign identifiers, page paths without query strings, device category, browser identifiers such as _fbp and _fbc, IP address, browser user agent, registration events, and hashed account identifiers. ScholarMark does not send research content to Meta.",
     ],
   },
   {
@@ -22,6 +25,7 @@ const sections = [
       "Campaign data is used to manage early access, measure which invite links and channels are working, follow up with interested students, and understand whether a lead becomes an active user.",
       "The Chrome extension sends page content to ScholarMark only after you intentionally connect your account and use the save action from the extension, context menu, or keyboard shortcut.",
       "ScholarMark does not sell personal information or extension-collected browsing content.",
+      "When you allow optional advertising measurement, ScholarMark uses those events to attribute registrations to ads, measure campaign performance, and help Meta optimize ad delivery. Declining does not change ScholarMark features.",
     ],
   },
   {
@@ -39,6 +43,7 @@ const sections = [
       "ScholarMark may use service providers for hosting, authentication, storage, analytics, payment, email, and AI-assisted research features. These providers are used to operate ScholarMark and are not permitted to use your data for unrelated purposes.",
       "Payment information is processed by Stripe, PayPal, or Venmo. ScholarMark stores billing metadata such as customer IDs, subscription status, plan tier, and payment status, but not full card numbers.",
       "Some AI, OCR, citation, drafting, and style-analysis features may send user-selected research content to AI/model providers such as OpenAI or Anthropic.",
+      "Meta provides optional advertising measurement through the Meta Pixel and Conversions API. Browser and server events share an event identifier to avoid duplicate counting, and server-side identifiers such as email are normalized and hashed before transmission.",
       "DeepSeek is disabled by default. If ScholarMark enables it after privacy review, the app will identify it clearly before use. DeepSeek states that it processes data in the People's Republic of China and may use inputs to improve its technology unless the applicable user exercises an available opt-out. Do not use that model for sensitive personal data.",
       "ScholarMark may keep backups, logs, and security records for a limited period after information is removed from the active app, unless a longer retention period is required for legal, billing, security, or abuse-prevention reasons.",
     ],
@@ -49,6 +54,7 @@ const sections = [
       "You can remove or edit many saved materials from within ScholarMark. For account deletion, billing records, or data requests that are not available in-app, contact support@scholarmark.ai.",
       "You can disconnect the Chrome extension by logging out from the extension popup. ScholarMark stores an extension-scoped API key locally and attempts to revoke it during logout.",
       "You can uninstall the Chrome extension at any time from Chrome settings.",
+      "You can allow or decline optional Meta advertising measurement when prompted. ScholarMark also honors Global Privacy Control where supported. Use the control below to clear your saved choice and choose again.",
     ],
   },
   {
@@ -96,7 +102,7 @@ export default function Privacy() {
             ScholarMark Privacy Policy
           </h1>
           <p className="text-sm text-muted-foreground">
-            Last updated July 11, 2026. This policy explains how ScholarMark handles data for the
+            Last updated July 16, 2026. This policy explains how ScholarMark handles data for the
             web app and Chrome extension.
           </p>
         </div>
@@ -117,6 +123,25 @@ export default function Privacy() {
                 </ul>
               </section>
             ))}
+            <section className="space-y-3 border-t border-border pt-6">
+              <h2 className="text-lg font-sans uppercase tracking-[0.12em] text-primary">
+                Advertising Privacy Choice
+              </h2>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Clear your saved choice, return to the public site, and choose Allow or No thanks
+                again. Essential first-party security and product analytics are not changed by this
+                control.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  clearMarketingConsent();
+                  window.location.assign("/");
+                }}
+              >
+                Change optional ad measurement choice
+              </Button>
+            </section>
           </CardContent>
         </Card>
       </main>

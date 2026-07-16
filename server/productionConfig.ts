@@ -50,9 +50,14 @@ export function getProductionConfigErrors(
   const clerkPublishableKey = env.VITE_CLERK_PUBLISHABLE_KEY || env.CLERK_PUBLISHABLE_KEY || "";
   const clerkSecretKey = env.CLERK_SECRET_KEY || "";
   const extensionCorsMode = env.EXTENSION_CORS_MODE?.trim() || "enabled";
+  const metaTrackingEnabled = env.META_TRACKING_ENABLED === "true";
 
   if (env.LOCAL_DEV_AUTH === "true" || env.VITE_LOCAL_DEV_AUTH === "true") {
     errors.push("LOCAL_DEV_AUTH and VITE_LOCAL_DEV_AUTH must be disabled in production.");
+  }
+
+  if (!metaTrackingEnabled && env.VITE_META_TRACKING_ENABLED === "true") {
+    errors.push("VITE_META_TRACKING_ENABLED must be false unless META_TRACKING_ENABLED is true.");
   }
 
   if (!allowTestClerkKeys && !clerkPublishableKey.startsWith("pk_live_")) {
@@ -60,7 +65,44 @@ export function getProductionConfigErrors(
   }
 
   if (phase === "build") {
+    if (metaTrackingEnabled && env.VITE_META_TRACKING_ENABLED !== "true") {
+      errors.push("VITE_META_TRACKING_ENABLED must be true when Meta tracking is enabled.");
+    }
+    if (metaTrackingEnabled && !/^\d+$/.test(env.VITE_META_PIXEL_ID?.trim() || "")) {
+      errors.push(
+        "VITE_META_PIXEL_ID must be a numeric Meta Pixel ID when Meta tracking is enabled.",
+      );
+    }
     return errors;
+  }
+
+  if (metaTrackingEnabled) {
+    const metaPixelId = (env.META_PIXEL_ID || env.VITE_META_PIXEL_ID || "").trim();
+    if (!/^\d+$/.test(metaPixelId)) {
+      errors.push("META_PIXEL_ID must be a numeric Meta Pixel ID when Meta tracking is enabled.");
+    }
+    if (!hasValue(env.META_CONVERSIONS_API_TOKEN)) {
+      errors.push("META_CONVERSIONS_API_TOKEN is required when Meta tracking is enabled.");
+    }
+    if (
+      hasValue(env.META_PIXEL_ID) &&
+      hasValue(env.VITE_META_PIXEL_ID) &&
+      env.META_PIXEL_ID!.trim() !== env.VITE_META_PIXEL_ID!.trim()
+    ) {
+      errors.push("META_PIXEL_ID and VITE_META_PIXEL_ID must match for event deduplication.");
+    }
+    const metaOrigins = splitCsv(env.META_ALLOWED_EVENT_ORIGINS);
+    if (metaOrigins.length === 0 || metaOrigins.some((origin) => !isHttpsUrl(origin))) {
+      errors.push(
+        "META_ALLOWED_EVENT_ORIGINS must list HTTPS origins when Meta tracking is enabled.",
+      );
+    }
+    if (
+      hasValue(env.META_GRAPH_API_VERSION) &&
+      !/^v\d+\.\d+$/.test(env.META_GRAPH_API_VERSION!.trim())
+    ) {
+      errors.push("META_GRAPH_API_VERSION must use a value such as v25.0.");
+    }
   }
 
   if (!allowTestClerkKeys && !clerkSecretKey.startsWith("sk_live_")) {
