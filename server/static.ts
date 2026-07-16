@@ -27,7 +27,7 @@ function setStaticHeaders(res: express.Response, filePath: string): void {
 export function servePublicStatic(app: Express) {
   const { distPath, indexPath } = staticPaths();
   app.use(express.static(distPath, { index: false, setHeaders: setStaticHeaders }));
-  app.get(["/", "/summer", "/invite", "/invite/:code"], (_req, res) => {
+  app.get(["/", "/start", "/summer", "/invite", "/invite/:code"], (_req, res) => {
     res.setHeader("Cache-Control", HTML_CACHE_CONTROL);
     res.sendFile(indexPath);
   });
@@ -38,10 +38,7 @@ export function serveStatic(app: Express) {
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
-    res.setHeader(
-      "Cache-Control",
-      HTML_CACHE_CONTROL,
-    );
+    res.setHeader("Cache-Control", HTML_CACHE_CONTROL);
     res.sendFile(indexPath);
   });
 }

@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { z } from "zod";
-import { requireAuth } from "./auth";
+import { optionalAuth, requireAuth } from "./auth";
 import { requireAdmin } from "./analyticsRoutes";
 import { sqlite } from "./db";
 import { createLogger } from "./logger";
+import { getUserById } from "./authStorage";
+import {
+  isMetaConversionsConfigured,
+  isRecentMetaRegistration,
+  sendMetaConversion,
+} from "./metaConversions";
 
 const logger = createLogger("siteAnalyticsRoutes");
 
@@ -39,6 +45,19 @@ const siteEventSchema = pageViewSchema.extend({
   deviceCategory: z.enum(["mobile", "tablet", "desktop", "unknown"]),
   viewportWidth: z.number().int().min(0).max(10_000).optional().nullable(),
   viewportHeight: z.number().int().min(0).max(10_000).optional().nullable(),
+  metaEventId: z
+    .string()
+    .min(8)
+    .max(100)
+    .regex(/^[a-zA-Z0-9_-]+$/)
+    .optional()
+    .nullable(),
+  marketingConsent: z.boolean().optional().default(false),
+  eventSourceUrl: z.string().url().max(1000).optional().nullable(),
+  fbp: z.string().max(500).optional().nullable(),
+  fbc: z.string().max(500).optional().nullable(),
+  value: z.number().min(0).max(1_000_000).optional().nullable(),
+  currency: z.string().length(3).optional().nullable(),
 });
 
 function referrerHost(value: string | null | undefined): string | null {
@@ -66,30 +85,91 @@ function epoch(value: unknown, fallback: number): number {
 }
 
 export function registerSiteAnalyticsRoutes(app: Express): void {
-  app.post("/api/site-analytics/event", (req: Request, res: Response) => {
-    const parsed = siteEventSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Invalid analytics event" });
+  const optionalRegistrationAuth = (req: Request, res: Response, next: NextFunction) => {
+    if (req.body?.eventName === "signup_completed") {
+      void optionalAuth(req, res, next);
+      return;
+    }
+    next();
+  };
 
-    try {
-      const event = parsed.data;
-      sqlite.prepare(`INSERT INTO site_events (
+  app.post(
+    "/api/site-analytics/event",
+    optionalRegistrationAuth,
+    async (req: Request, res: Response) => {
+      const parsed = siteEventSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid analytics event" });
+
+      try {
+        const event = parsed.data;
+        sqlite
+          .prepare(
+            `INSERT INTO site_events (
         id, event_name, visitor_id, session_id, path, referrer_host,
         utm_source, utm_medium, utm_campaign, utm_content, cta_or_feature,
         device_category, viewport_width, viewport_height, client_timestamp, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(
-          randomUUID(), event.eventName, event.visitorId, event.sessionId, event.path,
-          referrerHost(event.referrer), event.utmSource || null, event.utmMedium || null,
-          event.utmCampaign || null, event.utmContent || null, event.ctaOrFeature || null,
-          event.deviceCategory, event.viewportWidth ?? null, event.viewportHeight ?? null,
-          event.clientTimestamp ?? null, Date.now(),
-        );
-      return res.status(204).end();
-    } catch (error) {
-      logger.error({ err: error }, "Site-event ingestion failed");
-      return res.status(503).json({ message: "Analytics temporarily unavailable" });
-    }
-  });
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            randomUUID(),
+            event.eventName,
+            event.visitorId,
+            event.sessionId,
+            event.path,
+            referrerHost(event.referrer),
+            event.utmSource || null,
+            event.utmMedium || null,
+            event.utmCampaign || null,
+            event.utmContent || null,
+            event.ctaOrFeature || null,
+            event.deviceCategory,
+            event.viewportWidth ?? null,
+            event.viewportHeight ?? null,
+            event.clientTimestamp ?? null,
+            Date.now(),
+          );
+        let authoritativeRegistration = event.eventName !== "signup_completed";
+        if (event.eventName === "signup_completed") {
+          authoritativeRegistration = false;
+          if (req.user?.userId) {
+            const user = await getUserById(req.user.userId);
+            const createdAt = user?.createdAt?.getTime();
+            authoritativeRegistration = isRecentMetaRegistration(createdAt);
+          }
+        }
+
+        const shouldForwardToMeta =
+          event.marketingConsent &&
+          authoritativeRegistration &&
+          Boolean(event.metaEventId && event.eventSourceUrl) &&
+          !["internal_verification", "deployment_test"].includes(event.utmSource || "") &&
+          isMetaConversionsConfigured();
+
+        if (shouldForwardToMeta) {
+          void sendMetaConversion({
+            siteEventName: event.eventName,
+            eventId: event.metaEventId!,
+            eventTimeMs: event.clientTimestamp,
+            eventSourceUrl: event.eventSourceUrl!,
+            visitorId: event.visitorId,
+            email: req.user?.email,
+            clientIpAddress: req.ip || req.socket.remoteAddress,
+            clientUserAgent: req.get("user-agent"),
+            fbp: event.fbp,
+            fbc: event.fbc,
+            ctaOrFeature: event.ctaOrFeature,
+            value: event.value,
+            currency: event.currency,
+          });
+        }
+
+        return res.status(204).end();
+      } catch (error) {
+        logger.error({ err: error }, "Site-event ingestion failed");
+        return res.status(503).json({ message: "Analytics temporarily unavailable" });
+      }
+    },
+  );
 
   app.post("/api/site-analytics/page-view", (req: Request, res: Response) => {
     const parsed = pageViewSchema.safeParse(req.body);
@@ -98,14 +178,24 @@ export function registerSiteAnalyticsRoutes(app: Express): void {
     try {
       const view = parsed.data;
       sqlite
-        .prepare(`INSERT INTO site_page_views (
+        .prepare(
+          `INSERT INTO site_page_views (
           id, visitor_id, session_id, path, referrer, referrer_host,
           utm_source, utm_medium, utm_campaign, utm_content, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
         .run(
-          randomUUID(), view.visitorId, view.sessionId, view.path,
-          safeReferrer(view.referrer), referrerHost(view.referrer), view.utmSource || null,
-          view.utmMedium || null, view.utmCampaign || null, view.utmContent || null, Date.now(),
+          randomUUID(),
+          view.visitorId,
+          view.sessionId,
+          view.path,
+          safeReferrer(view.referrer),
+          referrerHost(view.referrer),
+          view.utmSource || null,
+          view.utmMedium || null,
+          view.utmCampaign || null,
+          view.utmContent || null,
+          Date.now(),
         );
       return res.status(204).end();
     } catch (error) {
@@ -114,57 +204,72 @@ export function registerSiteAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get(
-    "/api/admin/site-analytics",
-    requireAuth,
-    requireAdmin,
-    (req: Request, res: Response) => {
-      try {
-        res.setHeader("Cache-Control", "no-store");
-        const now = Date.now();
-        const from = epoch(req.query.from, now - 7 * 86_400_000);
-        const to = epoch(req.query.to, now);
-        if (from > to) return res.status(400).json({ message: "Invalid time range" });
+  app.get("/api/admin/site-analytics", requireAuth, requireAdmin, (req: Request, res: Response) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      const now = Date.now();
+      const from = epoch(req.query.from, now - 7 * 86_400_000);
+      const to = epoch(req.query.to, now);
+      if (from > to) return res.status(400).json({ message: "Invalid time range" });
 
-        const totals = sqlite.prepare(`SELECT COUNT(*) AS page_views,
+      const totals = sqlite
+        .prepare(
+          `SELECT COUNT(*) AS page_views,
           COUNT(DISTINCT visitor_id) AS unique_visitors,
           COUNT(DISTINCT session_id) AS sessions
-          FROM site_page_views WHERE created_at BETWEEN ? AND ?`).get(from, to);
-        const sources = sqlite.prepare(`SELECT
+          FROM site_page_views WHERE created_at BETWEEN ? AND ?`,
+        )
+        .get(from, to);
+      const sources = sqlite
+        .prepare(
+          `SELECT
           COALESCE(NULLIF(utm_source, ''), NULLIF(referrer_host, ''), 'direct') AS source,
           COUNT(*) AS page_views, COUNT(DISTINCT visitor_id) AS unique_visitors
           FROM site_page_views WHERE created_at BETWEEN ? AND ?
-          GROUP BY source ORDER BY page_views DESC LIMIT 20`).all(from, to);
-        const pages = sqlite.prepare(`SELECT path, COUNT(*) AS page_views,
+          GROUP BY source ORDER BY page_views DESC LIMIT 20`,
+        )
+        .all(from, to);
+      const pages = sqlite
+        .prepare(
+          `SELECT path, COUNT(*) AS page_views,
           COUNT(DISTINCT visitor_id) AS unique_visitors
           FROM site_page_views WHERE created_at BETWEEN ? AND ?
-          GROUP BY path ORDER BY page_views DESC LIMIT 20`).all(from, to);
-        const campaigns = sqlite.prepare(`SELECT utm_campaign AS campaign,
+          GROUP BY path ORDER BY page_views DESC LIMIT 20`,
+        )
+        .all(from, to);
+      const campaigns = sqlite
+        .prepare(
+          `SELECT utm_campaign AS campaign,
           COALESCE(utm_source, 'unknown') AS source, COUNT(*) AS page_views,
           COUNT(DISTINCT visitor_id) AS unique_visitors
           FROM site_page_views WHERE created_at BETWEEN ? AND ? AND utm_campaign IS NOT NULL
-          GROUP BY utm_campaign, utm_source ORDER BY page_views DESC LIMIT 20`).all(from, to);
+          GROUP BY utm_campaign, utm_source ORDER BY page_views DESC LIMIT 20`,
+        )
+        .all(from, to);
 
-        const funnelRows = sqlite.prepare(`SELECT event_name, COUNT(*) AS event_count,
+      const funnelRows = sqlite
+        .prepare(
+          `SELECT event_name, COUNT(*) AS event_count,
           COUNT(DISTINCT visitor_id) AS unique_visitors
           FROM site_events WHERE created_at BETWEEN ? AND ?
-          GROUP BY event_name`).all(from, to) as Array<{
-            event_name: string;
-            event_count: number;
-            unique_visitors: number;
-          }>;
-        const funnelMap = new Map(funnelRows.map((row) => [row.event_name, row]));
-        const funnel = FUNNEL_EVENTS.map((eventName) => ({
-          eventName,
-          eventCount: funnelMap.get(eventName)?.event_count ?? 0,
-          uniqueVisitors: funnelMap.get(eventName)?.unique_visitors ?? 0,
-        }));
+          GROUP BY event_name`,
+        )
+        .all(from, to) as Array<{
+        event_name: string;
+        event_count: number;
+        unique_visitors: number;
+      }>;
+      const funnelMap = new Map(funnelRows.map((row) => [row.event_name, row]));
+      const funnel = FUNNEL_EVENTS.map((eventName) => ({
+        eventName,
+        eventCount: funnelMap.get(eventName)?.event_count ?? 0,
+        uniqueVisitors: funnelMap.get(eventName)?.unique_visitors ?? 0,
+      }));
 
-        return res.json({ period: { from, to }, totals, sources, pages, campaigns, funnel });
-      } catch (error) {
-        logger.error({ err: error }, "Site analytics query failed");
-        return res.status(500).json({ message: "Failed to fetch site analytics" });
-      }
-    },
-  );
+      return res.json({ period: { from, to }, totals, sources, pages, campaigns, funnel });
+    } catch (error) {
+      logger.error({ err: error }, "Site analytics query failed");
+      return res.status(500).json({ message: "Failed to fetch site analytics" });
+    }
+  });
 }

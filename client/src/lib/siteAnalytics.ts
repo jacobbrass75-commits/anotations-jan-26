@@ -1,3 +1,9 @@
+import {
+  getMarketingConsent,
+  getMetaBrowserIdentifiers,
+  trackMetaPixelEvent,
+} from "@/lib/metaTracking";
+
 export type SiteEventName =
   | "landing_view"
   | "engaged_10_seconds"
@@ -10,8 +16,10 @@ export type SiteEventName =
   | "purchase_completed"
   | "first_project_created";
 
-interface SiteEventOptions {
+export interface SiteEventOptions {
   ctaOrFeature?: string;
+  value?: number;
+  currency?: string;
 }
 
 const ATTRIBUTION_KEY = "scholarmark_site_attribution";
@@ -87,8 +95,15 @@ export function trackSiteEvent(eventName: SiteEventName, options: SiteEventOptio
   if (import.meta.env.DEV || typeof window === "undefined") return;
 
   try {
+    const metaEventId = newId();
+    const marketingConsent = getMarketingConsent() === "granted";
+    const metaIdentifiers = getMetaBrowserIdentifiers();
+    trackMetaPixelEvent(eventName, metaEventId, options);
+
     const body = JSON.stringify({
       eventName,
+      metaEventId,
+      marketingConsent,
       visitorId: storedId(localStorage, "scholarmark_visitor_id"),
       sessionId: storedId(sessionStorage, "scholarmark_session_id"),
       path: window.location.pathname.slice(0, 500),
@@ -98,6 +113,11 @@ export function trackSiteEvent(eventName: SiteEventName, options: SiteEventOptio
       deviceCategory: deviceCategory(),
       viewportWidth: approximate(window.innerWidth),
       viewportHeight: approximate(window.innerHeight),
+      eventSourceUrl: `${window.location.origin}${window.location.pathname}`.slice(0, 1000),
+      fbp: metaIdentifiers.fbp,
+      fbc: metaIdentifiers.fbc,
+      value: options.value,
+      currency: options.currency,
     });
     void fetch("/api/site-analytics/event", {
       method: "POST",

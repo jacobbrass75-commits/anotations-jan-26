@@ -85,7 +85,12 @@ export function SiteAnalyticsTracker() {
   useEffect(() => {
     if (import.meta.env.DEV || pathname.startsWith("/admin/")) return;
 
-    if (pathname === "/" || pathname.startsWith("/summer") || pathname.startsWith("/invite")) {
+    if (
+      pathname === "/" ||
+      pathname === "/start" ||
+      pathname.startsWith("/summer") ||
+      pathname.startsWith("/invite")
+    ) {
       trackSiteEvent("landing_view");
     } else if (pathname === "/pricing") {
       trackSiteEvent("pricing_view");

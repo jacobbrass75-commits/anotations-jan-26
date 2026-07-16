@@ -19,6 +19,9 @@ npm run extension:package
 - Confirm `CHROME_EXTENSION_IDS` is set after the Chrome extension is published. Until then, set `EXTENSION_CORS_MODE=disabled` so extension origins are denied explicitly.
 - Confirm the backup timer is active or run `deploy/backup-data.sh` manually.
 - Confirm the rollback target is known.
+- If Meta tracking is enabled, confirm the Pixel ID, Conversions API token, allowed origins, and
+  consent banner in production. Use `META_TEST_EVENT_CODE` only while validating Events Manager,
+  then remove it.
 
 ## Deploy
 

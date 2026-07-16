@@ -64,7 +64,7 @@ async function runAppSmoke() {
     "root did not return HTML",
   );
   assert(root.text.includes('<div id="root">'), "root HTML is missing React mount point");
-  assert(root.text.includes("Get ahead on your thesis"), "root HTML is missing resilient content");
+  assert(root.text.includes("Build your thesis"), "root HTML is missing resilient content");
 
   const staticFallback = await expectStatus("app static fallback", "/pricing", 200);
   assert(
@@ -73,12 +73,9 @@ async function runAppSmoke() {
   );
 
   if (!skipStaticRouteSmoke) {
-    for (const path of ["/summer", "/sign-in", "/sign-up", "/summer/onboarding"]) {
+    for (const path of ["/start", "/summer", "/sign-in", "/sign-up", "/summer/onboarding"]) {
       const page = await expectStatus(`app static fallback ${path}`, path, 200);
-      assert(
-        page.text.includes('<div id="root">'),
-        `${path} is missing React mount point`,
-      );
+      assert(page.text.includes('<div id="root">'), `${path} is missing React mount point`);
     }
   } else {
     console.log("[smoke] static route fallback checks skipped");
@@ -92,10 +89,7 @@ async function runAppSmoke() {
     "/api/write/test-models",
     401,
   );
-  assert(
-    protectedModelList.json?.message,
-    "writing model tests did not return a JSON auth error",
-  );
+  assert(protectedModelList.json?.message, "writing model tests did not return a JSON auth error");
 
   const invalidCampaignSignup = await expectStatus(
     "campaign signup validation",
