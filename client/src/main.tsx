@@ -4,13 +4,41 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/source-serif-4";
 import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
+import {
+  buildStaleAssetRecoveryUrl,
+  getStaleAssetRecoveryStorageKey,
+  STALE_ASSET_STABILITY_MS,
+  stripStaleAssetRecoveryParam,
+} from "@/lib/assetRecovery";
+import { isFastMarketingEntry } from "@/lib/marketingEntry";
 
-// A cached HTML document can reference a code-split chunk removed by a newer
-// deployment. Embedded social browsers are especially aggressive about that
-// cache. Let Vite recover by requesting the current entry document.
+function requestStaleAssetRecovery(): boolean {
+  const recoveryWindow = window as typeof window & {
+    __scholarmarkRecoverStaleAssets?: () => boolean;
+  };
+  if (recoveryWindow.__scholarmarkRecoverStaleAssets) {
+    return recoveryWindow.__scholarmarkRecoverStaleAssets();
+  }
+
+  const storageKey = getStaleAssetRecoveryStorageKey(window.location.pathname);
+  try {
+    if (window.sessionStorage.getItem(storageKey) === "1") return false;
+    window.sessionStorage.setItem(storageKey, "1");
+  } catch {
+    // The URL marker still prevents a loop when storage is unavailable.
+  }
+  const recoveryUrl = buildStaleAssetRecoveryUrl(window.location.href);
+  if (!recoveryUrl) return false;
+  window.location.replace(recoveryUrl);
+  return true;
+}
+
+// A stale cached document can reference a removed code-split chunk. Recover
+// once with a cache-busting document request; the inline bootstrap in
+// index.html handles the same failure when even this entry bundle is stale.
 window.addEventListener("vite:preloadError", (event) => {
   event.preventDefault();
-  window.location.reload();
+  requestStaleAssetRecovery();
 });
 
 const LOCAL_DEV_AUTH = import.meta.env.VITE_LOCAL_DEV_AUTH === "true";
@@ -21,18 +49,8 @@ if (!LOCAL_DEV_AUTH && !PUBLISHABLE_KEY) {
 
 const root = createRoot(document.getElementById("root")!);
 
-const MARKETING_HOSTS = new Set(["scholarmark.ai", "www.scholarmark.ai"]);
-const FAST_MARKETING_PATHS = ["/", "/summer", "/invite"];
-
-function isFastMarketingEntry(): boolean {
-  if (!MARKETING_HOSTS.has(window.location.hostname.toLowerCase())) return false;
-  return FAST_MARKETING_PATHS.some(
-    (path) => window.location.pathname === path || window.location.pathname.startsWith(`${path}/`),
-  );
-}
-
 async function renderApp() {
-  if (isFastMarketingEntry()) {
+  if (isFastMarketingEntry(window.location.hostname, window.location.pathname)) {
     const [{ default: SummerCampaign }, { SiteAnalyticsTracker }] = await Promise.all([
       import("./pages/SummerCampaign"),
       import("./components/SiteAnalyticsTracker"),
@@ -66,4 +84,18 @@ async function renderApp() {
   );
 }
 
-void renderApp();
+void renderApp().then(() => {
+  window.setTimeout(() => {
+    try {
+      window.sessionStorage.removeItem(getStaleAssetRecoveryStorageKey(window.location.pathname));
+    } catch {
+      // Storage can be unavailable in privacy-restricted webviews.
+    }
+    const cleanUrl = stripStaleAssetRecoveryParam(window.location.href);
+    if (
+      cleanUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`
+    ) {
+      window.history.replaceState(window.history.state, "", cleanUrl);
+    }
+  }, STALE_ASSET_STABILITY_MS);
+});
