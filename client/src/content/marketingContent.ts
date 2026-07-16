@@ -32,6 +32,354 @@ const asset = (name: string) => `/campaign-assets/${name}`;
 
 export const blogArticles: BlogArticle[] = [
   {
+    slug: "writing-v3-quote-integrity-benchmark",
+    title: "Writing V3 Benchmark: 99.2% Quote Integrity Across Five AI Readers",
+    seoTitle: "Writing V3 Benchmark: 99.2% Quote Integrity",
+    metaDescription:
+      "See how ScholarMark tested exact quote retrieval across 224-page research cases, five frozen AI readers, and an equal 8K context budget.",
+    excerpt:
+      "Under the same 8K memory budget, ScholarMark's updated context harness averaged 99.2% quote integrity across five frozen AI readers.",
+    category: "Research & Benchmarks",
+    targetKeyword: "AI quote retrieval benchmark",
+    audience:
+      "Students, researchers, educators, and AI builders interested in source-grounded long-form writing.",
+    readMinutes: 7,
+    visual: asset("writing-v3-quote-benchmark.svg"),
+    visualAlt:
+      "Bar chart showing 99.2 percent quote integrity for Writing V3 compared with 55.8 percent for raw context",
+    ctaText: "Build a writing workflow that keeps the evidence visible.",
+    ctaUrl: "/summer",
+    academicIntegrityNote:
+      "These are internal development-benchmark results, not a guarantee that every generated sentence or citation will be correct. Students must still inspect original sources and verify final quotes, citations, paraphrases, and claims.",
+    body: `
+A long context window can hold a lot of text and still lose the exact quotation a writer needs.
+
+That is the problem ScholarMark's Writing V3 development work set out to test. Instead of asking which AI model sounds most impressive, we froze the reader and changed only the context supplied to it. The question was simple: **when a long research project gets crowded, does the system still deliver the exact quote, the correct source, and the correct page?**
+
+In ScholarMark's July 2026 long-form quote benchmark, the updated context harness averaged **99.2% quote integrity** across five frozen reader targets under the same 8K policy-memory budget. Raw context averaged 55.8%. The former harness averaged 55.3%.
+
+## What the benchmark tested
+
+The suite used eight deterministic synthetic research cases. Each case contained four 56-page documents: **224 pages and roughly 35,000 words per case**.
+
+The cases were designed around failure modes that matter in real academic writing:
+
+- A quotation buried late in a long document.
+- A near-duplicate passage that should not be mistaken for the target.
+- A quotation approved early in a long conversation.
+- A later instruction that supersedes an earlier choice.
+- A claim requiring evidence from two sources.
+- A request for a quotation that was never supplied.
+- Two editions that require correct source and page binding.
+- An exact quotation written in Spanish.
+
+Synthetic documents were useful here because a model could not answer from memorized training data. It had to work from the context packet it received.
+
+## Three context policies, one budget
+
+Every within-model comparison used the same reader instructions, settings, case order, and answer contract. Only the memory policy changed.
+
+**Raw context** kept the beginning of the unprocessed conversation and source collection that fit inside the limit.
+
+**The former harness** summarized older conversation, kept the latest six exchanges, ranked whole documents, and then took pages in document order.
+
+**The updated harness** resolved current decisions, removed superseded choices, brought back relevant older exchanges, ranked individual pages, pinned quote-bearing pages whole, and kept quote text attached to source and locator.
+
+That distinction matters. A summary can preserve the idea of a quote while deleting the wording or page needed to cite it. A raw context dump can preserve everything in theory while crowding the important page out of the usable window.
+
+## The result across five readers
+
+The equal-budget updated scores were:
+
+- Gemini 3.1 Pro: 1.0000
+- Claude Opus 4.8: 1.0000
+- Claude Opus 4.6: 1.0000
+- DeepSeek V4 Pro: 0.9792
+- OpenAI GPT-5.6 Sol through OpenRouter: 0.9792
+
+Across 40 paired model-case comparisons against raw context, the updated harness recorded **30 wins, 10 ties, and no losses**. The same win, tie, and loss count held against the former harness.
+
+The updated equal-8K packets also used about **84% fewer input tokens** than the corresponding complete full-context packets. In this suite, the smaller packet was not merely cheaper. It was substantially more reliable.
+
+## Why less context can produce better results
+
+The finding is not that context is bad. The finding is that context needs structure.
+
+A useful long-form writing packet should answer four questions:
+
+1. What is the writer asking for now?
+2. Which earlier decisions are still active?
+3. Which exact source pages are relevant to this turn?
+4. Can every quotation stay attached to its source and locator?
+
+When those jobs are handled explicitly, the reader does not need to search an indiscriminate wall of text while also trying to write.
+
+## What this result does and does not prove
+
+This was an internal, deterministic synthetic benchmark with eight cases. All 120 equal-budget rows completed. One of 240 total authoritative rows—an unconstrained raw DeepSeek response—remained unparsable after retries, but that did not affect the complete equal-budget comparison.
+
+The result supports a narrow claim: on this frozen suite, the updated memory policy preserved exact quotes and provenance much better than raw or former context under the same budget.
+
+It does **not** prove that ScholarMark is the world's best memory system, that every model output is correct, or that a synthetic suite replaces testing on held-out real PDFs. Those are the next standards to meet.
+
+For students, the practical lesson is already clear: a serious writing tool should do more than accept a large upload. It should help the right evidence arrive at the right moment—and make that evidence easy to verify.
+`,
+    faq: [
+      {
+        question: "What does 99.2% quote integrity mean?",
+        answer:
+          "It is the mean score across the applicable exact-quote, source/page attribution, grounded-citation, forbidden-alternative, abstention, and decision-retention checks in eight synthetic cases across five frozen reader targets.",
+      },
+      {
+        question: "Was the benchmark comparing AI models?",
+        answer:
+          "No. The primary comparison was within each model. Reader instructions and settings stayed fixed while the context policy changed.",
+      },
+      {
+        question: "Why use an equal 8K budget?",
+        answer:
+          "Giving every policy the same memory ceiling separates context-policy quality from the advantage of simply sending more text.",
+      },
+      {
+        question: "Does this eliminate hallucinated quotations?",
+        answer:
+          "No. It shows a strong result on a controlled internal suite. Final quotations and citations still require verification against the original source.",
+      },
+    ],
+  },
+  {
+    slug: "context-rot-long-research-projects",
+    title: "What Context Rot Looks Like in a Long Research Project",
+    seoTitle: "Context Rot in Long Research Projects",
+    metaDescription:
+      "Learn how AI writing systems lose decisions, quotations, provenance, and updates—and what ScholarMark measured under an equal context budget.",
+    excerpt:
+      "Long projects fail when the system remembers plenty of text but forgets which decisions are current, which quote is exact, or when it should abstain.",
+    category: "Research & Benchmarks",
+    targetKeyword: "AI context rot",
+    audience:
+      "Students and educators using AI across theses, capstones, literature reviews, and other multi-session writing projects.",
+    readMinutes: 7,
+    visual: asset("writing-v3-context-integrity.svg"),
+    visualAlt:
+      "Horizontal bar chart showing a 96.4 percent context-integrity score for the ScholarMark composite policy under an equal 4K budget",
+    ctaText: "Keep decisions and evidence organized across a long paper.",
+    ctaUrl: "/summer",
+    academicIntegrityNote:
+      "Memory architecture can reduce context failures, but it cannot replace source review or student judgment. Always check the original passage, citation data, and assignment policy before submission.",
+    body: `
+Context rot is not simply "the AI forgot something."
+
+In a long research project, the system can remember a large amount of text and still preserve the wrong things. It may keep an abandoned thesis alive. It may blend an old instruction with a newer one. It may remember the idea of a quotation but lose its exact wording or page. It may answer confidently when the requested evidence was never supplied.
+
+Those are different failures, and they need to be measured separately.
+
+## Four kinds of context integrity
+
+ScholarMark's context-integrity benchmark separates four jobs:
+
+1. **Evidence integrity:** exact quote text, source identity, and locator stay bound together.
+2. **Conversation integrity:** thesis, scope, exclusions, tone, and section decisions survive compaction.
+3. **Update integrity:** a new instruction replaces an old instruction instead of being blended with it.
+4. **Epistemic integrity:** the system abstains when the requested fact or quote is absent.
+
+A generic "needle in a haystack" test does not fully capture these problems. Finding a sentence is not enough if the system attaches it to the wrong source, follows an outdated decision, or invents support for a claim.
+
+## The equal-budget stress test
+
+In a separate July 2026 development run, ScholarMark tested four memory policies on the same eight generated stress cases using the same frozen reader model. Every policy received an estimated 4K policy-memory cap.
+
+The observed context-integrity scores were:
+
+- Recent six exchanges: 0.3003
+- Full history: 0.5923
+- Summary plus recent exchanges: 0.6458
+- ScholarMark composite policy: **0.9643**
+
+The composite policy had no per-case loss to any equal-budget baseline. In the paired analysis, it recorded four wins and four ties against full history; seven wins and one tie against recent-six; and three wins and five ties against summary-plus-recent.
+
+## What the composite remembered
+
+Under the equal budget, the ScholarMark policy achieved perfect observed scores for:
+
+- Decision recall.
+- Update accuracy.
+- Exact-quote recall.
+- Source attribution F1.
+- Grounded-citation precision.
+- Retrieval recall.
+- Abstention accuracy.
+
+Fact recall was 0.8667. The official overall score remained 0.9643 even though the only nominal miss involved conservative exact-substring grading of semantically retained formatting constraints.
+
+The equal-budget packet used 38,572 reader input tokens across the run, compared with 71,288 in its unconstrained condition—a **45.9% reduction**.
+
+## Why full history is not automatically safe
+
+Full history sounds like the least lossy option. Under an unlimited budget it performed strongly, scoring 0.9286. But when every policy had to fit the same smaller window, raw full history fell to 0.5923.
+
+The problem is competition. Old turns, stale decisions, synthetic retrieval messages, source text, and current instructions all compete for space and attention. Keeping everything in chronological order does not tell the reader what matters now.
+
+Recent-only memory has the opposite problem. It is compact, but it can erase an important approval, constraint, or source decision made earlier in the project.
+
+A rolling summary helps, but a summary can flatten provenance. It may preserve that "a useful quote was found" while losing the exact wording, source ID, and page locator required for safe use.
+
+## A better mental model: active memory and cold evidence
+
+Writing V3 treats the active prompt as deliberately selective while keeping the original evidence archive recoverable.
+
+Current requests and current decisions stay active. Relevant older exchanges can return. Quote-bearing pages remain whole. Stale synthetic retrievals leave first. Removing evidence from the prompt does not delete it from the project; the source can be searched again when the question changes.
+
+This is closer to how a careful researcher works. Not every note sits on the desk at once, but the archive remains available.
+
+## The honest claim boundary
+
+This was a small custom suite, not an independent external benchmark. The marginal confidence intervals overlap, even though the paired intervals on the same cases favored the composite policy. An external LongMemEval-style confirmation and a larger held-out set are still needed.
+
+So the responsible conclusion is narrow: under this generated equal-budget stress test, structured memory preserved the tested writing context much better than raw history, recent-only memory, or a conventional summary-plus-recent baseline.
+
+That is not the end of context rot. It is a measurable way to design against it.
+`,
+    faq: [
+      {
+        question: "What is context rot?",
+        answer:
+          "Context rot is the gradual loss or distortion of useful information as an AI-assisted project grows. It can affect facts, current decisions, exact quotes, attribution, updates, and the ability to abstain.",
+      },
+      {
+        question: "Is full conversation history always better?",
+        answer:
+          "No. Full history can work well with a large enough window, but under a constrained budget stale and low-value material can crowd out current instructions and relevant evidence.",
+      },
+      {
+        question: "Why not just summarize old messages?",
+        answer:
+          "Summaries help with size but can erase exact wording, source identity, page locators, and the distinction between current and superseded decisions.",
+      },
+      {
+        question: "Was this an external benchmark?",
+        answer:
+          "No. It was an internal eight-case generated stress suite. The result is promising but should be confirmed on larger held-out and external benchmarks.",
+      },
+    ],
+  },
+  {
+    slug: "writing-v3-living-evidence-packet",
+    title: "How a Living Evidence Packet Keeps Long-Form AI Writing Grounded",
+    seoTitle: "Writing V3's Living Evidence Packet",
+    metaDescription:
+      "See how ScholarMark's Writing V3 development architecture resolves current decisions, retrieves relevant pages, and protects quote provenance.",
+    excerpt:
+      "Writing V3 treats the context window as a changing evidence workspace—not permanent storage for every source, note, and conversation turn.",
+    category: "How ScholarMark Works",
+    targetKeyword: "source grounded AI writing system",
+    audience:
+      "Students, researchers, and technical readers who want to understand evidence-aware AI writing without the jargon.",
+    readMinutes: 6,
+    visual: asset("writing-v3-living-evidence.svg"),
+    visualAlt: "Resolve, retrieve, and bind diagram for the Writing V3 living evidence packet",
+    ctaText: "Start a source-grounded project with your own evidence.",
+    ctaUrl: "/summer",
+    academicIntegrityNote:
+      "A stronger evidence pipeline supports responsible writing; it does not transfer authorship or final responsibility to the software. Verify every final quotation, citation, paraphrase, and claim.",
+    body: `
+The easiest way to build a long-form AI writing system is to keep adding material to the prompt.
+
+Upload the sources. Add the annotations. Add the conversation. Add a summary of the old conversation. Add every useful quote. Add the latest draft.
+
+Eventually, the context window becomes a storage closet. Everything is technically present, but the system has to sort through stale choices, repeated passages, old retrieval results, and current instructions at the same time it is supposed to reason and write.
+
+ScholarMark's Writing V3 development architecture uses a different model: **the context window is a living evidence workspace, not the permanent archive.**
+
+## Step 1: Resolve what is current
+
+Long projects change.
+
+The writer narrows the thesis. A source moves from background reading to evidence. A section changes tone. An approved quotation is replaced. A newer instruction explicitly reverses an older one.
+
+Writing V3 resolves those decisions before building the active prompt. Superseded choices leave. The current request stays pinned. Relevant older exchanges can be brought back when they matter to the present turn.
+
+This prevents a common failure where an AI system politely follows both the old and new instruction at once.
+
+## Step 2: Retrieve the right pages
+
+Document-level retrieval is often too coarse for long sources. A 300-page book may be relevant, but most of its pages are not relevant to the sentence being drafted.
+
+Writing V3 ranks evidence at the passage and page level. Stored annotations can improve ranking, but they do not act as a gate. Canonical text remains searchable even when a document has incomplete annotations or embeddings.
+
+For section-by-section writing, the system retrieves a fresh packet for the active section rather than reusing one broad paper-level packet. Easy questions can stay compact. Ambiguous searches can receive more evidence.
+
+Most importantly, pages carrying exact quotations are kept whole when possible. The quote does not survive by being compressed into a vague summary.
+
+## Step 3: Bind wording to provenance
+
+An exact quotation is not just a string.
+
+For academic use, it is a bundle:
+
+- The exact wording.
+- The source identity.
+- The page or location.
+- The surrounding context needed to interpret it.
+
+Writing V3 verifies returned passages against canonical document text and keeps that provenance attached. Style references may shape voice, but they cannot become evidence. Source text is treated as untrusted material, not as instructions to the model.
+
+After drafting or stitching sections together, the system audits long quotations again. Verified occurrences receive server-side provenance. An unverified quotation can be removed instead of being presented as safe. If the same wording appears in multiple sources and the correct origin is ambiguous, the ambiguity stays visible rather than being assigned arbitrarily.
+
+## Active context can shrink without deleting evidence
+
+Selective memory sounds risky if "removed from context" is confused with "deleted."
+
+They are not the same.
+
+Synthetic retrieval turns and stale low-value history can leave the active window while the canonical source archive stays intact. If a later question makes an old source relevant again, the system can search the original text and rebuild the packet.
+
+The active prompt is temporary. The evidence record is durable.
+
+## Why this architecture mattered in testing
+
+That resolve-retrieve-bind pattern is what the benchmark articles in this series evaluate.
+
+In the long-form quote suite, the updated harness averaged 99.2% quote integrity under an equal 8K memory budget across five frozen readers. In the separate context-integrity stress suite, the composite policy scored 0.9643 under an estimated 4K memory cap.
+
+Those are internal development results with clear limitations, but they support a practical design principle: **better writing does not begin by sending the model everything. It begins by constructing better context.**
+
+## What students should expect from source-grounded AI
+
+A source-grounded writing tool should make it easier to answer:
+
+- Where did this quotation come from?
+- Can I open the original passage?
+- Is this the current thesis or an old one?
+- Which evidence supports this section?
+- Did the system find support, or should it abstain?
+
+The tool can assist with those questions. The student still owns the argument, interpretation, source review, and final submission.
+`,
+    faq: [
+      {
+        question: "What is a living evidence packet?",
+        answer:
+          "It is a bounded, task-specific context packet rebuilt for the current turn or section. It includes active decisions and relevant verified evidence without permanently carrying every old message and source page.",
+      },
+      {
+        question: "Does removing context delete a source?",
+        answer:
+          "No. Material can leave the active prompt while the canonical source remains stored and searchable for later questions.",
+      },
+      {
+        question: "Are annotations required for retrieval?",
+        answer:
+          "In the V3 design, annotations can boost ranking but are not required gates. Canonical source text remains searchable.",
+      },
+      {
+        question: "What happens to an unverified quotation?",
+        answer:
+          "The V3 quote-audit design can remove a long quotation that cannot be verified against selected canonical sources rather than marking it as safe.",
+      },
+    ],
+  },
+  {
     slug: "summer-thesis-head-start",
     title: "Summer Thesis Head Start: Start Before Fall Gets Busy",
     seoTitle: "Summer Thesis Head Start: Start Before Fall Gets Busy",
@@ -41,7 +389,8 @@ export const blogArticles: BlogArticle[] = [
       "A practical eight-week start for students who want a research question, source plan, outline, and first draft feedback before the semester gets crowded.",
     category: "Summer Thesis Head Start",
     targetKeyword: "summer thesis planning",
-    audience: "Rising juniors and seniors starting theses, capstones, honors papers, or research seminars.",
+    audience:
+      "Rising juniors and seniors starting theses, capstones, honors papers, or research seminars.",
     readMinutes: 5,
     visual: asset("summer-thesis-social-square.png"),
     visualAlt: "ScholarMark Summer Thesis Head Start campaign graphic",
@@ -305,11 +654,11 @@ ScholarMark is built for this evidence-first workflow. It helps you collect sour
     seoTitle: "What Source-Grounded AI Writing Means For Students",
     metaDescription:
       "Source-grounded AI writing starts from your actual materials, not a blank chat. Learn how it supports safer academic drafting.",
-    excerpt:
-      "Do not ask AI to write from nowhere. Ask it to work from sources you can inspect.",
+    excerpt: "Do not ask AI to write from nowhere. Ask it to work from sources you can inspect.",
     category: "Source-Grounded Writing",
     targetKeyword: "source grounded AI writing",
-    audience: "Students, advisors, writing centers, and faculty looking for responsible AI writing support.",
+    audience:
+      "Students, advisors, writing centers, and faculty looking for responsible AI writing support.",
     readMinutes: 5,
     visual: asset("summer-thesis-source-grounded-ai.png"),
     visualAlt: "Source-grounded AI workflow visual",
@@ -390,7 +739,8 @@ That is why ScholarMark should be used as verification support, not as a magic g
       "Citation formatting makes a reference look right. Citation verification checks whether the source actually supports your claim.",
     category: "Citation Safety",
     targetKeyword: "citation verification AI",
-    audience: "Students writing research papers, theses, capstones, literature reviews, and writing samples.",
+    audience:
+      "Students writing research papers, theses, capstones, literature reviews, and writing samples.",
     readMinutes: 5,
     visual: asset("summer-thesis-citation-aware-story.png"),
     visualAlt: "Citation-aware story visual",

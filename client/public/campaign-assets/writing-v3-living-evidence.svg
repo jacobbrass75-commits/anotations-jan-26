@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">Writing V3 living evidence packet</title>
+  <desc id="desc">Writing V3 resolves current decisions, retrieves relevant pages, and binds exact quote text to its source and page locator.</desc>
+  <rect width="1200" height="675" fill="#fbfaf8"/>
+  <rect x="52" y="48" width="1096" height="579" rx="28" fill="#ffffff" stroke="#e5e1dc" stroke-width="2"/>
+  <text x="92" y="110" fill="#1d2433" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="3">A LIVING EVIDENCE PACKET</text>
+  <text x="92" y="166" fill="#171717" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="750">Resolve. Retrieve. Bind.</text>
+  <text x="92" y="204" fill="#69717d" font-family="Inter, Arial, sans-serif" font-size="20">The active prompt changes with the writing task; the canonical source archive remains intact.</text>
+
+  <line x1="176" y1="312" x2="1024" y2="312" stroke="#b7c0cc" stroke-width="4"/>
+  <circle cx="176" cy="312" r="16" fill="#3f88f7"/>
+  <circle cx="600" cy="312" r="16" fill="#3f88f7"/>
+  <circle cx="1024" cy="312" r="16" fill="#3f88f7"/>
+
+  <rect x="92" y="252" width="260" height="280" rx="22" fill="#f3f5f7"/>
+  <text x="124" y="292" fill="#276bd5" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="800" letter-spacing="2">01 · RESOLVE</text>
+  <text x="124" y="359" fill="#1d2433" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="750">Keep current decisions</text>
+  <text x="124" y="401" fill="#5c6672" font-family="Inter, Arial, sans-serif" font-size="18">Remove superseded choices.</text>
+  <text x="124" y="431" fill="#5c6672" font-family="Inter, Arial, sans-serif" font-size="18">Retain the active request.</text>
+  <text x="124" y="461" fill="#5c6672" font-family="Inter, Arial, sans-serif" font-size="18">Rehydrate relevant older turns.</text>
+
+  <rect x="470" y="252" width="260" height="280" rx="22" fill="#eaf3ff"/>
+  <text x="502" y="292" fill="#276bd5" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="800" letter-spacing="2">02 · RETRIEVE</text>
+  <text x="502" y="359" fill="#1d2433" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="750">Find the right pages</text>
+  <text x="502" y="401" fill="#5c6672" font-family="Inter, Arial, sans-serif" font-size="18">Rank individual pages.</text>
+  <text x="502" y="431" fill="#5c6672" font-family="Inter, Arial, sans-serif" font-size="18">Pin quote-bearing pages whole.</text>
+  <text x="502" y="461" fill="#5c6672" font-family="Inter, Arial, sans-serif" font-size="18">Refresh for every section.</text>
+
+  <rect x="848" y="252" width="260" height="280" rx="22" fill="#f8f0e8"/>
+  <text x="880" y="292" fill="#8d5a2b" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="800" letter-spacing="2">03 · BIND</text>
+  <text x="880" y="359" fill="#1d2433" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="750">Protect provenance</text>
+  <text x="880" y="401" fill="#6f655b" font-family="Inter, Arial, sans-serif" font-size="18">Keep quote, source, and page</text>
+  <text x="880" y="431" fill="#6f655b" font-family="Inter, Arial, sans-serif" font-size="18">attached. Audit after drafting.</text>
+  <text x="880" y="461" fill="#6f655b" font-family="Inter, Arial, sans-serif" font-size="18">If uncertain, stay uncertain.</text>
+
+  <text x="92" y="588" fill="#8a919b" font-family="Inter, Arial, sans-serif" font-size="14">Removing stale context does not delete evidence. The original source can be searched again when the question changes.</text>
+</svg>
