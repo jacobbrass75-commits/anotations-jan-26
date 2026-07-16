@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getClerkErrorCode, getClerkErrorMessage } from "@/lib/clerkErrors";
 import { activateClerkSession } from "@/lib/clerkSession";
+import { withAuthOperationTimeout } from "@/lib/authOperation";
 import {
   deriveEmbeddedSignUpStep,
   getRequiredProfileFields,
@@ -62,12 +63,15 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
       if (activatingSession.current) return true;
       activatingSession.current = true;
       try {
-        await activateClerkSession({
-          setActive,
-          sessionId: result.createdSessionId,
-          redirectUrl,
-          taskFallbackUrl: portalUrl,
-        });
+        await withAuthOperationTimeout(
+          activateClerkSession({
+            setActive,
+            sessionId: result.createdSessionId,
+            redirectUrl,
+            taskFallbackUrl: portalUrl,
+          }),
+          "Your account is ready, but opening the session took too long. Retry or use the secure signup page below.",
+        );
         return true;
       } catch (caught) {
         activatingSession.current = false;
@@ -90,7 +94,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
     if (await activateCompletedSignUp(result)) return;
     const nextStep = deriveEmbeddedSignUpStep(result);
     if (nextStep === "verification" && sendVerificationCode) {
-      await result.prepareEmailAddressVerification({ strategy: "email_code" });
+      await withAuthOperationTimeout(
+        result.prepareEmailAddressVerification({ strategy: "email_code" }),
+        "Sending the verification code took too long. Retry or use the secure signup page below.",
+      );
       setNotice("We sent a six-digit verification code to your email.");
     }
     setStep(nextStep);
@@ -112,7 +119,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const created = await signUp.create({ emailAddress: emailAddress.trim(), password });
+      const created = await withAuthOperationTimeout(
+        signUp.create({ emailAddress: emailAddress.trim(), password }),
+        "Secure signup took too long. Retry or use the secure signup page below.",
+      );
       setPassword("");
       await advanceSignUp(created, true);
     } catch (caught) {
@@ -150,11 +160,14 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const updated = await signUp.update({
-        ...(requiredProfileFields.includes("first_name") ? { firstName: firstName.trim() } : {}),
-        ...(requiredProfileFields.includes("last_name") ? { lastName: lastName.trim() } : {}),
-        ...(requiredProfileFields.includes("legal_accepted") ? { legalAccepted } : {}),
-      });
+      const updated = await withAuthOperationTimeout(
+        signUp.update({
+          ...(requiredProfileFields.includes("first_name") ? { firstName: firstName.trim() } : {}),
+          ...(requiredProfileFields.includes("last_name") ? { lastName: lastName.trim() } : {}),
+          ...(requiredProfileFields.includes("legal_accepted") ? { legalAccepted } : {}),
+        }),
+        "Saving your account details took too long. Retry or use the secure signup page below.",
+      );
       await advanceSignUp(updated, true);
     } catch (caught) {
       setError(getClerkErrorMessage(caught, "We couldn't save those details. Please try again."));
@@ -180,7 +193,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const verified = await signUp.attemptEmailAddressVerification({ code: normalizedCode });
+      const verified = await withAuthOperationTimeout(
+        signUp.attemptEmailAddressVerification({ code: normalizedCode }),
+        "Verifying the code took too long. Retry or use the secure signup page below.",
+      );
       setCode("");
       await advanceSignUp(verified, false);
     } catch (caught) {
@@ -199,7 +215,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
     }
     setIsSubmitting(true);
     try {
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      await withAuthOperationTimeout(
+        signUp.prepareEmailAddressVerification({ strategy: "email_code" }),
+        "Resending the code took too long. Retry or use the secure signup page below.",
+      );
       setNotice("A new six-digit code is on its way.");
     } catch (caught) {
       setError(getClerkErrorMessage(caught, "We couldn't resend the code yet. Please try again."));

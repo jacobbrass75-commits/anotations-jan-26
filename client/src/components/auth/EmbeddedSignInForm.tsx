@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getClerkErrorMessage } from "@/lib/clerkErrors";
 import { activateClerkSession } from "@/lib/clerkSession";
+import { withAuthOperationTimeout } from "@/lib/authOperation";
 import { findEmailCodeSecondFactor } from "@/lib/embeddedAuthFlow";
 import { buildClerkAccountPortalUrl, withRedirectUrl } from "@/lib/redirects";
 
@@ -59,12 +60,15 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
       activatingSession.current = true;
       setStep("complete");
       try {
-        await activateClerkSession({
-          setActive,
-          sessionId: result.createdSessionId,
-          redirectUrl,
-          taskFallbackUrl: portalUrl,
-        });
+        await withAuthOperationTimeout(
+          activateClerkSession({
+            setActive,
+            sessionId: result.createdSessionId,
+            redirectUrl,
+            taskFallbackUrl: portalUrl,
+          }),
+          "Sign-in completed, but opening the session took too long. Retry or use the secure sign-in page below.",
+        );
         return true;
       } catch (caught) {
         activatingSession.current = false;
@@ -84,10 +88,13 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
         );
         return false;
       }
-      await resource.prepareSecondFactor({
-        strategy: "email_code",
-        emailAddressId: factor.emailAddressId,
-      });
+      await withAuthOperationTimeout(
+        resource.prepareSecondFactor({
+          strategy: "email_code",
+          emailAddressId: factor.emailAddressId,
+        }),
+        "Sending the security code took too long. Retry or use the secure sign-in page below.",
+      );
       setSecondFactor(factor);
       setStep("second-factor");
       if (announce) setNotice(`We sent a six-digit code to ${factor.safeIdentifier}.`);
@@ -146,11 +153,14 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const result = await signIn.create({
-        identifier: emailAddress.trim(),
-        password,
-        strategy: "password",
-      });
+      const result = await withAuthOperationTimeout(
+        signIn.create({
+          identifier: emailAddress.trim(),
+          password,
+          strategy: "password",
+        }),
+        "Secure sign-in took too long. Retry or use the secure sign-in page below.",
+      );
       setPassword("");
       if (await activateCompletedSignIn(result)) return;
       if (result.status === "needs_second_factor") {
@@ -183,10 +193,13 @@ export function EmbeddedSignInForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const verified = await signIn.attemptSecondFactor({
-        strategy: "email_code",
-        code: normalizedCode,
-      });
+      const verified = await withAuthOperationTimeout(
+        signIn.attemptSecondFactor({
+          strategy: "email_code",
+          code: normalizedCode,
+        }),
+        "Verifying the security code took too long. Retry or use the secure sign-in page below.",
+      );
       setCode("");
       if (await activateCompletedSignIn(verified)) return;
       setError("The code was accepted, but sign-in needs another secure step.");

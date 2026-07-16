@@ -5,6 +5,7 @@ export const testFiles = [
   "tests/client/writingModels.test.ts",
   "tests/client/redirects.test.ts",
   "tests/client/assetRecovery.test.ts",
+  "tests/client/authOperation.test.ts",
   "tests/client/clerkErrors.test.ts",
   "tests/client/embeddedAuthFlow.test.ts",
   "tests/client/embeddedAuthMarkup.test.ts",
