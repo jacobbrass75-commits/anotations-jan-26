@@ -119,11 +119,15 @@ export default function SummerCampaign() {
             <Link href="/faq" className="text-sm text-muted-foreground">
               FAQ
             </Link>
-            <Link href={withRedirectUrl("/sign-in", "/dashboard")}>
-              <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" asChild>
+              <a
+                href={withRedirectUrl("/sign-in", "/dashboard")}
+                target="_top"
+                data-testid="summer-sign-in"
+              >
                 Sign in
-              </Button>
-            </Link>
+              </a>
+            </Button>
           </div>
         </div>
       </header>
@@ -154,12 +158,16 @@ export default function SummerCampaign() {
                   Create an account to open your writing dashboard and start working.
                 </p>
                 <Button size="lg" className="h-12 w-full uppercase tracking-[0.08em]" asChild>
-                  <Link
+                  <a
                     href={signupHref}
-                    onClick={() => trackSiteEvent("primary_cta_click", { ctaOrFeature: "hero_start_now" })}
+                    target="_top"
+                    data-testid="summer-start-now"
+                    onClick={() =>
+                      trackSiteEvent("primary_cta_click", { ctaOrFeature: "hero_start_now" })
+                    }
                   >
                     Start now
-                  </Link>
+                  </a>
                 </Button>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   By continuing, you agree to our{" "}
@@ -202,7 +210,9 @@ export default function SummerCampaign() {
           <div className="max-w-3xl space-y-4">
             <div className="flex items-center gap-2">
               <Mail className="h-5 w-5 text-primary" />
-              <h2 className="text-2xl font-semibold">Get personal help from ScholarMark’s founder</h2>
+              <h2 className="text-2xl font-semibold">
+                Get personal help from ScholarMark’s founder
+              </h2>
             </div>
             <p className="text-muted-foreground">
               Get personal help setting up ScholarMark for your research workflow. I’ll help you
@@ -213,7 +223,9 @@ export default function SummerCampaign() {
               <Button asChild>
                 <a
                   href={founderEmailHref}
-                  onClick={() => trackSiteEvent("primary_cta_click", { ctaOrFeature: "founder_email_landing" })}
+                  onClick={() =>
+                    trackSiteEvent("primary_cta_click", { ctaOrFeature: "founder_email_landing" })
+                  }
                 >
                   Email Jacob
                 </a>
@@ -221,7 +233,9 @@ export default function SummerCampaign() {
               <Button variant="outline" asChild>
                 <a
                   href={founderBookingHref}
-                  onClick={() => trackSiteEvent("primary_cta_click", { ctaOrFeature: "founder_setup_landing" })}
+                  onClick={() =>
+                    trackSiteEvent("primary_cta_click", { ctaOrFeature: "founder_setup_landing" })
+                  }
                 >
                   Book a 15-minute setup
                 </a>
