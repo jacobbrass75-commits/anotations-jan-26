@@ -4,13 +4,21 @@ import { testFiles } from "./test-files.mjs";
 
 const vitestEntrypoint = path.resolve("node_modules", "vitest", "vitest.mjs");
 const passthroughArgs = process.argv.slice(2);
+const platformArgs = process.platform === "win32" ? ["--hookTimeout=30000"] : [];
 
 for (const testFile of testFiles) {
   console.log(`\n[vitest] ${testFile}`);
 
   const result = spawnSync(
     process.execPath,
-    ["--max-old-space-size=8192", vitestEntrypoint, "run", testFile, ...passthroughArgs],
+    [
+      "--max-old-space-size=8192",
+      vitestEntrypoint,
+      "run",
+      testFile,
+      ...platformArgs,
+      ...passthroughArgs,
+    ],
     {
       stdio: "inherit",
       env: process.env,
