@@ -20,7 +20,6 @@ const ProjectWorkspace = lazy(() => import("@/pages/ProjectWorkspace"));
 const ProjectDocument = lazy(() => import("@/pages/ProjectDocument"));
 const Login = lazy(() => import("@/pages/Login"));
 const Register = lazy(() => import("@/pages/Register"));
-const DirectSignup = lazy(() => import("@/pages/DirectSignup"));
 const SsoCallback = lazy(() => import("@/pages/SsoCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
 const BlogIndex = lazy(() => import("@/pages/BlogIndex"));
@@ -114,7 +113,7 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/start" component={DirectSignup} />
+      <Route path="/start" component={SummerCampaign} />
       <Route path="/sign-in" component={Login} />
       <Route path="/sign-in/*" component={Login} />
       <Route path="/sign-up" component={Register} />
