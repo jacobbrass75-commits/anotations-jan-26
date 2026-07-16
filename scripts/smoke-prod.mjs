@@ -7,6 +7,7 @@ const skipApp = process.env.SKIP_APP_SMOKE === "1";
 const skipBilling = process.env.SKIP_BILLING_SMOKE === "1";
 const skipMcp = process.env.SKIP_MCP_SMOKE === "1";
 const skipStaticRouteSmoke = process.env.SKIP_STATIC_ROUTE_SMOKE === "1";
+const skipHtmlCachePolicy = process.env.SKIP_HTML_CACHE_POLICY_SMOKE === "1";
 const chromeExtensionId = (process.env.CHROME_EXTENSION_IDS || "")
   .split(",")
   .map((value) => value.trim())
@@ -65,6 +66,20 @@ async function runAppSmoke() {
   );
   assert(root.text.includes('<div id="root">'), "root HTML is missing React mount point");
   assert(root.text.includes("Get ahead on your thesis"), "root HTML is missing resilient content");
+  if (!skipHtmlCachePolicy) {
+    assert(
+      root.response.headers.get("cache-control")?.includes("no-store"),
+      "root HTML must not be cached across asset deployments",
+    );
+  }
+  assert(
+    root.text.includes("__scholarmarkRecoverStaleAssets"),
+    "root HTML is missing one-shot stale-asset recovery",
+  );
+  assert(
+    root.text.includes("accounts.scholarmark.ai"),
+    "root HTML is missing the embedded-auth hosted fallback",
+  );
 
   const staticFallback = await expectStatus("app static fallback", "/pricing", 200);
   assert(
@@ -76,6 +91,12 @@ async function runAppSmoke() {
     for (const path of ["/start", "/summer", "/sign-in", "/sign-up", "/summer/onboarding"]) {
       const page = await expectStatus(`app static fallback ${path}`, path, 200);
       assert(page.text.includes('<div id="root">'), `${path} is missing React mount point`);
+      if (!skipHtmlCachePolicy) {
+        assert(
+          page.response.headers.get("cache-control")?.includes("no-store"),
+          `${path} HTML must not be cached across asset deployments`,
+        );
+      }
     }
   } else {
     console.log("[smoke] static route fallback checks skipped");
