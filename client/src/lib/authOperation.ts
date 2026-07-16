@@ -1,25 +1,21 @@
-export const DEFAULT_AUTH_OPERATION_TIMEOUT_MS = 20_000;
+export const DEFAULT_AUTH_OPERATION_DELAY_MS = 20_000;
 
-export class AuthOperationTimeoutError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AuthOperationTimeoutError";
-  }
-}
-
-export async function withAuthOperationTimeout<T>(
+export async function withAuthOperationDelayNotice<T>(
   operation: Promise<T>,
-  timeoutMessage: string,
-  timeoutMs = DEFAULT_AUTH_OPERATION_TIMEOUT_MS,
+  delayMessage: string,
+  onDelayChange: (message: string | null) => void,
+  delayMs = DEFAULT_AUTH_OPERATION_DELAY_MS,
 ): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timeout = setTimeout(() => reject(new AuthOperationTimeoutError(timeoutMessage)), timeoutMs);
-  });
+  let delayWasAnnounced = false;
+  const delayNotice = setTimeout(() => {
+    delayWasAnnounced = true;
+    onDelayChange(delayMessage);
+  }, delayMs);
 
   try {
-    return await Promise.race([operation, timeoutPromise]);
+    return await operation;
   } finally {
-    if (timeout) clearTimeout(timeout);
+    clearTimeout(delayNotice);
+    if (delayWasAnnounced) onDelayChange(null);
   }
 }

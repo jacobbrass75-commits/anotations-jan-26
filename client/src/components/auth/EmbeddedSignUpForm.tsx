@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getClerkErrorCode, getClerkErrorMessage } from "@/lib/clerkErrors";
 import { activateClerkSession } from "@/lib/clerkSession";
-import { withAuthOperationTimeout } from "@/lib/authOperation";
+import { withAuthOperationDelayNotice } from "@/lib/authOperation";
 import {
   deriveEmbeddedSignUpStep,
   getRequiredProfileFields,
@@ -32,6 +32,7 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [delayMessage, setDelayMessage] = useState<string | null>(null);
   const activatingSession = useRef(false);
 
   const portalUrl = useMemo(
@@ -63,14 +64,15 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
       if (activatingSession.current) return true;
       activatingSession.current = true;
       try {
-        await withAuthOperationTimeout(
+        await withAuthOperationDelayNotice(
           activateClerkSession({
             setActive,
             sessionId: result.createdSessionId,
             redirectUrl,
             taskFallbackUrl: portalUrl,
           }),
-          "Your account is ready, but opening the session took too long. Retry or use the secure signup page below.",
+          "Your account is ready, but opening the session is still processing. Use the secure hosted signup page below if it does not finish.",
+          setDelayMessage,
         );
         return true;
       } catch (caught) {
@@ -94,9 +96,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
     if (await activateCompletedSignUp(result)) return;
     const nextStep = deriveEmbeddedSignUpStep(result);
     if (nextStep === "verification" && sendVerificationCode) {
-      await withAuthOperationTimeout(
+      await withAuthOperationDelayNotice(
         result.prepareEmailAddressVerification({ strategy: "email_code" }),
-        "Sending the verification code took too long. Retry or use the secure signup page below.",
+        "The verification email is still being requested. Do not resend yet; use the secure hosted signup page below if needed.",
+        setDelayMessage,
       );
       setNotice("We sent a six-digit verification code to your email.");
     }
@@ -119,9 +122,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const created = await withAuthOperationTimeout(
+      const created = await withAuthOperationDelayNotice(
         signUp.create({ emailAddress: emailAddress.trim(), password }),
-        "Secure signup took too long. Retry or use the secure signup page below.",
+        "Secure signup is still processing. Do not submit it again; use the secure hosted signup page below if it does not finish.",
+        setDelayMessage,
       );
       setPassword("");
       await advanceSignUp(created, true);
@@ -160,13 +164,14 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const updated = await withAuthOperationTimeout(
+      const updated = await withAuthOperationDelayNotice(
         signUp.update({
           ...(requiredProfileFields.includes("first_name") ? { firstName: firstName.trim() } : {}),
           ...(requiredProfileFields.includes("last_name") ? { lastName: lastName.trim() } : {}),
           ...(requiredProfileFields.includes("legal_accepted") ? { legalAccepted } : {}),
         }),
-        "Saving your account details took too long. Retry or use the secure signup page below.",
+        "Your account details are still being saved. Do not submit them again; use the secure hosted signup page below if needed.",
+        setDelayMessage,
       );
       await advanceSignUp(updated, true);
     } catch (caught) {
@@ -193,9 +198,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
 
     setIsSubmitting(true);
     try {
-      const verified = await withAuthOperationTimeout(
+      const verified = await withAuthOperationDelayNotice(
         signUp.attemptEmailAddressVerification({ code: normalizedCode }),
-        "Verifying the code took too long. Retry or use the secure signup page below.",
+        "Your verification is still processing. Do not submit the code again; use the secure hosted signup page below if needed.",
+        setDelayMessage,
       );
       setCode("");
       await advanceSignUp(verified, false);
@@ -215,9 +221,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
     }
     setIsSubmitting(true);
     try {
-      await withAuthOperationTimeout(
+      await withAuthOperationDelayNotice(
         signUp.prepareEmailAddressVerification({ strategy: "email_code" }),
-        "Resending the code took too long. Retry or use the secure signup page below.",
+        "The new code is still being requested. Do not resend again; use the secure hosted signup page below if needed.",
+        setDelayMessage,
       );
       setNotice("A new six-digit code is on its way.");
     } catch (caught) {
@@ -266,6 +273,11 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {delayMessage && (
+          <div className="mb-4">
+            <AuthMessage kind="error">{delayMessage}</AuthMessage>
+          </div>
+        )}
         {step === "details" && (
           <form className="space-y-4" onSubmit={handleDetailsSubmit} noValidate>
             <div className="space-y-2">
@@ -313,11 +325,15 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
             {error && <AuthMessage kind="error">{error}</AuthMessage>}
             {notice && <AuthMessage>{notice}</AuthMessage>}
             <Button className="h-12 w-full" type="submit" disabled={!isLoaded || isSubmitting}>
-              {isSubmitting || !isLoaded ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+              {!delayMessage && (isSubmitting || !isLoaded) ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : null}
               {!isLoaded
                 ? "Preparing secure signup"
                 : isSubmitting
-                  ? "Creating account"
+                  ? delayMessage
+                    ? "Signup is still processing"
+                    : "Creating account"
                   : "Continue with email"}
             </Button>
           </form>
@@ -372,8 +388,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
             )}
             {error && <AuthMessage kind="error">{error}</AuthMessage>}
             <Button className="h-12 w-full" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {isSubmitting ? "Saving" : "Continue"}
+              {isSubmitting && !delayMessage ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : null}
+              {isSubmitting ? (delayMessage ? "Still saving" : "Saving") : "Continue"}
             </Button>
           </form>
         )}
@@ -401,8 +419,14 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
             {error && <AuthMessage kind="error">{error}</AuthMessage>}
             {notice && <AuthMessage>{notice}</AuthMessage>}
             <Button className="h-12 w-full" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {isSubmitting ? "Verifying" : "Verify and open ScholarMark"}
+              {isSubmitting && !delayMessage ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : null}
+              {isSubmitting
+                ? delayMessage
+                  ? "Verification is still processing"
+                  : "Verifying"
+                : "Verify and open ScholarMark"}
             </Button>
             <button
               type="button"
@@ -428,7 +452,8 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
 
         {step === "complete" && (
           <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-            <LoaderCircle className="h-4 w-4 animate-spin" /> Opening your workspace
+            {!delayMessage && <LoaderCircle className="h-4 w-4 animate-spin" />}
+            {delayMessage ? "Session setup is still processing" : "Opening your workspace"}
           </div>
         )}
 
