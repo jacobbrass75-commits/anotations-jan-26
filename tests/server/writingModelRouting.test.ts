@@ -14,7 +14,9 @@ describe("writing model routing", () => {
     expect(routed.chat).toBe(id);
   });
 
-  it("keeps DeepSeek disabled unless its privacy flag is explicit", () => {
+  it("enables the Starter value model by default and supports an explicit opt-out", () => {
+    expect(normalizeWritingModel("deepseek")).toBe("deepseek");
+    process.env.ENABLE_DEEPSEEK_WRITING = "false";
     expect(normalizeWritingModel("deepseek")).toBe("sonnet");
     process.env.ENABLE_DEEPSEEK_WRITING = "true";
     expect(getModelsForConversation({ writingModel: "deepseek" })).toMatchObject({

@@ -491,7 +491,10 @@ describe("web clip route integration", () => {
     const { documents, users } = await import("../../shared/schema");
 
     try {
-      await db.update(users).set({ storageLimit: 10, storageUsed: 0 } as any).where(eq(users.id, "user-1"));
+      await db
+        .update(users)
+        .set({ storageLimit: 10, storageUsed: 0 } as any)
+        .where(eq(users.id, "user-1"));
 
       const created = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/web-clips", {
         method: "POST",
@@ -567,7 +570,7 @@ describe("web clip route integration", () => {
     }
   });
 
-  it("requires a Pro tier or higher to create web clips", async () => {
+  it("allows free accounts to create web clips", async () => {
     const { db, server, freeUserToken } = await createApp();
     const { webClips } = await import("../../shared/schema");
 
@@ -583,13 +586,9 @@ describe("web clip route integration", () => {
         },
       );
 
-      expect(response.status).toBe(403);
-      expect(response.body).toEqual({
-        message: "This feature requires the pro plan",
-        requiredTier: "pro",
-        currentTier: "free",
-      });
-      expect(await db.select().from(webClips)).toHaveLength(0);
+      expect(response.status).toBe(201);
+      expect(response.body).toMatchObject({ projectId: "project-free" });
+      expect(await db.select().from(webClips)).toHaveLength(1);
     } finally {
       await server.close();
     }

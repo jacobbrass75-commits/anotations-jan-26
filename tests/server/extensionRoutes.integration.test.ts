@@ -105,7 +105,7 @@ describe("extension web clip integration", () => {
     };
   }
 
-  it("rejects free-tier extension saves before writing clip data", async () => {
+  it("allows free-tier extension saves", async () => {
     const { token, db, webClips, server } = await createExtensionApp("free");
 
     try {
@@ -119,13 +119,9 @@ describe("extension web clip integration", () => {
         },
       );
 
-      expect(response.status).toBe(403);
-      expect(response.body).toEqual({
-        message: "This feature requires the pro plan",
-        requiredTier: "pro",
-        currentTier: "free",
-      });
-      expect(await db.select().from(webClips)).toHaveLength(0);
+      expect(response.status).toBe(201);
+      expect(response.body).toMatchObject({ highlightedText: "Important quote" });
+      expect(await db.select().from(webClips)).toHaveLength(1);
     } finally {
       await server.close();
     }

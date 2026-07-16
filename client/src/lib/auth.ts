@@ -153,20 +153,20 @@ type Feature =
 const FEATURE_TIERS: Record<Feature, string> = {
   chat: "free",
   writing: "free",
-  deep_write: "max",
+  deep_write: "free",
   source_verified: "free",
-  export: "pro",
+  export: "free",
   bulk_export: "max",
-  chrome_extension: "pro",
-  bibliography: "pro",
-  endash_toggle: "pro",
-  batch_analysis: "max",
-  multi_prompt: "max",
+  chrome_extension: "free",
+  bibliography: "free",
+  endash_toggle: "free",
+  batch_analysis: "free",
+  multi_prompt: "free",
   vision_ocr: "pro",
   advanced_vision_ocr: "max",
   unlimited_docs: "pro",
   unlimited_projects: "pro",
-  unlimited_citations: "pro",
+  unlimited_citations: "free",
 };
 
 const TIER_LEVELS: Record<string, number> = { free: 0, pro: 1, max: 2 };

@@ -15,27 +15,22 @@ describe("UsageLedger", () => {
   afterEach(() => sqlite.close());
 
   it("prevents concurrent-style reservations from overspending", () => {
-    const results = ["a", "b", "c"].map((requestId) =>
+    const operations = [
+      ...Array.from({ length: 5 }, (_, index) => ({ model: "opus" as const, index })),
+      ...Array.from({ length: 5 }, (_, index) => ({ model: "sonnet" as const, index })),
+      ...Array.from({ length: 25 }, (_, index) => ({ model: "deepseek" as const, index })),
+    ];
+    const results = operations.map(({ model, index }) =>
       ledger.reserve({
         userId: "u1",
-        requestId,
+        requestId: `${model}-${index}`,
         tier: "free",
-        model: "sonnet",
+        model,
         now,
         billingPeriodStart: now,
       }),
     );
-    expect(results.filter((result) => result.ok)).toHaveLength(3);
-    expect(
-      ledger.reserve({
-        userId: "u1",
-        requestId: "opus",
-        tier: "free",
-        model: "opus",
-        now,
-        billingPeriodStart: now,
-      }),
-    ).toMatchObject({ ok: true });
+    expect(results.every((result) => result.ok)).toBe(true);
     expect(
       ledger.reserve({
         userId: "u1",
@@ -46,6 +41,47 @@ describe("UsageLedger", () => {
         billingPeriodStart: now,
       }),
     ).toMatchObject({ ok: false, reason: "credits" });
+  });
+
+  it("enforces Starter model ceilings and blocks GPT", () => {
+    const limits = [
+      ["opus", 5],
+      ["sonnet", 5],
+      ["deepseek", 25],
+    ] as const;
+
+    for (const [model, limit] of limits) {
+      for (let index = 0; index < limit; index += 1) {
+        expect(
+          ledger.reserve({
+            userId: `user-${model}`,
+            requestId: `${model}-${index}`,
+            tier: "free",
+            model,
+            now,
+          }),
+        ).toMatchObject({ ok: true });
+      }
+      expect(
+        ledger.reserve({
+          userId: `user-${model}`,
+          requestId: `${model}-extra`,
+          tier: "free",
+          model,
+          now,
+        }),
+      ).toMatchObject({ ok: false, reason: "model_limit" });
+    }
+
+    expect(
+      ledger.reserve({
+        userId: "user-gpt",
+        requestId: "gpt-blocked",
+        tier: "free",
+        model: "gpt",
+        now,
+      }),
+    ).toMatchObject({ ok: false, reason: "model_limit" });
   });
 
   it("makes reserve and settle idempotent", () => {
@@ -79,6 +115,18 @@ describe("UsageLedger", () => {
         billingPeriodStart: now,
       }),
     ).toMatchObject({ ok: true });
+    for (let index = 1; index < 5; index += 1) {
+      expect(
+        ledger.reserve({
+          userId: "u1",
+          requestId: `opus-${index}`,
+          tier: "free",
+          model: "opus",
+          now,
+          billingPeriodStart: now,
+        }),
+      ).toMatchObject({ ok: true });
+    }
     expect(
       ledger.reserve({
         userId: "u1",
@@ -144,6 +192,19 @@ describe("UsageLedger", () => {
         billingPeriodStart: start,
         billingPeriodEnd: end,
         estimatedCostCents: 451,
+      }),
+    ).toMatchObject({ ok: false, reason: "cost" });
+  });
+
+  it("caps Starter provider cost at $1.50 per period", () => {
+    expect(
+      ledger.reserve({
+        userId: "free-cost",
+        requestId: "too-expensive",
+        tier: "free",
+        model: "sonnet",
+        now,
+        estimatedCostCents: 151,
       }),
     ).toMatchObject({ ok: false, reason: "cost" });
   });

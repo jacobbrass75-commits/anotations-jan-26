@@ -21,7 +21,7 @@ import {
 import { useHumanizeText } from "@/hooks/useHumanizer";
 import { useWritingPipeline, type WritingRequest } from "@/hooks/useWriting";
 import { queryClient } from "@/lib/queryClient";
-import { getAuthHeaders } from "@/lib/auth";
+import { getAuthHeaders, useAuth } from "@/lib/auth";
 import {
   WRITING_MODEL_OPTIONS,
   normalizeWritingModelValue,
@@ -127,6 +127,7 @@ export default function WritingChat({
   summerMode,
 }: WritingChatProps) {
   const { toast } = useToast();
+  const { tier } = useAuth();
 
   // Project selection
   const { data: projects = [] } = useProjects();
@@ -221,7 +222,11 @@ export default function WritingChat({
   const [citationStyle, setCitationStyle] = useState(conversationData?.citationStyle || "chicago");
   const [tone, setTone] = useState(conversationData?.tone || "academic");
   const [writingModel, setWritingModel] = useState<WritingModelValue>(
-    normalizeWritingModelValue(conversationData?.writingModel),
+    conversationData?.writingModel
+      ? normalizeWritingModelValue(conversationData.writingModel)
+      : tier === "free" && WRITING_MODEL_OPTIONS.some((option) => option.value === "deepseek")
+        ? "deepseek"
+        : "sonnet",
   );
   const [humanize, setHumanize] = useState(conversationData?.humanize ?? true);
   const [noEnDashes, setNoEnDashes] = useState(conversationData?.noEnDashes || false);

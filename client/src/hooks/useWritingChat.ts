@@ -109,7 +109,7 @@ export function useCreateWritingConversation() {
         projectId: data.projectId ?? null,
         selectedSourceIds: data.selectedSourceIds || [],
         writingStyleId: data.writingStyleId ?? null,
-        writingModel: data.writingModel ?? "precision",
+        writingModel: data.writingModel,
         citationStyle: data.citationStyle ?? "chicago",
         tone: data.tone ?? "academic",
         humanize: data.humanize ?? true,

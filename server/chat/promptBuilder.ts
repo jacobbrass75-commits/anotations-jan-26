@@ -113,7 +113,7 @@ export function prettyToneLabel(tone?: string): string {
 
 export function normalizeWritingModel(value: string | null | undefined): WritingModelChoice {
   if (value === "opus" || value === "sonnet" || value === "gpt56") return value;
-  if (value === "deepseek" && process.env.ENABLE_DEEPSEEK_WRITING === "true") return value;
+  if (value === "deepseek" && process.env.ENABLE_DEEPSEEK_WRITING !== "false") return value;
   // Migrate legacy values without pretending that a different model was selected.
   if (value === "precision") return "opus";
   if (value === "extended") return "sonnet";
@@ -125,7 +125,7 @@ export function normalizeWritingModel(value: string | null | undefined): Writing
   ) {
     return "gpt56";
   }
-  if (value === "deepseek/deepseek-v4-pro" && process.env.ENABLE_DEEPSEEK_WRITING === "true") {
+  if (value === "deepseek/deepseek-v4-pro" && process.env.ENABLE_DEEPSEEK_WRITING !== "false") {
     return "deepseek";
   }
   if (value === "anthropic/claude-opus-4.8") return "opus";
@@ -274,9 +274,15 @@ function clipUtf8AtBoundary(
   let end = low;
   if (end > 0 && /[\uD800-\uDBFF]/.test(value[end - 1])) end -= 1;
   const candidate = value.slice(0, end);
-  const boundaries = [candidate.lastIndexOf("\n"), candidate.lastIndexOf(". "), candidate.lastIndexOf(" ")];
+  const boundaries = [
+    candidate.lastIndexOf("\n"),
+    candidate.lastIndexOf(". "),
+    candidate.lastIndexOf(" "),
+  ];
   const boundary = Math.max(...boundaries);
-  const body = candidate.slice(0, boundary >= candidate.length * 0.65 ? boundary + 1 : candidate.length).trimEnd();
+  const body = candidate
+    .slice(0, boundary >= candidate.length * 0.65 ? boundary + 1 : candidate.length)
+    .trimEnd();
   return `${body}${suffix}`;
 }
 
@@ -397,11 +403,7 @@ export function buildSourceBlock(
     .join("\n\n");
 
   const maxUtf8Bytes = options.maxUtf8Bytes;
-  if (
-    !maxUtf8Bytes ||
-    maxUtf8Bytes <= 0 ||
-    Buffer.byteLength(unbounded, "utf8") <= maxUtf8Bytes
-  ) {
+  if (!maxUtf8Bytes || maxUtf8Bytes <= 0 || Buffer.byteLength(unbounded, "utf8") <= maxUtf8Bytes) {
     return unbounded;
   }
 
@@ -413,7 +415,11 @@ export function buildSourceBlock(
   const bounded = sources
     .map((source, index) => formatSourceWithinBudget(source, index, plan, perSourceBytes))
     .join("\n\n");
-  return clipUtf8AtBoundary(bounded, maxUtf8Bytes, "\n[additional sources omitted from the inline prompt]");
+  return clipUtf8AtBoundary(
+    bounded,
+    maxUtf8Bytes,
+    "\n[additional sources omitted from the inline prompt]",
+  );
 }
 
 export function buildSelectedWritingStyleBlock(writingStyle: WritingStyleContext | null): string {

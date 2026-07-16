@@ -292,7 +292,7 @@ describe("upload route hardening", () => {
   it("rejects new uploads once the account document limit is reached", async () => {
     const { server, token } = await createUploadApp({
       tier: "free",
-      existingDocumentCount: 5,
+      existingDocumentCount: 50,
     });
     const form = new FormData();
     form.append(
@@ -311,7 +311,7 @@ describe("upload route hardening", () => {
 
       expect(response.status).toBe(403);
       expect(body).toMatchObject({
-        limit: 5,
+        limit: 50,
         requiredTier: "pro",
       });
     } finally {

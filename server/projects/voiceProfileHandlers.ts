@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { checkTokenBudget, requireAuth, requireTier } from "../auth";
+import { checkTokenBudget, requireAuth } from "../auth";
 import { aiLimiter } from "../rateLimits";
 import { projectStorage } from "../projectStorage";
 import { createTokenUsageAccumulator } from "../aiUsage";
@@ -17,7 +17,6 @@ export function registerVoiceProfileRoutes(app: Express): void {
     "/api/projects/:id/voice-profile/analyze",
     requireAuth,
     aiLimiter,
-    requireTier("pro"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       const tokenUsage = createTokenUsageAccumulator();

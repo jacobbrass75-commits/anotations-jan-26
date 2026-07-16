@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { checkTokenBudget, requireAuth, requireTier } from "./auth";
+import { checkTokenBudget, requireAuth } from "./auth";
 import { aiLimiter } from "./rateLimits";
 import { createTokenUsageAccumulator } from "./aiUsage";
 import { writingStyleStorage } from "./writingStyleStorage";
@@ -67,26 +67,20 @@ async function getOwnedWritingStyleOr404(
 }
 
 export function registerWritingStyleRoutes(app: Express): void {
-  app.get(
-    "/api/writing-styles",
-    requireAuth,
-    requireTier("pro"),
-    async (req: Request, res: Response) => {
-      try {
-        const styles = await writingStyleStorage.getWritingStylesForUser(req.user!.userId);
-        res.json(styles.map(toWritingStyleResponse));
-      } catch (error) {
-        logger.error({ err: error }, "Error listing writing styles:");
-        res.status(500).json({ message: "Failed to list writing styles" });
-      }
-    },
-  );
+  app.get("/api/writing-styles", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const styles = await writingStyleStorage.getWritingStylesForUser(req.user!.userId);
+      res.json(styles.map(toWritingStyleResponse));
+    } catch (error) {
+      logger.error({ err: error }, "Error listing writing styles:");
+      res.status(500).json({ message: "Failed to list writing styles" });
+    }
+  });
 
   app.post(
     "/api/writing-styles",
     requireAuth,
     aiLimiter,
-    requireTier("pro"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       const tokenUsage = createTokenUsageAccumulator();
@@ -131,27 +125,21 @@ export function registerWritingStyleRoutes(app: Express): void {
     },
   );
 
-  app.get(
-    "/api/writing-styles/:id",
-    requireAuth,
-    requireTier("pro"),
-    async (req: Request, res: Response) => {
-      try {
-        const style = await getOwnedWritingStyleOr404(req, res);
-        if (!style) return;
-        res.json(toWritingStyleResponse(style));
-      } catch (error) {
-        logger.error({ err: error }, "Error fetching writing style:");
-        res.status(500).json({ message: "Failed to fetch writing style" });
-      }
-    },
-  );
+  app.get("/api/writing-styles/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const style = await getOwnedWritingStyleOr404(req, res);
+      if (!style) return;
+      res.json(toWritingStyleResponse(style));
+    } catch (error) {
+      logger.error({ err: error }, "Error fetching writing style:");
+      res.status(500).json({ message: "Failed to fetch writing style" });
+    }
+  });
 
   app.put(
     "/api/writing-styles/:id",
     requireAuth,
     aiLimiter,
-    requireTier("pro"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       const tokenUsage = createTokenUsageAccumulator();
@@ -221,20 +209,15 @@ export function registerWritingStyleRoutes(app: Express): void {
     },
   );
 
-  app.delete(
-    "/api/writing-styles/:id",
-    requireAuth,
-    requireTier("pro"),
-    async (req: Request, res: Response) => {
-      try {
-        const style = await getOwnedWritingStyleOr404(req, res);
-        if (!style) return;
-        await writingStyleStorage.deleteWritingStyle(style.id);
-        res.json({ success: true });
-      } catch (error) {
-        logger.error({ err: error }, "Error deleting writing style:");
-        res.status(500).json({ message: "Failed to delete writing style" });
-      }
-    },
-  );
+  app.delete("/api/writing-styles/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const style = await getOwnedWritingStyleOr404(req, res);
+      if (!style) return;
+      await writingStyleStorage.deleteWritingStyle(style.id);
+      res.json({ success: true });
+    } catch (error) {
+      logger.error({ err: error }, "Error deleting writing style:");
+      res.status(500).json({ message: "Failed to delete writing style" });
+    }
+  });
 }

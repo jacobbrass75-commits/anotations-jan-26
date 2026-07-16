@@ -104,7 +104,8 @@ export class UsageLedger {
         return { ok: false, reason: "cost", remainingCredits };
 
       const modelLimit = tier === "free" ? STARTER_MODEL_USE_LIMITS[input.model] : undefined;
-      if (modelLimit) {
+      if (modelLimit !== undefined) {
+        if (modelLimit <= 0) return { ok: false, reason: "model_limit", remainingCredits };
         const count = this.sqlite
           .prepare(
             `SELECT COUNT(*) count FROM ai_usage_reservations

@@ -10,7 +10,7 @@ import { processChunksWithPipelineV2 } from "../pipelineV2";
 import { buildAnnotationSearchIndex } from "../contextGenerator";
 import type { TokenUsageReporter } from "../aiUsage";
 import type { Express, Request, Response } from "express";
-import { checkTokenBudget, requireAuth, requireTier } from "../auth";
+import { checkTokenBudget, requireAuth } from "../auth";
 import { aiLimiter } from "../rateLimits";
 import { createTokenUsageAccumulator } from "../aiUsage";
 import { generateAutoAnnotationPrompts } from "../openai";
@@ -388,7 +388,6 @@ export function registerProjectAnalysisRoutes(app: Express): void {
     "/api/project-documents/:id/analyze-multi",
     requireAuth,
     aiLimiter,
-    requireTier("max"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       const tokenUsage = createTokenUsageAccumulator();
@@ -634,7 +633,6 @@ export function registerProjectAnalysisRoutes(app: Express): void {
     "/api/projects/:projectId/batch-analyze",
     requireAuth,
     aiLimiter,
-    requireTier("max"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       const tokenUsage = createTokenUsageAccumulator();

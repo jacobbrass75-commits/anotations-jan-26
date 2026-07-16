@@ -21,7 +21,8 @@ export const OPENROUTER_WRITING_MODEL_IDS = [
 export type OpenRouterWritingModelId = (typeof OPENROUTER_WRITING_MODEL_IDS)[number];
 
 export const PLAN_OPENROUTER_BUDGET_MICRODOLLARS: Record<PlanTier, number> = {
-  free: 0,
+  // Value-model calls also remain subject to Starter's global $1.50 ledger ceiling.
+  free: 0.5 * MICRODOLLARS_PER_DOLLAR,
   pro: 7 * MICRODOLLARS_PER_DOLLAR,
   max: 25 * MICRODOLLARS_PER_DOLLAR,
 };
@@ -392,9 +393,7 @@ export async function runOpenRouterChatCompletion(input: {
     model: input.model.id,
     output,
     finishReason:
-      typeof body.choices?.[0]?.finish_reason === "string"
-        ? body.choices[0].finish_reason
-        : null,
+      typeof body.choices?.[0]?.finish_reason === "string" ? body.choices[0].finish_reason : null,
     usage: {
       promptTokens,
       completionTokens,

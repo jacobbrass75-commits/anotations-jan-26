@@ -15,8 +15,8 @@ function configuredInt(name: string, fallback: number): number {
 
 export const AI_USAGE_PLANS: Record<PlanTier, AiUsagePlan> = {
   free: {
-    credits: configuredInt("AI_STARTER_CREDITS", 60),
-    costCeilingCents: configuredInt("AI_STARTER_COST_CEILING_CENTS", 60),
+    credits: configuredInt("AI_STARTER_CREDITS", 250),
+    costCeilingCents: configuredInt("AI_STARTER_COST_CEILING_CENTS", 150),
     periodDays: 30,
   },
   pro: {
@@ -39,8 +39,10 @@ export const WRITING_CREDIT_WEIGHTS: Record<WritingCreditModel, number> = {
 };
 
 export const STARTER_MODEL_USE_LIMITS: Partial<Record<WritingCreditModel, number>> = {
-  opus: 1,
-  gpt: 1,
+  opus: 5,
+  sonnet: 5,
+  deepseek: 25,
+  gpt: 0,
 };
 
 export function getAiUsagePlan(tier: string | null | undefined): AiUsagePlan {
@@ -54,19 +56,20 @@ const TIER_LEVELS: Record<PlanTier, number> = {
 };
 
 const DOCUMENT_LIMITS: Record<PlanTier, number | null> = {
-  free: 5,
+  // Three full Starter projects can each hold ten sources, with room for generated drafts.
+  free: 50,
   pro: 50,
   max: null,
 };
 
 const PROJECT_LIMITS: Record<PlanTier, number | null> = {
-  free: 1,
+  free: 3,
   pro: 10,
   max: null,
 };
 
 const PROJECT_SOURCE_LIMITS: Record<PlanTier, number | null> = {
-  free: 5,
+  free: 10,
   pro: 50,
   max: null,
 };

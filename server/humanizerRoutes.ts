@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { checkTokenBudget, requireAuth, requireTier } from "./auth";
+import { checkTokenBudget, requireAuth } from "./auth";
 import { aiLimiter } from "./rateLimits";
 import { incrementTokenUsage } from "./authStorage";
 import { humanizeText, MAX_HUMANIZER_TEXT_LENGTH } from "./humanizer";
@@ -26,7 +26,6 @@ export function registerHumanizerRoutes(app: Express): void {
     "/api/humanize",
     requireAuth,
     aiLimiter,
-    requireTier("pro"),
     checkTokenBudget,
     async (req: Request, res: Response) => {
       const startedAt = Date.now();

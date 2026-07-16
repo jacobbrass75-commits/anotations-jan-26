@@ -26,10 +26,10 @@ export const DEEPSEEK_WRITING_MODEL_OPTION = {
   providerModelId: "deepseek-v4-pro",
 } as const;
 
-// DeepSeek processing is opt-in because it has a distinct privacy/data residency profile.
+// DeepSeek is the Starter value model. Deployments can explicitly disable it when needed.
 export const WRITING_MODEL_OPTIONS = [
   ...CORE_WRITING_MODEL_OPTIONS,
-  ...(import.meta.env.VITE_ENABLE_DEEPSEEK_WRITING === "true"
+  ...(import.meta.env.VITE_ENABLE_DEEPSEEK_WRITING !== "false"
     ? [DEEPSEEK_WRITING_MODEL_OPTION]
     : []),
 ] as const;

@@ -97,8 +97,37 @@ describe("writing route integration", () => {
     };
   }
 
-  it("requires Max for Deep Write before calling Anthropic", async () => {
-    const { server, token } = await createApp({ tier: "pro" });
+  it("allows free Deep Write through the limited usage budget", async () => {
+    const { server, token } = await createApp({ tier: "free" });
+    anthropicCreate
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              thesis: "Free users can briefly test deeper drafting.",
+              bibliography: [],
+              sections: [
+                {
+                  title: "Introduction",
+                  description: "Set up the argument.",
+                  sourceIds: [],
+                  targetWords: 100,
+                },
+              ],
+            }),
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "## Introduction\nA deeper free draft." }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "# Complete Paper\nA deeper free draft." }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
 
     try {
       const response = await fetch(`${server.baseUrl}/api/write`, {
@@ -108,22 +137,18 @@ describe("writing route integration", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          topic: "Premium deep write",
+          topic: "Starter deep write",
           citationStyle: "chicago",
           tone: "academic",
           targetLength: "short",
           deepWrite: true,
         }),
       });
-      const body = await response.json();
+      const text = await response.text();
 
-      expect(response.status).toBe(403);
-      expect(body).toMatchObject({
-        error: "Deep Write requires the Max plan",
-        requiredTier: "max",
-        currentTier: "pro",
-      });
-      expect(anthropicCreate).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(text).toContain('"type":"complete"');
+      expect(anthropicCreate).toHaveBeenCalledTimes(3);
     } finally {
       await server.close();
     }

@@ -245,7 +245,7 @@ describe("project route integration", () => {
   it("rejects project creation once the account project limit is reached", async () => {
     const { server, token } = await createApp({
       tier: "free",
-      existingProjectCount: 1,
+      existingProjectCount: 3,
     });
 
     try {
@@ -257,8 +257,8 @@ describe("project route integration", () => {
 
       expect(response.status).toBe(403);
       expect(response.body).toMatchObject({
-        current: 1,
-        limit: 1,
+        current: 3,
+        limit: 3,
         requiredTier: "pro",
       });
     } finally {
@@ -351,7 +351,7 @@ describe("project route integration", () => {
     }
   });
 
-  it("rejects the sixth source on a free project", async () => {
+  it("rejects the eleventh source on a free project", async () => {
     const { db, server, token } = await createApp({
       tier: "free",
       tokensUsed: 0,
@@ -369,7 +369,7 @@ describe("project route integration", () => {
       updatedAt: now,
     } as any);
     await db.insert(documents).values(
-      Array.from({ length: 6 }, (_, index) => ({
+      Array.from({ length: 11 }, (_, index) => ({
         id: `free-source-doc-${index + 1}`,
         userId: "quota-user",
         filename: `source-${index + 1}.txt`,
@@ -380,7 +380,7 @@ describe("project route integration", () => {
       })) as any,
     );
     await db.insert(projectDocuments).values(
-      Array.from({ length: 5 }, (_, index) => ({
+      Array.from({ length: 10 }, (_, index) => ({
         id: `free-project-doc-${index + 1}`,
         projectId: "free-source-project",
         documentId: `free-source-doc-${index + 1}`,
@@ -394,7 +394,7 @@ describe("project route integration", () => {
         {
           method: "POST",
           headers: { authorization: `Bearer ${token}` },
-          body: { documentId: "free-source-doc-6" },
+          body: { documentId: "free-source-doc-11" },
         },
       );
       const rows = await db
@@ -405,12 +405,12 @@ describe("project route integration", () => {
       expect(response.status).toBe(403);
       expect(response.body).toMatchObject({
         code: "project_source_limit",
-        current: 5,
-        limit: 5,
+        current: 10,
+        limit: 10,
         requested: 1,
         requiredTier: "pro",
       });
-      expect(rows).toHaveLength(5);
+      expect(rows).toHaveLength(10);
     } finally {
       await server.close();
     }

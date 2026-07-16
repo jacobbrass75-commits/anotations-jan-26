@@ -105,8 +105,6 @@ import {
 import { createLogger } from "../logger";
 import {
   OpenRouterWritingError,
-  estimateOpenRouterMessagesCostMicrodollars,
-  getOpenRouterBudgetSnapshot,
   getOpenRouterWritingModel,
   runOpenRouterChatCompletion,
   type OpenRouterChatMessage,
@@ -248,21 +246,9 @@ async function runOpenRouterWithBudget(input: {
     throw new OpenRouterWritingError(401, "Authentication required");
   }
 
-  const budget = getOpenRouterBudgetSnapshot(user);
-  if (budget.limitMicrodollars <= 0) {
-    throw new OpenRouterWritingError(403, "OpenRouter writing models require the Pro or Max plan");
-  }
-
   const model = await getOpenRouterWritingModel(input.modelId);
-  const estimatedCostMicrodollars = estimateOpenRouterMessagesCostMicrodollars(
-    model,
-    input.messages,
-    input.maxTokens,
-  );
-  if (estimatedCostMicrodollars > budget.remainingMicrodollars) {
-    throw new OpenRouterWritingError(403, "OpenRouter writing model budget exceeded");
-  }
-
+  // The rolling UsageLedger reservation made before this call is the authoritative
+  // cost/model gate. The legacy aiBudget field remains available for reporting.
   const result = await runOpenRouterChatCompletion({
     model,
     messages: input.messages,
@@ -535,9 +521,12 @@ export function registerChatRoutes(app: Express) {
         writingStyleId,
       } = req.body || {};
 
-      const normalizedWritingModel = normalizeWritingModel(
-        typeof writingModel === "string" ? writingModel : undefined,
-      );
+      const normalizedWritingModel =
+        typeof writingModel === "string"
+          ? normalizeWritingModel(writingModel)
+          : req.user!.tier === "free" && process.env.ENABLE_DEEPSEEK_WRITING !== "false"
+            ? "deepseek"
+            : "sonnet";
       const defaultModels = getModelsForConversation(
         { writingModel: normalizedWritingModel },
         req.user!.tier,
@@ -836,8 +825,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         let evidenceBriefText = "[No new evidence gathered for this turn]";
         const retrievedEvidenceThisTurn: string[] = [];
         const currentUserTurnNumber = history.filter(
-          (message) =>
-            message.role === "user" && !isSyntheticRetrievalMessage(message.content),
+          (message) => message.role === "user" && !isSyntheticRetrievalMessage(message.content),
         ).length;
         let messagesForTurn: AnthropicHistoryMessage[] = [];
         if (mode === "precision") {
@@ -879,13 +867,10 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           evidenceBriefText = formatEvidenceBrief(evidenceBrief, {
             maxUtf8Bytes: evidenceBriefByteBudget,
           });
-
         }
 
         const compactedHistory = buildCompactedHistory(
-          history
-            .slice(0, -1)
-            .map((message) => ({ role: message.role, content: message.content })),
+          history.slice(0, -1).map((message) => ({ role: message.role, content: message.content })),
           clipboardPromptText,
           effectiveCompactionSummary,
           effectiveCompactedAtTurn,
@@ -900,7 +885,10 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           ...compactedHistory,
           ...(mode === "precision"
             ? [
-                { role: "user" as const, content: `[EVIDENCE GATHERED THIS TURN]\n${evidenceBriefText}` },
+                {
+                  role: "user" as const,
+                  content: `[EVIDENCE GATHERED THIS TURN]\n${evidenceBriefText}`,
+                },
                 {
                   role: "assistant" as const,
                   content:
@@ -1447,7 +1435,10 @@ ${chunkContext}`;
             tokenBudget: Math.max(20_000, DEFAULT_PROMPT_MEMORY_TOKEN_BUDGET - 2_000),
           });
         } catch (error) {
-          if (error instanceof Error && error.message.includes("exceeds the configured memory budget")) {
+          if (
+            error instanceof Error &&
+            error.message.includes("exceeds the configured memory budget")
+          ) {
             return res.status(413).json({
               message:
                 "The current paper is too large to compile safely in one pass. Split it into smaller sections so no drafted section is omitted.",

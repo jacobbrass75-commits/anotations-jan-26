@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { requireAuth, requireTier } from "./auth";
+import { requireAuth } from "./auth";
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -293,60 +293,55 @@ async function validateClipProjectTargets(input: {
 }
 
 export function registerWebClipRoutes(app: Express): void {
-  app.post(
-    "/api/web-clips",
-    requireAuth,
-    requireTier("pro"),
-    async (req: Request, res: Response) => {
-      try {
-        const parsed = createWebClipRequestSchema.safeParse(req.body);
-        if (!parsed.success) {
-          return res
-            .status(400)
-            .json({ error: "Invalid web clip payload", details: parsed.error.flatten() });
-        }
-
-        const payload: InsertWebClip = {
-          ...parsed.data,
-          sourceUrl: normalizeUrl(parsed.data.sourceUrl),
-          category: normalizeWebClipCategory(parsed.data.category),
-          tags: parsed.data.tags ?? [],
-        };
-
-        const targetValidation = await validateClipProjectTargets({
-          userId: req.user!.userId,
-          projectId: payload.projectId,
-          projectDocumentId: payload.projectDocumentId,
-        });
-        if (!targetValidation.ok) {
-          return res.status(targetValidation.status).json({ error: targetValidation.error });
-        }
-
-        const citationData = buildCitationData(payload);
-        const footnote = generateChicagoFootnote(citationData);
-        const bibliography = generateChicagoBibliography(citationData);
-
-        const [created] = await db
-          .insert(webClips)
-          .values({
-            ...payload,
-            projectId: targetValidation.projectId,
-            userId: req.user!.userId,
-            citationData,
-            footnote,
-            bibliography,
-          })
-          .returning();
-
-        return res.status(201).json(created);
-      } catch (error) {
-        logger.error({ err: error }, "Error creating web clip:");
+  app.post("/api/web-clips", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const parsed = createWebClipRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
         return res
-          .status(500)
-          .json({ error: error instanceof Error ? error.message : "Failed to create web clip" });
+          .status(400)
+          .json({ error: "Invalid web clip payload", details: parsed.error.flatten() });
       }
-    },
-  );
+
+      const payload: InsertWebClip = {
+        ...parsed.data,
+        sourceUrl: normalizeUrl(parsed.data.sourceUrl),
+        category: normalizeWebClipCategory(parsed.data.category),
+        tags: parsed.data.tags ?? [],
+      };
+
+      const targetValidation = await validateClipProjectTargets({
+        userId: req.user!.userId,
+        projectId: payload.projectId,
+        projectDocumentId: payload.projectDocumentId,
+      });
+      if (!targetValidation.ok) {
+        return res.status(targetValidation.status).json({ error: targetValidation.error });
+      }
+
+      const citationData = buildCitationData(payload);
+      const footnote = generateChicagoFootnote(citationData);
+      const bibliography = generateChicagoBibliography(citationData);
+
+      const [created] = await db
+        .insert(webClips)
+        .values({
+          ...payload,
+          projectId: targetValidation.projectId,
+          userId: req.user!.userId,
+          citationData,
+          footnote,
+          bibliography,
+        })
+        .returning();
+
+      return res.status(201).json(created);
+    } catch (error) {
+      logger.error({ err: error }, "Error creating web clip:");
+      return res
+        .status(500)
+        .json({ error: error instanceof Error ? error.message : "Failed to create web clip" });
+    }
+  });
 
   app.get("/api/web-clips", requireAuth, async (req: Request, res: Response) => {
     try {

@@ -64,22 +64,33 @@ declare global {
 }
 
 const features: TierFeature[] = [
-  { label: "Sources", free: "5 active", pro: "50 active", max: "No set count limit" },
-  { label: "Projects", free: "1", pro: "10", max: "No set count limit" },
+  {
+    label: "Sources",
+    free: "10 per project / 50 total",
+    pro: "50 active",
+    max: "No set count limit",
+  },
+  { label: "Projects", free: "3", pro: "10", max: "No set count limit" },
   { label: "Storage", free: "50 MB", pro: "500 MB", max: "5 GB" },
   {
     label: "Citations",
-    free: "Chicago",
+    free: "Chicago, MLA 9, APA 7",
     pro: "Chicago, MLA 9, APA 7",
     max: "Chicago, MLA 9, APA 7",
   },
   { label: "OCR", free: "PaddleOCR", pro: "GPT-4o-mini Vision", max: "GPT-4o Vision" },
-  { label: "AI chat", free: "Limited", pro: "Yes", max: "Yes" },
-  { label: "AI credits/period", free: "60", pro: "600", max: "2,400" },
+  { label: "AI chat", free: "Included, usage-capped", pro: "Yes", max: "Yes" },
+  { label: "AI credits/period", free: "250", pro: "600", max: "2,400" },
+  {
+    label: "Starter model caps",
+    free: "Up to 5 Opus, 5 Sonnet, 25 DeepSeek",
+    pro: "Shared Pro allowance",
+    max: "Shared Max allowance",
+  },
   {
     label: "AI Writing",
-    free: "Quick Draft limited",
-    pro: "Quick Draft",
+    free: "Quick Draft + Deep Write, usage-capped",
+    pro: "Quick Draft + Deep Write",
     max: "Quick Draft + Deep Write",
   },
   {
@@ -88,10 +99,10 @@ const features: TierFeature[] = [
     pro: "Included",
     max: "Included",
   },
-  { label: "Export", free: "---", pro: "DOCX / PDF", max: "DOCX / PDF" },
-  { label: "Chrome Extension", free: "---", pro: "Yes", max: "Yes" },
-  { label: "Bibliography Gen", free: "---", pro: "Yes", max: "Yes" },
-  { label: "En-dash Toggle", free: "---", pro: "Yes", max: "Yes" },
+  { label: "Export", free: "DOCX / PDF", pro: "DOCX / PDF", max: "DOCX / PDF" },
+  { label: "Chrome Extension", free: "Yes", pro: "Yes", max: "Yes" },
+  { label: "Bibliography Gen", free: "Yes", pro: "Yes", max: "Yes" },
+  { label: "En-dash Toggle", free: "Yes", pro: "Yes", max: "Yes" },
 ];
 
 let paypalSdkPromise: Promise<void> | null = null;
@@ -621,8 +632,7 @@ export default function Pricing() {
           <div className="mb-6 rounded-lg border border-primary/30 bg-primary/5 px-5 py-4">
             <h2 className="font-semibold">Your account is ready</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Start Pro for $14 today, or continue to your dashboard with the limited Starter
-              allowance.
+              Start Pro for $14 today, or use the complete Starter workspace with lower limits.
             </p>
             <Button
               className="mt-3"
@@ -641,20 +651,23 @@ export default function Pricing() {
           <Card className={currentTier === "free" ? "border-primary" : ""}>
             <CardHeader>
               <CardTitle>Free</CardTitle>
-              <CardDescription>Get started with the basics</CardDescription>
+              <CardDescription>Use the complete workspace with starter limits</CardDescription>
               <div className="text-3xl font-bold mt-2">
                 $0<span className="text-sm font-normal text-muted-foreground">/mo</span>
               </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>5 active sources</p>
-              <p>1 project</p>
+              <p>10 sources per project, up to 50 active documents</p>
+              <p>3 projects</p>
               <p>50 MB storage</p>
-              <p>Chicago citation formatting</p>
-              <p>PaddleOCR</p>
-              <p>Limited monthly AI credits</p>
-              <p>A small premium allowance plus more value-model usage</p>
-              <p>Source verification included</p>
+              <p>Chicago, MLA 9, and APA 7 citation formatting</p>
+              <p>Standard extraction and PaddleOCR</p>
+              <p>250 weighted AI credits per 30 days</p>
+              <p>Up to 5 Opus, 5 Sonnet, and 25 DeepSeek operations</p>
+              <p>Annotation, writing, verification, export, and web clips included</p>
+              <p className="text-muted-foreground">
+                A shared $1.50 cost ceiling can end unusually large AI requests sooner.
+              </p>
             </CardContent>
             <CardFooter>
               {currentTier === "free" ? (
@@ -692,7 +705,7 @@ export default function Pricing() {
               <p>Chicago, MLA 9, and APA 7 citation formatting</p>
               <p>GPT-4o-mini Vision OCR</p>
               <p>Higher monthly AI credit allowance</p>
-              <p>AI writing: Quick Draft</p>
+              <p>AI writing: Quick Draft + Deep Write</p>
               <p>Source verification included</p>
               <p>DOCX/PDF export</p>
               <p>Chrome extension</p>
