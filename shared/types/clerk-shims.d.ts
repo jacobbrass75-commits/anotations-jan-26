@@ -46,6 +46,7 @@ declare module "@clerk/clerk-react" {
     signUpUrl?: string;
     forceRedirectUrl?: string;
     fallbackRedirectUrl?: string;
+    appearance?: Record<string, unknown>;
   }>;
 
   export const SignUp: React.ComponentType<{
@@ -54,6 +55,7 @@ declare module "@clerk/clerk-react" {
     signInUrl?: string;
     forceRedirectUrl?: string;
     fallbackRedirectUrl?: string;
+    appearance?: Record<string, unknown>;
   }>;
 
   export const AuthenticateWithRedirectCallback: React.ComponentType<Record<string, unknown>>;
