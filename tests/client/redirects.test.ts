@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SIGNED_IN_REDIRECT,
+  buildAttributedSignupUrl,
   buildClerkAccountPortalUrl,
   buildDirectSignupUrl,
   getSafeRedirectUrl,
@@ -72,6 +73,22 @@ describe("redirect utilities", () => {
       ),
     ).toBe(
       "/sign-up?redirect_url=%2Fdashboard&utm_source=ig&utm_medium=paid&utm_campaign=summer&utm_content=reel-2&fbclid=abc123",
+    );
+  });
+
+  it("builds an embedded signup URL with a safe custom return target", () => {
+    expect(
+      buildAttributedSignupUrl(
+        "?utm_source=ig&utm_medium=paid_social&utm_term=thesis&fbclid=abc123&redirect_url=https://evil.example",
+        "/pricing?onboarding=1&source=summer",
+        true,
+      ),
+    ).toBe(
+      "/sign-up?redirect_url=%2Fpricing%3Fonboarding%3D1%26source%3Dsummer&utm_source=ig&utm_medium=paid_social&utm_term=thesis&fbclid=abc123&embedded_auth=1",
+    );
+
+    expect(buildAttributedSignupUrl("", "https://evil.example", true)).toBe(
+      "/sign-up?redirect_url=%2Fdashboard&embedded_auth=1",
     );
   });
 });

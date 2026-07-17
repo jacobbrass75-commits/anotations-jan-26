@@ -7,10 +7,9 @@ export function detectEmbeddedBrowser(
   userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent,
   search = typeof window === "undefined" ? "" : window.location.search,
 ): EmbeddedBrowserKind | null {
-  if (new URLSearchParams(search).get("embedded_auth") === "1") return "other";
   if (/Instagram/i.test(userAgent)) return "instagram";
   if (FACEBOOK_WEBVIEW_PATTERN.test(userAgent)) return "facebook";
   if (OTHER_EMBEDDED_BROWSER_PATTERN.test(userAgent)) return "other";
+  if (new URLSearchParams(search).get("embedded_auth") === "1") return "other";
   return null;
 }
-

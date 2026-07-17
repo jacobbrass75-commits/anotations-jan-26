@@ -11,8 +11,7 @@ describe("detectEmbeddedBrowser", () => {
   });
 
   it("detects Facebook embedded browsers", () => {
-    expect(detectEmbeddedBrowser("Mozilla/5.0 [FBAN/FBIOS;FBAV/518.0.0.44.90;]"))
-      .toBe("facebook");
+    expect(detectEmbeddedBrowser("Mozilla/5.0 [FBAN/FBIOS;FBAV/518.0.0.44.90;]")).toBe("facebook");
   });
 
   it("does not flag ordinary Safari", () => {
@@ -25,5 +24,9 @@ describe("detectEmbeddedBrowser", () => {
 
   it("supports the explicit browser-test override", () => {
     expect(detectEmbeddedBrowser("ordinary browser", "?embedded_auth=1")).toBe("other");
+  });
+
+  it("keeps the Instagram identity when embedded auth is explicitly requested", () => {
+    expect(detectEmbeddedBrowser("Instagram 380.0.0", "?embedded_auth=1")).toBe("instagram");
   });
 });

@@ -25,6 +25,9 @@ const FUNNEL_ORDER = [
   "primary_cta_click",
   "pricing_view",
   "signup_started",
+  "signup_details_submitted",
+  "signup_verification_sent",
+  "signup_verification_succeeded",
   "signup_completed",
   "checkout_started",
   "purchase_completed",
@@ -44,7 +47,7 @@ describe("site analytics routes", () => {
     process.env.ADMIN_USER_IDS = "analytics-admin";
     process.chdir(tempDir);
     await bootstrapTempWorkspace(tempDir);
-  });
+  }, 30_000);
 
   afterEach(async () => {
     sqlite?.close();
@@ -71,6 +74,7 @@ describe("site analytics routes", () => {
       username: "analytics@example.com",
       password: "",
       tier: "max",
+      emailVerified: true,
       createdAt: now,
       updatedAt: now,
     } as any);
@@ -82,8 +86,16 @@ describe("site analytics routes", () => {
       server: await startHttpServer(app),
       readLatestPageView: () =>
         importedSqlite
-          .prepare("SELECT referrer, referrer_host FROM site_page_views ORDER BY created_at DESC LIMIT 1")
+          .prepare(
+            "SELECT referrer, referrer_host FROM site_page_views ORDER BY created_at DESC LIMIT 1",
+          )
           .get() as { referrer: string | null; referrer_host: string | null } | undefined,
+      readCompletionRows: () =>
+        importedSqlite
+          .prepare(
+            "SELECT user_id, visitor_id FROM site_events WHERE event_name = 'signup_completed' ORDER BY created_at",
+          )
+          .all() as Array<{ user_id: string | null; visitor_id: string }>,
       adminToken: generateToken({
         id: "analytics-admin",
         email: "analytics@example.com",
@@ -183,6 +195,78 @@ describe("site analytics routes", () => {
     try {
       const response = await requestJson(server.baseUrl, "/api/admin/site-analytics");
       expect(response.status).toBe(401);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("records signup completion only for a newly-created verified account", async () => {
+    const { server, adminToken, readCompletionRows } = await createApp();
+    try {
+      const anonymous = await requestJson(server.baseUrl, "/api/site-analytics/event", {
+        method: "POST",
+        body: event("signup_completed"),
+      });
+      expect(anonymous.status).toBe(204);
+
+      const legacyJwt = await requestJson(server.baseUrl, "/api/site-analytics/event", {
+        method: "POST",
+        headers: { authorization: `Bearer ${adminToken}` },
+        body: event("signup_completed"),
+      });
+      expect(legacyJwt.status).toBe(204);
+
+      clerkGetAuth.mockReturnValue({ userId: "analytics-admin" });
+      const clerkUser = (createdAt: number, verified: boolean) => ({
+        createdAt,
+        primaryEmailAddressId: "email-primary",
+        emailAddresses: [
+          {
+            id: "email-primary",
+            emailAddress: "analytics@example.com",
+            verification: { status: verified ? "verified" : "unverified" },
+          },
+        ],
+        publicMetadata: {},
+      });
+
+      clerkGetUser.mockResolvedValue(clerkUser(Date.now(), false));
+      const unverified = await requestJson(server.baseUrl, "/api/site-analytics/event", {
+        method: "POST",
+        body: event("signup_completed", { visitorId: "visitor-unverified" }),
+      });
+      expect(unverified.status).toBe(204);
+
+      clerkGetUser.mockResolvedValue(clerkUser(Date.now() - 60 * 60 * 1000, true));
+      const oldAccount = await requestJson(server.baseUrl, "/api/site-analytics/event", {
+        method: "POST",
+        body: event("signup_completed", { visitorId: "visitor-old-account" }),
+      });
+      expect(oldAccount.status).toBe(204);
+
+      clerkGetUser.mockResolvedValue(clerkUser(Date.now(), true));
+      for (const visitorId of ["visitor-real-signup", "visitor-replayed-signup"]) {
+        const authenticated = await requestJson(server.baseUrl, "/api/site-analytics/event", {
+          method: "POST",
+          body: event("signup_completed", { visitorId }),
+        });
+        expect(authenticated.status).toBe(204);
+      }
+
+      const report = await requestJson<{
+        funnel: Array<{ eventName: string; eventCount: number; uniqueVisitors: number }>;
+      }>(server.baseUrl, `/api/admin/site-analytics?from=0&to=${Date.now() + 60_000}`, {
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(report.status).toBe(200);
+      expect(report.body?.funnel.find((step) => step.eventName === "signup_completed")).toEqual({
+        eventName: "signup_completed",
+        eventCount: 1,
+        uniqueVisitors: 1,
+      });
+      expect(readCompletionRows()).toEqual([
+        { user_id: "analytics-admin", visitor_id: "visitor-real-signup" },
+      ]);
     } finally {
       await server.close();
     }

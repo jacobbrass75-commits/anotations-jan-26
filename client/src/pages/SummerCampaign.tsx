@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { withRedirectUrl } from "@/lib/redirects";
+import { detectEmbeddedBrowser } from "@/lib/embeddedBrowser";
+import { buildAttributedSignupUrl, withRedirectUrl } from "@/lib/redirects";
 import { trackSiteEvent } from "@/lib/siteAnalytics";
 
 const ATTRIBUTION_STORAGE_KEY = "scholarmark_campaign_attribution";
@@ -23,7 +24,7 @@ const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark
 const founderEmailHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("ScholarMark Founder Help - Landing Page")}`;
 const founderBookingHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("ScholarMark 15-Minute Setup - Landing Page")}`;
 
-interface CampaignAttribution {
+export interface CampaignAttribution {
   campus?: string;
   major?: string;
   channel?: string;
@@ -34,6 +35,18 @@ interface CampaignAttribution {
   utmCampaign?: string;
   utmTerm?: string;
   utmContent?: string;
+}
+
+export function mergeCampaignAttribution(
+  stored: CampaignAttribution,
+  current: CampaignAttribution,
+): CampaignAttribution {
+  const meaningfulCurrent = Object.fromEntries(
+    Object.entries(current).filter(([, value]) => value),
+  ) as CampaignAttribution;
+  return Object.fromEntries(
+    Object.entries({ ...stored, ...meaningfulCurrent }).filter(([, value]) => value),
+  ) as CampaignAttribution;
 }
 
 function readAttribution(inviteCode?: string): CampaignAttribution {
@@ -56,9 +69,25 @@ function readAttribution(inviteCode?: string): CampaignAttribution {
     utmTerm: params.get("utm_term") ?? undefined,
     utmContent: params.get("utm_content") ?? undefined,
   };
-  return Object.fromEntries(
-    Object.entries({ ...stored, ...values }).filter(([, value]) => value),
-  ) as CampaignAttribution;
+  return mergeCampaignAttribution(stored, values);
+}
+
+export function buildCampaignAttributionSearch(
+  search: string,
+  attribution: CampaignAttribution,
+): string {
+  const params = new URLSearchParams(search);
+  const campaignParams: Array<[string, string | undefined]> = [
+    ["utm_source", attribution.utmSource],
+    ["utm_medium", attribution.utmMedium],
+    ["utm_campaign", attribution.utmCampaign],
+    ["utm_term", attribution.utmTerm],
+    ["utm_content", attribution.utmContent],
+  ];
+  for (const [key, value] of campaignParams) {
+    if (value && !params.has(key)) params.set(key, value);
+  }
+  return params.toString();
 }
 
 const FEATURES = [
@@ -72,13 +101,18 @@ const FEATURES = [
 
 export default function SummerCampaign() {
   const [, inviteParams] = useRoute("/invite/:code");
+  const attribution = useMemo(() => readAttribution(inviteParams?.code), [inviteParams?.code]);
   const signupHref = useMemo(
-    () => withRedirectUrl("/sign-up", "/pricing?onboarding=1&source=summer"),
-    [],
+    () =>
+      buildAttributedSignupUrl(
+        buildCampaignAttributionSearch(window.location.search, attribution),
+        "/pricing?onboarding=1&source=summer",
+        detectEmbeddedBrowser() !== null,
+      ),
+    [attribution],
   );
 
   useEffect(() => {
-    const attribution = readAttribution(inviteParams?.code);
     try {
       localStorage.setItem(ATTRIBUTION_STORAGE_KEY, JSON.stringify(attribution));
     } catch {
@@ -100,7 +134,7 @@ export default function SummerCampaign() {
         body: JSON.stringify({ ...attribution, landingPath: window.location.pathname }),
       }).catch(() => undefined);
     }
-  }, [inviteParams?.code]);
+  }, [attribution]);
 
   return (
     <div className="min-h-screen bg-background">

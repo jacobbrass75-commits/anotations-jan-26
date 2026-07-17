@@ -15,8 +15,15 @@ import {
   type EmbeddedSignUpStep,
 } from "@/lib/embeddedAuthFlow";
 import { buildClerkAccountPortalUrl, withRedirectUrl } from "@/lib/redirects";
+import { trackSiteEvent } from "@/lib/siteAnalytics";
+import { markSignupInProgress } from "@/lib/signupAnalyticsState";
 
 const CLERK_LOAD_TIMEOUT_MS = 8_000;
+
+function ensureEmbeddedSignupStarted(): void {
+  if (!markSignupInProgress()) return;
+  trackSiteEvent("signup_started", { ctaOrFeature: "embedded_interaction" });
+}
 
 export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
   const { isLoaded, signUp, setActive } = useSignUp();
@@ -101,6 +108,7 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
         "The verification email is still being requested. Do not resend yet; use the secure hosted signup page below if needed.",
         setDelayMessage,
       );
+      trackSiteEvent("signup_verification_sent", { ctaOrFeature: "embedded_email_code" });
       setNotice("We sent a six-digit verification code to your email.");
     }
     setStep(nextStep);
@@ -121,6 +129,8 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
     }
 
     setIsSubmitting(true);
+    ensureEmbeddedSignupStarted();
+    trackSiteEvent("signup_details_submitted", { ctaOrFeature: "embedded_email_password" });
     try {
       const created = await withAuthOperationDelayNotice(
         signUp.create({ emailAddress: emailAddress.trim(), password }),
@@ -203,6 +213,9 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
         "Your verification is still processing. Do not submit the code again; use the secure hosted signup page below if needed.",
         setDelayMessage,
       );
+      trackSiteEvent("signup_verification_succeeded", {
+        ctaOrFeature: "embedded_email_code",
+      });
       setCode("");
       await advanceSignUp(verified, false);
     } catch (caught) {
@@ -226,6 +239,7 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
         "The new code is still being requested. Do not resend again; use the secure hosted signup page below if needed.",
         setDelayMessage,
       );
+      trackSiteEvent("signup_verification_sent", { ctaOrFeature: "embedded_email_resend" });
       setNotice("A new six-digit code is on its way.");
     } catch (caught) {
       setError(getClerkErrorMessage(caught, "We couldn't resend the code yet. Please try again."));
@@ -443,7 +457,16 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
           <div className="space-y-4">
             {error && <AuthMessage kind="error">{error}</AuthMessage>}
             <Button className="h-12 w-full" asChild>
-              <a href={portalUrl} target="_top">
+              <a
+                href={portalUrl}
+                target="_top"
+                onClick={() => {
+                  ensureEmbeddedSignupStarted();
+                  trackSiteEvent("signup_hosted_fallback", {
+                    ctaOrFeature: "embedded_unsupported",
+                  });
+                }}
+              >
                 Continue secure account setup
               </a>
             </Button>
@@ -474,6 +497,10 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
             className="font-semibold text-primary underline underline-offset-2"
             href={portalUrl}
             target="_top"
+            onClick={() => {
+              ensureEmbeddedSignupStarted();
+              trackSiteEvent("signup_hosted_fallback", { ctaOrFeature: `embedded_${step}` });
+            }}
           >
             Use the secure hosted signup page
           </a>
