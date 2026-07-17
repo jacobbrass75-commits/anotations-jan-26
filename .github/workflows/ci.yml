@@ -37,9 +37,7 @@ jobs:
         run: npm run lint
 
       - name: Test
-        # Hosted Windows runners occasionally need more than Vitest's 10s
-        # default while rebuilding the isolated integration-test database.
-        run: npm test -- --hookTimeout=30000
+        run: npm test
 
   audit:
     name: audit
