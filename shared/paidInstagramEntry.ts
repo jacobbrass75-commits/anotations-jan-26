@@ -46,7 +46,14 @@ export function getPaidInstagramSignupRedirect(
   }
 
   const incoming = new URLSearchParams(search);
-  if (incoming.get("sm_landing") === "1" || !isPaidInstagramCampaign(search)) {
+  // Landing-first is the safe default for Instagram. Direct signup previously
+  // recreated an in-app-browser loop, so keep it available only as an explicit
+  // opt-in for controlled testing instead of inferring it from paid UTMs.
+  if (
+    incoming.get("sm_direct_signup") !== "1" ||
+    incoming.get("sm_landing") === "1" ||
+    !isPaidInstagramCampaign(search)
+  ) {
     return null;
   }
 

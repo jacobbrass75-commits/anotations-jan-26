@@ -20,16 +20,14 @@ describe("fast marketing entry", () => {
     expect(isFastMarketingEntry("accounts.scholarmark.ai", "/start")).toBe(false);
   });
 
-  it("sends paid Instagram traffic directly to embedded signup with attribution", () => {
+  it("keeps paid Instagram traffic on the campaign landing page by default", () => {
     expect(
       getPaidInstagramSignupRedirect(
         "scholarmark.ai",
         "/",
         "?utm_source=ig&utm_medium=paid&utm_campaign=120254753679600309&utm_content=120254753681570309&fbclid=abc123&ignored=secret",
       ),
-    ).toBe(
-      "/sign-up?redirect_url=%2Fdashboard&utm_source=ig&utm_medium=paid&utm_campaign=120254753679600309&utm_content=120254753681570309&fbclid=abc123&embedded_auth=1&sm_direct_signup=1",
-    );
+    ).toBeNull();
 
     expect(
       getPaidInstagramSignupRedirect(
@@ -37,16 +35,14 @@ describe("fast marketing entry", () => {
         "/start",
         "?utm_source=Instagram&utm_medium=paid_social&utm_campaign=summer",
       ),
-    ).toBe(
-      "/sign-up?redirect_url=%2Fdashboard&utm_source=Instagram&utm_medium=paid_social&utm_campaign=summer&embedded_auth=1&sm_direct_signup=1",
-    );
+    ).toBeNull();
   });
 
-  it("preserves every allowlisted attribution field and caps campaign values", () => {
+  it("allows controlled direct-signup tests only with explicit opt-in", () => {
     const redirect = getPaidInstagramSignupRedirect(
       "scholarmark.ai",
       "/",
-      `?utm_source=ig&utm_medium=paid&utm_term=thesis&utm_id=meta-42&utm_content=${"x".repeat(205)}&ignored=secret`,
+      `?utm_source=ig&utm_medium=paid&sm_direct_signup=1&utm_term=thesis&utm_id=meta-42&utm_content=${"x".repeat(205)}&ignored=secret`,
     );
     const params = new URL(redirect!, "https://scholarmark.ai").searchParams;
 
@@ -54,6 +50,8 @@ describe("fast marketing entry", () => {
     expect(params.get("utm_id")).toBe("meta-42");
     expect(params.get("utm_content")).toBe("x".repeat(200));
     expect(params.has("ignored")).toBe(false);
+    expect(params.get("embedded_auth")).toBe("1");
+    expect(params.get("sm_direct_signup")).toBe("1");
   });
 
   it("recognizes normalized paid Instagram attribution", () => {
@@ -72,30 +70,38 @@ describe("fast marketing entry", () => {
 
   it("keeps organic, non-Instagram, opted-out, and non-entry traffic on its page", () => {
     expect(
-      getPaidInstagramSignupRedirect("scholarmark.ai", "/", "?utm_source=ig&utm_medium=organic"),
-    ).toBeNull();
-    expect(
-      getPaidInstagramSignupRedirect("scholarmark.ai", "/", "?utm_source=facebook&utm_medium=paid"),
+      getPaidInstagramSignupRedirect(
+        "scholarmark.ai",
+        "/",
+        "?utm_source=ig&utm_medium=organic&sm_direct_signup=1",
+      ),
     ).toBeNull();
     expect(
       getPaidInstagramSignupRedirect(
         "scholarmark.ai",
         "/",
-        "?utm_source=ig&utm_medium=paid&sm_landing=1",
+        "?utm_source=facebook&utm_medium=paid&sm_direct_signup=1",
+      ),
+    ).toBeNull();
+    expect(
+      getPaidInstagramSignupRedirect(
+        "scholarmark.ai",
+        "/",
+        "?utm_source=ig&utm_medium=paid&sm_direct_signup=1&sm_landing=1",
       ),
     ).toBeNull();
     expect(
       getPaidInstagramSignupRedirect(
         "scholarmark.ai",
         "/sign-up",
-        "?utm_source=ig&utm_medium=paid",
+        "?utm_source=ig&utm_medium=paid&sm_direct_signup=1",
       ),
     ).toBeNull();
     expect(
       getPaidInstagramSignupRedirect(
         "accounts.scholarmark.ai",
         "/",
-        "?utm_source=ig&utm_medium=paid",
+        "?utm_source=ig&utm_medium=paid&sm_direct_signup=1",
       ),
     ).toBeNull();
   });
