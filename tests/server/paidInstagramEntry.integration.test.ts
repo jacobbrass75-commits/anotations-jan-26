@@ -35,42 +35,51 @@ describe("paid Instagram server entry", () => {
     });
   }
 
-  it("redirects the real paid Instagram campaign before the SPA while preserving attribution", async () => {
+  it.each([
+    [
+      "GET",
+      "/?utm_source=ig&utm_medium=paid&utm_campaign=120254753679600309&utm_content=120254753681570309&fbclid=abc123&ignored=secret",
+    ],
+    ["GET", "/start?utm_source=Instagram&utm_medium=paid_social&utm_campaign=summer"],
+    ["HEAD", "/?utm_source=instagram.com&utm_medium=CPC&utm_campaign=summer"],
+  ])("serves the campaign landing page for default %s entry %s", async (method, path) => {
     const server = await startApp();
     try {
-      const response = await request(
-        server.baseUrl,
-        "/?utm_source=ig&utm_medium=paid&utm_campaign=120254753679600309&utm_content=120254753681570309&fbclid=abc123&ignored=secret",
-      );
+      const response = await request(server.baseUrl, path, { method });
 
-      expect(response.status).toBe(302);
-      expect(response.headers.get("location")).toBe(
-        "/sign-up?redirect_url=%2Fdashboard&utm_source=ig&utm_medium=paid&utm_campaign=120254753679600309&utm_content=120254753681570309&fbclid=abc123&embedded_auth=1&sm_direct_signup=1",
-      );
-      expect(response.headers.get("cache-control")).toContain("no-store");
-      expect(response.headers.get("pragma")).toBe("no-cache");
+      expect(response.status).toBe(200);
+      expect(response.headers.get("location")).toBeNull();
+      if (method !== "HEAD") {
+        expect(await response.text()).toBe(`spa:${method}:${path}`);
+      }
     } finally {
       await server.close();
     }
   });
 
   it.each([
-    ["GET", "/start?utm_source=Instagram&utm_medium=paid_social&utm_campaign=summer"],
-    ["HEAD", "/?utm_source=instagram.com&utm_medium=CPC&utm_campaign=summer"],
-  ])("redirects normalized %s campaign entry %s", async (method, path) => {
+    [
+      "GET",
+      "/start?utm_source=Instagram&utm_medium=paid_social&utm_campaign=summer&sm_direct_signup=1",
+      "/sign-up?redirect_url=%2Fdashboard&utm_source=Instagram&utm_medium=paid_social&utm_campaign=summer&embedded_auth=1&sm_direct_signup=1",
+    ],
+    [
+      "HEAD",
+      "/?utm_source=instagram.com&utm_medium=CPC&utm_campaign=summer&sm_direct_signup=1",
+      "/sign-up?redirect_url=%2Fdashboard&utm_source=instagram.com&utm_medium=CPC&utm_campaign=summer&embedded_auth=1&sm_direct_signup=1",
+    ],
+  ])("redirects explicitly opted-in %s campaign entry %s", async (method, path, location) => {
     const server = await startApp();
     try {
       const response = await request(server.baseUrl, path, { method });
       expect(response.status).toBe(302);
-      expect(response.headers.get("location")).toContain("/sign-up?redirect_url=%2Fdashboard");
-      expect(response.headers.get("location")).toContain("embedded_auth=1");
-      expect(response.headers.get("location")).toContain("sm_direct_signup=1");
+      expect(response.headers.get("location")).toBe(location);
     } finally {
       await server.close();
     }
   });
 
-  it("canonicalizes www/HTTP first, preserves attribution, then redirects to signup", async () => {
+  it("canonicalizes www/HTTP first and keeps the canonical paid campaign on its landing page", async () => {
     const server = await startApp();
     const campaignPath = "/?utm_source=ig&utm_medium=paid&utm_campaign=canonical";
     try {
@@ -84,20 +93,20 @@ describe("paid Instagram server entry", () => {
       expect(canonical.status).toBe(308);
       expect(canonical.headers.get("location")).toBe(`https://scholarmark.ai${campaignPath}`);
 
-      const signup = await request(server.baseUrl, campaignPath);
-      expect(signup.status).toBe(302);
-      expect(signup.headers.get("location")).toContain("utm_campaign=canonical");
-      expect(signup.headers.get("location")).toContain("sm_direct_signup=1");
+      const landing = await request(server.baseUrl, campaignPath);
+      expect(landing.status).toBe(200);
+      expect(landing.headers.get("location")).toBeNull();
+      expect(await landing.text()).toBe(`spa:GET:${campaignPath}`);
     } finally {
       await server.close();
     }
   });
 
   it.each([
-    ["organic Instagram", "/?utm_source=ig&utm_medium=organic"],
-    ["Facebook", "/?utm_source=facebook&utm_medium=paid"],
-    ["landing opt-out", "/?utm_source=ig&utm_medium=paid&sm_landing=1"],
-    ["non-entry route", "/pricing?utm_source=ig&utm_medium=paid"],
+    ["organic Instagram", "/?utm_source=ig&utm_medium=organic&sm_direct_signup=1"],
+    ["Facebook", "/?utm_source=facebook&utm_medium=paid&sm_direct_signup=1"],
+    ["landing opt-out", "/?utm_source=ig&utm_medium=paid&sm_direct_signup=1&sm_landing=1"],
+    ["non-entry route", "/pricing?utm_source=ig&utm_medium=paid&sm_direct_signup=1"],
   ])("leaves %s traffic on the requested page", async (_label, path) => {
     const server = await startApp();
     try {
@@ -112,18 +121,24 @@ describe("paid Instagram server entry", () => {
   it("does not redirect internal hosts or non-navigation requests", async () => {
     const server = await startApp();
     try {
-      const internal = await request(server.baseUrl, "/?utm_source=ig&utm_medium=paid", {
-        headers: {
-          host: "app.scholarmark.ai",
-          "x-forwarded-host": "app.scholarmark.ai",
-          "x-forwarded-proto": "https",
+      const internal = await request(
+        server.baseUrl,
+        "/?utm_source=ig&utm_medium=paid&sm_direct_signup=1",
+        {
+          headers: {
+            host: "app.scholarmark.ai",
+            "x-forwarded-host": "app.scholarmark.ai",
+            "x-forwarded-proto": "https",
+          },
         },
-      });
+      );
       expect(internal.status).toBe(200);
 
-      const post = await request(server.baseUrl, "/?utm_source=ig&utm_medium=paid", {
-        method: "POST",
-      });
+      const post = await request(
+        server.baseUrl,
+        "/?utm_source=ig&utm_medium=paid&sm_direct_signup=1",
+        { method: "POST" },
+      );
       expect(post.status).toBe(200);
       expect(await post.text()).toContain("spa:POST:");
     } finally {
