@@ -201,6 +201,7 @@ async function runRestoredAppSmoke() {
         SKIP_BILLING_SMOKE: "1",
         SKIP_MCP_SMOKE: "1",
         SKIP_STATIC_ROUTE_SMOKE: "1",
+        SKIP_HTML_CACHE_POLICY_SMOKE: useProductionEntry ? "0" : "1",
         SMOKE_TIMEOUT_MS: "5000",
       },
       stdio: "pipe",

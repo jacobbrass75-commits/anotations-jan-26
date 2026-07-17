@@ -1,10 +1,28 @@
 import "dotenv/config";
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { readFile, rm } from "fs/promises";
+import { readdir, readFile, rm, stat } from "fs/promises";
+import path from "path";
 import { assertProductionConfig } from "../server/productionConfig";
 
 const shouldValidateProductionBuild = process.env.SCHOLARMARK_VALIDATE_PRODUCTION_BUILD === "true";
+const ASSET_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function pruneExpiredAssets(directory: string, cutoff: number): Promise<void> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await pruneExpiredAssets(entryPath, cutoff);
+        return;
+      }
+      if (!entry.isFile()) return;
+      const info = await stat(entryPath);
+      if (info.mtimeMs < cutoff) await rm(entryPath, { force: true });
+    }),
+  );
+}
 
 // Keep frequently used server dependencies bundled while leaving heavy/native deps external.
 const allowlist = [
@@ -37,10 +55,9 @@ async function buildAll() {
     assertProductionConfig(process.env, { phase: "build" });
   }
 
-  await rm("dist", { recursive: true, force: true });
-
   console.log("building client...");
   await viteBuild();
+  await pruneExpiredAssets(path.resolve("dist/public/assets"), Date.now() - ASSET_RETENTION_MS);
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));

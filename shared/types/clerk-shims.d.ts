@@ -1,5 +1,6 @@
 declare module "@clerk/clerk-react" {
   import * as React from "react";
+  import type { UseSignInReturn, UseSignUpReturn } from "@clerk/shared/types";
 
   export interface ClerkEmailAddress {
     emailAddress?: string | null;
@@ -33,6 +34,10 @@ declare module "@clerk/clerk-react" {
   export function useClerk(): {
     signOut: () => void | Promise<void>;
   };
+
+  export function useSignIn(): UseSignInReturn;
+
+  export function useSignUp(): UseSignUpReturn;
 
   export const ClerkProvider: React.ComponentType<{
     children?: React.ReactNode;

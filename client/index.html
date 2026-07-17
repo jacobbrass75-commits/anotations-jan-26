@@ -20,21 +20,245 @@
         }
       })();
     </script>
+    <script>
+      (() => {
+        const recoveryParam = "sm_asset_retry";
+        const recoveryStoragePrefix = "sm_asset_recovery:";
+        const portalOrigin = "https://accounts.scholarmark.ai";
+        const defaultRedirect = "/dashboard";
+        let recoveryStarted = false;
+
+        function safeRedirectUrl(candidate) {
+          if (
+            !candidate ||
+            !candidate.startsWith("/") ||
+            candidate.startsWith("//") ||
+            candidate.includes("\\") ||
+            /[\u0000-\u001f\u007f]/.test(candidate)
+          ) {
+            return defaultRedirect;
+          }
+          const parsed = new URL(candidate, window.location.origin);
+          if (parsed.origin !== window.location.origin) return defaultRedirect;
+          if (/^\/sign-(?:in|up)(?:\/|$)/.test(parsed.pathname)) return defaultRedirect;
+          return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        }
+
+        function accountPortalUrl(kind, redirectOverride) {
+          const params = new URLSearchParams(window.location.search);
+          const redirectPath = safeRedirectUrl(
+            redirectOverride || params.get("redirect_url") || params.get("redirect"),
+          );
+          const portalUrl = new URL(`/${kind}`, portalOrigin);
+          portalUrl.searchParams.set(
+            "redirect_url",
+            new URL(redirectPath, window.location.origin).toString(),
+          );
+          return portalUrl.toString();
+        }
+
+        function showRecoveryFallback() {
+          const render = () => {
+            const root = document.getElementById("root");
+            if (!root) return;
+            const onSignIn = /^\/sign-in(?:\/|$)/.test(window.location.pathname);
+            const onSignUp = /^\/sign-up(?:\/|$)/.test(window.location.pathname);
+            const onMarketing = /^(?:\/$|\/start(?:\/|$)|\/summer(?:\/|$)|\/invite(?:\/|$))/.test(
+              window.location.pathname,
+            );
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.delete(recoveryParam);
+            const currentPath = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+            const card = document.createElement("main");
+            card.style.cssText =
+              "max-width:32rem;margin:4rem auto;padding:1.5rem;font-family:Inter,system-ui,sans-serif;color:#2d2a26";
+            const label = document.createElement("p");
+            label.textContent = "SCHOLARMARK";
+            label.style.cssText = "font-size:.75rem;letter-spacing:.2em;color:#be4965";
+            const title = document.createElement("h1");
+            title.textContent = "Continue securely";
+            const detail = document.createElement("p");
+            detail.textContent =
+              "This in-app browser held an older ScholarMark page. Continue on the secure account page.";
+            detail.style.cssText = "line-height:1.6;color:#625b54";
+            const link = document.createElement("a");
+            link.href = accountPortalUrl(
+              onSignIn || (!onSignUp && !onMarketing) ? "sign-in" : "sign-up",
+              onSignIn || onSignUp
+                ? undefined
+                : onMarketing
+                  ? "/pricing?onboarding=1&source=summer"
+                  : currentPath,
+            );
+            link.target = "_top";
+            link.textContent =
+              onSignIn || (!onSignUp && !onMarketing)
+                ? "Continue to sign in"
+                : "Continue to free signup";
+            link.style.cssText =
+              "display:inline-block;margin-top:1rem;padding:.9rem 1.25rem;border-radius:.5rem;background:#7c3aed;color:white;text-decoration:none;font-weight:700";
+            card.append(label, title, detail, link);
+            root.replaceChildren(card);
+          };
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", render, { once: true });
+          } else {
+            render();
+          }
+        }
+
+        window.__scholarmarkRecoverStaleAssets = () => {
+          if (recoveryStarted) return true;
+          const url = new URL(window.location.href);
+          const storageKey = `${recoveryStoragePrefix}${url.pathname}`;
+          let alreadyAttempted = false;
+          try {
+            alreadyAttempted = window.sessionStorage.getItem(storageKey) === "1";
+          } catch {
+            // The query marker still protects privacy-restricted webviews.
+          }
+          if (alreadyAttempted || url.searchParams.has(recoveryParam)) {
+            recoveryStarted = true;
+            showRecoveryFallback();
+            return false;
+          }
+          recoveryStarted = true;
+          try {
+            window.sessionStorage.setItem(storageKey, "1");
+          } catch {
+            // The query marker still protects privacy-restricted webviews.
+          }
+          url.searchParams.set(recoveryParam, Date.now().toString(36));
+          window.location.replace(url.toString());
+          return true;
+        };
+
+        window.addEventListener("vite:preloadError", (event) => {
+          event.preventDefault();
+          window.__scholarmarkRecoverStaleAssets();
+        });
+        window.addEventListener(
+          "error",
+          (event) => {
+            const target = event.target;
+            const assetUrl = target && (target.src || target.href);
+            if (!assetUrl) return;
+            try {
+              const asset = new URL(assetUrl, window.location.href);
+              if (
+                asset.origin === window.location.origin &&
+                asset.pathname.startsWith("/assets/")
+              ) {
+                window.__scholarmarkRecoverStaleAssets();
+              }
+            } catch {
+              // Ignore malformed third-party asset URLs.
+            }
+          },
+          true,
+        );
+
+        const embeddedBrowser =
+          new URLSearchParams(window.location.search).get("embedded_auth") === "1" ||
+          /Instagram|FBAN|FBAV|FB_IAB|MessengerForiOS|; wv\)|\bwv\b/i.test(navigator.userAgent);
+        const authKind = /^\/sign-in(?:\/|$)/.test(window.location.pathname)
+          ? "sign-in"
+          : /^\/sign-up(?:\/|$)/.test(window.location.pathname)
+            ? "sign-up"
+            : null;
+        if (embeddedBrowser && authKind) {
+          window.__scholarmarkStaticAuthFallback = {
+            kind: authKind,
+            url: accountPortalUrl(authKind),
+          };
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root">
-      <main style="max-width:72rem;margin:0 auto;padding:3rem 1.25rem;font-family:Inter,system-ui,sans-serif;color:#2d2a26">
-        <p style="font-size:.75rem;letter-spacing:.2em;text-transform:uppercase;color:#736b63">ScholarMark</p>
-        <h1 style="max-width:48rem;font-size:clamp(2.25rem,7vw,4rem);line-height:1.05;margin:1rem 0">
+      <main
+        style="
+          max-width: 72rem;
+          margin: 0 auto;
+          padding: 3rem 1.25rem;
+          font-family: Inter, system-ui, sans-serif;
+          color: #2d2a26;
+        "
+      >
+        <p
+          style="
+            font-size: 0.75rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: #736b63;
+          "
+        >
+          ScholarMark
+        </p>
+        <h1
+          id="resilient-page-title"
+          style="
+            max-width: 48rem;
+            font-size: clamp(2.25rem, 7vw, 4rem);
+            line-height: 1.05;
+            margin: 1rem 0;
+          "
+        >
           Get ahead on your thesis, capstone, or big research paper
         </h1>
-        <p style="max-width:42rem;font-size:1.125rem;line-height:1.6;color:#625b54">
-          Plan, outline, revise, and strengthen long academic papers with source-grounded writing support.
+        <p
+          id="resilient-page-description"
+          style="max-width: 42rem; font-size: 1.125rem; line-height: 1.6; color: #625b54"
+        >
+          Plan, outline, revise, and strengthen long academic papers with source-grounded writing
+          support.
         </p>
-        <a href="/sign-up?redirect_url=%2Fpricing%3Fonboarding%3D1%26source%3Dsummer" style="display:inline-block;margin-top:1.5rem;padding:.9rem 1.25rem;border-radius:.5rem;background:#7c3aed;color:white;text-decoration:none;font-weight:700">Start now</a>
-        <noscript><p style="margin-top:1rem">JavaScript is required for the full ScholarMark workspace.</p></noscript>
+        <a
+          id="resilient-signup-link"
+          href="/sign-up?redirect_url=%2Fpricing%3Fonboarding%3D1%26source%3Dsummer"
+          target="_top"
+          style="
+            display: inline-block;
+            margin-top: 1.5rem;
+            padding: 0.9rem 1.25rem;
+            border-radius: 0.5rem;
+            background: #7c3aed;
+            color: white;
+            text-decoration: none;
+            font-weight: 700;
+          "
+          >Start now</a
+        >
+        <noscript
+          ><p style="margin-top: 1rem">
+            JavaScript is required for the full ScholarMark workspace.
+          </p></noscript
+        >
       </main>
     </div>
+    <script>
+      (() => {
+        const fallback = window.__scholarmarkStaticAuthFallback;
+        if (!fallback) return;
+        const signingIn = fallback.kind === "sign-in";
+        const title = document.getElementById("resilient-page-title");
+        const description = document.getElementById("resilient-page-description");
+        const link = document.getElementById("resilient-signup-link");
+        if (title)
+          title.textContent = signingIn
+            ? "Sign in to ScholarMark"
+            : "Create your ScholarMark account";
+        if (description) {
+          description.textContent =
+            "Secure email access is loading. If it takes more than a moment, continue on ScholarMark's hosted account page.";
+        }
+        if (link) {
+          link.href = fallback.url;
+          link.textContent = signingIn ? "Continue to secure sign in" : "Continue to secure signup";
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -25,7 +25,9 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname, "client"),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true,
+    // scripts/build.ts prunes old generations after a grace period. Keeping
+    // recent hashes lets cached Instagram HTML survive a deployment.
+    emptyOutDir: false,
   },
   server: {
     fs: {

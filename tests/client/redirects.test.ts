@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SIGNED_IN_REDIRECT,
+  buildClerkAccountPortalUrl,
   buildDirectSignupUrl,
   getSafeRedirectUrl,
   withRedirectUrl,
@@ -28,9 +29,39 @@ describe("redirect utilities", () => {
     expect(getSafeRedirectUrl("?redirect_url=%2Fsign-up")).toBe(DEFAULT_SIGNED_IN_REDIRECT);
   });
 
+  it("rejects backslash and control-character URL parser escapes", () => {
+    expect(getSafeRedirectUrl("?redirect_url=%2F%5Cevil.example%2Fsteal")).toBe(
+      DEFAULT_SIGNED_IN_REDIRECT,
+    );
+    expect(getSafeRedirectUrl("?redirect_url=%2Fsafe%0A%2Fnext")).toBe(DEFAULT_SIGNED_IN_REDIRECT);
+  });
+
   it("builds sign-in URLs with encoded return targets", () => {
     expect(withRedirectUrl("/sign-in", "/account?checkout=success")).toBe(
       "/sign-in?redirect_url=%2Faccount%3Fcheckout%3Dsuccess",
+    );
+  });
+
+  it("builds a hosted Clerk fallback that returns to a safe ScholarMark route", () => {
+    expect(
+      buildClerkAccountPortalUrl(
+        "sign-up",
+        "/pricing?onboarding=1&source=summer",
+        "https://scholarmark.ai",
+      ),
+    ).toBe(
+      "https://accounts.scholarmark.ai/sign-up?redirect_url=https%3A%2F%2Fscholarmark.ai%2Fpricing%3Fonboarding%3D1%26source%3Dsummer",
+    );
+  });
+
+  it("does not pass unsafe or recursive redirects to the hosted Clerk fallback", () => {
+    expect(
+      buildClerkAccountPortalUrl("sign-in", "https://evil.example/steal", "https://scholarmark.ai"),
+    ).toBe(
+      "https://accounts.scholarmark.ai/sign-in?redirect_url=https%3A%2F%2Fscholarmark.ai%2Fdashboard",
+    );
+    expect(buildClerkAccountPortalUrl("sign-up", "/sign-up", "https://scholarmark.ai")).toContain(
+      "redirect_url=https%3A%2F%2Fscholarmark.ai%2Fdashboard",
     );
   });
 

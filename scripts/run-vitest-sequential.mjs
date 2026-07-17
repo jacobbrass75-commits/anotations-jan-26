@@ -4,14 +4,7 @@ import { testFiles } from "./test-files.mjs";
 
 const vitestEntrypoint = path.resolve("node_modules", "vitest", "vitest.mjs");
 const passthroughArgs = process.argv.slice(2);
-const hasHookTimeout = passthroughArgs.some(
-  (arg) =>
-    arg === "--hookTimeout" ||
-    arg.startsWith("--hookTimeout=") ||
-    arg === "--hook-timeout" ||
-    arg.startsWith("--hook-timeout="),
-);
-const platformArgs = process.platform === "win32" && !hasHookTimeout ? ["--hookTimeout=30000"] : [];
+const platformArgs = process.platform === "win32" ? ["--hookTimeout=30000"] : [];
 
 for (const testFile of testFiles) {
   console.log(`\n[vitest] ${testFile}`);

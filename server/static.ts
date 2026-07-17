@@ -2,7 +2,13 @@ import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
 
-const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
+export const HTML_CACHE_CONTROL = "no-store, no-cache, must-revalidate, max-age=0, s-maxage=0";
+
+function setHtmlHeaders(res: express.Response): void {
+  res.setHeader("Cache-Control", HTML_CACHE_CONTROL);
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+}
 
 function staticPaths() {
   const distPath = path.resolve(__dirname, "public");
@@ -15,7 +21,7 @@ function staticPaths() {
 
 function setStaticHeaders(res: express.Response, filePath: string): void {
   if (filePath.endsWith(".html")) {
-    res.setHeader("Cache-Control", HTML_CACHE_CONTROL);
+    setHtmlHeaders(res);
     return;
   }
   if (filePath.includes(`${path.sep}assets${path.sep}`)) {
@@ -28,7 +34,7 @@ export function servePublicStatic(app: Express) {
   const { distPath, indexPath } = staticPaths();
   app.use(express.static(distPath, { index: false, setHeaders: setStaticHeaders }));
   app.get(["/", "/start", "/summer", "/invite", "/invite/:code"], (_req, res) => {
-    res.setHeader("Cache-Control", HTML_CACHE_CONTROL);
+    setHtmlHeaders(res);
     res.sendFile(indexPath);
   });
 }
@@ -38,7 +44,7 @@ export function serveStatic(app: Express) {
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
-    res.setHeader("Cache-Control", HTML_CACHE_CONTROL);
+    setHtmlHeaders(res);
     res.sendFile(indexPath);
   });
 }
