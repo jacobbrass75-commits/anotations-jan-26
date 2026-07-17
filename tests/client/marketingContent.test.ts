@@ -35,4 +35,16 @@ describe("marketing blog content", () => {
     expect(contextBenchmark?.body).toContain("0.9643");
     expect(contextBenchmark?.body).toContain("small custom suite");
   });
+
+  it("places the harness explainers in the public article series", () => {
+    expect(getArticle("writing-v3-quote-integrity-benchmark")?.body).toContain(
+      "/campaign-assets/writing-v3-harness-why-it-works.webp",
+    );
+    expect(getArticle("context-rot-long-research-projects")?.body).toContain(
+      "/campaign-assets/writing-v3-harness-vs-normal-chat.webp",
+    );
+    expect(getArticle("writing-v3-living-evidence-packet")?.body).toContain(
+      "/campaign-assets/writing-v3-harness-source-scale.webp",
+    );
+  });
 });

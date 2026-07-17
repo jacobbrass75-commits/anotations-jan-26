@@ -23,10 +23,18 @@ function MarkdownBody({ body }: { body: string }) {
           return <p className="text-sm leading-7 text-muted-foreground md:text-base">{children}</p>;
         },
         ul({ children }) {
-          return <ul className="space-y-2 pl-5 text-sm leading-7 text-muted-foreground md:text-base">{children}</ul>;
+          return (
+            <ul className="space-y-2 pl-5 text-sm leading-7 text-muted-foreground md:text-base">
+              {children}
+            </ul>
+          );
         },
         ol({ children }) {
-          return <ol className="space-y-2 pl-5 text-sm leading-7 text-muted-foreground md:text-base">{children}</ol>;
+          return (
+            <ol className="space-y-2 pl-5 text-sm leading-7 text-muted-foreground md:text-base">
+              {children}
+            </ol>
+          );
         },
         li({ children }) {
           return <li className="pl-1">{children}</li>;
@@ -34,7 +42,10 @@ function MarkdownBody({ body }: { body: string }) {
         a({ href = "", children }) {
           if (href.startsWith("/")) {
             return (
-              <Link href={href} className="font-medium text-primary underline-offset-4 hover:underline">
+              <Link
+                href={href}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
                 {children}
               </Link>
             );
@@ -48,6 +59,16 @@ function MarkdownBody({ body }: { body: string }) {
             >
               {children}
             </a>
+          );
+        },
+        img({ src = "", alt = "" }) {
+          return (
+            <img
+              src={src}
+              alt={alt}
+              loading="lazy"
+              className="my-7 w-full rounded-lg border border-border bg-muted/30"
+            />
           );
         },
       }}
@@ -70,7 +91,10 @@ export default function BlogArticle() {
       );
     }
 
-    const cleanupMeta = updatePageMeta(`${article.seoTitle} | ScholarMark`, article.metaDescription);
+    const cleanupMeta = updatePageMeta(
+      `${article.seoTitle} | ScholarMark`,
+      article.metaDescription,
+    );
     const cleanupJsonLd = mountJsonLd({
       "@context": "https://schema.org",
       "@type": "BlogPosting",
@@ -106,7 +130,10 @@ export default function BlogArticle() {
               <p className="text-sm text-muted-foreground">
                 That guide is not published here yet. The blog hub has the live articles.
               </p>
-              <Link href="/blog" className="inline-flex items-center gap-2 text-sm font-medium text-primary">
+              <Link
+                href="/blog"
+                className="inline-flex items-center gap-2 text-sm font-medium text-primary"
+              >
                 <ArrowLeft className="h-4 w-4" />
                 Back to blog
               </Link>
@@ -122,7 +149,10 @@ export default function BlogArticle() {
     <div className="min-h-screen bg-background text-foreground">
       <PublicSiteHeader eyebrow={article.category} />
       <main className="container mx-auto max-w-6xl space-y-8 px-4 py-8 lg:py-12">
-        <Link href="/blog" className="inline-flex items-center gap-2 text-sm font-medium text-primary">
+        <Link
+          href="/blog"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary"
+        >
           <ArrowLeft className="h-4 w-4" />
           Blog
         </Link>

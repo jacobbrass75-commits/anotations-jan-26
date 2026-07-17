@@ -87,6 +87,8 @@ Every within-model comparison used the same reader instructions, settings, case 
 
 That distinction matters. A summary can preserve the idea of a quote while deleting the wording or page needed to cite it. A raw context dump can preserve everything in theory while crowding the important page out of the usable window.
 
+![The Writing V3 harness resolves current decisions, retrieves relevant source pages, and binds each quote to its source and page.](/campaign-assets/writing-v3-harness-why-it-works.webp)
+
 ## The result across five readers
 
 The equal-budget updated scores were:
@@ -224,6 +226,8 @@ Recent-only memory has the opposite problem. It is compact, but it can erase an 
 
 A rolling summary helps, but a summary can flatten provenance. It may preserve that "a useful quote was found" while losing the exact wording, source ID, and page locator required for safe use.
 
+![A normal chat window lets history and pasted files compete for space, while the ScholarMark harness retrieves relevant pages from a searchable source library.](/campaign-assets/writing-v3-harness-vs-normal-chat.webp)
+
 ## A better mental model: active memory and cold evidence
 
 Writing V3 treats the active prompt as deliberately selective while keeping the original evidence archive recoverable.
@@ -335,6 +339,8 @@ They are not the same.
 Synthetic retrieval turns and stale low-value history can leave the active window while the canonical source archive stays intact. If a later question makes an old source relevant again, the system can search the original text and rebuild the packet.
 
 The active prompt is temporary. The evidence record is durable.
+
+![The source library can be larger than one model window because each section receives a newly focused evidence packet.](/campaign-assets/writing-v3-harness-source-scale.webp)
 
 ## Why this architecture mattered in testing
 
