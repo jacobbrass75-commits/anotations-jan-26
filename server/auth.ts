@@ -19,6 +19,8 @@ declare global {
       email: string;
       tier: string;
       authType?: "clerk" | "jwt" | "api_key" | "mcp" | "local_dev";
+      authCreatedAt?: number;
+      authEmailVerified?: boolean;
       apiKeyId?: string;
       scopes?: string[];
     }
@@ -486,11 +488,19 @@ async function resolveUser(req: Request): Promise<Express.User | null> {
   const clerkUser = await clerkClient.users.getUser(auth.userId);
   const { email, verified: emailVerified } = getPrimaryClerkEmail(clerkUser);
   const tier = normalizeClerkTier(clerkUser.publicMetadata?.tier);
+  const clerkCreatedAt = Number((clerkUser as { createdAt?: number }).createdAt);
 
   // Ensure a local DB row exists (for usage tracking)
   const dbUser = await getOrCreateUser(auth.userId, email, tier, { emailVerified });
 
-  return { userId: dbUser.id, email: dbUser.email, tier: dbUser.tier, authType: "clerk" };
+  return {
+    userId: dbUser.id,
+    email: dbUser.email,
+    tier: dbUser.tier,
+    authType: "clerk",
+    authCreatedAt: Number.isFinite(clerkCreatedAt) ? clerkCreatedAt : undefined,
+    authEmailVerified: emailVerified,
+  };
 }
 
 // ── Middleware: requires a valid Clerk session, API key, or legacy JWT ───────

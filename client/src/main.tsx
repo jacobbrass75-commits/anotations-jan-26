@@ -10,7 +10,7 @@ import {
   STALE_ASSET_STABILITY_MS,
   stripStaleAssetRecoveryParam,
 } from "@/lib/assetRecovery";
-import { isFastMarketingEntry } from "@/lib/marketingEntry";
+import { getPaidInstagramSignupRedirect, isFastMarketingEntry } from "@/lib/marketingEntry";
 
 function requestStaleAssetRecovery(): boolean {
   const recoveryWindow = window as typeof window & {
@@ -50,6 +50,16 @@ if (!LOCAL_DEV_AUTH && !PUBLISHABLE_KEY) {
 const root = createRoot(document.getElementById("root")!);
 
 async function renderApp() {
+  const paidInstagramSignupUrl = getPaidInstagramSignupRedirect(
+    window.location.hostname,
+    window.location.pathname,
+    window.location.search,
+  );
+  if (paidInstagramSignupUrl) {
+    window.location.replace(paidInstagramSignupUrl);
+    return;
+  }
+
   if (isFastMarketingEntry(window.location.hostname, window.location.pathname)) {
     const [{ default: SummerCampaign }, { SiteAnalyticsTracker }] = await Promise.all([
       import("./pages/SummerCampaign"),

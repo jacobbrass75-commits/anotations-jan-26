@@ -1,28 +1,42 @@
-import { SignUp } from "@clerk/clerk-react";
+import { SignUp, useAuth as useClerkAuth } from "@clerk/clerk-react";
 import { useEffect } from "react";
 import { Redirect } from "wouter";
 import { EmbeddedSignUpForm } from "@/components/auth/EmbeddedSignUpForm";
-import { SIGNUP_IN_PROGRESS_KEY } from "@/components/SignupAnalyticsTracker";
 import { isLocalDevAuthEnabled } from "@/lib/auth";
 import { detectEmbeddedBrowser } from "@/lib/embeddedBrowser";
 import { getSafeRedirectUrl, withRedirectUrl } from "@/lib/redirects";
 import { trackSiteEvent } from "@/lib/siteAnalytics";
+import { markSignupInProgress } from "@/lib/signupAnalyticsState";
 
 export default function Register() {
   const redirectUrl = getSafeRedirectUrl();
+
+  if (isLocalDevAuthEnabled()) {
+    return <Redirect to={redirectUrl} />;
+  }
+
+  return <ClerkRegister redirectUrl={redirectUrl} />;
+}
+
+export function shouldRedirectSignedInUser(
+  isLoaded: boolean,
+  isSignedIn?: boolean | null,
+): boolean {
+  return isLoaded && isSignedIn === true;
+}
+
+function ClerkRegister({ redirectUrl }: { redirectUrl: string }) {
+  const { isLoaded, isSignedIn } = useClerkAuth();
   const embeddedBrowser = detectEmbeddedBrowser();
 
   useEffect(() => {
-    try {
-      if (sessionStorage.getItem(SIGNUP_IN_PROGRESS_KEY) === "1") return;
-      sessionStorage.setItem(SIGNUP_IN_PROGRESS_KEY, "1");
-      trackSiteEvent("signup_started", { ctaOrFeature: "clerk_signup" });
-    } catch {
-      trackSiteEvent("signup_started", { ctaOrFeature: "clerk_signup" });
-    }
-  }, []);
+    if (!isLoaded || isSignedIn) return;
+    const flow = embeddedBrowser ? `embedded_${embeddedBrowser}` : "clerk_signup";
+    if (!markSignupInProgress()) return;
+    trackSiteEvent("signup_started", { ctaOrFeature: flow });
+  }, [embeddedBrowser, isLoaded, isSignedIn]);
 
-  if (isLocalDevAuthEnabled()) {
+  if (shouldRedirectSignedInUser(isLoaded, isSignedIn)) {
     return <Redirect to={redirectUrl} />;
   }
 

@@ -173,6 +173,7 @@ ON site_page_views(visitor_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS site_events (
   id TEXT PRIMARY KEY,
   event_name TEXT NOT NULL,
+  user_id TEXT,
   visitor_id TEXT NOT NULL,
   session_id TEXT NOT NULL,
   path TEXT NOT NULL,
@@ -377,10 +378,15 @@ ensureColumn("campaign_signups", "paid_plan", "paid_plan TEXT");
 ensureColumn("campaign_signups", "paid_status", "paid_status TEXT");
 ensureColumn("campaign_signups", "stripe_subscription_id", "stripe_subscription_id TEXT");
 ensureColumn("campaign_signups", "stripe_price_id", "stripe_price_id TEXT");
+ensureColumn("site_events", "user_id", "user_id TEXT");
 
 sqlite.exec(`
 CREATE INDEX IF NOT EXISTS idx_campaign_signups_paid_at
 ON campaign_signups(paid_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_site_events_signup_completion_user
+ON site_events(user_id, event_name)
+WHERE user_id IS NOT NULL AND event_name = 'signup_completed';
 `);
 
 // Export the raw sqlite connection for direct queries if needed

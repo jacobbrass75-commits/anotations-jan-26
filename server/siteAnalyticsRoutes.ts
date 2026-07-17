@@ -32,14 +32,19 @@ const FUNNEL_EVENTS = [
   "primary_cta_click",
   "pricing_view",
   "signup_started",
+  "signup_details_submitted",
+  "signup_verification_sent",
+  "signup_verification_succeeded",
   "signup_completed",
   "checkout_started",
   "purchase_completed",
   "first_project_created",
 ] as const;
 
+const SITE_EVENTS = [...FUNNEL_EVENTS, "signup_hosted_fallback"] as const;
+
 const siteEventSchema = pageViewSchema.extend({
-  eventName: z.enum(FUNNEL_EVENTS),
+  eventName: z.enum(SITE_EVENTS),
   clientTimestamp: z.number().int().positive().optional().nullable(),
   ctaOrFeature: z.string().max(200).optional().nullable(),
   deviceCategory: z.enum(["mobile", "tablet", "desktop", "unknown"]),
@@ -102,17 +107,35 @@ export function registerSiteAnalyticsRoutes(app: Express): void {
 
       try {
         const event = parsed.data;
-        sqlite
+        let authoritativeRegistration = event.eventName !== "signup_completed";
+        let eventUserId: string | null = null;
+        if (event.eventName === "signup_completed" && req.user?.userId) {
+          const user = await getUserById(req.user.userId);
+          authoritativeRegistration =
+            req.user.authType === "clerk" &&
+            req.user.authEmailVerified === true &&
+            isRecentMetaRegistration(req.user.authCreatedAt) &&
+            user?.emailVerified === true;
+          if (authoritativeRegistration) eventUserId = user!.id;
+        }
+
+        // A completion is a business conversion, not a client assertion. Do
+        // not persist it unless the request belongs to a newly-created,
+        // verified local account.
+        if (!authoritativeRegistration) return res.status(204).end();
+
+        const inserted = sqlite
           .prepare(
-            `INSERT INTO site_events (
-        id, event_name, visitor_id, session_id, path, referrer_host,
+            `INSERT OR IGNORE INTO site_events (
+        id, event_name, user_id, visitor_id, session_id, path, referrer_host,
         utm_source, utm_medium, utm_campaign, utm_content, cta_or_feature,
         device_category, viewport_width, viewport_height, client_timestamp, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             randomUUID(),
             event.eventName,
+            eventUserId,
             event.visitorId,
             event.sessionId,
             event.path,
@@ -128,16 +151,7 @@ export function registerSiteAnalyticsRoutes(app: Express): void {
             event.clientTimestamp ?? null,
             Date.now(),
           );
-        let authoritativeRegistration = event.eventName !== "signup_completed";
-        if (event.eventName === "signup_completed") {
-          authoritativeRegistration = false;
-          if (req.user?.userId) {
-            const user = await getUserById(req.user.userId);
-            const createdAt = user?.createdAt?.getTime();
-            authoritativeRegistration = isRecentMetaRegistration(createdAt);
-          }
-        }
-
+        if (inserted.changes === 0) return res.status(204).end();
         const shouldForwardToMeta =
           event.marketingConsent &&
           authoritativeRegistration &&

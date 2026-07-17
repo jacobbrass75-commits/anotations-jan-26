@@ -77,15 +77,25 @@ export function buildClerkAccountPortalUrl(
   return portalUrl.toString();
 }
 
-export function buildDirectSignupUrl(search = ""): string {
+export function buildAttributedSignupUrl(
+  search = "",
+  redirectUrl = DEFAULT_SIGNED_IN_REDIRECT,
+  embeddedAuth = false,
+): string {
   const incoming = new URLSearchParams(search);
   const outgoing = new URLSearchParams();
-  outgoing.set("redirect_url", "/dashboard");
+  outgoing.set("redirect_url", normalizeSafeRedirectUrl(redirectUrl));
 
   for (const key of DIRECT_SIGNUP_ATTRIBUTION_PARAMS) {
     const value = incoming.get(key)?.trim();
     if (value) outgoing.set(key, value.slice(0, 200));
   }
 
+  if (embeddedAuth) outgoing.set("embedded_auth", "1");
+
   return `/sign-up?${outgoing.toString()}`;
+}
+
+export function buildDirectSignupUrl(search = ""): string {
+  return buildAttributedSignupUrl(search);
 }
