@@ -42,6 +42,20 @@ describe("fast marketing entry", () => {
     );
   });
 
+  it("preserves every allowlisted attribution field and caps campaign values", () => {
+    const redirect = getPaidInstagramSignupRedirect(
+      "scholarmark.ai",
+      "/",
+      `?utm_source=ig&utm_medium=paid&utm_term=thesis&utm_id=meta-42&utm_content=${"x".repeat(205)}&ignored=secret`,
+    );
+    const params = new URL(redirect!, "https://scholarmark.ai").searchParams;
+
+    expect(params.get("utm_term")).toBe("thesis");
+    expect(params.get("utm_id")).toBe("meta-42");
+    expect(params.get("utm_content")).toBe("x".repeat(200));
+    expect(params.has("ignored")).toBe(false);
+  });
+
   it("recognizes normalized paid Instagram attribution", () => {
     expect(isPaidInstagramCampaign("?utm_source=ig&utm_medium=paid")).toBe(true);
     expect(isPaidInstagramCampaign("?utm_source=Instagram&utm_medium=paid_social")).toBe(true);

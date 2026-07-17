@@ -15,6 +15,7 @@ import { assertProductionConfig } from "./productionConfig";
 import { globalLimiter } from "./rateLimits";
 import { createLogger } from "./logger";
 import { canonicalRequest } from "./canonicalRequest";
+import { paidInstagramEntry } from "./paidInstagramEntry";
 
 assertProductionConfig(process.env, { phase: "runtime" });
 
@@ -23,6 +24,7 @@ const httpServer = createServer(app);
 app.disable("x-powered-by");
 app.set("trust proxy", true);
 app.use(canonicalRequest);
+app.use(paidInstagramEntry);
 if (process.env.NODE_ENV === "production") {
   servePublicStatic(app);
 }
