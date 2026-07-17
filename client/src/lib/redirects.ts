@@ -1,3 +1,5 @@
+import { DIRECT_SIGNUP_ATTRIBUTION_PARAMS } from "../../../shared/paidInstagramEntry";
+
 export const DEFAULT_SIGNED_IN_REDIRECT = "/dashboard";
 export const DEFAULT_APP_ORIGIN = "https://scholarmark.ai";
 export const DEFAULT_CLERK_ACCOUNT_PORTAL_ORIGIN = "https://accounts.scholarmark.ai";
@@ -10,16 +12,6 @@ function hasControlCharacters(value: string): boolean {
     return codePoint <= 31 || codePoint === 127;
   });
 }
-
-const DIRECT_SIGNUP_ATTRIBUTION_PARAMS = [
-  "utm_source",
-  "utm_medium",
-  "utm_campaign",
-  "utm_content",
-  "utm_term",
-  "utm_id",
-  "fbclid",
-] as const;
 
 export function normalizeSafeRedirectUrl(redirectUrl: string | null | undefined): string {
   if (!redirectUrl) return DEFAULT_SIGNED_IN_REDIRECT;
