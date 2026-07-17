@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">Writing V3 quote integrity benchmark results</title>
+  <desc id="desc">Updated context scored 99.2 percent average quote integrity, compared with 55.8 percent for raw context and 55.3 percent for the former harness.</desc>
+  <rect width="1200" height="675" fill="#fbfaf8"/>
+  <rect x="52" y="48" width="1096" height="579" rx="28" fill="#ffffff" stroke="#e5e1dc" stroke-width="2"/>
+  <text x="92" y="110" fill="#1d2433" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="3">SCHOLARMARK · WRITING V3</text>
+  <text x="92" y="166" fill="#171717" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="750">Exact quotes survive crowded context</text>
+  <text x="92" y="204" fill="#69717d" font-family="Inter, Arial, sans-serif" font-size="20">Mean quote integrity across five frozen readers · equal 8K memory budget</text>
+
+  <line x1="108" y1="492" x2="702" y2="492" stroke="#ccd2db" stroke-width="2"/>
+  <line x1="108" y1="272" x2="702" y2="272" stroke="#edf0f4" stroke-width="2"/>
+  <line x1="108" y1="382" x2="702" y2="382" stroke="#edf0f4" stroke-width="2"/>
+  <text x="62" y="279" fill="#8b929d" font-family="Inter, Arial, sans-serif" font-size="15">100%</text>
+  <text x="75" y="389" fill="#8b929d" font-family="Inter, Arial, sans-serif" font-size="15">50%</text>
+
+  <rect x="150" y="369" width="112" height="123" rx="12" fill="#aeb6c2"/>
+  <text x="206" y="351" text-anchor="middle" fill="#4f5967" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="700">55.8%</text>
+  <text x="206" y="526" text-anchor="middle" fill="#555e69" font-family="Inter, Arial, sans-serif" font-size="18">Raw context</text>
+
+  <rect x="338" y="370" width="112" height="122" rx="12" fill="#75bce8"/>
+  <text x="394" y="351" text-anchor="middle" fill="#347ca9" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="700">55.3%</text>
+  <text x="394" y="526" text-anchor="middle" fill="#555e69" font-family="Inter, Arial, sans-serif" font-size="18">Former harness</text>
+
+  <rect x="526" y="274" width="112" height="218" rx="12" fill="#3f88f7"/>
+  <text x="582" y="254" text-anchor="middle" fill="#276bd5" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="800">99.2%</text>
+  <text x="582" y="526" text-anchor="middle" fill="#276bd5" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Updated context</text>
+
+  <rect x="760" y="256" width="330" height="94" rx="18" fill="#eaf3ff"/>
+  <text x="790" y="294" fill="#276bd5" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="800">+43.3 points</text>
+  <text x="790" y="325" fill="#5c6672" font-family="Inter, Arial, sans-serif" font-size="18">mean advantage over raw context</text>
+
+  <rect x="760" y="370" width="330" height="94" rx="18" fill="#f3f5f7"/>
+  <text x="790" y="408" fill="#1d2433" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="800">30 wins · 10 ties · 0 losses</text>
+  <text x="790" y="439" fill="#5c6672" font-family="Inter, Arial, sans-serif" font-size="18">40 paired model-case comparisons</text>
+
+  <rect x="760" y="484" width="330" height="94" rx="18" fill="#f8f0e8"/>
+  <text x="790" y="522" fill="#8d5a2b" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="800">≈84% fewer input tokens</text>
+  <text x="790" y="553" fill="#6f655b" font-family="Inter, Arial, sans-serif" font-size="18">than complete full-context packets</text>
+
+  <text x="92" y="598" fill="#8a919b" font-family="Inter, Arial, sans-serif" font-size="13">Internal deterministic synthetic benchmark · July 2026 · eight cases · five frozen reader targets</text>
+</svg>

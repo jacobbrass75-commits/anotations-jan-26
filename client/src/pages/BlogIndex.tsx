@@ -13,8 +13,8 @@ export default function BlogIndex() {
   useEffect(
     () =>
       updatePageMeta(
-        "ScholarMark Blog | Source-Grounded Writing Guides",
-        "Guides for thesis planning, source-grounded AI writing, citation verification, quote context, and student-owned academic work.",
+        "ScholarMark Blog | Writing Guides and Research",
+        "Guides and benchmark research on thesis planning, source-grounded AI writing, citation verification, quote context, and student-owned academic work.",
       ),
     [],
   );
@@ -27,11 +27,11 @@ export default function BlogIndex() {
           <div className="space-y-5">
             <div className="eva-section-title">ScholarMark Blog</div>
             <h1 className="max-w-3xl text-3xl font-bold tracking-tight md:text-5xl">
-              Source-grounded writing guides for serious student research.
+              Source-grounded writing guides and research for serious student work.
             </h1>
             <p className="max-w-2xl text-base leading-7 text-muted-foreground md:text-lg">
-              Practical workflows for theses, capstones, long papers, quote context, citation
-              verification, and AI-assisted writing that keeps the evidence visible.
+              Practical workflows and transparent benchmark results for theses, capstones, long
+              papers, quote context, citation verification, and evidence-aware AI writing.
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
               {[
