@@ -41,6 +41,8 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [delayMessage, setDelayMessage] = useState<string | null>(null);
   const activatingSession = useRef(false);
+  const hasLoadedOnce = useRef(isLoaded);
+  const sessionRecoveryRequired = useRef(false);
 
   const portalUrl = useMemo(
     () => buildClerkAccountPortalUrl("sign-up", redirectUrl),
@@ -49,17 +51,30 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
   const signInUrl = useMemo(() => withRedirectUrl("/sign-in", redirectUrl), [redirectUrl]);
   const requiredProfileFields = signUp ? getRequiredProfileFields(signUp) : [];
 
+  const enterSessionRecovery = useCallback((message: string) => {
+    sessionRecoveryRequired.current = true;
+    setError(message);
+    setNotice(null);
+    setStep("recovery");
+  }, []);
+
   useEffect(() => {
     if (isLoaded) {
+      hasLoadedOnce.current = true;
       setLoadTimedOut(false);
       return;
     }
+    if (hasLoadedOnce.current) return;
     const timeout = window.setTimeout(() => setLoadTimedOut(true), CLERK_LOAD_TIMEOUT_MS);
     return () => window.clearTimeout(timeout);
   }, [isLoaded]);
 
   useEffect(() => {
     if (!isLoaded || !signUp) return;
+    if (sessionRecoveryRequired.current) {
+      setStep("recovery");
+      return;
+    }
     const nextStep = deriveEmbeddedSignUpStep(signUp);
     setStep(nextStep);
     if (signUp.emailAddress) setEmailAddress(signUp.emailAddress);
@@ -67,7 +82,13 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
 
   const activateCompletedSignUp = useCallback(
     async (result: SignUpResource): Promise<boolean> => {
-      if (result.status !== "complete" || !result.createdSessionId || !setActive) return false;
+      if (result.status !== "complete") return false;
+      if (!result.createdSessionId || !setActive) {
+        enterSessionRecovery(
+          "Your account is ready, but this browser could not open its secure session. Continue through the secure account page below.",
+        );
+        return true;
+      }
       if (activatingSession.current) return true;
       activatingSession.current = true;
       try {
@@ -84,19 +105,23 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
         return true;
       } catch (caught) {
         activatingSession.current = false;
-        throw caught;
+        enterSessionRecovery(
+          getClerkErrorMessage(
+            caught,
+            "Your account is ready, but its secure session could not open here. Continue through the secure account page below.",
+          ),
+        );
+        return true;
       }
     },
-    [portalUrl, redirectUrl, setActive],
+    [enterSessionRecovery, portalUrl, redirectUrl, setActive],
   );
 
   useEffect(() => {
-    if (!isLoaded || !signUp || signUp.status !== "complete") return;
-    void activateCompletedSignUp(signUp).catch((caught) => {
-      setError(
-        getClerkErrorMessage(caught, "Your account is ready, but sign-in could not finish."),
-      );
-    });
+    if (!isLoaded || !signUp || signUp.status !== "complete" || sessionRecoveryRequired.current) {
+      return;
+    }
+    void activateCompletedSignUp(signUp);
   }, [activateCompletedSignUp, isLoaded, signUp]);
 
   async function advanceSignUp(result: SignUpResource, sendVerificationCode: boolean) {
@@ -253,11 +278,13 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
       ? "Check your email"
       : step === "profile"
         ? "Finish your profile"
-        : step === "unsupported"
-          ? "Finish secure setup"
-          : step === "complete"
-            ? "Opening ScholarMark"
-            : "Create your free account";
+        : step === "recovery"
+          ? "Finish secure account setup"
+          : step === "unsupported"
+            ? "Finish secure setup"
+            : step === "complete"
+              ? "Opening ScholarMark"
+              : "Create your free account";
 
   return (
     <Card
@@ -279,11 +306,13 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
             ? `Enter the code sent to ${emailAddress}.`
             : step === "profile"
               ? "Add the remaining details required for your account."
-              : step === "unsupported"
-                ? "This account needs an additional secure setup step."
-                : step === "complete"
-                  ? "Your secure session is being prepared."
-                  : "Use email and password here. No credit card required."}
+              : step === "recovery"
+                ? "Your account was created, but its session needs to finish on the secure account page."
+                : step === "unsupported"
+                  ? "This account needs an additional secure setup step."
+                  : step === "complete"
+                    ? "Your secure session is being prepared."
+                    : "Use email and password here. No credit card required."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -464,6 +493,29 @@ export function EmbeddedSignUpForm({ redirectUrl }: { redirectUrl: string }) {
                   ensureEmbeddedSignupStarted();
                   trackSiteEvent("signup_hosted_fallback", {
                     ctaOrFeature: "embedded_unsupported",
+                  });
+                }}
+              >
+                Continue secure account setup
+              </a>
+            </Button>
+          </div>
+        )}
+
+        {step === "recovery" && (
+          <div className="space-y-4">
+            <AuthMessage kind="error">
+              {error ??
+                "Your account is ready, but this browser could not open its secure session. Continue below."}
+            </AuthMessage>
+            <Button className="h-12 w-full" asChild>
+              <a
+                href={portalUrl}
+                target="_top"
+                onClick={() => {
+                  ensureEmbeddedSignupStarted();
+                  trackSiteEvent("signup_hosted_fallback", {
+                    ctaOrFeature: "embedded_session_recovery",
                   });
                 }}
               >
