@@ -10,6 +10,7 @@ export type EmbeddedSignUpStep =
   | "profile"
   | "verification"
   | "unsupported"
+  | "recovery"
   | "complete";
 
 const PROFILE_FIELDS = new Set<SignUpField>(["first_name", "last_name", "legal_accepted"]);
@@ -22,12 +23,17 @@ export function getRequiredProfileFields(
 
 export function deriveEmbeddedSignUpStep(
   signUp:
-    | Pick<SignUpResource, "emailAddress" | "missingFields" | "status" | "unverifiedFields">
+    | Pick<
+        SignUpResource,
+        "createdSessionId" | "emailAddress" | "missingFields" | "status" | "unverifiedFields"
+      >
     | null
     | undefined,
 ): EmbeddedSignUpStep {
   if (!signUp || signUp.status === "abandoned") return "details";
-  if (signUp.status === "complete") return "complete";
+  if (signUp.status === "complete") {
+    return signUp.createdSessionId ? "complete" : "recovery";
+  }
   if (!signUp.emailAddress || signUp.missingFields.includes("password")) return "details";
   if (getRequiredProfileFields(signUp).length > 0) return "profile";
   if (signUp.missingFields.length > 0) return "unsupported";

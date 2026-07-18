@@ -9,6 +9,7 @@ export const testFiles = [
   "tests/client/clerkErrors.test.ts",
   "tests/client/embeddedAuthFlow.test.ts",
   "tests/client/embeddedAuthMarkup.test.ts",
+  "tests/client/embeddedSignUpForm.integration.test.tsx",
   "tests/client/embeddedBrowser.test.ts",
   "tests/client/marketingEntry.test.ts",
   "tests/client/metaTracking.test.ts",
