@@ -119,7 +119,9 @@ async function syncUserFromClerk(
     updates.tier = tier;
   }
 
-  if (user.tokenLimit !== tierLimits.tokenLimit) {
+  // A zero limit is an explicit support override for unlimited token usage.
+  // Preserve it across Clerk profile syncs instead of restoring the tier cap.
+  if (user.tokenLimit !== 0 && user.tokenLimit !== tierLimits.tokenLimit) {
     updates.tokenLimit = tierLimits.tokenLimit;
   }
 
