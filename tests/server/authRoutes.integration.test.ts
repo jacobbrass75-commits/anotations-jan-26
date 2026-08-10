@@ -500,6 +500,54 @@ describe("auth route integration", () => {
     }
   });
 
+  it("preserves an explicit unlimited token override during Clerk sync", async () => {
+    const { server, sqlite } = await createAuthApp();
+    sqlite
+      .prepare("UPDATE users SET tokens_used = ?, token_limit = ? WHERE id = ?")
+      .run(2_007_804, 0, "user-1");
+    clerkGetAuth.mockReturnValue({ userId: "user_unlimited_clerk_instance" });
+    clerkGetUser.mockResolvedValue({
+      primaryEmailAddressId: "email_unlimited",
+      emailAddresses: [
+        {
+          id: "email_unlimited",
+          emailAddress: "Researcher@Example.com",
+          verification: { status: "verified" },
+        },
+      ],
+      publicMetadata: { tier: "max" },
+    });
+
+    try {
+      const profile = await requestJson<Record<string, unknown>>(server.baseUrl, "/api/auth/me");
+      const existingUser = sqlite
+        .prepare("SELECT tier, tokens_used, token_limit, storage_limit FROM users WHERE id = ?")
+        .get("user-1") as {
+        tier: string;
+        tokens_used: number;
+        token_limit: number;
+        storage_limit: number;
+      };
+
+      expect(profile.status).toBe(200);
+      expect(profile.body).toMatchObject({
+        id: "user-1",
+        tier: "max",
+        tokensUsed: 2_007_804,
+        tokenLimit: 0,
+        storageLimit: 5_368_709_120,
+      });
+      expect(existingUser).toEqual({
+        tier: "max",
+        tokens_used: 2_007_804,
+        token_limit: 0,
+        storage_limit: 5_368_709_120,
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("applies token and storage limits from explicit Clerk tiers", async () => {
     const { server, sqlite } = await createAuthApp();
 
