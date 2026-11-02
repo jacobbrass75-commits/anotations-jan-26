@@ -734,7 +734,21 @@ function parseMetadataClient(rawMetadata: unknown, clientId: string): OAuthClien
     return null;
   }
 
-  const tokenEndpointAuthMethod = pickString(metadata.token_endpoint_auth_method) || "none";
+  // CIMD can advertise several supported methods. Select our supported public
+  // client method even when the legacy preference names private_key_jwt.
+  const supportedMethods = metadata.token_endpoint_auth_methods_supported;
+  if (
+    supportedMethods !== undefined &&
+    (!Array.isArray(supportedMethods) ||
+      !supportedMethods.every((method) => typeof method === "string") ||
+      !supportedMethods.includes("none"))
+  ) {
+    return null;
+  }
+  const tokenEndpointAuthMethod =
+    supportedMethods !== undefined
+      ? "none"
+      : pickString(metadata.token_endpoint_auth_method) || "none";
   if (tokenEndpointAuthMethod !== "none") {
     return null;
   }
