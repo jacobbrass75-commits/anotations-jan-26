@@ -45,7 +45,7 @@ function attachAuthInfo(req) {
 
 function createMcpServer() {
   const server = new McpServer(
-    { name: "ScholarMark", version: "1.1.0" },
+    { name: "ScholarMark", version: "1.1.1" },
     { instructions: SCHOLARMARK_HOST_INSTRUCTIONS },
   );
   registerScholarMarkTools(server, { backendBaseUrl, appBaseUrl, aiMode });
