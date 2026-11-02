@@ -126,18 +126,13 @@ describe("MCP host-AI mode", () => {
   let mcpChild: ChildProcess | null = null;
   const originalCwd = process.cwd();
 
-  beforeEach(
-    async () => {
-      tempDir = await mkdtemp(join(tmpdir(), "scholarmark-mcp-host-"));
-      vi.resetModules();
-      vi.clearAllMocks();
-      process.chdir(tempDir);
-      await bootstrapTempWorkspace(tempDir);
-    },
-    // Cold drizzle/tsx startup exceeded 30s on the Windows CI runner. Keep the
-    // tool assertions at their existing timeout; allow only setup more time.
-    process.platform === "win32" ? 90_000 : 30_000,
-  );
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "scholarmark-mcp-host-"));
+    vi.resetModules();
+    vi.clearAllMocks();
+    process.chdir(tempDir);
+    await bootstrapTempWorkspace(tempDir);
+  });
 
   afterEach(async () => {
     mcpChild?.kill();

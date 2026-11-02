@@ -4,7 +4,6 @@ import { testFiles } from "./test-files.mjs";
 
 const vitestEntrypoint = path.resolve("node_modules", "vitest", "vitest.mjs");
 const passthroughArgs = process.argv.slice(2);
-const platformArgs = process.platform === "win32" ? ["--hookTimeout=30000"] : [];
 
 for (const testFile of testFiles) {
   console.log(`\n[vitest] ${testFile}`);
@@ -16,7 +15,6 @@ for (const testFile of testFiles) {
       vitestEntrypoint,
       "run",
       testFile,
-      ...platformArgs,
       ...passthroughArgs,
     ],
     {
