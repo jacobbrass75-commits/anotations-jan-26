@@ -12,6 +12,8 @@ export interface CreateTextBackedDocumentInput {
   fullText: string;
   sourceBuffer: Buffer;
   userId: string;
+  /** Skip the background AI summary (host-AI mode supplies its own). Defaults to true. */
+  generateSummary?: boolean;
 }
 
 const DEFAULT_PASTED_SOURCE_NAME = "Pasted Source";
@@ -42,6 +44,7 @@ export async function createTextBackedDocument({
   fullText,
   sourceBuffer,
   userId,
+  generateSummary = true,
 }: CreateTextBackedDocumentInput): Promise<Document> {
   const normalizedText = fullText.trim();
   if (normalizedText.length < 10) {
@@ -67,17 +70,19 @@ export async function createTextBackedDocument({
 
   await storage.updateDocument(doc.id, { chunkCount: chunks.length });
 
-  generateDocumentSummary(normalizedText)
-    .then(async (summaryData) => {
-      await storage.updateDocument(doc.id, {
-        summary: summaryData.summary,
-        mainArguments: summaryData.mainArguments,
-        keyConcepts: summaryData.keyConcepts,
+  if (generateSummary) {
+    generateDocumentSummary(normalizedText)
+      .then(async (summaryData) => {
+        await storage.updateDocument(doc.id, {
+          summary: summaryData.summary,
+          mainArguments: summaryData.mainArguments,
+          keyConcepts: summaryData.keyConcepts,
+        });
+      })
+      .catch((error) => {
+        logger.error({ err: error }, `Failed to generate summary for document ${doc.id}:`);
       });
-    })
-    .catch((error) => {
-      logger.error({ err: error }, `Failed to generate summary for document ${doc.id}:`);
-    });
+  }
 
   const storedDoc = await storage.getDocument(doc.id);
   if (!storedDoc) {

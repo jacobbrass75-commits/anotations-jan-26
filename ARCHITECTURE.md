@@ -374,6 +374,8 @@ Defaults:
 
 Production metadata expects `MCP_RESOURCE_URL=https://mcp.scholarmark.ai` and reverse proxy routing where `/mcp` reaches this service.
 
+AI mode (`MCP_AI_MODE`, default `host`): in host mode the MCP client (Claude or ChatGPT) does the analysis, and ScholarMark stores sources, summaries, annotations, and citations through write tools (`save_source`, `save_annotations`, `save_citation`, ...). The MCP server tags backend requests with `X-ScholarMark-AI-Mode: host`. `server/hostAiMode.ts` detects the header, and the routes then skip auto-summaries, citation and context extraction, annotation embeddings, and the token-budget gate on text upload. Tools that run ScholarMark's own models are only registered with `MCP_AI_MODE=server`. See `docs/integrations/host-ai-mode.md`.
+
 ## Chrome Extension
 
 The extension includes:

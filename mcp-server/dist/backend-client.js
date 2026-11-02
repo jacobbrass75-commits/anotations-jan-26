@@ -28,9 +28,11 @@ async function parseResponseBody(response) {
 export class ScholarMarkBackendClient {
     baseUrl;
     requestTimeoutMs;
-    constructor(baseUrl, requestTimeoutMs = 300_000) {
+    defaultHeaders;
+    constructor(baseUrl, requestTimeoutMs = 300_000, defaultHeaders = {}) {
         this.baseUrl = baseUrl.replace(/\/+$/, "");
         this.requestTimeoutMs = requestTimeoutMs;
+        this.defaultHeaders = defaultHeaders;
     }
     async request(method, path, bearerToken, body, options) {
         const timeoutMs = options?.timeoutMs ?? this.requestTimeoutMs;
@@ -38,6 +40,7 @@ export class ScholarMarkBackendClient {
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         const signal = options?.signal ?? controller.signal;
         const headers = {
+            ...this.defaultHeaders,
             Authorization: `Bearer ${bearerToken}`,
         };
         if (!options?.acceptSse) {
@@ -75,6 +78,7 @@ export class ScholarMarkBackendClient {
             const response = await fetch(`${this.baseUrl}${path}`, {
                 method,
                 headers: {
+                    ...this.defaultHeaders,
                     Authorization: `Bearer ${bearerToken}`,
                     Accept: "application/json",
                 },

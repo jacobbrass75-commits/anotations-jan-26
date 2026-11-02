@@ -10,6 +10,8 @@ module.exports = {
         SCHOLARMARK_BACKEND_URL: "http://127.0.0.1:5001",
         MCP_AUTHORIZATION_SERVER: "https://app.scholarmark.ai",
         MCP_RESOURCE_URL: "https://mcp.scholarmark.ai",
+        MCP_AI_MODE: "host",
+        SCHOLARMARK_APP_URL: "https://app.scholarmark.ai",
       },
     },
   ],

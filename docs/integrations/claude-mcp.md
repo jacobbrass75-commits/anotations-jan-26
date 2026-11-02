@@ -10,6 +10,8 @@ https://mcp.scholarmark.ai/mcp
 
 Use Streamable HTTP for new Claude integrations. Treat `/sse` as legacy.
 
+By default the server runs in host-AI mode: Claude reads and annotates the documents with the user's own Claude plan, and ScholarMark only stores the results. See [host-ai-mode.md](host-ai-mode.md).
+
 ## Claude Web And Claude Desktop
 
 For individual Pro/Max users:
@@ -73,9 +75,11 @@ Read-only first-pass config:
         "get_source_summary",
         "get_source_annotations",
         "search_project_sources",
-        "get_source_chunks",
+        "read_source_text",
         "find_quote_in_source",
-        "get_web_clips"
+        "get_web_clips",
+        "search",
+        "fetch"
       ]
     }
   }

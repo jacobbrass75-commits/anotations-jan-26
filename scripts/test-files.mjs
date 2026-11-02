@@ -44,6 +44,7 @@ export const testFiles = [
   "tests/server/chatRoutes.integration.test.ts",
   "tests/server/extensionRoutes.integration.test.ts",
   "tests/server/oauthRoutes.integration.test.ts",
+  "tests/server/mcpHostMode.integration.test.ts",
   "tests/server/projectRoutes.integration.test.ts",
   "tests/server/uploadRoutes.integration.test.ts",
   "tests/server/webClipRoutes.integration.test.ts",

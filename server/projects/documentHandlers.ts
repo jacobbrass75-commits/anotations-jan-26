@@ -3,7 +3,12 @@ import { eq } from "drizzle-orm";
 import { hasTokenBudgetAvailable, requireAuth } from "../auth";
 import { aiLimiter } from "../rateLimits";
 import { projectStorage } from "../projectStorage";
-import { buildAnnotationSearchIndex, generateRetrievalContext } from "../contextGenerator";
+import {
+  buildAnnotationSearchIndex,
+  generateRetrievalContext,
+  generateSearchableContent,
+} from "../contextGenerator";
+import { isHostAiRequest } from "../hostAiMode";
 import { db } from "../db";
 import { storage } from "../storage";
 import { isSourceRole } from "../sourceRoles";
@@ -136,7 +141,8 @@ export function registerProjectDocumentRoutes(app: Express): void {
 
         // Context and citation generation - don't block document addition
         try {
-          if (doc && project && (await hasTokenBudgetAvailable(req))) {
+          // Host-AI callers write their own citation and context, so skip server AI.
+          if (doc && project && !isHostAiRequest(req) && (await hasTokenBudgetAvailable(req))) {
             const tokenUsage = createTokenUsageAccumulator();
             // Generate retrieval context
             let retrievalContext = "";
@@ -474,11 +480,20 @@ export function registerProjectDocumentRoutes(app: Express): void {
 
         // Search indexing is optional - don't block annotation creation
         try {
-          const searchIndex = await buildAnnotationSearchIndex(
-            validated.highlightedText,
-            validated.note || null,
-            validated.category,
-          );
+          // Host-AI mode stores keyword-searchable text only, without an embedding call.
+          const searchIndex = isHostAiRequest(req)
+            ? {
+                searchableContent: await generateSearchableContent(
+                  validated.highlightedText,
+                  validated.note || null,
+                  validated.category,
+                ),
+              }
+            : await buildAnnotationSearchIndex(
+                validated.highlightedText,
+                validated.note || null,
+                validated.category,
+              );
           await projectStorage.updateProjectAnnotation(annotation.id, searchIndex);
         } catch (indexError) {
           logger.warn({ err: indexError }, "Search indexing failed (non-blocking):");
