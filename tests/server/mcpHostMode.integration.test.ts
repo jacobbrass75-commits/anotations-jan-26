@@ -202,6 +202,18 @@ describe("MCP host-AI mode", () => {
         expect(tool.annotations?.readOnlyHint, tool.name).toBeTypeOf("boolean");
       }
       expect(client.getInstructions()).toContain("save_annotations");
+      expect(
+        tools.find((tool: { name: string }) => tool.name === "search")?.outputSchema,
+      ).toMatchObject({
+        type: "object",
+        required: ["results"],
+      });
+      expect(
+        tools.find((tool: { name: string }) => tool.name === "fetch")?.outputSchema,
+      ).toMatchObject({
+        type: "object",
+        required: expect.arrayContaining(["id", "title", "text", "url"]),
+      });
 
       const project = parseToolJson(
         await client.callTool({ name: "create_project", arguments: { name: "Rivers" } }),
@@ -283,18 +295,31 @@ describe("MCP host-AI mode", () => {
       expect(annotated.saved[0].matchType).toBe("whitespace_insensitive");
       expect(annotated.notFound).toHaveLength(1);
 
-      const results = parseToolJson(
-        await client.callTool({ name: "search", arguments: { query: "embankments" } }),
-      );
+      const searchResponse = await client.callTool({
+        name: "search",
+        arguments: { query: "embankments" },
+      });
+      const results = parseToolJson(searchResponse);
+      expect(searchResponse.structuredContent).toEqual(results);
       const annotationHit = results.results.find((hit: { id: string }) =>
         hit.id.startsWith("annotation:"),
       );
       expect(annotationHit).toBeTruthy();
-      const fetched = parseToolJson(
-        await client.callTool({ name: "fetch", arguments: { id: annotationHit.id } }),
-      );
+      const fetchResponse = await client.callTool({
+        name: "fetch",
+        arguments: { id: annotationHit.id },
+      });
+      const fetched = parseToolJson(fetchResponse);
+      expect(fetchResponse.structuredContent).toEqual(fetched);
       expect(fetched.text).toContain("its floods forced London to build embankments");
       expect(fetched.metadata.citation).toMatchObject({ title: "Thames History" });
+
+      for (const id of [`source:${saved.projectDocumentId}`, `document:${saved.documentId}`]) {
+        const sourceResponse = await client.callTool({ name: "fetch", arguments: { id } });
+        const source = parseToolJson(sourceResponse);
+        expect(sourceResponse.structuredContent).toEqual(source);
+        expect(source.text).toBe(text);
+      }
 
       await client.close();
 

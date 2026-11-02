@@ -93,7 +93,7 @@ APP_BASE_URL=https://app.scholarmark.ai MCP_BASE_URL=https://mcp.scholarmark.ai 
 curl -s https://mcp.scholarmark.ai/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
 ```
 
-The response should show `"version":"1.1.0"`, and its `instructions` should mention `save_annotations`. On the server, `pm2 logs scholarmark-mcp` should print `AI mode: host` at startup.
+The response should show `"version":"1.1.1"`, and its `instructions` should mention `save_annotations`. On the server, `pm2 logs scholarmark-mcp` should print `AI mode: host` at startup.
 
 ## 7. Connect and test from Claude and ChatGPT
 

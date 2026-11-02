@@ -1,6 +1,18 @@
 import { BackendHttpError, ScholarMarkBackendClient } from "./backend-client.js";
 import { consumeSSEStream } from "./sse-buffer.js";
 import { z } from "zod";
+const RETRIEVAL_OUTPUT_SCHEMAS = {
+    search: z.object({
+        results: z.array(z.object({
+            id: z.string(), title: z.string(), url: z.string(),
+            text: z.string().optional(), score: z.number().nullable().optional(),
+        })),
+    }),
+    fetch: z.object({
+        id: z.string(), title: z.string(), text: z.string(), url: z.string(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+    }),
+};
 function asTextResult(payload) {
     return {
         content: [
@@ -23,6 +35,9 @@ function asErrorResult(message) {
     };
 }
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false };
+function asRetrievalResult(payload) {
+    return { ...asTextResult(payload), structuredContent: payload };
+}
 const WRITES = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 const OVERWRITES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
 const DELETES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
@@ -77,6 +92,7 @@ function registerTool(server, name, description, inputSchema, handler) {
             title: metadata.title,
             description,
             inputSchema: mcpInputSchema,
+            outputSchema: RETRIEVAL_OUTPUT_SCHEMAS[name],
             annotations: metadata.annotations,
         }, handler);
         return;
@@ -1355,7 +1371,7 @@ export function registerScholarMarkTools(server, options) {
             });
         }
         results.sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
-        return asTextResult({ results: results.slice(0, 30) });
+        return asRetrievalResult({ results: results.slice(0, 30) });
     }));
     register("fetch", "Open a search result by ID and return its full text and metadata", {
         type: "object",
@@ -1378,7 +1394,7 @@ export function registerScholarMarkTools(server, options) {
             const fullText = typeof document?.fullText === "string" ? document.fullText : "";
             const contextStart = Math.max(0, annotation.startPosition - 600);
             const contextEnd = Math.min(fullText.length, annotation.endPosition + 600);
-            return asTextResult({
+            return asRetrievalResult({
                 id,
                 title: `${document?.filename ?? "Source"} (annotation)`,
                 url: `${appBaseUrl}/projects/${projectDocument.projectId}/documents/${first}?annotationId=${encodeURIComponent(second)}`,
@@ -1398,7 +1414,7 @@ export function registerScholarMarkTools(server, options) {
             const documentId = projectDocument ? projectDocument.documentId : first;
             const document = await client.requestJson("GET", `/api/documents/${encodeURIComponent(documentId)}`, token);
             const fullText = typeof document?.fullText === "string" ? document.fullText : "";
-            return asTextResult({
+            return asRetrievalResult({
                 id,
                 title: document?.filename ?? "Source",
                 url: projectDocument
