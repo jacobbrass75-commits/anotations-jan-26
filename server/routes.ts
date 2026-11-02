@@ -65,6 +65,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { checkTokenBudget, requireAuth } from "./auth";
 import { aiLimiter } from "./rateLimits";
+import { checkTokenBudgetUnlessHostAi, isHostAiRequest } from "./hostAiMode";
 import { decrementStorageUsage, reserveStorageUsage } from "./authStorage";
 import { createTokenUsageAccumulator } from "./aiUsage";
 import { createTextBackedDocument, normalizePastedSourceFilename } from "./documentIngestion";
@@ -397,7 +398,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     "/api/upload",
     requireAuth,
     aiLimiter,
-    checkTokenBudget,
+    checkTokenBudgetUnlessHostAi,
     trackCampaignActivation("uploaded_document"),
     upload.single("file"),
     async (req: Request, res: Response) => {
@@ -421,6 +422,13 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         const isPdf = file.mimetype === "application/pdf" || fileExtension === ".pdf";
         const isTxt = file.mimetype === "text/plain" || fileExtension === ".txt";
         const isImage = isImageFile(file.mimetype, fileExtension);
+
+        if (isHostAiRequest(req) && (isImage || (!isPdf && !isTxt) || ocrMode !== "standard")) {
+          return res.status(400).json({
+            message:
+              "Host-AI uploads require a text-layer PDF or TXT file with standard extraction. Save extracted text instead for scans and images.",
+          });
+        }
 
         if (!isPdf && !isTxt && !isImage) {
           return res.status(400).json({
@@ -470,6 +478,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
             fullText,
             sourceBuffer: file.buffer,
             userId: req.user!.userId,
+            generateSummary: !isHostAiRequest(req),
           });
           reservedStorageBytes = 0;
           return res.json(updatedDoc);
@@ -539,7 +548,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     "/api/upload-text",
     requireAuth,
     aiLimiter,
-    checkTokenBudget,
+    checkTokenBudgetUnlessHostAi,
     trackCampaignActivation("uploaded_document"),
     textUpload.none(),
     async (req: Request, res: Response) => {
@@ -566,6 +575,7 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
           fullText: normalizedText,
           sourceBuffer: Buffer.from(rawText, "utf-8"),
           userId: req.user!.userId,
+          generateSummary: !isHostAiRequest(req),
         });
         reservedStorageBytes = 0;
 
@@ -1119,6 +1129,46 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
     } catch (error) {
       logger.error({ err: error }, "Error fetching summary:");
       res.status(500).json({ message: "Failed to fetch summary" });
+    }
+  });
+
+  // Save a summary written by the caller (host-AI mode) instead of generating one
+  app.put("/api/documents/:id/summary", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { summary, mainArguments, keyConcepts } = req.body ?? {};
+      const isStringList = (value: unknown) =>
+        value === undefined ||
+        (Array.isArray(value) && value.every((entry) => typeof entry === "string"));
+
+      if (summary !== undefined && typeof summary !== "string") {
+        return res.status(400).json({ message: "summary must be a string" });
+      }
+      if (!isStringList(mainArguments) || !isStringList(keyConcepts)) {
+        return res
+          .status(400)
+          .json({ message: "mainArguments and keyConcepts must be arrays of strings" });
+      }
+      if (summary === undefined && mainArguments === undefined && keyConcepts === undefined) {
+        return res.status(400).json({ message: "Nothing to update" });
+      }
+
+      const doc = await getOwnedDocumentOr404(req, res);
+      if (!doc) return;
+
+      const updated = await storage.updateDocument(doc.id, {
+        ...(summary !== undefined ? { summary } : {}),
+        ...(mainArguments !== undefined ? { mainArguments } : {}),
+        ...(keyConcepts !== undefined ? { keyConcepts } : {}),
+      });
+
+      res.json({
+        summary: updated?.summary ?? null,
+        mainArguments: updated?.mainArguments ?? null,
+        keyConcepts: updated?.keyConcepts ?? null,
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Error saving summary:");
+      res.status(500).json({ message: "Failed to save summary" });
     }
   });
 

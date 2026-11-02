@@ -22,10 +22,63 @@ function asErrorResult(message) {
         ],
     };
 }
+const READ_ONLY = { readOnlyHint: true, openWorldHint: false };
+const WRITES = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const OVERWRITES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+const DELETES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+// Directory listings (Claude connectors, ChatGPT apps) require a title and safety hints on every tool.
+const TOOL_METADATA = {
+    get_projects: { title: "List projects", annotations: READ_ONLY },
+    create_project: { title: "Create project", annotations: WRITES },
+    get_source_library: { title: "List source library", annotations: READ_ONLY },
+    get_project_sources: { title: "List project sources", annotations: READ_ONLY },
+    search_project_sources: { title: "Search project", annotations: READ_ONLY },
+    add_source_to_project: { title: "Add source to project", annotations: WRITES },
+    upload_text_to_project: { title: "Upload text to project", annotations: WRITES },
+    upload_file_to_project: { title: "Upload file to project", annotations: WRITES },
+    get_source_status: { title: "Get source status", annotations: READ_ONLY },
+    get_source_summary: { title: "Get source summary", annotations: READ_ONLY },
+    get_source_annotations: { title: "Get annotations", annotations: READ_ONLY },
+    get_source_chunks: { title: "Semantic source search", annotations: READ_ONLY },
+    find_quote_in_source: { title: "Find quote in source", annotations: READ_ONLY },
+    get_web_clips: { title: "Get web clips", annotations: READ_ONLY },
+    start_conversation: { title: "Start ScholarMark chat", annotations: WRITES },
+    send_message: { title: "Send ScholarMark chat message", annotations: WRITES },
+    get_conversations: { title: "List ScholarMark chats", annotations: READ_ONLY },
+    compile_paper: { title: "Compile paper", annotations: WRITES },
+    verify_paper: { title: "Verify paper", annotations: READ_ONLY },
+    save_source: { title: "Save source", annotations: WRITES },
+    read_source_text: { title: "Read source text", annotations: READ_ONLY },
+    save_source_summary: { title: "Save source summary", annotations: OVERWRITES },
+    save_annotations: { title: "Save annotations", annotations: WRITES },
+    update_annotation: { title: "Update annotation", annotations: OVERWRITES },
+    delete_annotation: { title: "Delete annotation", annotations: DELETES },
+    save_citation: { title: "Save citation", annotations: OVERWRITES },
+    search: { title: "Search ScholarMark", annotations: READ_ONLY },
+    fetch: { title: "Fetch ScholarMark item", annotations: READ_ONLY },
+};
+/**
+ * Tools that run ScholarMark's own OpenAI/Anthropic calls. In host-AI mode the
+ * connecting client (Claude, ChatGPT) does that work itself, so these are hidden.
+ */
+const SERVER_AI_TOOLS = new Set([
+    "get_source_chunks",
+    "start_conversation",
+    "send_message",
+    "get_conversations",
+    "compile_paper",
+    "verify_paper",
+]);
 function registerTool(server, name, description, inputSchema, handler) {
     if (typeof server.registerTool === "function") {
         const mcpInputSchema = toZodInputSchema(inputSchema);
-        server.registerTool(name, { description, inputSchema: mcpInputSchema }, handler);
+        const metadata = TOOL_METADATA[name] ?? {};
+        server.registerTool(name, {
+            title: metadata.title,
+            description,
+            inputSchema: mcpInputSchema,
+            annotations: metadata.annotations,
+        }, handler);
         return;
     }
     if (typeof server.tool === "function") {
@@ -49,8 +102,18 @@ function toZodField(schema) {
     else if (schemaType === "boolean") {
         field = z.boolean();
     }
+    else if (schemaType === "array") {
+        const items = typeof schema.items === "object" && schema.items !== null ? schema.items : {};
+        field = z.array(toZodField(items));
+    }
+    else if (schemaType === "object") {
+        field = toZodInputSchema(schema);
+    }
     else {
         field = z.any();
+    }
+    if (Array.isArray(schema.enum) && schema.enum.length > 0 && schemaType === "string") {
+        field = z.enum(schema.enum);
     }
     const description = typeof schema.description === "string" ? schema.description.trim() : "";
     if (description.length > 0) {
@@ -417,9 +480,75 @@ async function withToken(context, fn) {
         return asErrorResult(describeBackendError(error));
     }
 }
+const ANNOTATION_CATEGORIES = ["key_quote", "argument", "evidence", "methodology", "user_added"];
+function parseBoundedInteger(input, key, fallback, min, max) {
+    const value = input[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return fallback;
+    }
+    return Math.max(min, Math.min(max, Math.floor(value)));
+}
+function parseOptionalStringList(input, key) {
+    const value = input[key];
+    if (typeof value === "undefined") {
+        return undefined;
+    }
+    if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) {
+        throw new Error(`${key} must be an array of strings`);
+    }
+    return value.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+}
+function buildSummaryPayload(input) {
+    const summary = parseOptionalString(input, "summary");
+    const mainArguments = parseOptionalStringList(input, "main_arguments");
+    const keyConcepts = parseOptionalStringList(input, "key_concepts");
+    if (!summary && !mainArguments && !keyConcepts) {
+        return null;
+    }
+    return {
+        ...(summary ? { summary } : {}),
+        ...(mainArguments ? { mainArguments } : {}),
+        ...(keyConcepts ? { keyConcepts } : {}),
+    };
+}
+function parseOptionalCitation(input) {
+    const citation = input.citation;
+    if (typeof citation === "undefined" || citation === null) {
+        return undefined;
+    }
+    if (typeof citation !== "object" || Array.isArray(citation)) {
+        throw new Error("citation must be an object");
+    }
+    if (typeof citation.title !== "string" || typeof citation.sourceType !== "string" || !Array.isArray(citation.authors)) {
+        throw new Error("citation needs sourceType, title, and authors (use [] when there is no author)");
+    }
+    return citation;
+}
+function truncateText(text, maxChars) {
+    const value = String(text ?? "");
+    return value.length > maxChars ? `${value.slice(0, maxChars)}...` : value;
+}
+export const SCHOLARMARK_HOST_INSTRUCTIONS = `ScholarMark stores the user's research sources, highlights, notes, and citations. You do the reading and analysis; ScholarMark keeps the results so they persist across chats and show up in the ScholarMark web app.
+
+When the user pastes or shares a document:
+1. Pick or create a project (get_projects, create_project). Ask which project if it is unclear.
+2. Save the document verbatim with save_source and the project_id. Include your summary, key concepts, and citation metadata when you can tell them from the text.
+3. Ask the user what they are looking for in this source (their research question, thesis, or the kind of evidence they need) before annotating, unless they already said.
+4. Read it with read_source_text (page through long sources with nextOffset), then call save_annotations with exact quotes, a category, and a note tying each quote to the user's goal. Retry or drop any quotes reported in notFound.
+5. Tell the user what you saved.
+
+To answer questions about saved material, use search and fetch, or search_project_sources, get_source_annotations, and find_quote_in_source. Quote saved text exactly and say which source it came from. Confirm with the user before deleting anything.`;
 export function registerScholarMarkTools(server, options) {
-    const client = new ScholarMarkBackendClient(options.backendBaseUrl);
-    registerTool(server, "get_projects", "List your ScholarMark writing projects", {
+    const hostAiMode = (options.aiMode ?? "host") === "host";
+    const client = new ScholarMarkBackendClient(options.backendBaseUrl, undefined, hostAiMode ? { "X-ScholarMark-AI-Mode": "host" } : {});
+    const appBaseUrl = (options.appBaseUrl ?? "https://app.scholarmark.ai").replace(/\/+$/, "");
+    const register = (name, ...rest) => {
+        if (hostAiMode && SERVER_AI_TOOLS.has(name)) {
+            return;
+        }
+        registerTool(server, name, ...rest);
+    };
+    register("get_projects", "List your ScholarMark writing projects", {
         type: "object",
         properties: {},
         additionalProperties: false,
@@ -427,7 +556,7 @@ export function registerScholarMarkTools(server, options) {
         const projects = await client.requestJson("GET", "/api/projects", token);
         return asTextResult(projects);
     }));
-    registerTool(server, "create_project", "Create a new ScholarMark project for organizing sources, quote work, and writing", {
+    register("create_project", "Create a new ScholarMark project for organizing sources, quote work, and writing", {
         type: "object",
         properties: {
             name: { type: "string", description: "Project name" },
@@ -447,7 +576,7 @@ export function registerScholarMarkTools(server, options) {
         });
         return asTextResult(project);
     }));
-    registerTool(server, "get_source_library", "List uploaded ScholarMark sources in your personal library, before or after attaching them to projects", {
+    register("get_source_library", "List uploaded ScholarMark sources in your personal library, before or after attaching them to projects", {
         type: "object",
         properties: {
             search: { type: "string", description: "Optional case-insensitive filter over filename or summary" },
@@ -473,7 +602,7 @@ export function registerScholarMarkTools(server, options) {
             sources: filtered.slice(0, limit),
         });
     }));
-    registerTool(server, "get_project_sources", "List sources attached to a specific ScholarMark project", {
+    register("get_project_sources", "List sources attached to a specific ScholarMark project", {
         type: "object",
         properties: {
             project_id: { type: "string", description: "ScholarMark project ID" },
@@ -485,7 +614,7 @@ export function registerScholarMarkTools(server, options) {
         const sources = await client.requestJson("GET", `/api/projects/${projectId}/documents`, token);
         return asTextResult(sources);
     }));
-    registerTool(server, "search_project_sources", "Search across all sources and saved evidence in a ScholarMark project", {
+    register("search_project_sources", "Search across all sources and saved evidence in a ScholarMark project", {
         type: "object",
         properties: {
             project_id: { type: "string", description: "ScholarMark project ID" },
@@ -510,7 +639,7 @@ export function registerScholarMarkTools(server, options) {
             results,
         });
     }));
-    registerTool(server, "add_source_to_project", "Attach an existing uploaded source from your library to a ScholarMark project", {
+    register("add_source_to_project", "Attach an existing uploaded source from your library to a ScholarMark project", {
         type: "object",
         properties: {
             project_id: { type: "string", description: "ScholarMark project ID" },
@@ -533,7 +662,7 @@ export function registerScholarMarkTools(server, options) {
             projectDocument,
         });
     }));
-    registerTool(server, "upload_text_to_project", "Create a ScholarMark source from pasted text and attach it to a project", {
+    register("upload_text_to_project", "Create a ScholarMark source from pasted text and attach it to a project", {
         type: "object",
         properties: {
             project_id: { type: "string", description: "ScholarMark project ID" },
@@ -568,7 +697,7 @@ export function registerScholarMarkTools(server, options) {
             projectDocument,
         });
     }));
-    registerTool(server, "upload_file_to_project", "Upload a base64-encoded file as a ScholarMark source and attach it to a project", {
+    register("upload_file_to_project", "Upload a base64-encoded file as a ScholarMark source and attach it to a project", {
         type: "object",
         properties: {
             project_id: { type: "string", description: "ScholarMark project ID" },
@@ -590,6 +719,13 @@ export function registerScholarMarkTools(server, options) {
     }, async (input, context) => withToken(context, async (token) => {
         const filename = parseRequiredString(input, "filename");
         const mimeType = parseOptionalString(input, "mime_type") || "application/octet-stream";
+        if (hostAiMode) {
+            const isTextLayerFile = /\.(pdf|txt)$/i.test(filename);
+            const ocrMode = parseOptionalOcrMode(input);
+            if (!isTextLayerFile || ocrMode !== "standard") {
+                return asErrorResult("Only PDFs with a text layer and .txt files can be uploaded directly. For scans, images, or other formats, read the file yourself and pass its text to save_source.");
+            }
+        }
         const fileBuffer = parseBase64FileContent(input);
         const formData = new FormData();
         formData.append("file", new Blob([fileBuffer], { type: mimeType }), filename);
@@ -609,7 +745,7 @@ export function registerScholarMarkTools(server, options) {
             projectDocument,
         });
     }));
-    registerTool(server, "get_source_status", "Check whether an uploaded ScholarMark source is ready, processing, or errored", {
+    register("get_source_status", "Check whether an uploaded ScholarMark source is ready, processing, or errored", {
         type: "object",
         properties: {
             project_document_id: { type: "string", description: "Project document ID from get_project_sources" },
@@ -625,7 +761,7 @@ export function registerScholarMarkTools(server, options) {
             status,
         });
     }));
-    registerTool(server, "get_source_summary", "Load a source summary, key concepts, and related project-document metadata", {
+    register("get_source_summary", "Load a source summary, key concepts, and related project-document metadata", {
         type: "object",
         properties: {
             project_document_id: { type: "string", description: "Project document ID from get_project_sources" },
@@ -642,7 +778,7 @@ export function registerScholarMarkTools(server, options) {
             summary,
         });
     }));
-    registerTool(server, "get_source_annotations", "Load quote-bank annotations for a project source or a plain document", {
+    register("get_source_annotations", "Load quote-bank annotations for a project source or a plain document", {
         type: "object",
         properties: {
             project_document_id: { type: "string", description: "Project document ID from get_project_sources" },
@@ -667,7 +803,7 @@ export function registerScholarMarkTools(server, options) {
             annotations,
         });
     }));
-    registerTool(server, "get_source_chunks", "Search a source for relevant chunks/quotes and return the best matching passages", {
+    register("get_source_chunks", "Search a source for relevant chunks/quotes and return the best matching passages", {
         type: "object",
         properties: {
             project_document_id: { type: "string", description: "Project document ID from get_project_sources" },
@@ -697,7 +833,7 @@ export function registerScholarMarkTools(server, options) {
             results,
         });
     }));
-    registerTool(server, "find_quote_in_source", "Find an exact or OCR-tolerant quote in a source and return positions, related annotation data, and a jump path when available", {
+    register("find_quote_in_source", "Find an exact or OCR-tolerant quote in a source and return positions, related annotation data, and a jump path when available", {
         type: "object",
         properties: {
             project_document_id: { type: "string", description: "Project document ID from get_project_sources" },
@@ -773,7 +909,7 @@ export function registerScholarMarkTools(server, options) {
             jumpPath,
         });
     }));
-    registerTool(server, "get_web_clips", "Load saved web clips, optionally filtered to a project, URL, category, or text query", {
+    register("get_web_clips", "Load saved web clips, optionally filtered to a project, URL, category, or text query", {
         type: "object",
         properties: {
             project_id: { type: "string", description: "Optional project ID to limit clips to one project" },
@@ -804,7 +940,7 @@ export function registerScholarMarkTools(server, options) {
         const clips = await client.requestJson("GET", `/api/web-clips${query}`, token);
         return asTextResult(clips);
     }));
-    registerTool(server, "start_conversation", "Start a new ScholarMark conversation for a project", {
+    register("start_conversation", "Start a new ScholarMark conversation for a project", {
         type: "object",
         properties: {
             project_id: { type: "string", description: "ScholarMark project ID" },
@@ -823,7 +959,7 @@ export function registerScholarMarkTools(server, options) {
         });
         return asTextResult(conversation);
     }));
-    registerTool(server, "send_message", "Send a message to a ScholarMark conversation and return the full buffered answer", {
+    register("send_message", "Send a message to a ScholarMark conversation and return the full buffered answer", {
         type: "object",
         properties: {
             conversation_id: { type: "string", description: "Conversation ID" },
@@ -842,7 +978,7 @@ export function registerScholarMarkTools(server, options) {
             usage: buffered.usage,
         });
     }));
-    registerTool(server, "get_conversations", "List conversations for a ScholarMark project", {
+    register("get_conversations", "List conversations for a ScholarMark project", {
         type: "object",
         properties: {
             project_id: { type: "string", description: "ScholarMark project ID" },
@@ -854,7 +990,7 @@ export function registerScholarMarkTools(server, options) {
         const conversations = await client.requestJson("GET", `/api/chat/conversations?projectId=${projectId}`, token);
         return asTextResult(conversations);
     }));
-    registerTool(server, "compile_paper", "Compile a conversation into a finalized paper draft", {
+    register("compile_paper", "Compile a conversation into a finalized paper draft", {
         type: "object",
         properties: {
             conversation_id: { type: "string", description: "Conversation ID" },
@@ -870,7 +1006,7 @@ export function registerScholarMarkTools(server, options) {
             usage: buffered.usage,
         });
     }));
-    registerTool(server, "verify_paper", "Verify citations and claims in a compiled paper", {
+    register("verify_paper", "Verify citations and claims in a compiled paper", {
         type: "object",
         properties: {
             conversation_id: { type: "string", description: "Conversation ID" },
@@ -887,5 +1023,398 @@ export function registerScholarMarkTools(server, options) {
             verification_report: formatSseOutput(buffered),
             usage: buffered.usage,
         });
+    }));
+    register("save_source", "Save a document the user pasted or shared as a ScholarMark source. Pass the full text exactly as given. Optionally attach it to a project and include your own summary, key concepts, and citation in the same call.", {
+        type: "object",
+        properties: {
+            text: { type: "string", description: "Full source text, verbatim" },
+            title: { type: "string", description: "Source title" },
+            project_id: { type: "string", description: "Optional project ID to attach the source to" },
+            source_role: {
+                type: "string",
+                enum: ["evidence", "background", "style_reference"],
+                description: "Optional role in the project",
+            },
+            role_in_project: { type: "string", description: "Optional note on how the user wants to use this source" },
+            summary: { type: "string", description: "Optional summary you wrote" },
+            main_arguments: { type: "array", items: { type: "string" }, description: "Optional main arguments you identified" },
+            key_concepts: { type: "array", items: { type: "string" }, description: "Optional key concepts you identified" },
+            citation: { type: "object", description: "Optional citation metadata; same shape as save_citation.citation (requires project_id)" },
+        },
+        required: ["text"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const text = parseRequiredString(input, "text");
+        const citation = parseOptionalCitation(input);
+        const projectId = parseOptionalString(input, "project_id");
+        if (citation && !projectId) {
+            throw new Error("citation requires project_id, because citations are stored per project");
+        }
+        const formData = new FormData();
+        const title = parseOptionalString(input, "title");
+        if (title) {
+            formData.append("title", title);
+        }
+        formData.append("text", text);
+        const document = await client.requestFormData("POST", "/api/upload-text", token, formData);
+        const documentId = typeof document?.id === "string" ? document.id : "";
+        if (!documentId) {
+            throw new Error("Text upload did not return a document ID.");
+        }
+        const summaryPayload = buildSummaryPayload(input);
+        const summary = summaryPayload
+            ? await client.requestJson("PUT", `/api/documents/${encodeURIComponent(documentId)}/summary`, token, summaryPayload)
+            : null;
+        let projectDocument = projectId ? await addDocumentToProject(client, token, input, documentId) : null;
+        if (projectDocument && citation) {
+            projectDocument = await client.requestJson("PUT", `/api/project-documents/${encodeURIComponent(projectDocument.id)}/citation`, token, citation);
+        }
+        return asTextResult({
+            documentId,
+            projectDocumentId: projectDocument?.id ?? null,
+            title: document.filename,
+            characters: typeof document.fullText === "string" ? document.fullText.length : text.length,
+            summary,
+            next: projectDocument
+                ? "Ask the user what they are looking for in this source, then read it with read_source_text and save findings with save_annotations."
+                : "Attach it to a project with add_source_to_project before saving annotations or a citation.",
+        });
+    }));
+    register("read_source_text", "Read a stored source's text in pages. Character offsets are absolute positions in the source, so you can read long documents in several calls.", {
+        type: "object",
+        properties: {
+            project_document_id: { type: "string", description: "Project document ID from get_project_sources" },
+            document_id: { type: "string", description: "Underlying document ID if the source is not in a project" },
+            offset: { type: "integer", description: "Character offset to start from (default 0)" },
+            max_chars: { type: "integer", description: "Characters to return (default 20000, max 60000)" },
+        },
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const { projectDocumentId, documentId } = await resolveSourceIds(client, token, input);
+        const document = await client.requestJson("GET", `/api/documents/${encodeURIComponent(documentId)}`, token);
+        const fullText = typeof document?.fullText === "string" ? document.fullText : "";
+        const offset = parseBoundedInteger(input, "offset", 0, 0, fullText.length);
+        const maxChars = parseBoundedInteger(input, "max_chars", 20_000, 1, 60_000);
+        const endOffset = Math.min(fullText.length, offset + maxChars);
+        return asTextResult({
+            projectDocumentId: projectDocumentId ?? null,
+            documentId,
+            title: document?.filename ?? null,
+            status: document?.status ?? null,
+            totalCharacters: fullText.length,
+            offset,
+            endOffset,
+            nextOffset: endOffset < fullText.length ? endOffset : null,
+            text: fullText.slice(offset, endOffset),
+        });
+    }));
+    register("save_source_summary", "Save your summary, main arguments, and key concepts for a source. Replaces the fields you pass.", {
+        type: "object",
+        properties: {
+            project_document_id: { type: "string", description: "Project document ID from get_project_sources" },
+            document_id: { type: "string", description: "Underlying document ID if the source is not in a project" },
+            summary: { type: "string", description: "Summary of the source" },
+            main_arguments: { type: "array", items: { type: "string" }, description: "Main arguments of the source" },
+            key_concepts: { type: "array", items: { type: "string" }, description: "Key concepts or terms" },
+        },
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const summaryPayload = buildSummaryPayload(input);
+        if (!summaryPayload) {
+            throw new Error("Pass at least one of summary, main_arguments, or key_concepts");
+        }
+        const { documentId } = await resolveSourceIds(client, token, input);
+        const summary = await client.requestJson("PUT", `/api/documents/${encodeURIComponent(documentId)}/summary`, token, summaryPayload);
+        return asTextResult({ documentId, summary });
+    }));
+    register("save_annotations", "Highlight passages in a project source and attach notes. Give each quote copied exactly from the source text; ScholarMark finds its position, tolerating case, whitespace, and OCR punctuation differences. Quotes that cannot be found are reported back and not saved.", {
+        type: "object",
+        properties: {
+            project_document_id: { type: "string", description: "Project document ID from get_project_sources or save_source" },
+            research_goal: { type: "string", description: "Optional: what the user said they are looking for, stored with each annotation" },
+            annotations: {
+                type: "array",
+                description: "Passages to highlight (max 50 per call)",
+                items: {
+                    type: "object",
+                    properties: {
+                        quote: { type: "string", description: "Exact passage from the source" },
+                        category: {
+                            type: "string",
+                            enum: ANNOTATION_CATEGORIES,
+                            description: "key_quote, argument, evidence, methodology, or user_added",
+                        },
+                        note: { type: "string", description: "Why this passage matters for the user's goal" },
+                        confidence: { type: "number", description: "Optional relevance from 0 to 1" },
+                    },
+                    required: ["quote", "category", "note"],
+                },
+            },
+        },
+        required: ["project_document_id", "annotations"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const projectDocumentId = parseRequiredString(input, "project_document_id");
+        const requested = Array.isArray(input.annotations) ? input.annotations : [];
+        if (requested.length === 0) {
+            throw new Error("annotations must contain at least one passage");
+        }
+        if (requested.length > 50) {
+            throw new Error("Save at most 50 annotations per call");
+        }
+        const researchGoal = parseOptionalString(input, "research_goal");
+        const { documentId, projectDocument } = await resolveSourceIds(client, token, { project_document_id: projectDocumentId });
+        const document = await client.requestJson("GET", `/api/documents/${encodeURIComponent(documentId)}`, token);
+        const fullText = typeof document?.fullText === "string" ? document.fullText : "";
+        const saved = [];
+        const notFound = [];
+        for (const entry of requested) {
+            const quote = typeof entry?.quote === "string" ? entry.quote.trim() : "";
+            const category = typeof entry?.category === "string" ? entry.category.trim() : "";
+            const note = typeof entry?.note === "string" ? entry.note.trim() : "";
+            if (!quote || !note || !ANNOTATION_CATEGORIES.includes(category)) {
+                notFound.push({ quote, reason: "quote, note, and a valid category are required" });
+                continue;
+            }
+            const range = findTextRange(fullText, quote);
+            if (!range) {
+                notFound.push({ quote, reason: "not found in source text" });
+                continue;
+            }
+            const confidence = typeof entry.confidence === "number" && Number.isFinite(entry.confidence)
+                ? Math.max(0, Math.min(1, entry.confidence))
+                : undefined;
+            const annotation = await client.requestJson("POST", `/api/project-documents/${encodeURIComponent(projectDocumentId)}/annotations`, token, {
+                startPosition: range.startPosition,
+                endPosition: range.endPosition,
+                highlightedText: fullText.slice(range.startPosition, range.endPosition),
+                category,
+                note,
+                isAiGenerated: true,
+                ...(confidence !== undefined ? { confidenceScore: confidence } : {}),
+                ...(researchGoal ? { promptText: researchGoal } : {}),
+            });
+            saved.push({
+                id: annotation?.id ?? null,
+                category,
+                matchType: range.matchType,
+                startPosition: range.startPosition,
+                endPosition: range.endPosition,
+            });
+        }
+        return asTextResult({
+            projectDocumentId,
+            savedCount: saved.length,
+            saved,
+            notFound,
+            viewInApp: `${appBaseUrl}/projects/${projectDocument.projectId}/documents/${projectDocumentId}`,
+        });
+    }));
+    register("update_annotation", "Change the note or category of a saved project annotation", {
+        type: "object",
+        properties: {
+            annotation_id: { type: "string", description: "Annotation ID from get_source_annotations or save_annotations" },
+            note: { type: "string", description: "New note" },
+            category: { type: "string", enum: ANNOTATION_CATEGORIES, description: "New category" },
+        },
+        required: ["annotation_id"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const annotationId = parseRequiredString(input, "annotation_id");
+        const note = parseOptionalString(input, "note");
+        const category = parseOptionalString(input, "category");
+        if (!note && !category) {
+            throw new Error("Pass note, category, or both");
+        }
+        if (category && !ANNOTATION_CATEGORIES.includes(category)) {
+            throw new Error(`category must be one of: ${ANNOTATION_CATEGORIES.join(", ")}`);
+        }
+        const annotation = await client.requestJson("PUT", `/api/project-annotations/${encodeURIComponent(annotationId)}`, token, {
+            ...(note ? { note } : {}),
+            ...(category ? { category } : {}),
+        });
+        return asTextResult(annotation);
+    }));
+    register("delete_annotation", "Delete a saved project annotation. Confirm with the user first.", {
+        type: "object",
+        properties: {
+            annotation_id: { type: "string", description: "Annotation ID to delete" },
+        },
+        required: ["annotation_id"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const annotationId = parseRequiredString(input, "annotation_id");
+        const response = await client.request("DELETE", `/api/project-annotations/${encodeURIComponent(annotationId)}`, token);
+        if (!response.ok) {
+            throw new BackendHttpError(response.status, await response.text().catch(() => null));
+        }
+        return asTextResult({ deleted: true, annotationId });
+    }));
+    register("save_citation", "Save citation metadata for a project source so ScholarMark can format footnotes and bibliography entries. Fill in what the source shows; leave unknown fields out.", {
+        type: "object",
+        properties: {
+            project_document_id: { type: "string", description: "Project document ID" },
+            citation: {
+                type: "object",
+                description: "Citation metadata",
+                properties: {
+                    sourceType: {
+                        type: "string",
+                        enum: ["book", "journal", "website", "newspaper", "chapter", "thesis", "other"],
+                    },
+                    authors: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                firstName: { type: "string" },
+                                lastName: { type: "string" },
+                            },
+                            required: ["firstName", "lastName"],
+                        },
+                    },
+                    title: { type: "string" },
+                    containerTitle: { type: "string", description: "Journal, website, or book containing the work" },
+                    publisher: { type: "string" },
+                    publicationPlace: { type: "string" },
+                    publicationDate: { type: "string" },
+                    volume: { type: "string" },
+                    issue: { type: "string" },
+                    pageStart: { type: "string" },
+                    pageEnd: { type: "string" },
+                    url: { type: "string" },
+                    accessDate: { type: "string" },
+                    doi: { type: "string" },
+                    edition: { type: "string" },
+                },
+                required: ["sourceType", "authors", "title"],
+            },
+        },
+        required: ["project_document_id", "citation"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const projectDocumentId = parseRequiredString(input, "project_document_id");
+        const citation = parseOptionalCitation(input);
+        if (!citation) {
+            throw new Error("citation is required");
+        }
+        const projectDocument = await client.requestJson("PUT", `/api/project-documents/${encodeURIComponent(projectDocumentId)}/citation`, token, citation);
+        return asTextResult({ projectDocumentId, citationData: projectDocument?.citationData ?? citation });
+    }));
+    register("search", "Search everything saved in ScholarMark: sources, summaries, and annotations across all of the user's projects. Returns result IDs to open with fetch.", {
+        type: "object",
+        properties: {
+            query: { type: "string", description: "Keywords to search for" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const query = parseRequiredString(input, "query");
+        const projects = await client.requestJson("GET", "/api/projects", token);
+        const projectRows = Array.isArray(projects) ? projects.slice(0, 25) : [];
+        const results = [];
+        const seen = new Set();
+        for (const project of projectRows) {
+            if (typeof project?.id !== "string") {
+                continue;
+            }
+            const response = await client.requestJson("POST", `/api/projects/${encodeURIComponent(project.id)}/search`, token, { query, limit: 10 });
+            for (const hit of Array.isArray(response?.results) ? response.results : []) {
+                if (typeof hit?.documentId !== "string") {
+                    continue;
+                }
+                const id = hit.type === "annotation" && typeof hit.annotationId === "string"
+                    ? `annotation:${hit.documentId}:${hit.annotationId}`
+                    : `source:${hit.documentId}`;
+                if (seen.has(id)) {
+                    continue;
+                }
+                seen.add(id);
+                results.push({
+                    id,
+                    title: `${hit.documentFilename ?? "Source"}${hit.type === "annotation" ? " (annotation)" : ""} - ${project.name ?? "Project"}`,
+                    url: `${appBaseUrl}/projects/${project.id}/documents/${hit.documentId}`,
+                    text: truncateText(hit.highlightedText ?? hit.matchedText ?? "", 300),
+                    score: hit.similarityScore ?? null,
+                });
+            }
+        }
+        const library = await client.requestJson("GET", "/api/documents/meta", token);
+        const needle = query.toLowerCase();
+        for (const source of Array.isArray(library) ? library : []) {
+            const haystack = `${source?.filename ?? ""}\n${source?.summary ?? ""}`.toLowerCase();
+            if (typeof source?.id !== "string" || !haystack.includes(needle)) {
+                continue;
+            }
+            results.push({
+                id: `document:${source.id}`,
+                title: source.filename ?? "Source",
+                url: `${appBaseUrl}/`,
+                text: truncateText(source.summary ?? "", 300),
+                score: null,
+            });
+        }
+        results.sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+        return asTextResult({ results: results.slice(0, 30) });
+    }));
+    register("fetch", "Open a search result by ID and return its full text and metadata", {
+        type: "object",
+        properties: {
+            id: { type: "string", description: "Result ID from search" },
+        },
+        required: ["id"],
+        additionalProperties: false,
+    }, async (input, context) => withToken(context, async (token) => {
+        const id = parseRequiredString(input, "id");
+        const [kind, first, second] = id.split(":");
+        if (kind === "annotation" && first && second) {
+            const projectDocument = await client.requestJson("GET", `/api/project-documents/${encodeURIComponent(first)}`, token);
+            const annotations = await client.requestJson("GET", `/api/project-documents/${encodeURIComponent(first)}/annotations`, token);
+            const annotation = (Array.isArray(annotations) ? annotations : []).find((row) => row?.id === second);
+            if (!annotation) {
+                throw new Error("Annotation not found");
+            }
+            const document = await client.requestJson("GET", `/api/documents/${encodeURIComponent(projectDocument.documentId)}`, token);
+            const fullText = typeof document?.fullText === "string" ? document.fullText : "";
+            const contextStart = Math.max(0, annotation.startPosition - 600);
+            const contextEnd = Math.min(fullText.length, annotation.endPosition + 600);
+            return asTextResult({
+                id,
+                title: `${document?.filename ?? "Source"} (annotation)`,
+                url: `${appBaseUrl}/projects/${projectDocument.projectId}/documents/${first}?annotationId=${encodeURIComponent(second)}`,
+                text: `${annotation.highlightedText}\n\nNote: ${annotation.note ?? ""}\n\nContext:\n${fullText.slice(contextStart, contextEnd)}`,
+                metadata: {
+                    category: annotation.category,
+                    projectDocumentId: first,
+                    documentId: projectDocument.documentId,
+                    citation: projectDocument.citationData ?? null,
+                },
+            });
+        }
+        if ((kind === "source" || kind === "document") && first) {
+            const projectDocument = kind === "source"
+                ? await client.requestJson("GET", `/api/project-documents/${encodeURIComponent(first)}`, token)
+                : null;
+            const documentId = projectDocument ? projectDocument.documentId : first;
+            const document = await client.requestJson("GET", `/api/documents/${encodeURIComponent(documentId)}`, token);
+            const fullText = typeof document?.fullText === "string" ? document.fullText : "";
+            return asTextResult({
+                id,
+                title: document?.filename ?? "Source",
+                url: projectDocument
+                    ? `${appBaseUrl}/projects/${projectDocument.projectId}/documents/${first}`
+                    : `${appBaseUrl}/`,
+                text: truncateText(fullText, 100_000),
+                metadata: {
+                    documentId,
+                    projectDocumentId: projectDocument?.id ?? null,
+                    summary: document?.summary ?? null,
+                    keyConcepts: document?.keyConcepts ?? null,
+                    citation: projectDocument?.citationData ?? null,
+                    totalCharacters: fullText.length,
+                },
+            });
+        }
+        throw new Error("Unknown result ID. Use an ID returned by search.");
     }));
 }

@@ -1,5 +1,5 @@
 import express from "express";
-import { mkdtemp, rm } from "fs/promises";
+import { copyFile, mkdir, mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -221,6 +221,84 @@ describe("OAuth route hardening", () => {
       await server.close();
     }
   });
+
+  it("selects public-client auth from ChatGPT CIMD supported methods", async () => {
+    await mkdir(join(tempDir, "server", "views"), { recursive: true });
+    await copyFile(
+      join(originalCwd, "server", "views", "authorize.html"),
+      join(tempDir, "server", "views", "authorize.html"),
+    );
+    const server = await createOAuthApp();
+    const clientId = "https://93.184.216.34/chatgpt-client.json";
+    clerkGetUser.mockResolvedValue({
+      emailAddresses: [{ emailAddress: "oauth@example.com", verification: { status: "verified" } }],
+      publicMetadata: { tier: "pro" },
+    });
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (fetchInputUrl(input) === clientId) {
+        return Response.json({
+          client_id: clientId,
+          client_name: "ChatGPT",
+          redirect_uris: ["http://localhost/callback"],
+          token_endpoint_auth_method: "private_key_jwt",
+          token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
+        });
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch;
+
+    try {
+      const response = await requestJson(server.baseUrl, authorizePath(clientId));
+      expect(response.status).toBe(200);
+      expect(response.text).toContain("Authorize ChatGPT");
+      expect(
+        sqlite
+          ?.prepare("SELECT token_endpoint_auth_method FROM mcp_oauth_clients WHERE client_id = ?")
+          .all(clientId),
+      ).toEqual([{ token_endpoint_auth_method: "none" }]);
+      const wrongRedirect = await requestJson(
+        server.baseUrl,
+        authorizePath(clientId, { redirect_uri: "https://example.com/wrong-callback" }),
+      );
+      expect(wrongRedirect.status).toBe(400);
+      expect(wrongRedirect.body).toMatchObject({ error: "invalid_redirect_uri" });
+    } finally {
+      await server.close();
+    }
+  }, 15_000);
+
+  it("rejects unsupported or malformed CIMD method lists without a legacy downgrade", async () => {
+    const server = await createOAuthApp();
+    const clientId = "https://93.184.216.34/unsupported-client.json";
+    let supportedMethods: unknown;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (fetchInputUrl(input) === clientId) {
+        return Response.json({
+          client_id: clientId,
+          redirect_uris: ["http://localhost/callback"],
+          token_endpoint_auth_method: "none",
+          token_endpoint_auth_methods_supported: supportedMethods,
+        });
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch;
+
+    try {
+      for (const methods of [["private_key_jwt"], [], "none", ["none", 1]]) {
+        supportedMethods = methods;
+        const response = await requestJson(server.baseUrl, authorizePath(clientId));
+        expect(response.status).toBe(400);
+        expect(response.body).toMatchObject({ error: "invalid_client" });
+      }
+      expect(
+        sqlite
+          ?.prepare("SELECT client_id FROM mcp_oauth_clients WHERE client_id = ?")
+          .all(clientId),
+      ).toEqual([]);
+    } finally {
+      await server.close();
+    }
+  }, 15_000);
 
   it("does not adopt an existing local user from an unverified Clerk email during authorization", async () => {
     const server = await createOAuthApp();

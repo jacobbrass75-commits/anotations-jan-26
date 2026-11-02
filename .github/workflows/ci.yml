@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install MCP server dependencies
+        run: npm ci --prefix mcp-server
+
       - name: Type check
         run: npm run check
 

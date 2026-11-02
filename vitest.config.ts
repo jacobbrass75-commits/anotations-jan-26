@@ -11,6 +11,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Temporary SQLite/drizzle setup can exceed 30s on hosted Windows disks.
+    // This changes hook timeouts only; test-operation deadlines stay intact.
+    hookTimeout: process.platform === "win32" ? 90_000 : 10_000,
     globals: true,
     passWithNoTests: false,
     pool: "forks",

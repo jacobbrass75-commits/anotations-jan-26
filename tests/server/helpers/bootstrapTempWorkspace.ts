@@ -21,6 +21,14 @@ export async function bootstrapTempWorkspace(tempDir: string): Promise<void> {
     }
   }
 
+  const templatePath = process.env.SCHOLARMARK_TEST_DB_TEMPLATE;
+  if (templatePath) {
+    await mkdir(join(tempDir, "data"), { recursive: true });
+    // Copy a closed, pristine SQLite file. Never share a writable database or WAL.
+    await copyFile(templatePath, join(tempDir, "data", "sourceannotator.db"));
+    return;
+  }
+
   const bootstrap = spawnSync(process.execPath, [tsxEntrypoint, bootstrapScript], {
     cwd: tempDir,
     env: process.env,

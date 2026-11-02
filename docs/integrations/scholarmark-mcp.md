@@ -2,6 +2,8 @@
 
 ScholarMark exposes a remote MCP server for AI clients that can connect to external tools.
 
+> The server defaults to host-AI mode (`MCP_AI_MODE=host`). In that mode, `get_source_chunks`, the conversation tools, `compile_paper`, and `verify_paper` are not registered, because they spend ScholarMark AI credits. Use `read_source_text`, `search_project_sources`, or `search`/`fetch` instead. See [host-ai-mode.md](host-ai-mode.md). Tool lists below that include those tools apply to `MCP_AI_MODE=server`.
+
 Canonical endpoint:
 
 ```text

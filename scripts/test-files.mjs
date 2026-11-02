@@ -1,4 +1,7 @@
 export const testFiles = [
+  "tests/server/testWorkspaceTemplate.test.ts",
+  "tests/server/mcpHostMode.integration.test.ts",
+  "tests/server/oauthRoutes.integration.test.ts",
   "tests/shared/annotationLinks.test.ts",
   "tests/client/documentExportUtils.test.ts",
   "tests/client/accountUtils.test.ts",
@@ -43,7 +46,6 @@ export const testFiles = [
   "tests/server/rateLimits.integration.test.ts",
   "tests/server/chatRoutes.integration.test.ts",
   "tests/server/extensionRoutes.integration.test.ts",
-  "tests/server/oauthRoutes.integration.test.ts",
   "tests/server/projectRoutes.integration.test.ts",
   "tests/server/uploadRoutes.integration.test.ts",
   "tests/server/webClipRoutes.integration.test.ts",

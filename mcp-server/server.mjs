@@ -4,11 +4,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { buildProtectedResourceMetadata } from "./dist/discovery.js";
-import { registerScholarMarkTools } from "./dist/mcp-tools.js";
+import { registerScholarMarkTools, SCHOLARMARK_HOST_INSTRUCTIONS } from "./dist/mcp-tools.js";
 
 const app = express();
 const port = Number(process.env.MCP_SERVER_PORT ?? 5002);
 const backendBaseUrl = process.env.SCHOLARMARK_BACKEND_URL ?? "http://127.0.0.1:5001";
+const appBaseUrl = process.env.SCHOLARMARK_APP_URL ?? "https://app.scholarmark.ai";
+// "host": Claude/ChatGPT does the AI work and ScholarMark only stores results (no
+// ScholarMark AI spend). "server": also expose tools that run ScholarMark's own models.
+const aiMode = process.env.MCP_AI_MODE === "server" ? "server" : "host";
 const mcpSessions = new Map();
 const sseSessions = new Map();
 
@@ -40,8 +44,11 @@ function attachAuthInfo(req) {
 }
 
 function createMcpServer() {
-  const server = new McpServer({ name: "ScholarMark", version: "1.0.0" });
-  registerScholarMarkTools(server, { backendBaseUrl });
+  const server = new McpServer(
+    { name: "ScholarMark", version: "1.1.0" },
+    { instructions: SCHOLARMARK_HOST_INSTRUCTIONS },
+  );
+  registerScholarMarkTools(server, { backendBaseUrl, appBaseUrl, aiMode });
   return server;
 }
 
@@ -364,4 +371,5 @@ app.post("/sse", async (req, res) => {
 app.listen(port, "0.0.0.0", () => {
   console.log(`ScholarMark MCP server listening on port ${port}`);
   console.log(`Proxying backend requests to ${backendBaseUrl}`);
+  console.log(`AI mode: ${aiMode}`);
 });

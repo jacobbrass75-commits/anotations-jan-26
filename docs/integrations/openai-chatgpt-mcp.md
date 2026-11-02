@@ -10,30 +10,28 @@ https://mcp.scholarmark.ai/mcp
 
 ## Decision Matrix
 
-| Lane | Use When | How ScholarMark Connects |
-| --- | --- | --- |
-| ChatGPT developer mode connector | You want to test ScholarMark inside ChatGPT | Add `https://mcp.scholarmark.ai/mcp` as a custom connector |
-| ChatGPT app with Apps SDK | You want a polished publishable ChatGPT app | Keep MCP tools, optionally add iframe UI resources |
-| Responses API remote MCP | You are building your own OpenAI API app | Pass ScholarMark as a `type: "mcp"` tool with `server_url` |
-| Deep research/company knowledge | You want read-only retrieval | Add a narrow search/fetch-oriented tool profile before publishing |
+| Lane                            | Use When                                    | How ScholarMark Connects                                          |
+| ------------------------------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| ChatGPT custom MCP plugin       | You want to test ScholarMark inside ChatGPT | Add `https://mcp.scholarmark.ai/mcp` as a custom connector        |
+| ChatGPT app with Apps SDK       | You want a polished publishable ChatGPT app | Keep MCP tools, optionally add iframe UI resources                |
+| Responses API remote MCP        | You are building your own OpenAI API app    | Pass ScholarMark as a `type: "mcp"` tool with `server_url`        |
+| Deep research/company knowledge | You want read-only retrieval                | Add a narrow search/fetch-oriented tool profile before publishing |
 
-ScholarMark is currently best suited for ChatGPT developer mode and Responses API remote MCP. Apps SDK UI can come later.
+ScholarMark is currently best suited for ChatGPT custom MCP plugins and Responses API remote MCP. Apps SDK UI can come later.
 
-## ChatGPT Developer Mode
+By default the server runs in host-AI mode: ChatGPT does the reading and annotating with the user's own plan, and ScholarMark only stores the results. It also exposes the `search` and `fetch` tools that deep research and company knowledge expect. See [host-ai-mode.md](host-ai-mode.md).
 
-1. Enable developer mode in ChatGPT settings.
-2. Go to `Settings > Connectors > Create`.
-3. Add:
+## ChatGPT Custom MCP Plugin
 
-```text
-Connector name: ScholarMark
-Connector URL: https://mcp.scholarmark.ai/mcp
-Description: Source-grounded academic writing workspace for projects, uploaded sources, quote verification, and draft review.
-```
+1. Open [ChatGPT Plugins](https://chatgpt.com/plugins).
+2. Select the plus button, then **Add custom MCP server**.
+3. Enter the name `ScholarMark`, a description, and the public endpoint `https://mcp.scholarmark.ai/mcp`.
+4. Configure OAuth authentication, review the warning, and select **Create as a plugin**.
+5. Complete ScholarMark sign-in and review the discovered tools.
+6. Install the plugin, start a new chat, and select ScholarMark using `@`.
+7. After tool changes, open the connection in Plugins, select **Refresh**, verify the metadata, and start a new chat.
 
-4. Create the connector.
-5. Complete OAuth linking when prompted.
-6. Refresh connector metadata after changing ScholarMark tool definitions.
+Account and workspace policies apply. See the [official connection guide](https://developers.openai.com/apps-sdk/deploy/connect-chatgpt).
 
 Recommended first test prompt:
 
@@ -74,14 +72,16 @@ const response = await client.responses.create({
         "get_source_summary",
         "get_source_annotations",
         "search_project_sources",
-        "get_source_chunks",
+        "read_source_text",
         "find_quote_in_source",
-        "get_web_clips"
+        "get_web_clips",
+        "search",
+        "fetch",
       ],
-      require_approval: "always"
-    }
+      require_approval: "always",
+    },
   ],
-  input: "Find source-backed quotes for my paper."
+  input: "Find source-backed quotes for my paper.",
 });
 
 console.log(response.output_text);
@@ -91,7 +91,7 @@ Use read-only `allowed_tools` first. Add upload and writing tools only after use
 
 ## Full Tool Profile
 
-For developer-mode testing after OAuth is stable:
+Host mode exposes these tools after OAuth is linked:
 
 ```json
 [
@@ -106,20 +106,23 @@ For developer-mode testing after OAuth is stable:
   "get_source_summary",
   "get_source_annotations",
   "search_project_sources",
-  "get_source_chunks",
   "find_quote_in_source",
   "get_web_clips",
-  "start_conversation",
-  "get_conversations",
-  "send_message",
-  "compile_paper",
-  "verify_paper"
+  "save_source",
+  "read_source_text",
+  "save_source_summary",
+  "save_annotations",
+  "update_annotation",
+  "delete_annotation",
+  "save_citation",
+  "search",
+  "fetch"
 ]
 ```
 
 ## Deep Research And Company Knowledge
 
-OpenAI deep research/company knowledge style integrations work best with narrow retrieval tools. Before treating ScholarMark as a broad research connector, add or map a `search`/`fetch` style read-only pair that returns concise source snippets and stable document references.
+OpenAI deep research/company knowledge style integrations work best with narrow retrieval tools. ScholarMark provides a `search`/`fetch` pair with concise source snippets and stable document references. Use a read-only tool allowlist for retrieval-only integrations.
 
 Do not expose write tools in this profile:
 
@@ -147,12 +150,12 @@ ScholarMark must keep:
 
 ## Test Checklist
 
-- ChatGPT developer mode scans the MCP server and shows tools.
+- ChatGPT discovers the MCP server and shows the host-mode tools.
 - OAuth opens ScholarMark login and returns to ChatGPT.
 - `get_projects` works after linking.
 - `upload_text_to_project` creates a source and project document.
 - `find_quote_in_source` returns `found: true` for a known quote.
-- `verify_paper` returns a report for a small compiled draft.
+- `save_annotations` saves exact quotes and `search`/`fetch` retrieve them in a new chat.
 - Refresh connector metadata after tool changes.
 
 ## Official References
