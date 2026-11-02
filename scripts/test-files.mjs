@@ -1,4 +1,5 @@
 export const testFiles = [
+  "tests/server/testWorkspaceTemplate.test.ts",
   "tests/server/mcpHostMode.integration.test.ts",
   "tests/server/oauthRoutes.integration.test.ts",
   "tests/shared/annotationLinks.test.ts",
