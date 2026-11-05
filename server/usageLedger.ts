@@ -1,8 +1,8 @@
 import type Database from "better-sqlite3";
 import {
   getAiUsagePlan,
+  MODEL_USE_LIMITS,
   normalizePlanTier,
-  STARTER_MODEL_USE_LIMITS,
   WRITING_CREDIT_WEIGHTS,
   type PlanTier,
   type WritingCreditModel,
@@ -19,7 +19,11 @@ export type ReservationResult =
       periodEnd: Date;
       idempotent: boolean;
     }
-  | { ok: false; reason: "credits" | "cost" | "model_limit"; remainingCredits: number };
+  | {
+      ok: false;
+      reason: "credits" | "cost" | "model_limit" | "conflict";
+      remainingCredits: number;
+    };
 
 export interface ReserveUsageInput {
   userId: string;
@@ -65,6 +69,9 @@ export class UsageLedger {
       if (existing) {
         if (existing.user_id !== input.userId)
           throw new Error("Usage request ID belongs to another user");
+        // A replayed ID must not move an existing reservation onto a different model.
+        if (existing.model !== input.model)
+          return { ok: false, reason: "conflict", remainingCredits: 0 };
         return {
           ok: true,
           requestId: input.requestId,
@@ -86,6 +93,7 @@ export class UsageLedger {
         plan.periodDays,
       );
       const credits = WRITING_CREDIT_WEIGHTS[input.model];
+      if (credits === undefined) return { ok: false, reason: "model_limit", remainingCredits: 0 };
       const estimatedCost = nonnegativeInt(input.estimatedCostCents);
       const totals = this.sqlite
         .prepare(
@@ -98,12 +106,10 @@ export class UsageLedger {
         )
         .get(input.userId, period.start.getTime(), period.end.getTime()) as any;
       const remainingCredits = Math.max(0, plan.credits - Number(totals.credits));
-      if (Number(totals.credits) + credits > plan.credits)
-        return { ok: false, reason: "credits", remainingCredits };
-      if (Number(totals.cost) + estimatedCost > plan.costCeilingCents)
-        return { ok: false, reason: "cost", remainingCredits };
 
-      const modelLimit = tier === "free" ? STARTER_MODEL_USE_LIMITS[input.model] : undefined;
+      // Run caps (including the Premium Opus cap) are checked inside the same immediate
+      // transaction as the insert, so concurrent requests cannot both take the last run.
+      const modelLimit = MODEL_USE_LIMITS[tier][input.model];
       if (modelLimit !== undefined) {
         if (modelLimit <= 0) return { ok: false, reason: "model_limit", remainingCredits };
         const count = this.sqlite
@@ -115,6 +121,10 @@ export class UsageLedger {
         if (Number(count.count) >= modelLimit)
           return { ok: false, reason: "model_limit", remainingCredits };
       }
+      if (Number(totals.credits) + credits > plan.credits)
+        return { ok: false, reason: "credits", remainingCredits };
+      if (Number(totals.cost) + estimatedCost > plan.costCeilingCents)
+        return { ok: false, reason: "cost", remainingCredits };
 
       this.sqlite
         .prepare(
@@ -183,6 +193,21 @@ export class UsageLedger {
       .get(userId, periodStart.getTime(), periodEnd.getTime()) as any;
     return { creditsUsed: Number(row.credits), costCentsUsed: Number(row.cost) };
   }
+
+  modelRunsUsed(
+    userId: string,
+    model: WritingCreditModel,
+    periodStart: Date,
+    periodEnd: Date,
+  ): number {
+    const row = this.sqlite
+      .prepare(
+        `SELECT COUNT(*) count FROM ai_usage_reservations
+      WHERE user_id=? AND period_start=? AND period_end=? AND model=?`,
+      )
+      .get(userId, periodStart.getTime(), periodEnd.getTime(), model) as any;
+    return Number(row.count);
+  }
 }
 
 function nonnegativeInt(value: number | undefined): number {
@@ -197,7 +222,10 @@ export function resolvePeriod(
   days = 30,
 ) {
   if (tier !== "free" && start && end && end > start) return { start, end };
-  const anchor = start && start <= now ? start : now;
+  // Without a usable anchor (legacy rows have no billing_cycle_start), fall back to
+  // fixed epoch-aligned windows. Anchoring on `now` would give every request its own
+  // period, so credit, cost, and Opus run caps would never accumulate.
+  const anchor = start && start <= now ? start : new Date(0);
   const elapsedPeriods = Math.max(
     0,
     Math.floor((now.getTime() - anchor.getTime()) / (days * DAY_MS)),

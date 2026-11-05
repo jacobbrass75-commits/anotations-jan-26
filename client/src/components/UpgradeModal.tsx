@@ -8,7 +8,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { PLAN_DISPLAY_PRICES } from "@shared/billingPlans";
+import {
+  BILLING_PLAN_LABELS,
+  MODEL_ACCESS_DISCLAIMER,
+  PLAN_MODEL_ACCESS,
+  planPriceLabel,
+} from "@shared/billingPlans";
 
 interface UpgradeModalProps {
   open: boolean;
@@ -18,8 +23,8 @@ interface UpgradeModalProps {
 }
 
 const TIER_LABELS: Record<string, string> = {
-  pro: `Pro ($${PLAN_DISPLAY_PRICES.pro}/mo)`,
-  max: `Max ($${PLAN_DISPLAY_PRICES.max}/mo)`,
+  pro: planPriceLabel("pro"),
+  max: planPriceLabel("max"),
 };
 
 export function UpgradeModal({ open, onClose, requiredTier, feature }: UpgradeModalProps) {
@@ -43,20 +48,27 @@ export function UpgradeModal({ open, onClose, requiredTier, feature }: UpgradeMo
                 <li>50 sources per project, 10 projects, 500 MB storage</li>
                 <li>Higher AI credit, token, and cost allowances</li>
                 <li>GPT-4o-mini Vision OCR</li>
+                {PLAN_MODEL_ACCESS.pro.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
                 <li>More room for source-grounded drafting and analysis</li>
               </ul>
             </>
           )}
           {requiredTier === "max" && (
             <>
-              <p>Max includes everything in Pro, plus:</p>
+              <p>{BILLING_PLAN_LABELS.max} includes everything in Pro, plus:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
                 <li>No set source/project count limit, with 5 GB storage</li>
+                <li>{PLAN_MODEL_ACCESS.max[PLAN_MODEL_ACCESS.max.length - 1]}</li>
                 <li>Highest limits for source-grounded drafting</li>
                 <li>GPT-4o Vision OCR &amp; 2M tokens/mo</li>
               </ul>
             </>
           )}
+          {requiredTier === "pro" || requiredTier === "max" ? (
+            <p className="text-xs">{MODEL_ACCESS_DISCLAIMER}</p>
+          ) : null}
         </div>
         <DialogFooter className="gap-2">
           <Button variant="ghost" onClick={onClose}>

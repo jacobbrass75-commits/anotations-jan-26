@@ -18,6 +18,16 @@ describe("humanizer", () => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    // Never inherit real provider keys from the developer shell; tests opt in explicitly.
+    vi.stubEnv("GEMINI_API_KEY", "");
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("HUMANIZER_ANTHROPIC_MODEL", "");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("Unexpected network call in humanizer test");
+      }),
+    );
   });
 
   afterEach(() => {
@@ -67,13 +77,57 @@ describe("humanizer", () => {
     const { humanizeText } = await import("../../server/humanizer");
     const result = await humanizeText("Original text");
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       humanizedText: "Humanized output",
       provider: "anthropic",
-      model: "claude-opus-4-8",
+      model: "claude-sonnet-5-5",
       tokensUsed: 20,
     });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    const params = anthropicCreate.mock.calls[0][0];
+    expect(params).not.toHaveProperty("temperature");
+    expect(params).not.toHaveProperty("top_p");
+    expect(params).not.toHaveProperty("top_k");
+    expect(params).not.toHaveProperty("thinking");
+  });
+
+  it("never falls back to Opus, even when an operator override names it", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-key");
+    vi.stubEnv("HUMANIZER_ANTHROPIC_MODEL", "claude-opus-5-5");
+    anthropicCreate.mockResolvedValue({
+      content: [{ type: "text", text: "Rewritten" }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+
+    const { humanizeText } = await import("../../server/humanizer");
+    const result = await humanizeText("Original text");
+
+    expect(result.model).toBe("claude-sonnet-5-5");
+    expect(anthropicCreate.mock.calls[0][0].model).toBe("claude-sonnet-5-5");
+  });
+
+  it("runs an explicit Claude choice on that model and reads text after thinking blocks", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "gemini-key");
+    vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-key");
+    anthropicCreate.mockResolvedValue({
+      content: [
+        { type: "thinking", thinking: "", signature: "sig" },
+        { type: "text", text: "Haiku rewrite" },
+      ],
+      usage: { input_tokens: 4, output_tokens: 6 },
+    });
+
+    const { humanizeText } = await import("../../server/humanizer");
+    const result = await humanizeText("Original text", { model: "haiku", temperature: 0.4 });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      humanizedText: "Haiku rewrite",
+      model: "claude-haiku-5-5",
+      inputTokens: 4,
+      outputTokens: 6,
+    });
+    expect(anthropicCreate.mock.calls[0][0]).not.toHaveProperty("temperature");
   });
 });

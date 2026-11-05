@@ -515,9 +515,71 @@ describe("writing route integration", () => {
       expect(response.status).toBe(200);
       expect(text).toContain('"type":"complete"');
       expect(modelParams).toHaveLength(3);
-      expect(modelParams.every((params) => params.model === "claude-sonnet-5")).toBe(true);
+      expect(modelParams.every((params) => params.model === "claude-sonnet-5-5")).toBe(true);
       expect(modelParams.every((params) => params.output_config?.effort === "medium")).toBe(true);
       expect(modelParams.every((params) => params.thinking === undefined)).toBe(true);
+      expect(modelParams.every((params) => params.temperature === undefined)).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("sends no thinking budget on deep writes and reads plans after thinking blocks", async () => {
+    const { server, token } = await createApp();
+
+    anthropicCreate
+      .mockResolvedValueOnce({
+        content: [
+          { type: "thinking", thinking: "", signature: "sig" },
+          {
+            type: "text",
+            text: JSON.stringify({
+              thesis: "Thinking blocks come first on Claude 5.5.",
+              bibliography: [],
+              sections: [
+                { title: "Introduction", description: "Open.", sourceIds: [], targetWords: 100 },
+              ],
+            }),
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [
+          { type: "thinking", thinking: "", signature: "sig" },
+          { type: "text", text: "## Introduction\nA deep draft section." },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: [
+          { type: "thinking", thinking: "", signature: "sig" },
+          { type: "text", text: "# Complete Paper\nA deep draft section." },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+
+    try {
+      const response = await fetch(`${server.baseUrl}/api/write`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          topic: "Deep write",
+          citationStyle: "chicago",
+          tone: "academic",
+          targetLength: "short",
+          deepWrite: true,
+        }),
+      });
+      const text = await response.text();
+      const modelParams = anthropicCreate.mock.calls.map(([params]) => params as any);
+
+      expect(response.status).toBe(200);
+      expect(text).toContain("Thinking blocks come first on Claude 5.5.");
+      expect(text).toContain('"type":"complete"');
+      expect(modelParams).toHaveLength(3);
+      expect(modelParams.every((params) => params.thinking === undefined)).toBe(true);
+      expect(modelParams.every((params) => params.output_config?.effort === "high")).toBe(true);
     } finally {
       await server.close();
     }

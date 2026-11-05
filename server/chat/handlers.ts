@@ -79,7 +79,6 @@ import {
   estimateContextUsage,
   getModelsForConversation,
   getWritingMode,
-  normalizeWritingModel,
   isTieredSource,
   planSourceBlock,
   toAnthropicMessages,
@@ -87,6 +86,7 @@ import {
   type ContextUsageEstimate,
   type ContextWarningLevel,
   type PromptSource,
+  type WritingModelChoice,
   type WritingProjectContext,
   type WritingStyleContext,
 } from "./promptBuilder";
@@ -110,28 +110,26 @@ import {
   type OpenRouterChatMessage,
   type OpenRouterWritingModelId,
 } from "../openRouterWriting";
-import type { WritingCreditModel } from "../planLimits";
+import {
+  defaultWritingModelForTier,
+  isWritingModelAllowedForTier,
+  type WritingCreditModel,
+} from "../planLimits";
+import { resolveRequestedWritingModel, writingModelLabel } from "../writingModelChoice";
+import type { ReservationResult } from "../usageLedger";
 
 const logger = createLogger("chat/handlers");
-
-function creditModelForChoice(value: string | null | undefined): WritingCreditModel {
-  const normalized = normalizeWritingModel(value);
-  if (normalized === "opus") return "opus";
-  if (normalized === "gpt56") return "gpt";
-  if (normalized === "deepseek") return "deepseek";
-  return "sonnet";
-}
 
 function estimatedModelCostCents(
   model: WritingCreditModel,
   inputTokens: number,
   outputTokens: number,
 ): number {
+  // USD per million tokens. Haiku uses its over-100k-prompt rate so estimates stay conservative.
   const rates = {
-    opus: { input: 5, output: 25 },
-    sonnet: { input: 3, output: 15 },
-    gpt: { input: 5, output: 30 },
-    deepseek: { input: 0.435, output: 0.87 },
+    opus: { input: 4, output: 20 },
+    sonnet: { input: 2, output: 10 },
+    haiku: { input: 0.5, output: 2.5 },
   }[model];
   return Math.ceil(
     ((Math.max(0, inputTokens) * rates.input + Math.max(0, outputTokens) * rates.output) /
@@ -140,6 +138,23 @@ function estimatedModelCostCents(
   );
 }
 
+function reservationFailureMessage(
+  model: WritingCreditModel,
+  reason: Extract<ReservationResult, { ok: false }>["reason"],
+): string {
+  if (reason === "model_limit") {
+    return model === "opus"
+      ? "Your Claude Opus 5.5 runs for this period have been used. Switch to Claude Sonnet 5.5 or Claude Haiku 5.5 to keep writing."
+      : `Your ${writingModelLabel(model)} allowance for this period has been used.`;
+  }
+  return "AI credit allowance reached for this period";
+}
+
+/**
+ * Reserves ledger usage before any provider call. The tier is re-read from the
+ * database so a stale session cannot unlock a model, and a reused request ID cannot
+ * authorize a second provider call against a single reservation.
+ */
 async function reserveWritingCredits(input: {
   req: Request;
   model: WritingCreditModel;
@@ -149,6 +164,12 @@ async function reserveWritingCredits(input: {
 }) {
   const user = await getUserById(input.req.user!.userId);
   if (!user) throw new OpenRouterWritingError(401, "Authentication required");
+  if (!isWritingModelAllowedForTier(input.model, user.tier)) {
+    throw new OpenRouterWritingError(
+      403,
+      `${writingModelLabel(input.model)} requires the Premium plan. Choose Claude Sonnet 5.5 or Claude Haiku 5.5.`,
+    );
+  }
   const clientRequestId = input.req.header("x-request-id")?.trim() || randomUUID();
   const requestId = `${user.id}:${input.operation}:${clientRequestId}`;
   const reservation = usageLedger.reserve({
@@ -165,14 +186,34 @@ async function reserveWritingCredits(input: {
     billingPeriodEnd: user.subscriptionCurrentPeriodEnd,
   });
   if (!reservation.ok) {
+    if (reservation.reason === "conflict") {
+      throw new OpenRouterWritingError(409, "This request ID was already used for another model");
+    }
     throw new OpenRouterWritingError(
       429,
-      reservation.reason === "model_limit"
-        ? `The ${input.model} Starter allowance has been used for this period`
-        : "AI credit allowance reached for this period",
+      reservationFailureMessage(input.model, reservation.reason),
+    );
+  }
+  if (reservation.idempotent) {
+    throw new OpenRouterWritingError(
+      409,
+      "This request was already submitted. Send a new request ID to run it again.",
     );
   }
   return requestId;
+}
+
+function requestedConversationModel(
+  writingModel: unknown,
+  tier: string | null | undefined,
+  res: Response,
+): WritingModelChoice | null {
+  const requested = resolveRequestedWritingModel(writingModel, tier);
+  if (!requested.ok) {
+    res.status(requested.status).json({ message: requested.message });
+    return null;
+  }
+  return requested.model;
 }
 
 async function getOwnedConversationOr404(
@@ -510,7 +551,6 @@ export function registerChatRoutes(app: Express) {
     try {
       const {
         title,
-        model,
         projectId,
         selectedSourceIds,
         citationStyle,
@@ -521,15 +561,16 @@ export function registerChatRoutes(app: Express) {
         writingStyleId,
       } = req.body || {};
 
-      const normalizedWritingModel =
-        typeof writingModel === "string"
-          ? normalizeWritingModel(writingModel)
-          : req.user!.tier === "free" && process.env.ENABLE_DEEPSEEK_WRITING !== "false"
-            ? "deepseek"
-            : "sonnet";
+      const tier = req.user!.tier;
+      let normalizedWritingModel: WritingModelChoice = defaultWritingModelForTier(tier);
+      if (writingModel !== undefined && writingModel !== null) {
+        const requested = requestedConversationModel(writingModel, tier, res);
+        if (!requested) return;
+        normalizedWritingModel = requested;
+      }
       const defaultModels = getModelsForConversation(
         { writingModel: normalizedWritingModel },
-        req.user!.tier,
+        tier,
       );
       if (projectId) {
         const project = await getOwnedProjectOr404(projectId, req.user!.userId);
@@ -546,7 +587,8 @@ export function registerChatRoutes(app: Express) {
 
       const conv = await chatStorage.createConversation({
         title: title || "New Chat",
-        model: model || defaultModels.chat,
+        // The stored provider model always reflects the resolved choice, never a client string.
+        model: defaultModels.chat,
         writingModel: normalizedWritingModel,
         userId: req.user!.userId,
         projectId: projectId || null,
@@ -590,24 +632,18 @@ export function registerChatRoutes(app: Express) {
 
   app.put("/api/chat/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const {
-        title,
-        model,
-        writingModel,
-        citationStyle,
-        tone,
-        humanize,
-        noEnDashes,
-        writingStyleId,
-      } = req.body;
+      const { title, writingModel, citationStyle, tone, humanize, noEnDashes, writingStyleId } =
+        req.body;
 
       const updates: Record<string, unknown> = {};
       if (title !== undefined) updates.title = title;
-      if (model !== undefined) updates.model = model;
-      if (writingModel !== undefined)
-        updates.writingModel = normalizeWritingModel(
-          typeof writingModel === "string" ? writingModel : undefined,
-        );
+      // A client-supplied provider `model` string is ignored; it follows writingModel.
+      if (writingModel !== undefined) {
+        const requested = requestedConversationModel(writingModel, req.user!.tier, res);
+        if (!requested) return;
+        updates.writingModel = requested;
+        updates.model = getModelsForConversation({ writingModel: requested }, req.user!.tier).chat;
+      }
       if (citationStyle !== undefined) updates.citationStyle = citationStyle;
       if (tone !== undefined) updates.tone = tone;
       if (humanize !== undefined) updates.humanize = humanize;
@@ -683,7 +719,7 @@ export function registerChatRoutes(app: Express) {
 
         let history = await chatStorage.getMessagesForConversation(conv.id);
         let anthropicMessages = toAnthropicMessages(history);
-        const mode = getWritingMode(conv);
+        const mode = getWritingMode(conv, req.user!.tier);
         const models = getModelsForConversation(conv, req.user!.tier);
 
         const { project, sources, writingStyle } = await loadConversationContext(
@@ -721,7 +757,7 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           });
         }
 
-        usageCreditModel = creditModelForChoice(conv.writingModel);
+        usageCreditModel = models.choice;
         usageRequestId = await reserveWritingCredits({
           req,
           model: usageCreditModel,
@@ -1478,7 +1514,7 @@ ${chunkContext}`;
           });
         }
 
-        usageCreditModel = creditModelForChoice(conv.writingModel);
+        usageCreditModel = models.choice;
         usageRequestId = await reserveWritingCredits({
           req,
           model: usageCreditModel,
@@ -1641,7 +1677,7 @@ ${chunkContext}`;
           });
         }
 
-        usageCreditModel = creditModelForChoice(conv.writingModel);
+        usageCreditModel = models.choice;
         usageRequestId = await reserveWritingCredits({
           req,
           model: usageCreditModel,

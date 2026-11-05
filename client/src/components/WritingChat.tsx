@@ -24,7 +24,8 @@ import { queryClient } from "@/lib/queryClient";
 import { getAuthHeaders, useAuth } from "@/lib/auth";
 import {
   WRITING_MODEL_OPTIONS,
-  normalizeWritingModelValue,
+  effectiveWritingModelForTier,
+  isWritingModelAvailableForTier,
   type WritingModelValue,
 } from "@/lib/writingModels";
 import {
@@ -222,11 +223,7 @@ export default function WritingChat({
   const [citationStyle, setCitationStyle] = useState(conversationData?.citationStyle || "chicago");
   const [tone, setTone] = useState(conversationData?.tone || "academic");
   const [writingModel, setWritingModel] = useState<WritingModelValue>(
-    conversationData?.writingModel
-      ? normalizeWritingModelValue(conversationData.writingModel)
-      : tier === "free" && WRITING_MODEL_OPTIONS.some((option) => option.value === "deepseek")
-        ? "deepseek"
-        : "sonnet",
+    effectiveWritingModelForTier(conversationData?.writingModel, tier),
   );
   const [humanize, setHumanize] = useState(conversationData?.humanize ?? true);
   const [noEnDashes, setNoEnDashes] = useState(conversationData?.noEnDashes || false);
@@ -243,7 +240,7 @@ export default function WritingChat({
     if (conversationData) {
       if (conversationData.citationStyle) setCitationStyle(conversationData.citationStyle);
       if (conversationData.tone) setTone(conversationData.tone);
-      setWritingModel(normalizeWritingModelValue(conversationData.writingModel));
+      setWritingModel(effectiveWritingModelForTier(conversationData.writingModel, tier));
       if (conversationData.humanize !== undefined && conversationData.humanize !== null) {
         setHumanize(conversationData.humanize);
       }
@@ -252,7 +249,7 @@ export default function WritingChat({
       }
       setSelectedWritingStyleId(conversationData.writingStyleId || NO_STYLE_VALUE);
     }
-  }, [conversationData]);
+  }, [conversationData, tier]);
 
   useEffect(() => {
     if (selectedWritingStyleId === NO_STYLE_VALUE) return;
@@ -1085,7 +1082,11 @@ export default function WritingChat({
                     </SelectTrigger>
                     <SelectContent>
                       {WRITING_MODEL_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          disabled={!isWritingModelAvailableForTier(option.value, tier)}
+                        >
                           {option.label} — {option.description}
                         </SelectItem>
                       ))}

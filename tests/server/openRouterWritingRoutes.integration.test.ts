@@ -18,6 +18,7 @@ describe("OpenRouter writing model test routes", () => {
     vi.clearAllMocks();
     process.chdir(tempDir);
     process.env.OPENROUTER_API_KEY = "sk-or-test";
+    process.env.ENABLE_OPENROUTER_WRITING_TESTS = "true";
     await bootstrapTempWorkspace(tempDir);
   });
 
@@ -25,6 +26,7 @@ describe("OpenRouter writing model test routes", () => {
     sqlite?.close();
     sqlite = null;
     process.chdir(originalCwd);
+    delete process.env.ENABLE_OPENROUTER_WRITING_TESTS;
     if (originalOpenRouterApiKey === undefined) {
       delete process.env.OPENROUTER_API_KEY;
     } else {
@@ -116,6 +118,33 @@ describe("OpenRouter writing model test routes", () => {
       context_length: contextLength,
     };
   }
+
+  it("hides the GPT/DeepSeek test routes unless an operator enables them", async () => {
+    delete process.env.ENABLE_OPENROUTER_WRITING_TESTS;
+    const { chatBodies } = mockOpenRouterFetch();
+    const { server, token } = await createApp({ tier: "max" });
+
+    try {
+      const list = await fetch(`${server.baseUrl}/api/write/test-models`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const run = await fetch(`${server.baseUrl}/api/write/test-models/run`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "openai/gpt-5.6-sol",
+          prompt: "Write one vivid paragraph about a library.",
+        }),
+      });
+
+      expect(list.status).toBe(404);
+      expect(run.status).toBe(404);
+      expect(chatBodies).toHaveLength(0);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      await server.close();
+    }
+  });
 
   it("lists only the governed OpenRouter writing models", async () => {
     mockOpenRouterFetch();

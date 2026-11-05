@@ -10,7 +10,7 @@ describe("account utilities", () => {
   it("formats plan labels for display", () => {
     expect(formatAccountTier("free")).toBe("Free");
     expect(formatAccountTier("pro")).toBe("Pro");
-    expect(formatAccountTier("max")).toBe("Max");
+    expect(formatAccountTier("max")).toBe("Premium");
     expect(formatAccountTier("unknown")).toBe("Free");
   });
 

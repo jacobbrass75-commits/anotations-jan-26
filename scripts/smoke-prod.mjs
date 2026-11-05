@@ -219,8 +219,16 @@ async function runAppSmoke() {
       "Stripe Pro checkout is not using the USD 5 lookup key",
     );
     assert(
-      stripeConfig.json?.plans?.max?.amountCents === 5000,
-      "Stripe Max price did not report 5000 cents",
+      stripeConfig.json?.plans?.max?.amountCents === 1400,
+      "Stripe Premium price did not report 1400 cents",
+    );
+    assert(
+      stripeConfig.json?.plans?.max?.label === "Premium",
+      "Stripe max plan is not labeled Premium",
+    );
+    assert(
+      stripeConfig.json?.plans?.max?.lookupKey === "scholarmark_max_monthly_usd14",
+      "Stripe Premium checkout is not using the USD 14 lookup key",
     );
   } else {
     console.log("[smoke] Stripe billing config check skipped");
