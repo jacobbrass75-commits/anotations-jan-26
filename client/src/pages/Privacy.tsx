@@ -38,6 +38,19 @@ const sections = [
     ],
   },
   {
+    title: "Claude, ChatGPT, And Codex Connector",
+    body: [
+      "ScholarMark offers a remote MCP connector at https://mcp.scholarmark.ai/mcp for Claude, ChatGPT, and Codex. You add it in the host app and sign in to ScholarMark through OAuth. The connector then reads and writes only your own ScholarMark account.",
+      "When the assistant calls a ScholarMark tool you have authorized, the host app sends ScholarMark the tool's inputs and an OAuth access token. Inputs can include source text you shared in the chat, PDF or text files, summaries, key concepts, highlighted quotes, notes, citation metadata, project names and details, and search queries.",
+      "ScholarMark returns what each tool requests, such as project and source lists, stored source text, summaries, highlights, citation metadata, web clips, and search results with links to the ScholarMark app. The host app receives that content in your conversation.",
+      "ScholarMark stores what write tools send, including sources, summaries, highlights, notes, and citations, in your account, where it appears in the ScholarMark web app like other saved materials and stays until you delete it. ScholarMark stores hashes of the OAuth tokens it issues, and those tokens expire.",
+      "In the connector's default mode, Claude or ChatGPT does the reading, summarizing, and annotating. ScholarMark stores the results and makes no calls to its own AI model providers for connector requests.",
+      "Routine connector request logs record the request method and path, the MCP method name, a shortened session ID, the client user agent, response status, timing, and your user ID.",
+      "Anthropic operates Claude, and OpenAI operates ChatGPT and Codex. You use those apps under your own agreements with Anthropic or OpenAI, and their terms and privacy policies govern how they store and use your conversations, including content ScholarMark returns to them. ScholarMark processes connector data to provide the features of your ScholarMark account.",
+      "You can review and remove saved sources, projects, and highlights in the ScholarMark web app. To stop future access, disconnect ScholarMark in the host app's connector settings. To have ScholarMark revoke issued connector tokens, contact support@scholarmark.ai.",
+    ],
+  },
+  {
     title: "Service Providers",
     body: [
       "ScholarMark may use service providers for hosting, authentication, storage, analytics, payment, email, and AI-assisted research features. These providers are used to operate ScholarMark and are not permitted to use your data for unrelated purposes.",
@@ -45,7 +58,8 @@ const sections = [
       "Some AI, OCR, citation, drafting, and style-analysis features may send user-selected research content to AI/model providers such as OpenAI or Anthropic.",
       "Meta provides optional advertising measurement through the Meta Pixel and Conversions API. Browser and server events share an event identifier to avoid duplicate counting, and server-side identifiers such as email are normalized and hashed before transmission.",
       "DeepSeek is disabled by default. If ScholarMark enables it after privacy review, the app will identify it clearly before use. DeepSeek states that it processes data in the People's Republic of China and may use inputs to improve its technology unless the applicable user exercises an available opt-out. Do not use that model for sensitive personal data.",
-      "ScholarMark may keep backups, logs, and security records for a limited period after information is removed from the active app, unless a longer retention period is required for legal, billing, security, or abuse-prevention reasons.",
+      "ScholarMark takes backup snapshots of its database and uploaded files, including one before each deployment. The backup job keeps the 14 most recent snapshots and removes older ones, so information you delete from the active app remains in existing snapshots until they rotate out.",
+      "That rotation covers backups only. ScholarMark may keep logs and security records for a limited period, and keeps records longer when legal, billing, security, or abuse-prevention reasons require it. Content you share with Claude, ChatGPT, Codex, or another host app is handled by that provider under its own policies, outside ScholarMark's backups.",
     ],
   },
   {
@@ -102,8 +116,8 @@ export default function Privacy() {
             ScholarMark Privacy Policy
           </h1>
           <p className="text-sm text-muted-foreground">
-            Last updated July 16, 2026. This policy explains how ScholarMark handles data for the
-            web app and Chrome extension.
+            Last updated November 5, 2026. This policy explains how ScholarMark handles data for the
+            web app, the Chrome extension, and the MCP connector for Claude, ChatGPT, and Codex.
           </p>
         </div>
 

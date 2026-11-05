@@ -26,6 +26,7 @@ npm start
 - `MCP_RESOURCE_URL`: Public MCP resource URL.
 - `MCP_AI_MODE`: `host` (default) or `server`. In `host` mode, Claude or ChatGPT does the AI work and ScholarMark only stores the results, so ScholarMark makes no OpenAI or Anthropic calls. See `../docs/integrations/host-ai-mode.md`.
 - `SCHOLARMARK_APP_URL`: Web app base URL used for links in tool results. Defaults to `https://app.scholarmark.ai`.
+- `OPENAI_APPS_CHALLENGE_TOKEN`: Optional. The domain-verification token the OpenAI plugin portal shows when you connect the MCP server. When set, `GET /.well-known/openai-apps-challenge` returns exactly that token as `text/plain`. When unset, or when the value isn't a single line of printable ASCII up to 1024 characters, the route returns 404. The server logs only whether the route is enabled. Set it in the PM2 process environment on the server and keep it out of the repo.
 
 ## Notes
 

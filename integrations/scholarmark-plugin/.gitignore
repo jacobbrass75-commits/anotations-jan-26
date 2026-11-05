@@ -1,0 +1,2 @@
+# Built upload packages; rebuild with `node tools/package.mjs`.
+dist/
