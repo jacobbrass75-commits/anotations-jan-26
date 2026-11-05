@@ -13,6 +13,8 @@ const appBaseUrl = process.env.SCHOLARMARK_APP_URL ?? "https://app.scholarmark.a
 // "host": Claude/ChatGPT does the AI work and ScholarMark only stores results (no
 // ScholarMark AI spend). "server": also expose tools that run ScholarMark's own models.
 const aiMode = process.env.MCP_AI_MODE === "server" ? "server" : "host";
+// OpenAI plugin portal domain verification. Off unless the env var holds a valid token.
+const openaiAppsChallengeToken = parseChallengeToken(process.env.OPENAI_APPS_CHALLENGE_TOKEN);
 const mcpSessions = new Map();
 const sseSessions = new Map();
 
@@ -24,6 +26,22 @@ setInterval(
   },
   10 * 60 * 1000,
 );
+
+// Accepts one line of printable ASCII, up to 1024 characters. Never logs the value.
+function parseChallengeToken(raw) {
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const token = raw.trim();
+  if (!token) {
+    return null;
+  }
+  if (!/^[\x21-\x7E]{1,1024}$/.test(token)) {
+    console.warn("[CHALLENGE] OPENAI_APPS_CHALLENGE_TOKEN is not a single printable token; route disabled");
+    return null;
+  }
+  return token;
+}
 
 function attachAuthInfo(req) {
   const authHeader = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
@@ -129,6 +147,20 @@ function sendServiceInfo(res) {
 }
 
 app.get("/", (_req, res) => sendServiceInfo(res));
+
+// Returns the exact token as plain text, as the OpenAI submission guide requires.
+app.get("/.well-known/openai-apps-challenge", (_req, res) => {
+  if (!openaiAppsChallengeToken) {
+    res.status(404).type("text/plain").send("Not found");
+    return;
+  }
+  res
+    .status(200)
+    .set("Cache-Control", "no-store")
+    .set("X-Content-Type-Options", "nosniff")
+    .type("text/plain")
+    .send(openaiAppsChallengeToken);
+});
 
 app.get("/.well-known/oauth-protected-resource", (req, res) => {
   res.status(200).json(buildProtectedResourceMetadata(req));
@@ -372,4 +404,5 @@ app.listen(port, "0.0.0.0", () => {
   console.log(`ScholarMark MCP server listening on port ${port}`);
   console.log(`Proxying backend requests to ${backendBaseUrl}`);
   console.log(`AI mode: ${aiMode}`);
+  console.log(`OpenAI apps challenge route: ${openaiAppsChallengeToken ? "enabled" : "disabled"}`);
 });

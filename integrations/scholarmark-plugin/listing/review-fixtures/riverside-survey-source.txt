@@ -1,0 +1,20 @@
+SYNTHETIC TEST DOCUMENT. Written for ScholarMark plugin review and QA. This is not a real publication, organization, or dataset. It is released with the plugin under the MIT License.
+
+[Page 1]
+Volunteer Retention at the Riverside Community Garden: 2024 Survey Report
+Riverside Garden Collective
+
+[Page 2]
+Methods
+We surveyed 212 volunteers who joined the garden between January 2022 and June 2023. The response rate was 64 percent. Respondents answered questions about how long they volunteered, whether they were paired with a mentor, their usual shift length, and their reasons for leaving.
+
+[Page 3]
+Findings
+Thirty-eight percent of respondents stopped volunteering within twelve months of joining.
+Volunteers who were paired with a mentor in their first month were more likely to remain active after one year, although the difference was modest and the survey cannot show that mentoring caused it.
+The most common reason given for leaving was schedule conflicts (46 percent), followed by moving away (21 percent).
+
+[Page 4]
+Discussion
+Some coordinators believe that shorter shifts would improve retention. Our data do not support this view: retention was similar for two-hour and four-hour shifts.
+Because the survey relied on self-report and reached only current and recent volunteers, the results may not describe volunteers who left without responding.

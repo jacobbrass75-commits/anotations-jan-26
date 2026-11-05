@@ -1,0 +1,24 @@
+{
+  "name": "scholarmark",
+  "displayName": "ScholarMark",
+  "version": "1.0.0",
+  "description": "Audit claims, quotations, page locators, and DOIs in academic writing against the evidence you provide, and optionally check quotes against and save verified evidence to your ScholarMark library.",
+  "author": {
+    "name": "ScholarMark",
+    "email": "support@scholarmark.ai",
+    "url": "https://scholarmark.ai"
+  },
+  "homepage": "https://scholarmark.ai",
+  "license": "MIT",
+  "keywords": ["citations", "quotations", "research", "academic-writing", "evidence", "doi"],
+  "icon": "./assets/logo.png",
+  "supportUrl": "https://scholarmark.ai/support",
+  "privacyPolicyUrl": "https://scholarmark.ai/privacy",
+  "termsOfServiceUrl": "https://scholarmark.ai/terms",
+  "mcpServers": {
+    "scholarmark": {
+      "type": "http",
+      "url": "https://mcp.scholarmark.ai/mcp"
+    }
+  }
+}
