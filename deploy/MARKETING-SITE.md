@@ -21,7 +21,7 @@ On `scholarmark.ai` (`www` and HTTP are still 308-canonicalized first):
 
 | Path                                                                                                | Served by                                                                                                                                                                                                                                                                    |
 | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                                                                                                 | Astro, except paid Instagram UTMs, `ref`, `code`, `invite`, `sm_landing`, `sm_direct_signup`, `embedded_auth`, or a signed-in Clerk browser (`__client_uat`). Those keep the SPA landing.                                                                                    |
+| `/`                                                                                                 | Astro, except paid Instagram UTMs, `ref`, `code`, `invite`, `sm_landing`, `sm_direct_signup`, or `embedded_auth`. Those keep the SPA landing. Auth cookies (e.g. Clerk `__client_uat`) are ignored; returning users use the header Sign in link to `app.scholarmark.ai`.          |
 | `/guides`, `/guides/*`                                                                              | Astro. The canonical trailing-slash form is enforced with a 308 redirect; unknown guides return the Astro 404.                                                                                                                                                               |
 | `/_astro/*`                                                                                         | Astro hashed assets on any host, `immutable`, and a 404 (never SPA HTML) on a miss.                                                                                                                                                                                          |
 | `/robots.txt`, `/sitemap.xml`                                                                       | Composed by the server. Indexable release: app-private paths disallowed, Astro sitemap plus legacy public SPA pages (`/pricing`, `/faq`, `/blog`, `/blog/*`, `/privacy`, `/terms`, `/support`). Non-indexable release: Astro's blocking robots and empty sitemap, unchanged. |
@@ -39,12 +39,15 @@ responses, but the server keeps control of `Cache-Control`, so HTML is always `n
 
 ## Build and deploy
 
-`deploy/refresh-prod.sh` needs no changes. It runs the root `npm ci`, then
-`npm run build`, which loads `/opt/app/.env`. When `SCHOLARMARK_MARKETING_SITE=astro`,
-`scripts/build.ts`:
+`deploy/refresh-prod.sh` runs the root `npm ci`, then `npm run build`, which loads
+`/opt/app/.env`. It runs the smoke from `APP_DIR` so the smoke's `.env` (and the
+Astro-specific checks) load even after the MCP dependency refresh. When
+`SCHOLARMARK_MARKETING_SITE=astro`, `scripts/build.ts`:
 
 1. Checks `marketing/package.json`, `marketing/package-lock.json`, and the Node version
-   against `engines.node` (currently `>=22.12.0`).
+   against `engines.node`. Use Node 22.22 or newer for the marketing build; production
+   uses the staged binary `/opt/app/.tools/node-v22.23.4-linux-x64/bin/node` via
+   `SCHOLARMARK_MARKETING_NODE_PATH` (see [RELEASE.md](./RELEASE.md)).
 2. Runs `npm ci` in `marketing/`, after the root install, never in parallel. It is
    skipped when the lockfile and Node version match the previous install.
 3. Runs `npm run build` in `marketing/` with a scrubbed environment: system variables,
@@ -57,7 +60,8 @@ With the switch off, the Astro install and build are skipped entirely.
 
 ## Production switch
 
-Preconditions: `node -v` on the server is at least 22.12, and `marketing/` (including
+Preconditions: the marketing build Node (`SCHOLARMARK_MARKETING_NODE_PATH`, or the system
+`node -v` if unset) is at least 22.22, and `marketing/` (including
 `package-lock.json`) is on the deployed ref.
 
 ```bash
@@ -97,7 +101,8 @@ SCHOLARMARK_MARKETING_PREVIEW_HOSTS=localhost npm start
 1. Browse `http://localhost:5001/`, `/guides/`, and a guide. Confirm `X-Robots-Tag: noindex`
    and a blocking `/robots.txt` (the staging gate).
 2. Confirm SPA paths still work: `/?utm_source=ig&utm_medium=paid`, `/?ref=test`, `/blog`,
-   `/pricing`, `/start`, `/sign-up`.
+   `/pricing`, `/start`, `/sign-up`. Confirm `/` still serves Astro in a browser that has
+   Clerk cookies from a previous sign-in.
 3. Run `APP_BASE_URL=http://127.0.0.1:5001 SCHOLARMARK_MARKETING_SITE=astro npm run smoke:local`.
    This uses marketing-host forwarding headers, so it exercises the real `scholarmark.ai`
    branch.
