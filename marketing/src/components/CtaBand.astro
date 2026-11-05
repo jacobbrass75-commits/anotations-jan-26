@@ -1,0 +1,104 @@
+---
+import Button from "./Button.astro";
+import { links } from "../lib/links";
+import { PRO_PRICE_LABEL, proPriceLive } from "../config/release";
+
+interface Props {
+  title?: string;
+  copy?: string;
+  /** Identifies the placement on the signup link, for QA and the verification script. */
+  placement: string;
+}
+
+const {
+  title = "Bring your sources. Keep the evidence in view.",
+  copy = "Create a free account, start a project, and upload the first source you plan to cite.",
+  placement,
+} = Astro.props;
+---
+
+<section class="cta-band" aria-labelledby={`cta-${placement}`}>
+  <div class="cta-band__copy">
+    <h2 id={`cta-${placement}`}>{title}</h2>
+    <p>{copy}</p>
+  </div>
+  <div class="cta-band__actions">
+    <Button href={links.signup} size="lg" signup data-cta={placement}>Create free account</Button>
+    <p class="cta-band__note">
+      {
+        proPriceLive ? (
+          <>
+            Free plan available. Pro is {PRO_PRICE_LABEL}. <a href={links.pricing}>Compare plans</a>
+          </>
+        ) : (
+          <>
+            Free plan available. <a href={links.pricing}>See current plans and pricing</a>
+          </>
+        )
+      }
+    </p>
+  </div>
+</section>
+
+<style>
+  .cta-band {
+    display: grid;
+    gap: 1.75rem;
+    padding: clamp(1.75rem, 5vw, 3rem);
+    border-radius: var(--radius-lg);
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .cta-band h2 {
+    font-size: clamp(1.75rem, 3.6vw, 2.5rem);
+    color: var(--paper);
+  }
+
+  .cta-band__copy {
+    display: grid;
+    gap: 0.75rem;
+    max-width: 36rem;
+  }
+
+  .cta-band__copy p {
+    color: #d9d1c5;
+  }
+
+  .cta-band__actions {
+    display: grid;
+    gap: 0.75rem;
+    justify-items: start;
+    align-content: center;
+  }
+
+  .cta-band__note {
+    color: #d9d1c5;
+    font-size: 0.9375rem;
+  }
+
+  .cta-band__note a {
+    color: #fff;
+  }
+
+  .cta-band :global(.btn--primary) {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  .cta-band :global(.btn--primary:hover) {
+    background: #fff;
+    color: var(--accent-strong);
+  }
+
+  .cta-band :global(:focus-visible) {
+    outline-color: #9db4ff;
+  }
+
+  @media (min-width: 52rem) {
+    .cta-band {
+      grid-template-columns: 1.4fr 1fr;
+      align-items: center;
+    }
+  }
+</style>

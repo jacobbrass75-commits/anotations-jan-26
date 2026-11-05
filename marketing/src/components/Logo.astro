@@ -1,0 +1,46 @@
+---
+interface Props {
+  /** Render as plain markup (no link) when the logo already sits inside a link. */
+  asLink?: boolean;
+}
+
+const { asLink = true } = Astro.props;
+const Tag = asLink ? "a" : "span";
+---
+
+<Tag class="logo" href={asLink ? "/" : undefined} aria-label={asLink ? "ScholarMark home" : undefined}>
+  <svg class="logo__mark" viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
+    <rect width="64" height="64" rx="12" fill="#1d1a17"></rect>
+    <path d="M16 14h17c5 0 9 4 9 9v27c0 1-1 2-2 2H23c-4 0-7-3-7-7V14Z" fill="#faf7f1"></path>
+    <path d="M22 20h12c3 0 5 2 5 5v21c-2-2-4-3-7-3H22V20Z" fill="#c8455c"></path>
+    <path d="M42 18h6v31l-3-3-3 3V18Z" fill="#f1b72c"></path>
+    <path d="M24 28h10M24 35h9" stroke="#faf7f1" stroke-width="3" stroke-linecap="round"></path>
+  </svg>
+  <span class="logo__word">ScholarMark</span>
+</Tag>
+
+<style>
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .logo:hover {
+    color: var(--ink);
+  }
+
+  .logo__mark {
+    flex: none;
+    border-radius: 7px;
+  }
+
+  .logo__word {
+    font-family: var(--serif);
+    font-size: 1.25rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+</style>

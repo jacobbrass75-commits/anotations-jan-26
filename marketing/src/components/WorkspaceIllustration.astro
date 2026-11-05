@@ -1,0 +1,466 @@
+---
+/**
+ * Illustrative HTML/CSS mockup of a ScholarMark project. Every name, sentence and
+ * page number below is invented sample content; it is not a product screenshot.
+ */
+---
+
+<figure class="ws" aria-labelledby="ws-caption" aria-describedby="ws-description">
+  <div class="ws__frame" aria-hidden="true">
+    <div class="ws__bar">
+      <span class="ws__dots"><i></i><i></i><i></i></span>
+      <span class="ws__project">Sample project · Shade and night-time heat</span>
+      <span class="ws__badge">Illustration</span>
+    </div>
+
+    <div class="ws__body">
+      <aside class="ws-sources">
+        <p class="ws-label">Sources</p>
+        <ul>
+          <li class="is-active">
+            <span class="ws-file ws-file--pdf">PDF</span>
+            <span><b>Neighborhood heat survey</b><small>3 highlights</small></span>
+          </li>
+          <li>
+            <span class="ws-file ws-file--scan">OCR</span>
+            <span><b>Tree canopy field notes</b><small>Scanned · 2 highlights</small></span>
+          </li>
+          <li>
+            <span class="ws-file ws-file--txt">TXT</span>
+            <span><b>Resident interviews</b><small>4 highlights</small></span>
+          </li>
+          <li>
+            <span class="ws-file ws-file--web">WEB</span>
+            <span><b>Transit shelter memo</b><small>1 highlight</small></span>
+          </li>
+        </ul>
+      </aside>
+
+      <section class="ws-reader">
+        <header class="ws-pane-head">
+          <span>Neighborhood heat survey</span>
+          <span class="ws-page">p. 12</span>
+        </header>
+        <div class="ws-reader__text">
+          <p class="ws-line ws-line--muted">
+            Readings were taken at street level between 9 p.m. and 5 a.m. on twelve blocks.
+          </p>
+          <p class="ws-line">
+            <mark class="ws-mark"><span class="ws-pin">1</span>Blocks with the least tree cover stayed
+              warmest after midnight, and they cooled the slowest before dawn.</mark>
+          </p>
+          <p class="ws-line ws-line--muted">
+            Survey volunteers recorded shade, pavement type and building height for each block.
+          </p>
+        </div>
+        <div class="ws-note">
+          <span class="ws-chip ws-chip--evidence">Evidence</span>
+          <p>Supports the section 2 claim about overnight heat. Check the methods on p. 4.</p>
+        </div>
+      </section>
+
+      <section class="ws-draft">
+        <header class="ws-pane-head">
+          <span>Draft · Section 2</span>
+          <span class="ws-style">Chicago</span>
+        </header>
+        <p class="ws-draft__text">
+          Shade matters most at night. In the survey's twelve blocks, the least-shaded streets
+          <span class="ws-quote">"stayed warmest after midnight"</span><span class="ws-nowrap"
+            ><span class="ws-cite"><span class="ws-pin">1</span>p. 12</span>,</span
+          > which suggests canopy loss compounds overnight heat.
+        </p>
+        <ul class="ws-checks">
+          <li class="ws-check ws-check--ok"><span class="ws-dot"></span>Quote found in source, p. 12</li>
+          <li class="ws-check ws-check--review"><span class="ws-dot"></span>Paraphrase: review against source</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <p id="ws-description" class="visually-hidden">
+    A sample project with four sources in a sidebar. The open source shows a highlighted sentence
+    on page 12 with a note tagging it as evidence. Beside it, a draft paragraph quotes part of that
+    sentence with a page 12 citation, a check that the quote was found in the source, and a
+    reminder that a paraphrase still needs review.
+  </p>
+  <figcaption id="ws-caption" class="ws__caption">
+    Illustration with sample content, not a live screenshot. Highlights, notes and page numbers
+    stay attached from source to draft.
+  </figcaption>
+</figure>
+
+<style>
+  .ws {
+    margin: 0;
+    min-width: 0;
+  }
+
+  .ws__frame {
+    overflow: hidden;
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    box-shadow: var(--shadow-frame);
+    font-family: var(--sans);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--ink-soft);
+  }
+
+  .ws__bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-deep);
+  }
+
+  .ws__dots {
+    display: flex;
+    gap: 0.3rem;
+  }
+
+  .ws__dots i {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--rule-strong);
+  }
+
+  .ws__project {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-weight: 550;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ws__badge {
+    flex: none;
+    padding: 0.1rem 0.5rem;
+    border: 1px dashed var(--muted);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .ws__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ws-label,
+  .ws-pane-head {
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .ws-pane-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .ws-page,
+  .ws-style {
+    padding: 0.05rem 0.4rem;
+    border-radius: var(--radius-sm);
+    background: var(--paper-deep);
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+
+  /* Sources sidebar */
+
+  .ws-sources {
+    padding: 0.9rem;
+    border-bottom: 1px solid var(--rule);
+    background: #fbf8f2;
+  }
+
+  .ws-sources .ws-label {
+    margin-bottom: 0.6rem;
+  }
+
+  .ws-sources ul {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    list-style: none;
+  }
+
+  .ws-sources li {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+  }
+
+  .ws-sources li.is-active {
+    border-color: var(--rule-strong);
+    background: var(--card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .ws-sources li:not(.is-active) {
+    display: none;
+  }
+
+  .ws-sources b {
+    display: block;
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .ws-sources small {
+    display: block;
+    color: var(--muted);
+    font-size: 0.7rem;
+  }
+
+  .ws-file {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 2.1rem;
+    height: 2.4rem;
+    border-radius: 0.3rem;
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+  }
+
+  .ws-file--pdf {
+    background: var(--accent);
+  }
+
+  .ws-file--scan {
+    background: #5b6b3a;
+  }
+
+  .ws-file--txt {
+    background: #3f5a7a;
+  }
+
+  .ws-file--web {
+    background: #6a4f7d;
+  }
+
+  /* Reader */
+
+  .ws-reader,
+  .ws-draft {
+    padding: 1rem 1.1rem 1.15rem;
+  }
+
+  .ws-reader {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .ws-reader__text {
+    display: grid;
+    gap: 0.6rem;
+    font-family: var(--serif);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+
+  .ws-line--muted {
+    color: var(--muted);
+  }
+
+  .ws-mark {
+    padding: 0.05rem 0.15rem;
+    border-radius: 0.2rem;
+    background: var(--highlight);
+    box-shadow: inset 0 -2px 0 var(--highlight-edge);
+    color: var(--ink);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .ws-pin {
+    display: inline-grid;
+    place-items: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    margin-right: 0.3rem;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--sans);
+    font-size: 0.625rem;
+    font-weight: 700;
+    vertical-align: 0.12em;
+  }
+
+  .ws-note {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: 0.9rem;
+    padding: 0.65rem 0.75rem;
+    border-left: 3px solid var(--ok);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    background: var(--ok-soft);
+    color: var(--ink-soft);
+  }
+
+  .ws-chip {
+    justify-self: start;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .ws-chip--evidence {
+    background: var(--ok);
+    color: #fff;
+  }
+
+  /* Draft */
+
+  .ws-draft__text {
+    font-family: var(--serif);
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: var(--ink);
+  }
+
+  .ws-quote {
+    background: linear-gradient(transparent 62%, var(--highlight) 62%);
+  }
+
+  .ws-cite {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.2rem;
+    padding: 0 0.4rem 0 0.15rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 999px;
+    background: var(--paper);
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+    vertical-align: 0.1em;
+  }
+
+  .ws-nowrap {
+    white-space: nowrap;
+  }
+
+  .ws-cite .ws-pin {
+    margin-right: 0.25rem;
+  }
+
+  .ws-checks {
+    display: grid;
+    gap: 0.4rem;
+    margin: 0.9rem 0 0;
+    padding: 0.75rem 0 0;
+    border-top: 1px dashed var(--rule-strong);
+    list-style: none;
+  }
+
+  .ws-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 550;
+  }
+
+  .ws-dot {
+    flex: none;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+  }
+
+  .ws-check--ok {
+    color: var(--ok);
+  }
+
+  .ws-check--ok .ws-dot {
+    background: var(--ok);
+  }
+
+  .ws-check--review {
+    color: var(--warn);
+  }
+
+  .ws-check--review .ws-dot {
+    border: 2px solid var(--warn);
+  }
+
+  .ws__caption {
+    margin-top: 0.85rem;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    text-align: center;
+  }
+
+  /* Tablet: reader and draft side by side, sources as a row of tabs. */
+  @media (min-width: 40rem) {
+    .ws__body {
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    }
+
+    .ws-sources {
+      grid-column: 1 / -1;
+    }
+
+    .ws-sources li:not(.is-active) {
+      display: flex;
+    }
+
+    .ws-reader {
+      border-right: 1px solid var(--rule);
+      border-bottom: 0;
+    }
+  }
+
+  /* Desktop: full three-pane workspace. */
+  @media (min-width: 68rem) {
+    .ws__body {
+      grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.15fr) minmax(0, 1fr);
+      min-height: 22rem;
+    }
+
+    .ws-sources {
+      grid-column: auto;
+      border-right: 1px solid var(--rule);
+      border-bottom: 0;
+    }
+
+    .ws-sources ul {
+      flex-direction: column;
+    }
+
+    .ws-sources li {
+      flex: initial;
+    }
+  }
+</style>

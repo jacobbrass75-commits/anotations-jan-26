@@ -10,6 +10,13 @@ DEPLOY_HOST=deploy@89.167.10.34 APP_REF=<known-good-commit-or-ref> bash deploy/d
 
 `deploy/refresh-prod.sh` creates a pre-deploy backup unless `SKIP_PREDEPLOY_BACKUP=1`, resets the app checkout to `APP_REF`, bootstraps the schema, rebuilds, reloads PM2, runs health checks, and runs `scripts/smoke-prod.mjs`.
 
+## Marketing site rollback
+
+If only the Astro marketing site on `scholarmark.ai` is the problem, set
+`SCHOLARMARK_MARKETING_SITE=spa` in `/opt/app/.env` and run
+`sudo -H -u deploy pm2 reload sourceannotator --update-env`. The SPA root returns without a
+rebuild. See [MARKETING-SITE.md](./MARKETING-SITE.md#rollback).
+
 ## Data rollback
 
 Only restore data if the bad deploy wrote corrupt or destructive data. Code rollback should be tried first.

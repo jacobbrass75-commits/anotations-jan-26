@@ -8,6 +8,8 @@ const skipBilling = process.env.SKIP_BILLING_SMOKE === "1";
 const skipMcp = process.env.SKIP_MCP_SMOKE === "1";
 const skipStaticRouteSmoke = process.env.SKIP_STATIC_ROUTE_SMOKE === "1";
 const skipHtmlCachePolicy = process.env.SKIP_HTML_CACHE_POLICY_SMOKE === "1";
+const marketingSiteEnabled =
+  process.env.SCHOLARMARK_MARKETING_SITE?.trim().toLowerCase() === "astro";
 const chromeExtensionId = (process.env.CHROME_EXTENSION_IDS || "")
   .split(",")
   .map((value) => value.trim())
@@ -50,6 +52,73 @@ async function expectStatus(label, path, expected, options = {}) {
   );
   console.log(`[smoke] ${label}: ${result.response.status}`);
   return result;
+}
+
+// Defaults to the local app with marketing-host forwarding headers so deploys can
+// verify before traffic; MARKETING_BASE_URL=https://scholarmark.ai checks through the proxy.
+async function runMarketingSiteSmoke() {
+  const marketingBaseUrl = process.env.MARKETING_BASE_URL
+    ? trimSlash(process.env.MARKETING_BASE_URL)
+    : null;
+  const marketingHost = {
+    baseUrl: marketingBaseUrl || appBaseUrl,
+    headers: marketingBaseUrl
+      ? {}
+      : { "x-forwarded-host": "scholarmark.ai", "x-forwarded-proto": "https" },
+  };
+
+  const root = await expectStatus("marketing root", "/", 200, marketingHost);
+  assert(
+    root.response.headers.get("x-scholarmark-surface") === "marketing",
+    "marketing host root is not served by the Astro build",
+  );
+  assert(
+    root.response.headers.get("cache-control")?.includes("no-store"),
+    "marketing root HTML must not be cached",
+  );
+
+  const campaign = await expectStatus(
+    "marketing paid Instagram landing",
+    "/?utm_source=ig&utm_medium=paid&utm_campaign=smoke",
+    200,
+    marketingHost,
+  );
+  assert(
+    campaign.text.includes('<div id="root">'),
+    "paid Instagram root must stay on the SPA landing",
+  );
+
+  for (const path of ["/blog", "/pricing"]) {
+    const page = await expectStatus(`marketing host SPA ${path}`, path, 200, marketingHost);
+    assert(page.text.includes('<div id="root">'), `${path} must stay on the SPA`);
+  }
+
+  const robots = await expectStatus("marketing robots.txt", "/robots.txt", 200, marketingHost);
+  assert(
+    robots.text.includes("Sitemap: https://scholarmark.ai/sitemap.xml"),
+    "robots.txt is missing the canonical sitemap",
+  );
+  const sitemap = await expectStatus("marketing sitemap.xml", "/sitemap.xml", 200, marketingHost);
+  assert(
+    sitemap.text.includes("<loc>https://scholarmark.ai/blog</loc>"),
+    "sitemap.xml lost the legacy blog index",
+  );
+  assert(
+    sitemap.text.includes("<loc>https://scholarmark.ai/guides/"),
+    "sitemap.xml does not list the Astro guides (was SITE_RELEASE_ENV=production at build?)",
+  );
+  const guides = await expectStatus("marketing guides index", "/guides/", 200, marketingHost);
+  assert(
+    guides.text.includes('<link rel="canonical" href="https://scholarmark.ai/guides/"'),
+    "guides index is missing its production canonical URL",
+  );
+
+  await expectStatus(
+    "marketing missing hashed asset",
+    "/_astro/smoke-missing.js",
+    404,
+    marketingHost,
+  );
 }
 
 async function runAppSmoke() {
@@ -100,6 +169,12 @@ async function runAppSmoke() {
     }
   } else {
     console.log("[smoke] static route fallback checks skipped");
+  }
+
+  if (marketingSiteEnabled) {
+    await runMarketingSiteSmoke();
+  } else {
+    console.log("[smoke] Astro marketing site disabled; SPA root checks only");
   }
 
   const protectedApi = await expectStatus("auth-required API", "/api/auth/me", 401);

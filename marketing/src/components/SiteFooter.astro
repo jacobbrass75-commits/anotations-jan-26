@@ -1,0 +1,122 @@
+---
+import Logo from "./Logo.astro";
+import { links } from "../lib/links";
+import { SUPPORT_EMAIL } from "../config/release";
+
+const year = new Date().getUTCFullYear();
+---
+
+<footer class="site-footer">
+  <div class="container site-footer__inner">
+    <div class="site-footer__brand">
+      <Logo />
+      <p>Find the passage. Keep the page. Write from the evidence.</p>
+    </div>
+
+    <nav class="site-footer__nav" aria-label="Footer">
+      <div>
+        <h2>Product</h2>
+        <ul>
+          <li><a href="/#how-it-works">How it works</a></li>
+          <li><a href={links.pricing}>Pricing</a></li>
+          <li><a href={links.signin}>Sign in</a></li>
+          <li><a href={links.signup} data-signup target="_top">Create free account</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Learn</h2>
+        <ul>
+          <li><a href="/guides/">Guides</a></li>
+          <li><a href={links.support}>Support</a></li>
+          <li><a href={links.supportEmail}>{SUPPORT_EMAIL}</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Legal</h2>
+        <ul>
+          <li><a href={links.privacy}>Privacy</a></li>
+          <li><a href={links.terms}>Terms</a></li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+  <div class="container site-footer__base">
+    <p>© {year} ScholarMark. You remain the author of your work.</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    border-top: 1px solid var(--rule);
+    background: var(--paper-deep);
+    color: var(--ink-soft);
+  }
+
+  .site-footer__inner {
+    display: grid;
+    gap: 2.5rem;
+    padding-block: 3.5rem 2.5rem;
+  }
+
+  .site-footer__brand {
+    display: grid;
+    gap: 0.75rem;
+    max-width: 22rem;
+  }
+
+  .site-footer__brand p {
+    color: var(--muted);
+    font-size: 0.9375rem;
+  }
+
+  .site-footer__nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 2rem;
+  }
+
+  .site-footer__nav h2 {
+    margin-bottom: 0.75rem;
+    font-family: var(--sans);
+    font-size: 0.75rem;
+    font-weight: 650;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .site-footer__nav ul {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .site-footer__nav a {
+    display: inline-block;
+    padding-block: 0.3rem;
+    color: var(--ink-soft);
+    font-size: 0.9375rem;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+
+  .site-footer__nav a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  .site-footer__base {
+    padding-block: 1.25rem 2rem;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  @media (min-width: 52rem) {
+    .site-footer__inner {
+      grid-template-columns: 1fr 1.6fr;
+    }
+  }
+</style>

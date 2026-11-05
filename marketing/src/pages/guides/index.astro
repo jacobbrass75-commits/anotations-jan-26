@@ -1,0 +1,189 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import CtaBand from "../../components/CtaBand.astro";
+import GuideCard from "../../components/GuideCard.astro";
+import { SITE_ORIGIN } from "../../config/release";
+import { getGuides, guidePath } from "../../lib/guides";
+
+const guides = await getGuides();
+const categories = [...new Set(guides.map((guide) => guide.data.category))].sort((a, b) =>
+  a.localeCompare(b),
+);
+const byCategory = categories.map((category) => ({
+  category,
+  id: `category-${category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+  guides: guides.filter((guide) => guide.data.category === category),
+}));
+
+const title = "Guides";
+const description =
+  "Practical guides to finding sources, keeping quotes in context, citing accurately and writing long research papers from evidence.";
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: "ScholarMark guides",
+    description,
+    url: `${SITE_ORIGIN}/guides/`,
+    hasPart: guides.map((guide) => ({
+      "@type": "Article",
+      headline: guide.data.title,
+      url: new URL(guidePath(guide), SITE_ORIGIN).toString(),
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${SITE_ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name: "Guides", item: `${SITE_ORIGIN}/guides/` },
+    ],
+  },
+];
+---
+
+<BaseLayout title={title} description={description} jsonLd={jsonLd}>
+  <section class="listing-hero">
+    <div class="container">
+      <p class="eyebrow">Guides</p>
+      <h1>Research and writing, step by step</h1>
+      <p class="lede">{description}</p>
+      {
+        byCategory.length > 1 && (
+          <nav class="category-nav" aria-label="Guide categories">
+            <ul>
+              {byCategory.map((group) => (
+                <li>
+                  <a class="tag" href={`#${group.id}`}>
+                    {group.category} <span class="category-nav__count">{group.guides.length}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )
+      }
+    </div>
+  </section>
+
+  <div class="container listing">
+    {
+      guides.length === 0 ? (
+        <div class="empty card">
+          <h2>New guides are on the way</h2>
+          <p>
+            We're writing practical guides on sources, quotes and citations. In the meantime, you can
+            start a project and bring in the first source you plan to cite.
+          </p>
+        </div>
+      ) : (
+        byCategory.map((group) => (
+          <section class="listing__group" aria-labelledby={group.id}>
+            <h2 id={group.id} class="listing__heading">
+              {group.category}
+            </h2>
+            <div class="listing__grid">
+              {group.guides.map((guide) => (
+                <GuideCard guide={guide} showCategory={false} />
+              ))}
+            </div>
+          </section>
+        ))
+      )
+    }
+
+    <div class="listing__cta">
+      <CtaBand placement="guides_index" />
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .listing-hero {
+    padding-block: clamp(3rem, 7vw, 5rem) clamp(2rem, 5vw, 3rem);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .listing-hero .container {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .listing-hero h1 {
+    max-width: 40rem;
+    font-size: clamp(2.25rem, 5.5vw, 3.75rem);
+  }
+
+  .listing-hero .lede {
+    max-width: 40rem;
+  }
+
+  .category-nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .category-nav a {
+    min-height: 2.25rem;
+    padding-inline: 0.85rem;
+    text-decoration: none;
+  }
+
+  .category-nav a:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+
+  .category-nav__count {
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .listing {
+    display: grid;
+    gap: clamp(2.5rem, 6vw, 4rem);
+    padding-block: clamp(2.5rem, 6vw, 4rem) var(--section-space);
+  }
+
+  .listing__group {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .listing__heading {
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--ink);
+    font-size: 1.5rem;
+  }
+
+  .listing__grid {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .empty {
+    display: grid;
+    gap: 0.75rem;
+    max-width: 40rem;
+    padding: 2rem;
+  }
+
+  .empty h2 {
+    font-size: 1.5rem;
+  }
+
+  .empty p {
+    color: var(--muted);
+  }
+
+  @media (min-width: 44rem) {
+    .listing__grid {
+      grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    }
+  }
+</style>

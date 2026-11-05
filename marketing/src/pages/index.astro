@@ -1,0 +1,636 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Button from "../components/Button.astro";
+import CtaBand from "../components/CtaBand.astro";
+import GuideCard from "../components/GuideCard.astro";
+import WorkspaceIllustration from "../components/WorkspaceIllustration.astro";
+import { PRO_PRICE_LABEL, SITE_ORIGIN, proPriceLive } from "../config/release";
+import { getGuides } from "../lib/guides";
+import { links } from "../lib/links";
+
+const description =
+  "ScholarMark keeps your sources, highlights and notes in one research project, so every quote you draft from stays tied to its source and page. Free plan available.";
+
+const latestGuides = (await getGuides()).slice(0, 3);
+
+const problems = [
+  {
+    title: "Quotes drift",
+    copy: "A sentence copied into notes loses its page number, then gets reworded twice before it reaches the draft.",
+  },
+  {
+    title: "AI fills the gaps",
+    copy: "Chat tools can produce quotes and citations that look right but don't match anything you have read.",
+  },
+  {
+    title: "Checking happens too late",
+    copy: "The night before the deadline is the worst time to find out a claim has no source behind it.",
+  },
+];
+
+const steps = [
+  {
+    title: "Collect",
+    copy: "Upload PDFs, text files and scanned readings into a project with your research question. Scans go through OCR so they can be searched.",
+  },
+  {
+    title: "Mark",
+    copy: "Highlight the passages that matter and note why: evidence, argument, method or a quote to use. ScholarMark can suggest relevant passages; you decide what stays.",
+  },
+  {
+    title: "Draft",
+    copy: "Outline and draft with your highlights beside you. Quotes carry their source and page, and citations format in Chicago, MLA 9 or APA 7.",
+  },
+  {
+    title: "Check",
+    copy: "Look up a quote in the original text to confirm its wording and page. Quotes that can't be matched to your sources aren't presented as verified.",
+  },
+];
+
+const features = [
+  {
+    title: "Projects with a research question",
+    copy: "Set a thesis and scope so suggestions and search stay on topic.",
+  },
+  {
+    title: "Search across every source",
+    copy: "Find a passage in any document in the project, not just the one that's open.",
+  },
+  {
+    title: "Highlights that keep their context",
+    copy: "Each highlight keeps the surrounding text, its page and your note.",
+  },
+  {
+    title: "Citations and bibliography",
+    copy: "Format references in Chicago, MLA 9 or APA 7 and generate a bibliography.",
+  },
+  {
+    title: "OCR for scanned pages",
+    copy: "Turn scanned PDFs and photographed readings into searchable text.",
+  },
+  {
+    title: "DOCX and PDF export",
+    copy: "Take your draft into the editor or submission system your course uses.",
+  },
+];
+
+const faqs: { q: string; a: string; link?: { href: string; label: string } }[] = [
+  {
+    q: "Is ScholarMark free?",
+    a: "There is a free plan with the complete workspace and starter limits on sources, projects, storage and AI use. Current paid plans are on the pricing page.",
+    link: { href: links.pricing, label: "View pricing" },
+  },
+  {
+    q: "Does ScholarMark guarantee my citations are correct?",
+    a: "No. It keeps quotes tied to the source text and page so they are quick to check, and it formats citations for you. Confirm every quote, page number and reference against the original before you submit.",
+  },
+  {
+    q: "Will ScholarMark write my paper?",
+    a: "It can help you outline and draft from the sources you've highlighted, but the argument and the final text are yours. Check your course or school policy on AI-assisted work.",
+  },
+  {
+    q: "What can I upload?",
+    a: "PDFs, plain-text files and scanned documents. Scanned pages are converted to text with OCR so you can search and highlight them.",
+  },
+  {
+    q: "Who can see my sources?",
+    a: "Your projects belong to your account. The Privacy Policy explains how ScholarMark stores and processes your data.",
+    link: { href: links.privacy, label: "Read the Privacy Policy" },
+  },
+];
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "ScholarMark",
+    url: `${SITE_ORIGIN}/`,
+    description,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "ScholarMark",
+    url: `${SITE_ORIGIN}/`,
+    logo: `${SITE_ORIGIN}/favicon.svg`,
+    email: "support@scholarmark.ai",
+  },
+];
+---
+
+<BaseLayout description={description} jsonLd={jsonLd}>
+  <section class="hero">
+    <div class="container">
+      <div class="hero__copy">
+        <p class="eyebrow">Research workspace for long papers</p>
+        <h1>Write from the evidence, with the page still attached.</h1>
+        <p class="lede hero__lede">
+          ScholarMark keeps your PDFs, scanned readings, highlights and notes in one project. The
+          passages you plan to cite stay next to your draft, with their page, context and citation
+          details.
+        </p>
+        <div class="btn-row btn-row--stack-mobile">
+          <Button href={links.signup} size="lg" signup data-cta="hero">Create free account</Button>
+          <Button href="#how-it-works" variant="secondary" size="lg">See how it works</Button>
+        </div>
+        <p class="hero__assurance">
+          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+            <path
+              d="M10 2 3.5 4.5v5c0 4 2.8 7.2 6.5 8.5 3.7-1.3 6.5-4.5 6.5-8.5v-5L10 2Z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linejoin="round"></path>
+            <path d="m7 10 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          You stay the author. ScholarMark helps you find your evidence, keep it with its page and
+          check each quote against the original source.
+        </p>
+      </div>
+
+      <div class="hero__visual">
+        <WorkspaceIllustration />
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--tint" aria-labelledby="problem-title">
+    <div class="container">
+      <div class="section-head">
+        <p class="eyebrow">The problem</p>
+        <h2 id="problem-title">Long papers come apart at the citation stage.</h2>
+      </div>
+      <ol class="problems">
+        {
+          problems.map((item) => (
+            <li>
+              <h3>{item.title}</h3>
+              <p>{item.copy}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="how-it-works" aria-labelledby="how-title">
+    <div class="container">
+      <div class="section-head">
+        <p class="eyebrow">How it works</p>
+        <h2 id="how-title">From reading to a draft you can check</h2>
+        <p class="lede">
+          One project holds the sources, the passages you marked and the draft that uses them, so
+          you can trace a sentence back to the page it came from.
+        </p>
+      </div>
+      <ol class="steps">
+        {
+          steps.map((step, index) => (
+            <li class="step">
+              <span class="step__num" aria-hidden="true">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <h3>{step.title}</h3>
+              <p>{step.copy}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <section class="section section--tint" aria-labelledby="position-title">
+    <div class="container position">
+      <div class="position__intro">
+        <p class="eyebrow">Evidence first</p>
+        <h2 id="position-title">The source comes first. The draft follows.</h2>
+        <p class="lede">
+          ScholarMark starts from what you've read, so support for a claim is visible while you write
+          it, and gaps show up while there's still time to fill them.
+        </p>
+      </div>
+      <div class="position__lists">
+        <div class="card position__card">
+          <h3>ScholarMark helps you</h3>
+          <ul class="checklist checklist--yes">
+            <li>Keep every highlight tied to its source and page</li>
+            <li>See which claims have support and which still need it</li>
+            <li>Format citations and build a bibliography</li>
+            <li>Export drafts to DOCX or PDF</li>
+          </ul>
+        </div>
+        <div class="card position__card">
+          <h3>Thesis and long-paper workflows</h3>
+          <ul class="checklist checklist--yes">
+            <li>Build a literature review from every source in one searchable project</li>
+            <li>Turn scanned archive pages into text you can search, highlight and quote</li>
+            <li>Gather a chapter's highlights into an outline and draft beside them</li>
+            <li>Check each quote against its page before a draft goes to your advisor</li>
+            <li>Export a chapter to DOCX for comments, then finish with a formatted bibliography</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="features-title">
+    <div class="container">
+      <div class="section-head">
+        <p class="eyebrow">In every project</p>
+        <h2 id="features-title">Built for theses, capstones and long research papers</h2>
+      </div>
+      <ul class="features">
+        {
+          features.map((feature) => (
+            <li class="feature">
+              <h3>{feature.title}</h3>
+              <p>{feature.copy}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  {
+    latestGuides.length > 0 && (
+      <section class="section section--tint" aria-labelledby="guides-title">
+        <div class="container">
+          <div class="guides-head">
+            <div class="section-head">
+              <p class="eyebrow">Guides</p>
+              <h2 id="guides-title">Research and writing, step by step</h2>
+            </div>
+            <a class="guides-head__all" href="/guides/">
+              All guides <span aria-hidden="true">→</span>
+            </a>
+          </div>
+          <div class="guide-grid">
+            {latestGuides.map((guide) => (
+              <GuideCard guide={guide} />
+            ))}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  <section class="section" aria-labelledby="pricing-title">
+    <div class="container pricing">
+      <div class="pricing__copy">
+        <p class="eyebrow">Pricing</p>
+        <h2 id="pricing-title">Start free. Upgrade when the project grows.</h2>
+        <p class="lede">
+          The free plan includes the complete workspace with starter limits on sources, storage and
+          AI use.
+          {proPriceLive ? ` Pro raises those limits for ${PRO_PRICE_LABEL}.` : " Paid plans raise those limits."}
+        </p>
+      </div>
+      <div class="btn-row btn-row--stack-mobile pricing__actions">
+        <Button href={links.signup} size="lg" signup data-cta="pricing">Create free account</Button>
+        <Button href={links.pricing} variant="secondary" size="lg">
+          {proPriceLive ? "Compare plans" : "See current plans"}
+        </Button>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--tint" aria-labelledby="faq-title">
+    <div class="container container--narrow">
+      <div class="section-head">
+        <p class="eyebrow">Questions</p>
+        <h2 id="faq-title">Straight answers</h2>
+      </div>
+      <div class="faq">
+        {
+          faqs.map((item) => (
+            <details class="faq__item">
+              <summary>{item.q}</summary>
+              <p>
+                {item.a}
+                {item.link && (
+                  <>
+                    {" "}
+                    <a href={item.link.href}>{item.link.label}</a>.
+                  </>
+                )}
+              </p>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <CtaBand placement="footer_band" />
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    padding-block: clamp(3rem, 8vw, 5.5rem) clamp(3.5rem, 8vw, 6rem);
+    background:
+      radial-gradient(60rem 28rem at 85% -10%, rgb(251 227 160 / 35%), transparent 70%),
+      radial-gradient(40rem 24rem at -10% 10%, rgb(247 230 232 / 70%), transparent 70%);
+  }
+
+  .hero__copy {
+    display: grid;
+    gap: 1.5rem;
+    max-width: 48rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.5rem, 6.4vw, 4.5rem);
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+  }
+
+  .hero__lede {
+    max-width: 40rem;
+  }
+
+  .hero__assurance {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    max-width: 38rem;
+    color: var(--muted);
+    font-size: 0.9375rem;
+  }
+
+  .hero__assurance svg {
+    flex: none;
+    margin-top: 0.15rem;
+    color: var(--ok);
+  }
+
+  .hero__visual {
+    margin-top: clamp(2.5rem, 6vw, 4rem);
+  }
+
+  .problems {
+    display: grid;
+    gap: 1.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: problem;
+  }
+
+  .problems li {
+    display: grid;
+    gap: 0.5rem;
+    padding-top: 1.25rem;
+    border-top: 2px solid var(--ink);
+  }
+
+  .problems h3 {
+    font-size: 1.375rem;
+  }
+
+  .problems p {
+    color: var(--muted);
+  }
+
+  .steps {
+    display: grid;
+    gap: 1.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .step {
+    display: grid;
+    gap: 0.6rem;
+    align-content: start;
+    padding: 1.5rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+  }
+
+  .step__num {
+    color: var(--accent);
+    font-family: var(--serif);
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .step h3 {
+    font-size: 1.375rem;
+  }
+
+  .step p {
+    color: var(--muted);
+    font-size: 0.975rem;
+  }
+
+  .position {
+    display: grid;
+    gap: 2.5rem;
+  }
+
+  .position__intro {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+  }
+
+  .position__intro h2 {
+    font-size: clamp(1.9rem, 4vw, 2.75rem);
+  }
+
+  .position__lists {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .position__card {
+    padding: 1.5rem;
+  }
+
+  .position__card h3 {
+    margin-bottom: 0.9rem;
+    font-size: 1.25rem;
+  }
+
+  .checklist {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .checklist li {
+    position: relative;
+    padding-left: 1.75rem;
+    color: var(--ink-soft);
+  }
+
+  .checklist li::before {
+    position: absolute;
+    left: 0;
+    top: 0.15em;
+    display: grid;
+    place-items: center;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .checklist--yes li::before {
+    content: "✓";
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+
+  .features {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+    list-style: none;
+  }
+
+  .feature {
+    display: grid;
+    gap: 0.4rem;
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .feature h3 {
+    font-size: 1.25rem;
+  }
+
+  .feature p {
+    color: var(--muted);
+  }
+
+  .guides-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .guides-head__all {
+    margin-bottom: clamp(2rem, 5vw, 3rem);
+    font-weight: 600;
+  }
+
+  .guide-grid {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .pricing {
+    display: grid;
+    gap: 2rem;
+    align-items: center;
+  }
+
+  .pricing__copy {
+    display: grid;
+    gap: 1rem;
+    max-width: 40rem;
+  }
+
+  .pricing__copy h2 {
+    font-size: clamp(1.9rem, 4vw, 2.75rem);
+  }
+
+  .faq {
+    border-top: 1px solid var(--rule-strong);
+  }
+
+  .faq__item {
+    border-bottom: 1px solid var(--rule-strong);
+  }
+
+  .faq__item summary {
+    position: relative;
+    padding: 1.25rem 2.5rem 1.25rem 0;
+    font-family: var(--serif);
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.3;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .faq__item summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .faq__item summary::after {
+    content: "+";
+    position: absolute;
+    right: 0.25rem;
+    top: 1.1rem;
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 1.5rem;
+    font-weight: 400;
+  }
+
+  .faq__item[open] summary::after {
+    content: "−";
+  }
+
+  .faq__item p {
+    padding-bottom: 1.4rem;
+    color: var(--ink-soft);
+  }
+
+  @media (min-width: 44rem) {
+    .problems {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 2rem;
+    }
+
+    .steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .features {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 2.5rem;
+    }
+
+    .guide-grid {
+      grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .steps {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .features {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .position {
+      grid-template-columns: 1fr 1.1fr;
+      gap: 4rem;
+    }
+
+    .pricing {
+      grid-template-columns: 1.4fr auto;
+    }
+  }
+</style>
