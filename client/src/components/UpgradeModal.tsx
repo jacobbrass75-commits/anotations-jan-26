@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { PLAN_DISPLAY_PRICES } from "@shared/billingPlans";
 
 interface UpgradeModalProps {
   open: boolean;
@@ -17,8 +18,8 @@ interface UpgradeModalProps {
 }
 
 const TIER_LABELS: Record<string, string> = {
-  pro: "Pro ($14/mo)",
-  max: "Max ($50/mo)",
+  pro: `Pro ($${PLAN_DISPLAY_PRICES.pro}/mo)`,
+  max: `Max ($${PLAN_DISPLAY_PRICES.max}/mo)`,
 };
 
 export function UpgradeModal({ open, onClose, requiredTier, feature }: UpgradeModalProps) {

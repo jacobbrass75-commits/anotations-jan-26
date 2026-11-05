@@ -1,5 +1,12 @@
 import type { Express as ExpressApp, Request, Response } from "express";
 import Stripe from "stripe";
+import {
+  BILLING_PLAN_LABELS,
+  CURRENT_PRICE_OFFERS,
+  KNOWN_PRICE_OFFERS,
+  type BillingPriceOffer,
+  type BillingTier,
+} from "@shared/billingPlans";
 import type { User } from "@shared/schema";
 import { requireAuth } from "./auth";
 import {
@@ -13,8 +20,6 @@ import { createLogger } from "./logger";
 
 const logger = createLogger("stripeBillingRoutes");
 
-type BillingTier = "pro" | "max";
-
 interface StripeBillingPlan {
   label: string;
   amountCents: number;
@@ -22,20 +27,21 @@ interface StripeBillingPlan {
   lookupKey: string;
 }
 
+function toStripeBillingPlan(tier: BillingTier, offer: BillingPriceOffer): StripeBillingPlan {
+  return {
+    label: BILLING_PLAN_LABELS[tier],
+    amountCents: offer.amountCents,
+    currency: offer.currency,
+    lookupKey: offer.lookupKey,
+  };
+}
+
 const PLAN_CONFIG: Record<BillingTier, StripeBillingPlan> = {
-  pro: {
-    label: "Pro",
-    amountCents: 1400,
-    currency: "usd",
-    lookupKey: "scholarmark_pro_monthly",
-  },
-  max: {
-    label: "Max",
-    amountCents: 5000,
-    currency: "usd",
-    lookupKey: "scholarmark_max_monthly",
-  },
+  pro: toStripeBillingPlan("pro", CURRENT_PRICE_OFFERS.pro),
+  max: toStripeBillingPlan("max", CURRENT_PRICE_OFFERS.max),
 };
+
+const BILLING_TIERS: BillingTier[] = ["pro", "max"];
 
 const PAID_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
 
@@ -106,25 +112,83 @@ function getSubscriptionCurrentPeriodEnd(subscription: Stripe.Subscription): Dat
   return typeof unixSeconds === "number" ? new Date(unixSeconds * 1000) : null;
 }
 
+function parseEnvList(value: string | undefined): string[] {
+  return (value || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+// The price ID new checkouts use for a tier, if pinned by env instead of lookup key.
+function getCheckoutPriceIdOverride(tier: BillingTier): string {
+  const value = tier === "pro" ? process.env.STRIPE_PRO_PRICE_ID : process.env.STRIPE_MAX_PRICE_ID;
+  return (value || "").trim();
+}
+
+// Price IDs that still grant a tier but are never used for new checkouts, e.g. the
+// pre-USD-5 Pro price that existing subscribers renew on.
+function getLegacyPriceIds(tier: BillingTier): string[] {
+  return parseEnvList(
+    tier === "pro"
+      ? process.env.STRIPE_PRO_LEGACY_PRICE_IDS
+      : process.env.STRIPE_MAX_LEGACY_PRICE_IDS,
+  );
+}
+
 function tierForPrice(price: Stripe.Price | null | undefined): BillingTier | null {
   if (!price) {
     return null;
   }
 
-  if (
-    price.lookup_key === PLAN_CONFIG.pro.lookupKey ||
-    price.id === process.env.STRIPE_PRO_PRICE_ID
-  ) {
-    return "pro";
-  }
-  if (
-    price.lookup_key === PLAN_CONFIG.max.lookupKey ||
-    price.id === process.env.STRIPE_MAX_PRICE_ID
-  ) {
-    return "max";
+  for (const tier of BILLING_TIERS) {
+    const checkoutPriceId = getCheckoutPriceIdOverride(tier);
+    if (
+      (checkoutPriceId && price.id === checkoutPriceId) ||
+      getLegacyPriceIds(tier).includes(price.id)
+    ) {
+      return tier;
+    }
   }
 
-  return null;
+  for (const tier of BILLING_TIERS) {
+    if (
+      price.lookup_key &&
+      KNOWN_PRICE_OFFERS[tier].some((offer) => offer.lookupKey === price.lookup_key)
+    ) {
+      return tier;
+    }
+  }
+
+  return parseTier(price.metadata?.scholarmark_tier);
+}
+
+// Subscriptions created by ScholarMark checkout carry the purchased tier in metadata.
+// Used only when the price itself is unrecognized so a Stripe price/env change cannot
+// silently revoke a paying subscriber.
+function tierFromSubscriptionMetadata(subscription: Stripe.Subscription): BillingTier | null {
+  if (subscription.metadata?.app !== "scholarmark") {
+    return null;
+  }
+  return parseTier(subscription.metadata?.tier);
+}
+
+function tierForSubscription(
+  subscription: Stripe.Subscription,
+  price: Stripe.Price | null,
+): BillingTier | null {
+  const priceTier = tierForPrice(price);
+  if (priceTier) {
+    return priceTier;
+  }
+
+  const metadataTier = tierFromSubscriptionMetadata(subscription);
+  if (metadataTier) {
+    logger.warn(
+      { subscriptionId: subscription.id, priceId: price?.id ?? null, tier: metadataTier },
+      "[billing] subscription price not recognized; using checkout metadata tier",
+    );
+  }
+  return metadataTier;
 }
 
 function getPrimarySubscriptionPrice(subscription: Stripe.Subscription): Stripe.Price | null {
@@ -132,10 +196,11 @@ function getPrimarySubscriptionPrice(subscription: Stripe.Subscription): Stripe.
 }
 
 async function resolvePriceForTier(stripe: Stripe, tier: BillingTier): Promise<Stripe.Price> {
-  const configuredPriceId =
-    tier === "pro" ? process.env.STRIPE_PRO_PRICE_ID : process.env.STRIPE_MAX_PRICE_ID;
-  if (configuredPriceId?.trim()) {
-    const price = await stripe.prices.retrieve(configuredPriceId.trim());
+  const configuredPriceId = getCheckoutPriceIdOverride(tier);
+  if (configuredPriceId) {
+    const price = await stripe.prices.retrieve(configuredPriceId, {
+      expand: ["currency_options"],
+    });
     validatePriceForTier(price, tier);
     return price;
   }
@@ -144,6 +209,7 @@ async function resolvePriceForTier(stripe: Stripe, tier: BillingTier): Promise<S
     active: true,
     limit: 1,
     lookup_keys: [PLAN_CONFIG[tier].lookupKey],
+    expand: ["data.currency_options"],
   });
   const price = prices.data[0];
   if (!price) {
@@ -153,10 +219,15 @@ async function resolvePriceForTier(stripe: Stripe, tier: BillingTier): Promise<S
   return price;
 }
 
+// Fails closed: checkout is only created when Stripe will charge exactly the advertised
+// amount, in USD, every month.
 function validatePriceForTier(price: Stripe.Price, tier: BillingTier): void {
   const expected = PLAN_CONFIG[tier];
   if (!price.active) {
     throw new Error(`Stripe price for ${expected.label} is not active`);
+  }
+  if (price.type !== "recurring") {
+    throw new Error(`Stripe price for ${expected.label} must be recurring`);
   }
   if (price.currency !== expected.currency) {
     throw new Error(`Stripe price for ${expected.label} must be ${expected.currency}`);
@@ -166,6 +237,26 @@ function validatePriceForTier(price: Stripe.Price, tier: BillingTier): void {
   }
   if (price.recurring?.interval !== "month" || price.recurring?.interval_count !== 1) {
     throw new Error(`Stripe price for ${expected.label} must recur monthly`);
+  }
+  if (price.recurring?.usage_type && price.recurring.usage_type !== "licensed") {
+    throw new Error(`Stripe price for ${expected.label} must be a flat licensed price`);
+  }
+  // Tiered, pay-what-you-want, and quantity-transformed prices can charge something
+  // other than unit_amount even when unit_amount matches.
+  if (
+    (price.billing_scheme && price.billing_scheme !== "per_unit") ||
+    price.custom_unit_amount ||
+    price.transform_quantity ||
+    (price.tiers && price.tiers.length > 0) ||
+    price.tiers_mode
+  ) {
+    throw new Error(`Stripe price for ${expected.label} must be a flat per-unit price`);
+  }
+  const otherCurrencies = Object.keys(price.currency_options ?? {}).filter(
+    (currency) => currency !== expected.currency,
+  );
+  if (otherCurrencies.length > 0) {
+    throw new Error(`Stripe price for ${expected.label} must not offer non-USD currency options`);
   }
 }
 
@@ -244,7 +335,7 @@ async function syncSubscriptionToUser(
   }
 
   const price = getPrimarySubscriptionPrice(subscription);
-  const tier = tierForPrice(price);
+  const tier = tierForSubscription(subscription, price);
   const hasPaidAccess = PAID_SUBSCRIPTION_STATUSES.has(subscription.status);
   const nextTier = hasPaidAccess && tier ? tier : "free";
   const customerId = getCustomerId(subscription.customer);
@@ -394,11 +485,14 @@ export function registerStripeBillingRoutes(app: ExpressApp): void {
           },
         ],
         allow_promotion_codes: true,
+        // Pro is advertised as USD 5; keep Stripe from localizing it into another currency.
+        ...(tier === "pro" ? { adaptive_pricing: { enabled: false } } : {}),
         success_url: buildCheckoutSuccessUrl(req),
         cancel_url: buildAppUrl(req, "/pricing", { checkout: "cancelled" }),
         metadata: {
           app: "scholarmark",
           billingOffer: "paid_first_month",
+          priceOffer: CURRENT_PRICE_OFFERS[tier].id,
           tier,
           userId: user.id,
         },
@@ -406,6 +500,7 @@ export function registerStripeBillingRoutes(app: ExpressApp): void {
           metadata: {
             app: "scholarmark",
             billingOffer: "paid_first_month",
+            priceOffer: CURRENT_PRICE_OFFERS[tier].id,
             tier,
             userId: user.id,
           },
