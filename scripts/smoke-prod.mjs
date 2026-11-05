@@ -180,12 +180,30 @@ async function runAppSmoke() {
   const protectedApi = await expectStatus("auth-required API", "/api/auth/me", 401);
   assert(protectedApi.json?.message, "auth-required API did not return a JSON error");
 
-  const protectedModelList = await expectStatus(
-    "auth-required writing model tests",
-    "/api/write/test-models",
+  const protectedWriting = await expectStatus(
+    "auth-required writing API",
+    "/api/write/history",
     401,
   );
-  assert(protectedModelList.json?.message, "writing model tests did not return a JSON auth error");
+  assert(protectedWriting.json?.message, "writing API did not return a JSON auth error");
+
+  // Non-Claude model tests are retired: the gate answers before auth, so even
+  // unauthenticated probes must get its JSON 404 rather than a 401 or a model list.
+  for (const [method, path] of [
+    ["GET", "/api/write/test-models"],
+    ["POST", "/api/write/test-models/run"],
+  ]) {
+    const retired = await expectStatus(`retired writing model tests ${method}`, path, 404, {
+      method,
+      ...(method === "POST"
+        ? { headers: { "content-type": "application/json" }, body: "{}" }
+        : {}),
+    });
+    assert(
+      retired.json?.message === "Not found",
+      `retired writing model tests ${method} did not return the gate's JSON 404`,
+    );
+  }
 
   const invalidCampaignSignup = await expectStatus(
     "campaign signup validation",
