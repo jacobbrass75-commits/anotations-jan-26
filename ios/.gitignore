@@ -1,0 +1,14 @@
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+ScholarMarkCore/.build/
+ScholarMarkCore/.swiftpm/
+.swiftpm/
+Package.resolved

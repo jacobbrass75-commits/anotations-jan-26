@@ -1,0 +1,306 @@
+name: iOS
+
+on:
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+    inputs:
+      scheme:
+        description: "Shared Xcode scheme to build and test"
+        required: false
+        default: "ScholarMark"
+      xcode_version:
+        description: "Xcode version installed on the runner image (must be 26 or newer)"
+        required: false
+        default: "26.6"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Inputs are empty on pull_request, so fall back to the pinned defaults.
+  SCHEME: ${{ inputs.scheme || 'ScholarMark' }}
+  XCODE_VERSION: ${{ inputs.xcode_version || '26.6' }}
+  MIN_XCODE_MAJOR: "26"
+  IOS_ROOT: ios
+  NSUnbufferedIO: "YES"
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  core-packages:
+    name: swift test (local packages)
+    # Pinned image label (arm64); never macos-latest, so Xcode/SDK changes are deliberate.
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          app="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "$app" ]]; then
+            echo "::error::Xcode ${XCODE_VERSION} is not installed on this runner image. Available:"
+            ls -d /Applications/Xcode_*.app || true
+            exit 1
+          fi
+          sudo xcode-select --switch "$app/Contents/Developer"
+          xcodebuild -version
+          major="$(xcodebuild -version | awk 'NR==1 { split($2, v, "."); print v[1] }')"
+          if (( major < MIN_XCODE_MAJOR )); then
+            echo "::error::Xcode ${major} is older than the required Xcode ${MIN_XCODE_MAJOR}."
+            exit 1
+          fi
+          swift --version
+
+      - name: Run swift test for each package under ios/
+        run: |
+          if [[ ! -d "$IOS_ROOT" ]]; then
+            echo "::error::Directory '$IOS_ROOT' does not exist on this ref."
+            exit 1
+          fi
+          packages=()
+          while IFS= read -r manifest; do
+            packages+=("$(dirname "$manifest")")
+          done < <(find "$IOS_ROOT" -maxdepth 3 -name Package.swift \
+                     -not -path '*/.build/*' -not -path '*/.swiftpm/*' -not -path '*/DerivedData/*' | sort)
+
+          if (( ${#packages[@]} == 0 )); then
+            echo "::notice::No Package.swift found under $IOS_ROOT; nothing to run."
+            exit 0
+          fi
+
+          failed=()
+          for pkg in "${packages[@]}"; do
+            echo "::group::swift test --package-path $pkg"
+            if swift test --package-path "$pkg" --parallel; then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              echo "::error::swift test failed for package $pkg"
+              failed+=("$pkg")
+            fi
+          done
+
+          if (( ${#failed[@]} > 0 )); then
+            echo "Failed packages: ${failed[*]}"
+            exit 1
+          fi
+
+  app:
+    name: xcodebuild test (${{ inputs.scheme || 'ScholarMark' }})
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DERIVED_DATA: build/DerivedData
+      RESULTS_DIR: build/results
+      LOGS_DIR: build/logs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          app="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "$app" ]]; then
+            echo "::error::Xcode ${XCODE_VERSION} is not installed on this runner image. Available:"
+            ls -d /Applications/Xcode_*.app || true
+            exit 1
+          fi
+          sudo xcode-select --switch "$app/Contents/Developer"
+          xcodebuild -version
+          major="$(xcodebuild -version | awk 'NR==1 { split($2, v, "."); print v[1] }')"
+          if (( major < MIN_XCODE_MAJOR )); then
+            echo "::error::Xcode ${major} is older than the required Xcode ${MIN_XCODE_MAJOR}."
+            exit 1
+          fi
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          echo "iOS Simulator SDK: $sdk"
+          if (( ${sdk%%.*} < MIN_XCODE_MAJOR )); then
+            echo "::error::iOS Simulator SDK $sdk is older than iOS ${MIN_XCODE_MAJOR}."
+            exit 1
+          fi
+
+      - name: Discover Xcode project
+        id: discover
+        run: |
+          if [[ ! -d "$IOS_ROOT" ]]; then
+            echo "::error::Directory '$IOS_ROOT' does not exist on this ref."
+            exit 1
+          fi
+          # Runner bash is 3.2: no mapfile, so results are newline-separated strings.
+          prune=(-not -path '*/.build/*' -not -path '*/.swiftpm/*' -not -path '*/DerivedData/*' -not -path '*/Pods/*')
+          count() { if [[ -z "$1" ]]; then echo 0; else printf '%s\n' "$1" | wc -l | tr -d ' '; fi; }
+
+          # XcodeGen spec is the source of truth when present; regenerate the project from it.
+          specs="$(find "$IOS_ROOT" -maxdepth 3 -name project.yml "${prune[@]}" | sort)"
+          if (( $(count "$specs") > 1 )); then
+            echo "::error::Found multiple XcodeGen specs; expected at most one:"
+            echo "$specs"
+            exit 1
+          fi
+          if (( $(count "$specs") == 1 )); then
+            spec="$specs"
+            if ! command -v xcodegen >/dev/null 2>&1; then
+              echo "::group::brew install xcodegen"
+              HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install xcodegen
+              echo "::endgroup::"
+            fi
+            xcodegen --version
+            (cd "$(dirname "$spec")" && xcodegen generate --spec "$(basename "$spec")")
+          fi
+
+          # Prefer a standalone workspace; ignore the one embedded in every .xcodeproj.
+          workspaces="$(find "$IOS_ROOT" -maxdepth 4 -name '*.xcworkspace' \
+                          -not -path '*.xcodeproj/*' "${prune[@]}" | sort)"
+          projects="$(find "$IOS_ROOT" -maxdepth 4 -name '*.xcodeproj' "${prune[@]}" | sort)"
+
+          if (( $(count "$workspaces") == 1 )); then
+            flag="-workspace"; container="$workspaces"
+          elif (( $(count "$workspaces") > 1 )); then
+            echo "::error::Found multiple workspaces; expected one:"
+            echo "$workspaces"
+            exit 1
+          elif (( $(count "$projects") == 1 )); then
+            flag="-project"; container="$projects"
+          elif (( $(count "$projects") > 1 )); then
+            echo "::error::Found multiple .xcodeproj bundles and no workspace:"
+            echo "$projects"
+            exit 1
+          else
+            echo "::error::No .xcodeproj, .xcworkspace, or XcodeGen project.yml found under $IOS_ROOT."
+            exit 1
+          fi
+          echo "Using $flag $container"
+
+          # The scheme must be shared (checked in), otherwise CI only sees autogenerated schemes.
+          shared="$(find "$IOS_ROOT" -path '*/xcshareddata/xcschemes/*.xcscheme' "${prune[@]}" | sort)"
+          if ! printf '%s\n' "$shared" | grep -Fq "/xcshareddata/xcschemes/${SCHEME}.xcscheme"; then
+            echo "::error::Shared scheme '${SCHEME}' not found (expected xcshareddata/xcschemes/${SCHEME}.xcscheme)."
+            echo "Shared schemes found:"
+            echo "${shared:-<none>}"
+            exit 1
+          fi
+
+          list_json="$(xcodebuild -list -json "$flag" "$container")"
+          if ! jq -e --arg s "$SCHEME" '[(.workspace // .project).schemes[]] | index($s)' <<<"$list_json" >/dev/null; then
+            echo "::error::xcodebuild -list does not report scheme '${SCHEME}' for $container."
+            jq '(.workspace // .project).schemes' <<<"$list_json"
+            exit 1
+          fi
+
+          echo "flag=$flag" >> "$GITHUB_OUTPUT"
+          echo "container=$container" >> "$GITHUB_OUTPUT"
+
+      - name: Select iPhone simulator
+        id: simulator
+        run: |
+          devices_json="$(xcrun simctl list devices available --json)"
+          # Highest installed iOS runtime, then the first iPhone by name for a stable choice.
+          pick="$(jq -r '
+            [ .devices | to_entries[]
+              | select(.key | test("SimRuntime\\.iOS-[0-9]+(-[0-9]+)*$"))
+              | (.key | capture("iOS-(?<v>[0-9-]+)$").v | split("-") | map(tonumber)) as $ver
+              | .value[]
+              | select(.isAvailable == true and (.name | startswith("iPhone")))
+              | { udid, name, ver: $ver } ]
+            | sort_by(.ver, .name)
+            | (map(.ver) | max) as $top
+            | map(select(.ver == $top))
+            | first // empty
+            | "\(.udid)\t\(.name)\t\(.ver | map(tostring) | join("."))"
+          ' <<<"$devices_json")"
+          if [[ -z "$pick" ]]; then
+            echo "::error::No available iPhone simulator found for the selected Xcode."
+            xcrun simctl list runtimes
+            xcrun simctl list devices available
+            exit 1
+          fi
+          IFS=$'\t' read -r udid name version <<<"$pick"
+          echo "Selected $name (iOS $version) $udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          echo "description=$name (iOS $version)" >> "$GITHUB_OUTPUT"
+          # Boot up front so a broken simulator fails here, not midway through the test run.
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+
+      - name: Build for testing
+        env:
+          FLAG: ${{ steps.discover.outputs.flag }}
+          CONTAINER: ${{ steps.discover.outputs.container }}
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
+          # Simulator-only, ad-hoc signing: no team, certificates, or provisioning profiles.
+          xcodebuild build-for-testing \
+            "$FLAG" "$CONTAINER" \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$RESULTS_DIR/build.xcresult" \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee "$LOGS_DIR/build.log" | xcbeautify --renderer github-actions
+
+      - name: Test
+        env:
+          FLAG: ${{ steps.discover.outputs.flag }}
+          CONTAINER: ${{ steps.discover.outputs.container }}
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          xcodebuild test-without-building \
+            "$FLAG" "$CONTAINER" \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$RESULTS_DIR/test.xcresult" \
+            2>&1 | tee "$LOGS_DIR/test.log" | xcbeautify --renderer github-actions
+
+      - name: Summarize results
+        if: always()
+        env:
+          SIMULATOR: ${{ steps.simulator.outputs.description }}
+        run: |
+          {
+            echo "## iOS: scheme \`${SCHEME}\`"
+            echo "- Xcode: $(xcodebuild -version | paste -sd ' ' -)"
+            echo "- Simulator: ${SIMULATOR:-not selected}"
+            if [[ -d "$RESULTS_DIR/build.xcresult" ]]; then
+              echo "### Build"
+              echo '```'
+              xcrun xcresulttool get build-results --path "$RESULTS_DIR/build.xcresult" 2>&1 | head -c 60000 || true
+              echo '```'
+            fi
+            if [[ -d "$RESULTS_DIR/test.xcresult" ]]; then
+              echo "### Tests"
+              echo '```'
+              xcrun xcresulttool get test-results summary --path "$RESULTS_DIR/test.xcresult" 2>&1 | head -c 60000 || true
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Only result bundles and logs; built .app products in DerivedData are never uploaded.
+      - name: Upload result bundles and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/results/*.xcresult
+            build/logs/*.log
+          if-no-files-found: ignore
+          retention-days: 7
