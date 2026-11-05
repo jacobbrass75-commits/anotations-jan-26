@@ -14,7 +14,10 @@ import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { withRedirectUrl } from "@/lib/redirects";
 import { trackSiteEvent } from "@/lib/siteAnalytics";
+import { PLAN_DISPLAY_PRICES } from "@shared/billingPlans";
 
+const PRO_PRICE = PLAN_DISPLAY_PRICES.pro;
+const MAX_PRICE = PLAN_DISPLAY_PRICES.max;
 const VENMO_HANDLE = normalizeVenmoHandle(import.meta.env.VITE_VENMO_HANDLE);
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
 
@@ -632,7 +635,8 @@ export default function Pricing() {
           <div className="mb-6 rounded-lg border border-primary/30 bg-primary/5 px-5 py-4">
             <h2 className="font-semibold">Your account is ready</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Start Pro for $14 today, or use the complete Starter workspace with lower limits.
+              Start Pro for ${PRO_PRICE} today, or use the complete Starter workspace with lower
+              limits.
             </p>
             <Button
               className="mt-3"
@@ -695,7 +699,8 @@ export default function Pricing() {
               <CardTitle>Pro</CardTitle>
               <CardDescription>For serious researchers</CardDescription>
               <div className="text-3xl font-bold mt-2">
-                $14<span className="text-sm font-normal text-muted-foreground">/mo</span>
+                ${PRO_PRICE}
+                <span className="text-sm font-normal text-muted-foreground">/mo</span>
               </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
@@ -719,7 +724,7 @@ export default function Pricing() {
               ) : (
                 <PlanCheckoutButton
                   tier="pro"
-                  amount="14"
+                  amount={PRO_PRICE}
                   label="Pro"
                   accountRef={accountRef}
                   isSignedIn={isSignedIn}
@@ -740,7 +745,8 @@ export default function Pricing() {
                 <CardTitle>Max</CardTitle>
                 <CardDescription>Higher limits for your thesis</CardDescription>
                 <div className="text-3xl font-bold mt-2">
-                  $50<span className="text-sm font-normal text-muted-foreground">/mo</span>
+                  ${MAX_PRICE}
+                  <span className="text-sm font-normal text-muted-foreground">/mo</span>
                 </div>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
@@ -771,7 +777,7 @@ export default function Pricing() {
               <tr className="bg-muted/50">
                 <th className="text-left p-3 font-medium">Feature</th>
                 <th className="text-center p-3 font-medium">Free</th>
-                <th className="text-center p-3 font-medium">Pro ($14/mo)</th>
+                <th className="text-center p-3 font-medium">Pro (${PRO_PRICE}/mo)</th>
                 {currentTier === "max" ? (
                   <th className="text-center p-3 font-medium">Legacy Max</th>
                 ) : null}
@@ -791,11 +797,12 @@ export default function Pricing() {
         </div>
 
         <div className="mt-6 rounded-lg border border-border bg-muted/30 px-4 py-4 text-xs leading-6 text-muted-foreground">
-          Prices are in USD. Pro costs $14 today and starts immediately. Stripe renews the
-          subscription for $14 each month until you cancel in the online billing portal. Canceling
-          stops future renewals; paid access continues through the current billing period. Venmo or
-          PayPal payments, when offered, provide one month of access unless ScholarMark confirms
-          otherwise. By subscribing, you agree to the{" "}
+          Prices are in USD. Pro costs ${PRO_PRICE} today and starts immediately. Stripe renews the
+          subscription for ${PRO_PRICE} each month until you cancel in the online billing portal.
+          Existing subscriptions renew at the price shown in the billing portal. Canceling stops
+          future renewals; paid access continues through the current billing period. Venmo or PayPal
+          payments, when offered, provide one month of access unless ScholarMark confirms otherwise.
+          By subscribing, you agree to the{" "}
           <Link href="/terms" className="text-primary underline-offset-4 hover:underline">
             Terms
           </Link>{" "}

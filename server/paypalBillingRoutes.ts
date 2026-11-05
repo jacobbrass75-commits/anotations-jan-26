@@ -1,5 +1,6 @@
 import type { Express as ExpressApp, Request, Response } from "express";
 import { randomUUID } from "crypto";
+import { BILLING_PLAN_LABELS, CURRENT_PRICE_OFFERS, type BillingTier } from "@shared/billingPlans";
 import { sqlite } from "./db";
 import { requireAuth } from "./auth";
 import { setUserTier } from "./authStorage";
@@ -8,7 +9,6 @@ import { createLogger } from "./logger";
 const logger = createLogger("paypalBillingRoutes");
 
 type PayPalEnvironment = "sandbox" | "live";
-type BillingTier = "pro" | "max";
 
 interface BillingPaymentRow {
   id: string;
@@ -22,9 +22,21 @@ interface BillingPaymentRow {
 }
 
 const CURRENCY = "USD";
+
+function toPayPalPlan(tier: BillingTier): { label: string; amount: string; amountCents: number } {
+  const { amountCents } = CURRENT_PRICE_OFFERS[tier];
+  return {
+    label: BILLING_PLAN_LABELS[tier],
+    amount: (amountCents / 100).toFixed(2),
+    amountCents,
+  };
+}
+
+// Pending orders are checked against the amount stored on their own row at capture,
+// so orders created before a price change still settle at the price the buyer saw.
 const PLAN_CONFIG: Record<BillingTier, { label: string; amount: string; amountCents: number }> = {
-  pro: { label: "Pro", amount: "14.00", amountCents: 1400 },
-  max: { label: "Max", amount: "50.00", amountCents: 5000 },
+  pro: toPayPalPlan("pro"),
+  max: toPayPalPlan("max"),
 };
 
 const selectPaymentByOrderId = sqlite.prepare(

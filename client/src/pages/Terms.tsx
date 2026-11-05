@@ -1,13 +1,15 @@
 import { BookOpen } from "lucide-react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
+import { PLAN_DISPLAY_PRICES } from "@shared/billingPlans";
 
 const sections = [
   {
     title: "Subscriptions And Billing",
     body: [
       "Paid ScholarMark plans are billed monthly in USD unless a checkout page or written agreement says otherwise.",
-      "The standard Pro offer charges $14 when checkout is completed, starts access immediately, and renews for $14 each month until canceled. It is not a free trial.",
+      `The standard Pro offer charges $${PLAN_DISPLAY_PRICES.pro} when checkout is completed, starts access immediately, and renews for $${PLAN_DISPLAY_PRICES.pro} each month until canceled. It is not a free trial.`,
+      "Subscriptions started under an earlier offer renew at the price shown in the Billing Portal until changed or canceled.",
       "Venmo or PayPal payments, when offered, provide one month of access unless ScholarMark confirms otherwise.",
       "You can cancel Stripe subscriptions from the Account page Billing Portal or by emailing support@scholarmark.ai. Cancellation stops future renewals; paid access continues through the current billing period unless a refund is issued.",
       "Payments are non-refundable except where required by law or for duplicate, mistaken, or unauthorized charges that ScholarMark confirms.",

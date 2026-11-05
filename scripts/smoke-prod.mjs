@@ -136,8 +136,12 @@ async function runAppSmoke() {
     assert(stripeConfig.json?.enabled === true, "Stripe billing config is not enabled");
     assert(stripeConfig.json?.currency === "USD", "Stripe billing config did not report USD");
     assert(
-      stripeConfig.json?.plans?.pro?.amountCents === 1400,
-      "Stripe Pro price did not report 1400 cents",
+      stripeConfig.json?.plans?.pro?.amountCents === 500,
+      "Stripe Pro price did not report 500 cents",
+    );
+    assert(
+      stripeConfig.json?.plans?.pro?.lookupKey === "scholarmark_pro_monthly_usd5",
+      "Stripe Pro checkout is not using the USD 5 lookup key",
     );
     assert(
       stripeConfig.json?.plans?.max?.amountCents === 5000,
