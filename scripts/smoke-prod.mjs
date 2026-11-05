@@ -22,10 +22,20 @@ function trimSlash(value) {
 
 async function request(path, options = {}) {
   const baseUrl = options.baseUrl || appBaseUrl;
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...options,
-    signal: AbortSignal.timeout(Number(process.env.SMOKE_TIMEOUT_MS || 10_000)),
-  });
+  const method = options.method || "GET";
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...options,
+      signal: AbortSignal.timeout(Number(process.env.SMOKE_TIMEOUT_MS || 10_000)),
+    });
+  } catch (error) {
+    const cause = error?.cause ? ` (cause: ${error.cause.code || error.cause.message || error.cause})` : "";
+    throw new Error(
+      `${options.label ? `${options.label}: ` : ""}${method} ${baseUrl}${path} failed: ${error?.message || error}${cause}`,
+      { cause: error },
+    );
+  }
   const text = await response.text();
   let json = null;
   if (text) {
@@ -45,7 +55,7 @@ function assert(condition, message) {
 }
 
 async function expectStatus(label, path, expected, options = {}) {
-  const result = await request(path, options);
+  const result = await request(path, { ...options, label });
   assert(
     result.response.status === expected,
     `${label} expected ${expected}, got ${result.response.status}: ${result.text.slice(0, 300)}`,
@@ -189,21 +199,16 @@ async function runAppSmoke() {
 
   // Non-Claude model tests are retired: the gate answers before auth, so even
   // unauthenticated probes must get its JSON 404 rather than a 401 or a model list.
-  for (const [method, path] of [
-    ["GET", "/api/write/test-models"],
-    ["POST", "/api/write/test-models/run"],
-  ]) {
-    const retired = await expectStatus(`retired writing model tests ${method}`, path, 404, {
-      method,
-      ...(method === "POST"
-        ? { headers: { "content-type": "application/json" }, body: "{}" }
-        : {}),
-    });
-    assert(
-      retired.json?.message === "Not found",
-      `retired writing model tests ${method} did not return the gate's JSON 404`,
-    );
-  }
+  // The POST route is covered by the writing routes integration suite.
+  const retired = await expectStatus(
+    "retired writing model tests GET",
+    "/api/write/test-models",
+    404,
+  );
+  assert(
+    retired.json?.message === "Not found",
+    "retired writing model tests GET did not return the gate's JSON 404",
+  );
 
   const invalidCampaignSignup = await expectStatus(
     "campaign signup validation",
