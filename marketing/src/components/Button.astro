@@ -1,0 +1,30 @@
+---
+import type { HTMLAttributes } from "astro/types";
+
+interface Props extends HTMLAttributes<"a"> {
+  href: string;
+  variant?: "primary" | "secondary" | "quiet";
+  size?: "sm" | "md" | "lg";
+  /**
+   * Marks a signup link. The attribution script forwards campaign parameters to
+   * it, mirroring how the app's own landing page builds its signup URL.
+   */
+  signup?: boolean;
+}
+
+const { href, variant = "primary", size = "md", signup = false, class: className, ...rest } =
+  Astro.props;
+const classes = ["btn", `btn--${variant}`, size !== "md" && `btn--${size}`, className]
+  .filter(Boolean)
+  .join(" ");
+---
+
+<a
+  href={href}
+  class={classes}
+  data-signup={signup ? "" : undefined}
+  target={signup ? "_top" : undefined}
+  {...rest}
+>
+  <slot />
+</a>

@@ -1,0 +1,85 @@
+---
+import { formatDay, guidePath, lastChanged, type Guide } from "../lib/guides";
+
+interface Props {
+  guide: Guide;
+  headingLevel?: "h2" | "h3";
+  /** Hide the category tag where the card already sits under its category heading. */
+  showCategory?: boolean;
+}
+
+const { guide, headingLevel = "h3", showCategory = true } = Astro.props;
+const Heading = headingLevel;
+const day = lastChanged(guide);
+---
+
+<article class="guide-card card">
+  <p class="guide-card__meta">
+    {showCategory && <span class="tag">{guide.data.category}</span>}
+    <time datetime={day}>{guide.data.updated ? "Updated " : ""}{formatDay(day)}</time>
+  </p>
+  <Heading class="guide-card__title">
+    <a href={guidePath(guide)}>{guide.data.title}</a>
+  </Heading>
+  <p class="guide-card__desc">{guide.data.description}</p>
+</article>
+
+<style>
+  .guide-card {
+    position: relative;
+    display: grid;
+    align-content: start;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    transition: border-color 0.15s ease;
+  }
+
+  .guide-card:hover,
+  .guide-card:focus-within {
+    border-color: var(--rule-strong);
+  }
+
+  .guide-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  .guide-card__title {
+    font-size: 1.375rem;
+  }
+
+  .guide-card__title a {
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  /* The whole card is clickable while the link text stays the accessible name. */
+  .guide-card__title a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  .guide-card__title a:hover {
+    color: var(--accent);
+  }
+
+  .guide-card__title a:focus-visible {
+    outline: none;
+  }
+
+  .guide-card:has(a:focus-visible) {
+    outline: 3px solid var(--focus);
+    outline-offset: 3px;
+  }
+
+  .guide-card__desc {
+    color: var(--muted);
+    font-size: 0.975rem;
+  }
+</style>

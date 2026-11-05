@@ -1,0 +1,42 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Button from "../components/Button.astro";
+import { links } from "../lib/links";
+---
+
+<BaseLayout
+  title="Page not found"
+  description="This page doesn't exist. Go to the ScholarMark homepage, browse guides, or sign in to the app."
+  noindex
+>
+  <section class="not-found">
+    <div class="container container--narrow">
+      <p class="eyebrow">404</p>
+      <h1>We couldn't find that page.</h1>
+      <p class="lede">
+        The link may be out of date. If you were trying to reach your projects, sign in to the
+        ScholarMark app.
+      </p>
+      <div class="btn-row btn-row--stack-mobile">
+        <Button href={links.signin}>Sign in to the app</Button>
+        <Button href="/guides/" variant="secondary">Browse guides</Button>
+        <Button href="/" variant="quiet">Homepage</Button>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .not-found {
+    padding-block: clamp(4rem, 12vw, 8rem);
+  }
+
+  .not-found .container {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .not-found h1 {
+    font-size: clamp(2.25rem, 6vw, 3.5rem);
+  }
+</style>
