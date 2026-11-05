@@ -122,6 +122,8 @@ fi
 wait_for_http "$APP_HEALTHCHECK_URL" "app"
 
 echo "[deploy] running production smoke checks"
+# Smoke loads .env from the cwd, so run it from APP_DIR rather than wherever MCP setup left us.
+cd "$APP_DIR"
 APP_BASE_URL="${APP_SMOKE_BASE_URL:-http://127.0.0.1:5001}" \
 MCP_BASE_URL="${MCP_SMOKE_BASE_URL:-http://127.0.0.1:5002}" \
 node "$APP_DIR/scripts/smoke-prod.mjs"

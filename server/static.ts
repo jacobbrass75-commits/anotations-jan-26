@@ -77,25 +77,15 @@ export function isMarketingSiteEnabled(env: NodeJS.ProcessEnv = process.env): bo
   return env[MARKETING_SITE_ENV]?.trim().toLowerCase() === "astro";
 }
 
-function hasSignedInHint(cookieHeader: string | undefined): boolean {
-  if (!cookieHeader) return false;
-  return cookieHeader.split(";").some((part) => {
-    const separator = part.indexOf("=");
-    if (separator === -1) return false;
-    const name = part.slice(0, separator).trim();
-    const value = part.slice(separator + 1).trim();
-    const isClientUat = name === "__client_uat" || name.startsWith("__client_uat_");
-    return isClientUat && value !== "" && value !== "0";
-  });
-}
-
-/** The marketing root yields to the SPA for campaign, referral, and signed-in visits. */
-export function shouldServeMarketingRoot(search: string, cookieHeader?: string): boolean {
+/**
+ * The marketing root yields to the SPA only for campaign, referral, and explicit landing flags.
+ * Auth cookies are ignored: Clerk hints like `__client_uat` go stale, and returning users reach
+ * the app through the header's Sign in link to app.scholarmark.ai.
+ */
+export function shouldServeMarketingRoot(search: string): boolean {
   if (isPaidInstagramCampaign(search)) return false;
   const params = new URLSearchParams(search);
-  if (SPA_ROOT_QUERY_PARAMS.some((key) => params.has(key))) return false;
-  // Clerk's client cookie marks a signed-in browser; the SPA sends it to /dashboard.
-  return !hasSignedInHint(cookieHeader);
+  return !SPA_ROOT_QUERY_PARAMS.some((key) => params.has(key));
 }
 
 interface MarketingPage {
@@ -480,7 +470,7 @@ export function loadMarketingSite(options: MarketingSiteOptions): MarketingSite 
     if (pathname === "/") {
       const queryStart = req.originalUrl.indexOf("?");
       const search = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
-      if (!shouldServeMarketingRoot(search, req.headers.cookie)) return next();
+      if (!shouldServeMarketingRoot(search)) return next();
       return sendPage(req, res, pathname, manifest.rootPage);
     }
 

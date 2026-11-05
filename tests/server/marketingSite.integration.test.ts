@@ -236,18 +236,18 @@ describe("Astro marketing site on the marketing host", () => {
     }
   });
 
-  it("hands signed-in browsers to the SPA so they reach the dashboard", async () => {
+  it("serves the Astro root regardless of stale or active Clerk cookies", async () => {
     const server = await startApp();
     try {
-      const signedIn = await request(server.baseUrl, "/", {
-        headers: { cookie: "theme=dark; __client_uat_Ab12=1730000000" },
-      });
-      expect(await signedIn.text()).toBe("spa:GET:/");
-
-      const signedOut = await request(server.baseUrl, "/", {
-        headers: { cookie: "__client_uat=0" },
-      });
-      expect(await signedOut.text()).toContain("astro-home");
+      for (const cookie of [
+        "theme=dark; __client_uat_Ab12=1730000000",
+        "__client_uat=1730000000; __session=abc",
+        "__client_uat=0",
+      ]) {
+        const response = await request(server.baseUrl, "/", { headers: { cookie } });
+        expect(response.status).toBe(200);
+        expect(await response.text()).toContain("astro-home");
+      }
     } finally {
       await server.close();
     }
@@ -453,9 +453,11 @@ describe("marketing site switches", () => {
     expect(isMarketingSiteEnabled({ SCHOLARMARK_MARKETING_SITE: " Astro " })).toBe(true);
   });
 
-  it("treats a zero Clerk client cookie as signed out", () => {
-    expect(shouldServeMarketingRoot("", "__client_uat=0")).toBe(true);
-    expect(shouldServeMarketingRoot("", "__client_uat=1730000000")).toBe(false);
+  it("routes the root by query flags only", () => {
+    expect(shouldServeMarketingRoot("")).toBe(true);
     expect(shouldServeMarketingRoot("?utm_source=google&utm_medium=cpc")).toBe(true);
+    expect(shouldServeMarketingRoot("?ref=abc")).toBe(false);
+    expect(shouldServeMarketingRoot("?sm_landing=legacy")).toBe(false);
+    expect(shouldServeMarketingRoot("?embedded_auth=1")).toBe(false);
   });
 });
