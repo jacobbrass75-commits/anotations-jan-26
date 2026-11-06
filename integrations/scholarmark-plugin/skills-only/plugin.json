@@ -1,0 +1,46 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "scholarmark-citation-audit",
+  "version": "1.0.0",
+  "description": "Audit claims, quotations, page locators, and DOIs in academic writing against the source text you provide in the conversation.",
+  "author": {
+    "name": "ScholarMark",
+    "email": "support@scholarmark.ai",
+    "url": "https://scholarmark.ai"
+  },
+  "homepage": "https://scholarmark.ai",
+  "license": "MIT",
+  "keywords": ["citations", "quotations", "research", "academic-writing", "evidence", "doi"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "ScholarMark Citation Audit",
+        "shortDescription": "Audit citations and evidence",
+        "longDescription": "ScholarMark Citation Audit helps students and researchers check academic writing against its sources. Paste a draft, plus the source passages you have, and the citation-audit skill reviews each claim, direct quotation, page locator, and reference. Each item gets a status, such as supported, partially supported, contradicted, unverifiable, or citation needed, along with a confidence level and a suggested next step. The skill reports separately what it checked and what it could not check, and it is written not to supply quotations, page numbers, DOIs, or other citation details that it has not found in a source.\n\nThe audit works only on text in the conversation. It needs no account and stores nothing.\n\nLimitations: the audit can only judge evidence it can read. Missing, paywalled, or sign-in-only pages are reported as unverifiable. Page numbers can be confirmed only when the source text includes page markers. DOI lookups need web access in your app. Treat the results as an aid to your own review, and check important findings against the original sources.",
+        "developerName": "ScholarMark",
+        "category": "Productivity",
+        "capabilities": [
+          "Audit citations in pasted text",
+          "Check quotations against pasted sources",
+          "Check DOIs and page locators"
+        ],
+        "websiteURL": "https://scholarmark.ai",
+        "supportURL": "https://scholarmark.ai/support",
+        "privacyPolicyURL": "https://scholarmark.ai/privacy",
+        "termsOfServiceURL": "https://scholarmark.ai/terms",
+        "defaultPrompt": [
+          "Audit the citations in this paragraph and flag claims the sources don't support.",
+          "Check whether the quotes in my draft match the source text word for word.",
+          "Check the DOIs and page numbers in my reference list."
+        ],
+        "brandColor": "#D4556B",
+        "brandColorDark": "#D4556B",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png"
+      },
+      "publication": {
+        "release_notes": "Initial release: the citation-audit skill for claims, quotations, page locators, and DOIs, working on text in the conversation."
+      }
+    }
+  }
+}

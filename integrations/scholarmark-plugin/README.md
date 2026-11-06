@@ -19,16 +19,20 @@ integrations/scholarmark-plugin/
 │   ├── assets/                      # logo.svg (copy of client/public/favicon.svg), logo.png, icon.png
 │   ├── README.md                    # user-facing; the Claude directory shows it as the listing
 │   └── LICENSE
+├── skills-only/                     # manifest + README for the skills-only OpenAI package
 ├── listing/
 │   ├── LISTING.md                   # listing fields, review materials, owner actions before submission
 │   └── review-fixtures/             # synthetic source, sample draft, expected audit results
 └── tools/
     ├── validate.mjs                 # offline checks, plus optional --live and --claude-cli
     ├── package.mjs                  # builds dist/*.zip deterministically and re-validates each archive
+    ├── skills-only.mjs              # derives the text-only skill copy for the skills-only package
     └── build-icons.mjs              # renders the PNG icons from logo.svg with the repo's sharp
 ```
 
 One folder serves both ecosystems. Claude Code and claude.ai read `.claude-plugin/plugin.json`, and OpenAI reads the root `plugin.json` and `mcp.json`. The packager builds a separate ZIP for each, so neither directory sees the other's manifest.
+
+The packager also builds `scholarmark-citation-audit-<version>.zip`, a skills-only OpenAI package listed as **ScholarMark Citation Audit**. It has no `mcp.json`, `review`, hooks, or server metadata, so it can be published without MCP review. Its manifest and README live in `skills-only/`. `skills-only.mjs` derives its skill from the canonical `plugin/skills/citation-audit` by removing the connected-mode passages and `references/scholarmark-tools.md`. Each edit must match exactly once, so the build fails if the canonical skill changes in a way the derivation doesn't cover. OpenAI doesn't support adding a server to a skills-only listing later, so this package has its own name and display name, and the combined `scholarmark` listing remains the path for connected features. `validate.mjs --target skills-only` checks it.
 
 ## Requirements
 
@@ -96,6 +100,7 @@ Restart the ChatGPT desktop app and install from the local source. If the Schola
 Neither submission has been made. See [`listing/LISTING.md`](listing/LISTING.md) for the owner actions that come first. The privacy policy update and the OpenAI domain-verification route are in the code and need a deploy before submission.
 
 - **ChatGPT and Codex**: upload `dist/scholarmark-openai-<version>.zip` in the OpenAI Platform dashboard's Plugins page, connect the MCP server (OAuth with DCR, read from `mcp.json`), complete domain verification, enter reviewer credentials, and submit. Guide: https://developers.openai.com/plugins/deploy/submission
+- **ChatGPT skills-only (text-only audit)**: upload `dist/scholarmark-citation-audit-<version>.zip` as a separate plugin. No MCP connection, review cases, or demo recording are needed. Guide: https://developers.openai.com/plugins/deploy/submission
 - **Claude directory**: push `plugin/` to a GitHub repository you control, then submit it as a **Plugin bundle** at https://claude.ai/directory/manage. Guide: https://claude.com/docs/plugins/submit
 
 ## Keeping it in sync
