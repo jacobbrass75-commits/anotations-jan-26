@@ -42,7 +42,7 @@ Limits are Apple's. "Now" is the length of the checked-in text, as measured by t
 | Copyright | `metadata/copyright.txt` | year, then owner; App Store Connect adds the © | `2026 ScholarMark` |
 | Primary category | `metadata/primary_category.txt` | | Education (matches `LSApplicationCategoryType` `public.app-category.education` in `project.yml`) |
 | Secondary category (optional) | `metadata/secondary_category.txt` | | Reference |
-| App Review notes | `metadata/review_information/notes.txt` | 4000 bytes | 1929 bytes |
+| App Review notes | `metadata/review_information/notes.txt` | 4000 bytes | 2075 bytes |
 | Sign-in required | (none) | demo account needed only if the app requires login | **No**: the app has no sign-in |
 | Screenshots | `build/AppStoreScreenshots/` (generated) | 1–10 per device size; `.jpeg`, `.jpg`, or `.png`; no alpha or transparency | 7 per size |
 
@@ -75,6 +75,9 @@ and [App Review Guidelines](https://developer.apple.com/app-store/review/guideli
   - Export formats: `ExportFormat` (text bibliography, Markdown, BibTeX, RIS, JSON backup).
   - Share sheet: `ShareLink`.
   - On-device storage that is included in device backups: `LibraryRepository.swift`.
+  - In-app privacy policy link (Guideline 5.1.1(i)): Settings → Privacy, `AppLinks.swift`. See the
+    [submission checklist](privacy-and-age-rating.md#privacy-policy-url): the policy section must be
+    approved and deployed first.
 - **Keywords** leave out the app name (Apple already indexes it) and other products' names.
   The in-app footer mentions Zotero, EndNote, and Mendeley, but the listing says "your reference
   manager" instead.
@@ -105,7 +108,7 @@ sizes and removes any alpha channel.
 | 04 | `review` | Review tab listing two sources with missing required fields |
 | 05 | `export` | Export sheet with the project bibliography preview |
 | 06 | `capture` | Capture screen with a DOI pasted, ready for "Look up details" |
-| 07 | `settings` | "Stored only on this iPhone or iPad", backup export, and the privacy note |
+| 07 | `settings` | "Stored only on this iPhone or iPad", backup export, and the privacy note with its Privacy Policy link |
 
 **Sample data is synthetic.** It comes from `LibraryStore.screenshotSample()` in
 `ios/ScholarMark/Support/ScreenshotMode.swift`. Every author, title, and journal is invented. URLs

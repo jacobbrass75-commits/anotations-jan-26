@@ -24,7 +24,7 @@ Apple pages used (checked 2026-11-06):
 | Delete all | `LibraryStore.deleteEverything()`, `LibraryRepository.deleteAll()` | Removes `library.json` only. It leaves `tmp/Exports/` and any `library-unreadable-<time>.json` that **Start fresh** set aside after a damaged load. Deleting the app removes the whole container. |
 | Network | `ScholarMarkCore/.../MetadataLookup.swift` | The only `URLSession` use in the app. It runs only when the user taps **Look up details**. A DOI goes to `https://doi.org/<doi>` with `Accept: application/vnd.citationstyles.csl+json`; doi.org can redirect to the registration agency (for example Crossref or DataCite) that serves the record. A link that contains a DOI (`CaptureInput.classify`) is treated as that DOI: only doi.org is contacted and the publisher page is not fetched. Any other link is fetched from its site with its full path and query, upgraded to HTTPS. If the page names a DOI, that DOI is then looked up at doi.org. The User-Agent is `ScholarMark-iOS/0.1 (citation lookup)`. The app adds no account, token, or device identifier. |
 | Cookies, cache, redirects | `URLSessionLoader` uses `URLSession.shared` | Apple: the shared session "uses the shared URLCache, HTTPCookieStorage, and URLCredentialStorage objects", and the default configuration "uses a persistent disk-based cache" and stores cookies. So a cookie a lookup site sets is kept in the app's container and sent back to that site on a later lookup, and responses can be cached on the device. The shared session has no delegate, so it follows redirects, including to other hosts. If you want lookups to keep nothing between requests, switching the loader to `URLSessionConfiguration.ephemeral` is a one-line change; the policy wording would then need its cookie sentence updated. |
-| Links | `SourceDetailView.swift` | **Open source** is a SwiftUI `Link`, so the system opens the URL in the default browser. The app has no web view. |
+| Links | `SourceDetailView.swift`, `SettingsView.swift`, `ScholarMarkCore/.../AppLinks.swift` | **Open source** and Settings → Privacy → **Privacy Policy** (`https://app.scholarmark.ai/privacy#ios`) are SwiftUI `Link`s, so the system opens the URL in the default browser only when tapped. The app makes no request for them and nothing runs at launch. The app has no web view. |
 | Sharing | `ExportView.swift`, `SettingsView.swift`, `SourceDetailView.swift` | Citations and export files reach other apps only through the system share sheet (`ShareLink`) or the clipboard, when the user chooses. |
 | SDKs | `Package.swift`, `project.yml` | No third-party packages. The app links only Apple frameworks and the local `ScholarMarkCore` package. |
 | Accounts, ads, analytics | whole `ios/` tree | None. |
@@ -80,10 +80,25 @@ parties that receive user data, and "explain its data retention/deletion policie
 | Retention and deletion | Bullets 2, 8: the library stays on the device; what Delete all and deleting the app remove, and what neither removes (backups, shared exports). |
 
 The guideline also requires a privacy policy link "within the app in an easily accessible
-manner". The app does not have one yet: Settings shows a privacy summary but no link to
-`https://app.scholarmark.ai/privacy`. Adding one (a `Link` in the Settings tab's Privacy section)
-is an app change that needs an Xcode build, so it is listed as a remaining step rather than made
-here.
+manner". Settings → Privacy now has a **Privacy Policy** `Link` to
+`https://app.scholarmark.ai/privacy#ios` (`AppLinks.privacyPolicy`). It is a standard SwiftUI
+control, so VoiceOver reads it as a link named "Privacy Policy", with a hint that it opens in the
+browser. `AppLinksTests.swift` checks the URL, and `Tools/app-store-tools.test.mjs` checks that it
+matches `metadata/en-US/privacy_url.txt` plus `#ios` and is used only by that `Link`.
+
+Until the web policy with the iOS section is deployed, the link opens the current policy, which
+has no iOS section (the `#ios` anchor just lands at the top). **Do not submit a build for review
+until the publisher has approved and deployed the policy section.**
+
+Before you submit:
+- [ ] Publisher approves the iOS section wording in `client/src/pages/Privacy.tsx` and sets
+      "Last updated" to the publish date.
+- [ ] The web app is deployed and `https://app.scholarmark.ai/privacy#ios` shows the section.
+- [ ] Xcode CI is green for the build you upload (the Settings link compiles and `swift test`
+      passes).
+- [ ] In the build, Settings → Privacy → **Privacy Policy** opens that page in the browser.
+- [ ] App Store Connect's Privacy Policy URL is `https://app.scholarmark.ai/privacy`
+      (`metadata/en-US/privacy_url.txt`).
 
 ## Age rating (App Store Connect → App Information → Age Ratings)
 

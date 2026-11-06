@@ -2,8 +2,9 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { deflateSync, inflateSync } from "node:zlib";
 
 import { checkKeywords, checkMetadata, unsupportedClaims } from "./check-app-store-metadata.mjs";
@@ -171,4 +172,18 @@ test("checkMetadata reports over-limit fields and bad URLs", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("the in-app privacy link matches the listing's Privacy Policy URL", () => {
+  const iosRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const listed = readFileSync(join(iosRoot, "AppStore", "metadata", "en-US", "privacy_url.txt"), "utf8").trim();
+  const linksSource = readFileSync(join(iosRoot, "ScholarMarkCore", "Sources", "ScholarMarkCore", "AppLinks.swift"), "utf8");
+  const inApp = linksSource.match(/privacyPolicy = URL\(string: "([^"]+)"\)/)?.[1];
+  assert.equal(inApp, `${listed}#ios`);
+
+  // The link is only ever handed to SwiftUI's Link, which opens it in the browser on tap.
+  const settings = readFileSync(join(iosRoot, "ScholarMark", "Views", "SettingsView.swift"), "utf8");
+  assert.match(settings, /Link\(destination: AppLinks\.privacyPolicy\) \{\s*Label\("Privacy Policy"/);
+  const uses = settings.match(/AppLinks\.privacyPolicy/g) ?? [];
+  assert.equal(uses.length, 1);
 });

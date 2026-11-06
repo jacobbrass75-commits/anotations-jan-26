@@ -46,6 +46,11 @@ struct SettingsView: View {
                 Section {
                     Text("When you tap Look up, the app sends the DOI to doi.org, or fetches the page you pasted, to read its citation details. Nothing else leaves your device. No account, tracking, or analytics.")
                         .font(.callout)
+                    // Opens in the system browser only when tapped; the app makes no request for it.
+                    Link(destination: AppLinks.privacyPolicy) {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                    }
+                    .accessibilityHint("Opens the ScholarMark privacy policy in your browser.")
                 } header: {
                     Text("Privacy")
                 }
