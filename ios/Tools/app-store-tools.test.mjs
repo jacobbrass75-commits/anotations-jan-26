@@ -1,6 +1,6 @@
 // Tests for the App Store listing and screenshot checkers. Run: node --test ios/Tools/
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -186,4 +186,53 @@ test("the in-app privacy link matches the listing's Privacy Policy URL", () => {
   assert.match(settings, /Link\(destination: AppLinks\.privacyPolicy\) \{\s*Label\("Privacy Policy"/);
   const uses = settings.match(/AppLinks\.privacyPolicy/g) ?? [];
   assert.equal(uses.length, 1);
+});
+
+test("in-app privacy copy makes no blanket 'nothing leaves the device' claim", () => {
+  // Lookups also carry the address, connection details, and site cookies (see the privacy
+  // policy's iOS section), so the app may only say what lookups never send.
+  const viewsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "ScholarMark");
+  const swiftFiles = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory() ? swiftFiles(join(dir, entry.name)) : entry.name.endsWith(".swift") ? [join(dir, entry.name)] : [],
+    );
+  const overclaim = /nothing (else )?(leaves|is sent from|is shared from) (your|the|this) (device|iphone|ipad)|never leaves? (your|the|this) (device|iphone|ipad)/i;
+  const found = [];
+  for (const file of swiftFiles(viewsDir)) {
+    for (const literal of readFileSync(file, "utf8").match(/"(?:[^"\\\n]|\\.)*"/g) ?? []) {
+      if (overclaim.test(literal)) found.push(`${file.split("/ios/")[1]}: ${literal}`);
+    }
+  }
+  assert.deepEqual(found, []);
+
+  const settings = readFileSync(join(viewsDir, "Views", "SettingsView.swift"), "utf8");
+  const capture = readFileSync(join(viewsDir, "Views", "CaptureSourceView.swift"), "utf8");
+  assert.match(settings, /Lookups never send your library, notes, or quotes\./);
+  assert.match(capture, /lookups never send your library, notes, or quotes\./);
+});
+
+test("DEBUG-only preview and screenshot code is used only inside #if DEBUG", () => {
+  // CI's simulator jobs build Debug, so a Release-only compile error (or screenshot fixtures
+  // leaking into the App Store build) would first show up in the Release archive. #Preview bodies
+  // are compiled in every configuration, so they count as ordinary code here.
+  const appDir = join(dirname(fileURLToPath(import.meta.url)), "..", "ScholarMark");
+  const swiftFiles = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory() ? swiftFiles(join(dir, entry.name)) : entry.name.endsWith(".swift") ? [join(dir, entry.name)] : [],
+    );
+  const debugOnly = /\bScreenshotScene\b|\bscreenshotSample\(|\bLibraryStore\.preview\(/;
+  const outside = [];
+  for (const file of swiftFiles(appDir)) {
+    const stack = []; // true for each enclosing #if DEBUG, false for any other #if
+    readFileSync(file, "utf8").split("\n").forEach((line, index) => {
+      const directive = line.trim();
+      if (/^#if\b/.test(directive)) stack.push(/^#if DEBUG\b/.test(directive));
+      else if (/^#else\b|^#elseif\b/.test(directive) && stack.length) stack[stack.length - 1] = false;
+      else if (/^#endif\b/.test(directive)) stack.pop();
+      else if (debugOnly.test(line) && !stack.includes(true) && !directive.startsWith("//")) {
+        outside.push(`${file.split("/ios/")[1]}:${index + 1}: ${directive}`);
+      }
+    });
+  }
+  assert.deepEqual(outside, []);
 });

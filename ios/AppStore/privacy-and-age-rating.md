@@ -94,8 +94,8 @@ Before you submit:
 - [ ] Publisher approves the iOS section wording in `client/src/pages/Privacy.tsx` and sets
       "Last updated" to the publish date.
 - [ ] The web app is deployed and `https://app.scholarmark.ai/privacy#ios` shows the section.
-- [ ] Xcode CI is green for the build you upload (the Settings link compiles and `swift test`
-      passes).
+- [ ] Xcode CI is green for the commit you upload: `swift test` passes, and the `app` job's
+      unsigned Release archive check (`archive-check.log`) shows no failures.
 - [ ] In the build, Settings → Privacy → **Privacy Policy** opens that page in the browser.
 - [ ] App Store Connect's Privacy Policy URL is `https://app.scholarmark.ai/privacy`
       (`metadata/en-US/privacy_url.txt`).

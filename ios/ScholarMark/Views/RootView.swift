@@ -73,6 +73,9 @@ private struct StorageProblemBanner: View {
     }
 }
 
+// Preview data is DEBUG-only, and #Preview bodies are compiled in Release too.
+#if DEBUG
 #Preview {
     RootView().environment(LibraryStore.preview())
 }
+#endif

@@ -23,6 +23,9 @@ node --test ios/Tools/app-store-tools.test.mjs
 ```
 
 The `listing` job in `.github/workflows/ios.yml` runs both on every pull request that touches `ios/`.
+The `app` job also builds an unsigned Release archive for a generic iOS device and checks its
+platform, architecture, bundle ID and version, privacy manifest, app icon, and that screenshot
+mode is absent (see [`ios/README.md`](../README.md#verification-status)).
 
 ## Field reference
 

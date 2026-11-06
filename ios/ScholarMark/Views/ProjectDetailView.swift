@@ -185,9 +185,12 @@ struct MoveToMenu: View {
     }
 }
 
+// Preview data is DEBUG-only, and #Preview bodies are compiled in Release too.
+#if DEBUG
 #Preview {
     NavigationStack {
         ProjectDetailView(scope: .inbox)
     }
     .environment(LibraryStore.preview())
 }
+#endif

@@ -250,6 +250,8 @@ private struct NotesEditor: View {
     }
 }
 
+// Preview data is DEBUG-only, and #Preview bodies are compiled in Release too.
+#if DEBUG
 #Preview {
     let store = LibraryStore.preview()
     return NavigationStack {
@@ -257,3 +259,4 @@ private struct NotesEditor: View {
     }
     .environment(store)
 }
+#endif
