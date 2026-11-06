@@ -121,6 +121,15 @@ Run it on a Mac with Xcode 26+ and Node 18+ (about 10 minutes, most of it simula
 ios/Tools/capture-app-store-screenshots.sh
 ```
 
+The script never deletes files. The output directory (default `build/AppStoreScreenshots`, or
+the first argument) must not exist yet or must be empty; otherwise the script stops before
+building. It also refuses a symbolic link or a regular file. To capture again, move or delete
+the earlier run yourself, or pass a new directory:
+
+```bash
+ios/Tools/capture-app-store-screenshots.sh build/AppStoreScreenshots-2
+```
+
 In CI, the `screenshots` job in `.github/workflows/ios.yml` runs the same script only on manual
 runs, so ordinary iOS pull requests do not wait for it. Use Actions → iOS → Run workflow, choose
 the branch, and tick **Also capture App Store screenshots**, or run:
@@ -133,7 +142,7 @@ It uploads the PNGs as the `app-store-screenshots-<run id>-<attempt>` artifact, 
 A manual run also repeats the normal build and test jobs.
 
 Before uploading, look at every image. The scenes open by simulated navigation, so a slow
-simulator can catch a screen mid-transition; rerun with `SETTLE_SECONDS=8` if one looks off.
+simulator can catch a screen mid-transition; rerun with `SETTLE_SECONDS=8` (and a new output directory) if one looks off.
 To check images from anywhere:
 
 ```bash

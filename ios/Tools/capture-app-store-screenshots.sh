@@ -5,6 +5,10 @@
 #
 #   ios/Tools/capture-app-store-screenshots.sh [output-dir]      (default: build/AppStoreScreenshots)
 #
+# The script never deletes files. output-dir must not exist yet or be an empty directory; it
+# refuses anything else (including "." or a folder that holds an earlier run). Move or delete an
+# old run yourself, or pass a new directory.
+#
 # Needs macOS with Xcode 26+ and Node 18+. Run from anywhere inside the repository. Override the
 # simulators with IPHONE_DEVICES, IPHONE_LARGE_DEVICES, and IPAD_DEVICES (comma-separated names,
 # first available wins). Set SKIP_BUILD=1 with APP_PATH=/path/ScholarMark.app to reuse a build.
@@ -34,6 +38,17 @@ devices_for() {
 
 log() { printf '==> %s\n' "$*"; }
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+# Checked before anything else runs. Nothing is ever removed: a new directory is created later,
+# or an existing one is used only if it is a real (not symlinked), writable, empty directory.
+if [[ -e "$out" || -L "$out" ]]; then
+  [[ ! -L "$out" ]] || fail "$out is a symbolic link. Pass a new output directory or the real path."
+  [[ -d "$out" ]] || fail "$out already exists and is not a directory. Pass a new output directory."
+  [[ -r "$out" && -w "$out" && -x "$out" ]] || fail "$out is not readable and writable. Pass a new output directory."
+  if [[ -n "$(ls -A "$out")" ]]; then
+    fail "$out is not empty, and this script never deletes files. Move or delete it yourself, or pass a new directory, e.g. build/AppStoreScreenshots-$(date +%Y%m%d-%H%M%S)"
+  fi
+fi
 
 command -v xcrun >/dev/null || fail "xcrun not found; this script needs macOS with Xcode."
 command -v node >/dev/null || fail "node not found; it checks the screenshots against Apple's sizes."
@@ -90,10 +105,6 @@ device_udid() {
   echo "$udid"
 }
 
-case "$out" in
-  ""|"/"|"$HOME"|"$repo") fail "refusing to use $out as the output directory (it is emptied first)" ;;
-esac
-rm -rf "$out"
 mkdir -p "$out"
 for slot in $slots; do
   udid=""
