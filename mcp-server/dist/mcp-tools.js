@@ -652,6 +652,7 @@ export function registerScholarMarkTools(server, options) {
         const results = await client.requestJson("POST", `/api/projects/${projectId}/search`, token, {
             query,
             limit,
+            includeSourceText: true,
         });
         return asTextResult({
             projectId: decodeURIComponent(projectId),
@@ -1338,7 +1339,7 @@ export function registerScholarMarkTools(server, options) {
             if (typeof project?.id !== "string") {
                 continue;
             }
-            const response = await client.requestJson("POST", `/api/projects/${encodeURIComponent(project.id)}/search`, token, { query, limit: 10 });
+            const response = await client.requestJson("POST", `/api/projects/${encodeURIComponent(project.id)}/search`, token, { query, limit: 10, includeSourceText: true });
             for (const hit of Array.isArray(response?.results) ? response.results : []) {
                 if (typeof hit?.documentId !== "string") {
                     continue;

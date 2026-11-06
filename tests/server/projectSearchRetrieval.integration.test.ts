@@ -19,17 +19,25 @@ const { clerkGetAuth, clerkMiddleware, clerkGetUser } = vi.hoisted(() => ({
   clerkMiddleware: vi.fn(() => (_req: unknown, _res: unknown, next: () => void) => next()),
   clerkGetUser: vi.fn(),
 }));
-const { generateDocumentSummary, getEmbeddingWithUsage, extractCitationMetadata } = vi.hoisted(
-  () => ({
-    generateDocumentSummary: vi.fn(async () => ({
-      summary: "server summary",
-      mainArguments: [],
-      keyConcepts: [],
-    })),
-    getEmbeddingWithUsage: vi.fn(async (text: string) => [text.length, 1, 0]),
-    extractCitationMetadata: vi.fn(async () => null),
-  }),
-);
+const { generateDocumentSummary, getEmbeddingWithUsage, extractCitationMetadata, embedFor } =
+  vi.hoisted(() => {
+    // Deterministic stand-in embedding, so a test can tell which text a stored vector came from.
+    const embedFor = (text: string) => [
+      text.length,
+      [...text].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 100003, 7),
+      0,
+    ];
+    return {
+      embedFor,
+      generateDocumentSummary: vi.fn(async () => ({
+        summary: "server summary",
+        mainArguments: [],
+        keyConcepts: [],
+      })),
+      getEmbeddingWithUsage: vi.fn(async (text: string) => embedFor(text)),
+      extractCitationMetadata: vi.fn(async () => null),
+    };
+  });
 
 vi.mock("@clerk/express", () => ({
   clerkMiddleware,
@@ -54,12 +62,14 @@ vi.mock("../../server/openai", async (importOriginal) => ({
 const repoRoot = resolve(__dirname, "../..");
 const sdkRoot = join(repoRoot, "mcp-server/node_modules/@modelcontextprotocol/sdk/dist/esm");
 
+// The blank line checks that passages come back as exact source text, not reflowed.
 const SOURCE_TEXT = [
   "Harbor records from 1850 describe the docks in detail.",
   "Most entries list cargo weights and tariffs collected at the quay.",
-  "A later ledger mentions that the lighthouse keeper rationed whale oil during the winter of 1853, which no other record confirms.",
+  "\n\nA later ledger mentions that the lighthouse keeper rationed whale oil during the winter of 1853, which no other record confirms.",
   "The final pages return to tariffs.",
 ].join(" ");
+const WHALE_OIL = "rationed whale oil";
 const ANNOTATED_QUOTE = "Most entries list cargo weights and tariffs collected at the quay.";
 
 type ToolResult = {
@@ -207,7 +217,9 @@ describe("project search retrieval", () => {
       body: form,
     });
     expect(uploaded.status).toBe(200);
-    const document = (await uploaded.json()) as { id: string };
+    const document = (await uploaded.json()) as { id: string; fullText: string };
+    // Offsets below are computed on SOURCE_TEXT, so it must be stored unchanged.
+    expect(document.fullText).toBe(SOURCE_TEXT);
 
     const projectDocument = await requestJson<{ id: string }>(
       baseUrl,
@@ -226,14 +238,21 @@ describe("project search retrieval", () => {
     };
   }
 
-  async function search(baseUrl: string, token: string, projectId: string, query: string) {
+  // Same request the web workspace sends (useGlobalSearch), unless extra fields are passed.
+  async function search(
+    baseUrl: string,
+    token: string,
+    projectId: string,
+    query: string,
+    extra: Record<string, unknown> = {},
+  ) {
     const response = await requestJson<{ results: any[] }>(
       baseUrl,
       `/api/projects/${projectId}/search`,
       {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
-        body: { query },
+        body: { query, filters: {}, ...extra },
       },
     );
     expect(response.status).toBe(200);
@@ -303,8 +322,8 @@ describe("project search retrieval", () => {
         .select()
         .from(projectAnnotations)
         .where(eq(projectAnnotations.id, annotationId));
-      // The embedding is rebuilt from the new searchable text (the mock encodes its length).
-      expect(afterServerEdit.searchEmbedding?.[0]).toBe(afterServerEdit.searchableContent!.length);
+      // The embedding is rebuilt from the new searchable text.
+      expect(afterServerEdit.searchEmbedding).toEqual(embedFor(afterServerEdit.searchableContent!));
 
       // Host-AI edit path: no ScholarMark embedding call, and the stale embedding is dropped.
       getEmbeddingWithUsage.mockClear();
@@ -438,9 +457,27 @@ describe("project search retrieval", () => {
       expect(passage).toBeTruthy();
       expect(passage.documentId).toBe(projectDocumentId);
       expect(passage.documentFilename).toContain("Harbor records");
-      expect(passage.matchedText).toContain("rationed whale oil");
-      expect(passage.startPosition).toBe(SOURCE_TEXT.indexOf("rationed whale oil"));
       expect(passage.relevanceLevel).toBe("high");
+      // matchedText is the source verbatim at [startPosition, endPosition): spacing kept,
+      // no ellipses, and it covers the match.
+      expect(passage.matchedText).toBe(
+        SOURCE_TEXT.slice(passage.startPosition, passage.endPosition),
+      );
+      expect(passage.matchedText).toContain(WHALE_OIL);
+      expect(passage.matchedText).toContain("\n\nA later ledger");
+      expect(passage.matchedText).not.toContain("…");
+      expect(passage.matchedText).toBe(passage.matchedText.trim());
+      const located = parseToolJson(
+        (await client.callTool({
+          name: "find_quote_in_source",
+          arguments: { project_document_id: projectDocumentId, quote: passage.matchedText },
+        })) as ToolResult,
+      );
+      expect(located.match).toMatchObject({
+        startPosition: passage.startPosition,
+        endPosition: passage.endPosition,
+        matchType: "exact",
+      });
 
       // Word-level matches work across the passage too.
       expect((await projectSearch("lighthouse winter")).some((r) => r.type === "source_text")).toBe(
@@ -448,22 +485,18 @@ describe("project search retrieval", () => {
       );
 
       // An annotated passage is reported once, as the annotation with the user's note.
-      const tariffHits = await projectSearch("cargo weights");
-      expect(tariffHits.filter((r) => r.type === "annotation")).toHaveLength(1);
-      expect(
-        tariffHits.filter(
-          (r) =>
-            r.type === "source_text" && r.startPosition === SOURCE_TEXT.indexOf("cargo weights"),
-        ),
-      ).toEqual([]);
+      const cargoHits = await projectSearch("cargo weights");
+      expect(cargoHits.filter((r) => r.type === "annotation")).toHaveLength(1);
+      expect(cargoHits.filter((r) => r.type === "source_text")).toEqual([]);
 
       // The annotated occurrence is skipped, and the later unannotated one is still returned.
       const tariffPassages = (await projectSearch("tariffs")).filter(
         (r) => r.type === "source_text",
       );
-      expect(tariffPassages.map((r) => r.startPosition)).toEqual([
-        SOURCE_TEXT.lastIndexOf("tariffs"),
-      ]);
+      expect(tariffPassages).toHaveLength(1);
+      const lastTariffs = SOURCE_TEXT.lastIndexOf("tariffs");
+      expect(tariffPassages[0].startPosition).toBeLessThanOrEqual(lastTariffs);
+      expect(tariffPassages[0].endPosition).toBe(SOURCE_TEXT.length);
 
       const globalHits = parseToolJson(
         (await client.callTool({
@@ -474,10 +507,24 @@ describe("project search retrieval", () => {
       expect(globalHits.results).toEqual([
         expect.objectContaining({
           id: `source:${projectDocumentId}`,
-          text: expect.stringContaining("rationed whale oil"),
+          text: expect.stringContaining(WHALE_OIL),
         }),
       ]);
       await client.close();
+
+      // The web workspace's request does not opt in, so its results are unchanged.
+      expect(
+        (await search(server.baseUrl, token, projectId, "rationed whale oil")).filter(
+          (r) => r.type === "source_text",
+        ),
+      ).toEqual([]);
+      expect(
+        (
+          await search(server.baseUrl, token, projectId, "rationed whale oil", {
+            includeSourceText: "true",
+          })
+        ).filter((r) => r.type === "source_text"),
+      ).toEqual([]);
 
       // Isolation: the other user's identical source never appears, and their project is closed.
       expect(JSON.stringify(passageHits)).not.toContain(other.projectDocumentId);
@@ -490,6 +537,153 @@ describe("project search retrieval", () => {
 
       expect(getEmbeddingWithUsage).not.toHaveBeenCalled();
       expect(generateDocumentSummary).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  }, 30_000);
+
+  async function createAnnotation(baseUrl: string, token: string, projectDocumentId: string) {
+    const startPosition = SOURCE_TEXT.indexOf(ANNOTATED_QUOTE);
+    const created = await requestJson<{ id: string }>(
+      baseUrl,
+      `/api/project-documents/${projectDocumentId}/annotations`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: {
+          startPosition,
+          endPosition: startPosition + ANNOTATED_QUOTE.length,
+          highlightedText: ANNOTATED_QUOTE,
+          category: "evidence",
+          note: "zephyrine shipping ledger",
+          isAiGenerated: false,
+        },
+      },
+    );
+    expect(created.status).toBe(201);
+    return created.body!.id;
+  }
+
+  async function readAnnotation(db: any, annotationId: string) {
+    const { projectAnnotations } = await import("../../shared/schema");
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db
+      .select()
+      .from(projectAnnotations)
+      .where(eq(projectAnnotations.id, annotationId));
+    return row;
+  }
+
+  it("keeps fields, index, and embedding consistent under overlapping partial edits", async () => {
+    const { db, server, token } = await createBackend();
+    try {
+      const { projectId, projectDocumentId } = await seedProject(server.baseUrl, token, "Harbor");
+      const annotationId = await createAnnotation(server.baseUrl, token, projectDocumentId);
+
+      // The note edit's embedding is slow and the category edit's is fast, so both requests
+      // are in flight together and finish in the opposite order they started.
+      getEmbeddingWithUsage.mockImplementation(async (text: string) => {
+        await new Promise((done) => setTimeout(done, text.includes("[evidence]") ? 300 : 20));
+        return embedFor(text);
+      });
+      const put = (body: Record<string, unknown>) =>
+        requestJson<any>(server.baseUrl, `/api/project-annotations/${annotationId}`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}` },
+          body,
+        });
+      const noteEdit = put({ note: "quillmont customs tariffs" });
+      await new Promise((done) => setTimeout(done, 50));
+      const categoryEdit = put({ category: "methodology" });
+      const [noteResponse, categoryResponse] = await Promise.all([noteEdit, categoryEdit]);
+      expect(noteResponse.status).toBe(200);
+      expect(categoryResponse.status).toBe(200);
+      // The later edit merged onto the earlier one instead of the original row.
+      expect(categoryResponse.body).toMatchObject({
+        note: "quillmont customs tariffs",
+        category: "methodology",
+      });
+
+      const row = await readAnnotation(db, annotationId);
+      expect(row).toMatchObject({ note: "quillmont customs tariffs", category: "methodology" });
+      const expected = `[methodology] ${ANNOTATED_QUOTE} quillmont customs tariffs`;
+      expect(row.searchableContent).toBe(expected);
+      // The slower embedding of the superseded text was dropped, not written over this one.
+      expect(row.searchEmbedding).toEqual(embedFor(expected));
+
+      // A late index write from an earlier state (an analysis run's background indexer, say)
+      // is dropped instead of overwriting the edit.
+      const { projectStorage } = await import("../../server/projectStorage");
+      const staleText = `[evidence] ${ANNOTATED_QUOTE} zephyrine shipping ledger`;
+      expect(
+        await projectStorage.writeProjectAnnotationSearchIndex(annotationId, {
+          searchableContent: staleText,
+          searchEmbedding: embedFor(staleText),
+        }),
+      ).toBe(false);
+      expect(await readAnnotation(db, annotationId)).toMatchObject({
+        searchableContent: expected,
+        searchEmbedding: embedFor(expected),
+      });
+      expect(
+        (await search(server.baseUrl, token, projectId, "zephyrine")).filter(
+          (r) => r.type === "annotation",
+        ),
+      ).toEqual([]);
+    } finally {
+      getEmbeddingWithUsage.mockImplementation(async (text: string) => embedFor(text));
+      await server.close();
+    }
+  }, 30_000);
+
+  it("ignores a stale index left by edits made before re-indexing existed", async () => {
+    const { db, server, token } = await createBackend();
+    try {
+      const { projectId, projectDocumentId } = await seedProject(server.baseUrl, token, "Harbor");
+      const annotationId = await createAnnotation(server.baseUrl, token, projectDocumentId);
+      const oldText = `[evidence] ${ANNOTATED_QUOTE} zephyrine shipping ledger`;
+
+      // What an edit through the old route left behind: new note and category, old index.
+      const { projectAnnotations } = await import("../../shared/schema");
+      const { eq } = await import("drizzle-orm");
+      await db
+        .update(projectAnnotations)
+        .set({ note: "quillmont customs tariffs", category: "argument" })
+        .where(eq(projectAnnotations.id, annotationId));
+      const stale = await readAnnotation(db, annotationId);
+      expect(stale.searchableContent).toBe(oldText);
+      expect(stale.searchEmbedding).toEqual(embedFor(oldText));
+
+      expect(
+        (await search(server.baseUrl, token, projectId, "zephyrine")).filter(
+          (r) => r.type === "annotation",
+        ),
+      ).toEqual([]);
+      const current = (await search(server.baseUrl, token, projectId, "quillmont")).find(
+        (r) => r.annotationId === annotationId,
+      );
+      expect(current).toMatchObject({
+        note: "quillmont customs tariffs",
+        category: "argument",
+        matchedText: `[argument] ${ANNOTATED_QUOTE} quillmont customs tariffs`,
+      });
+      // The category tag stays searchable.
+      expect(
+        (await search(server.baseUrl, token, projectId, "[argument]")).map((r) => r.annotationId),
+      ).toContain(annotationId);
+
+      // Chat retrieval stops trusting the embedding of the old text and falls back to the
+      // current note and highlight.
+      const { scoreAnnotationForQuery } = await import("../../server/chat/toolRequests");
+      const queryEmbedding = embedFor(oldText);
+      expect(scoreAnnotationForQuery(stale, ["zephyrine"], queryEmbedding)).toBe(0);
+      expect(scoreAnnotationForQuery(stale, ["quillmont"], queryEmbedding)).toBeGreaterThan(0);
+      const fresh = {
+        ...stale,
+        searchableContent: `[argument] ${ANNOTATED_QUOTE} quillmont customs tariffs`,
+      };
+      fresh.searchEmbedding = queryEmbedding;
+      expect(scoreAnnotationForQuery(fresh, ["anything"], queryEmbedding)).toBeCloseTo(1);
     } finally {
       await server.close();
     }

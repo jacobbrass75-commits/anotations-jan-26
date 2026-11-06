@@ -504,7 +504,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
                 validated.note || null,
                 validated.category,
               );
-          await projectStorage.updateProjectAnnotation(annotation.id, searchIndex);
+          await projectStorage.writeProjectAnnotationSearchIndex(annotation.id, searchIndex);
         } catch (indexError) {
           logger.warn({ err: indexError }, "Search indexing failed (non-blocking):");
         }
@@ -551,28 +551,21 @@ export function registerProjectDocumentRoutes(app: Express): void {
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid annotation update" });
       }
-      const edits = parsed.data;
-      const note = edits.note !== undefined ? edits.note : annotation.note;
-      const category = edits.category ?? annotation.category;
 
-      // Rebuild the search index from the edited fields in the same write, so project
-      // search never matches the old note or category. Host-AI requests store text only
-      // and drop the old embedding rather than keep one that describes the old note.
-      const searchIndex = isHostAiRequest(req)
-        ? {
-            searchableContent: await generateSearchableContent(
-              annotation.highlightedText,
-              note,
-              category,
-            ),
-          }
-        : await buildAnnotationSearchIndex(annotation.highlightedText, note, category);
-
-      const updated = await projectStorage.updateProjectAnnotation(req.params.id, {
-        ...edits,
-        searchableContent: searchIndex.searchableContent,
-        searchEmbedding: searchIndex.searchEmbedding ?? null,
-      });
+      // The edit and its keyword index are written together, so project search never
+      // matches the old note or category. Server-AI requests then embed the new text;
+      // host-AI requests leave the embedding empty and make no ScholarMark AI call.
+      let updated = await projectStorage.editProjectAnnotation(req.params.id, parsed.data);
+      if (updated && !isHostAiRequest(req)) {
+        const searchIndex = await buildAnnotationSearchIndex(
+          updated.highlightedText,
+          updated.note,
+          updated.category,
+        );
+        if (await projectStorage.writeProjectAnnotationSearchIndex(updated.id, searchIndex)) {
+          updated = await projectStorage.getProjectAnnotation(updated.id);
+        }
+      }
       if (!updated) {
         return res.status(404).json({ error: "Annotation not found" });
       }

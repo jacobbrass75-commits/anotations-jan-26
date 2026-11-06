@@ -414,7 +414,7 @@ describe("MCP host-AI tool inventory", () => {
         project_id: project.id,
         query: "mentoring",
       });
-      // Matches project context, summaries, and annotations; it does not scan full source text.
+      // Matches project context, summaries, annotations, and unannotated source passages.
       expect(JSON.stringify(projectHits.results)).toMatch(/mentoring caused it/i);
 
       const searchResponse = await call("search", { query: "mentoring" });
