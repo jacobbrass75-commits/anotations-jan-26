@@ -17,6 +17,7 @@ Run from `marketing/` (Node 22.22 or newer):
 | `npm run dev`         | Local dev server                                                   |
 | `npm run build`       | Static build into `dist/`                                          |
 | `npm run check`       | `astro check` (types, content schema, templates)                   |
+| `npm test`            | Unit tests for the attribution helpers (Node's built-in runner)    |
 | `npm run verify`      | Build the fixture matrix and check routes, links, SEO and copy     |
 | `npm run verify:dist` | Check an existing `dist/` built from the real guides               |
 
@@ -51,8 +52,13 @@ Signup CTAs go to the same URL the current landing page uses:
 `https://app.scholarmark.ai/sign-up?redirect_url=/pricing?onboarding=1&source=summer`.
 
 `src/scripts/attribution.ts` copies `utm_*` and `fbclid` from the landing URL onto signup
-links (kept in `sessionStorage` for the visit), and adds `embedded_auth=1` in Instagram and
-Facebook in-app browsers, matching `buildAttributedSignupUrl` in the app. The marketing site
+links and links to the app pricing page (kept in `sessionStorage` for the visit), and adds
+`embedded_auth=1` to signup links in Instagram and Facebook in-app browsers, matching
+`buildAttributedSignupUrl` in the app. Pricing links need the campaign too: the app reads
+attribution from the URL of the first app page it sees, so a visitor who went to pricing
+first would otherwise reach the app, and sign up from there, with no campaign. Sign-in,
+legal and support links are left alone. The pure helpers live in `attributionCore.ts` and are
+covered by `npm test`. The marketing site
 itself loads no analytics, pixels or third-party resources (fonts are self-hosted), sets no
 cookies, and its client script sends nothing anywhere, so it needs no consent banner. The app's consent-gated Meta measurement
 takes over after signup.
@@ -111,5 +117,6 @@ src/
   pages/                  index, guides/, guides/[slug]/, 404, robots.txt, sitemap.xml
   styles/global.css       design tokens and shared primitives
 scripts/verify.mjs        route and link verification
+tests/attribution.test.ts unit tests for signup and pricing attribution
 tests/fixtures/           fixture guides used only by `npm run verify`
 ```
