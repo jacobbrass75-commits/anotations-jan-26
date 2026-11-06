@@ -89,6 +89,47 @@ const HOST_TOOLS = [
   "fetch",
 ];
 
+// Expected safety annotations, checked against the handlers: reads only GET or run read-only
+// searches, writes only add rows, and destructive tools overwrite or delete saved data. Every
+// tool reaches only the signed-in user's own ScholarMark account, so none is open-world.
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+const WRITES = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+const DESTRUCTIVE = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+const HOST_TOOL_ANNOTATIONS: Record<string, Record<string, boolean>> = {
+  get_projects: READ_ONLY,
+  create_project: WRITES,
+  get_source_library: READ_ONLY,
+  get_project_sources: READ_ONLY,
+  search_project_sources: READ_ONLY,
+  add_source_to_project: WRITES,
+  upload_text_to_project: WRITES,
+  upload_file_to_project: WRITES,
+  get_source_status: READ_ONLY,
+  get_source_summary: READ_ONLY,
+  get_source_annotations: READ_ONLY,
+  find_quote_in_source: READ_ONLY,
+  get_web_clips: READ_ONLY,
+  save_source: WRITES,
+  read_source_text: READ_ONLY,
+  save_source_summary: DESTRUCTIVE,
+  save_annotations: WRITES,
+  update_annotation: DESTRUCTIVE,
+  delete_annotation: DESTRUCTIVE,
+  save_citation: DESTRUCTIVE,
+  search: READ_ONLY,
+  fetch: READ_ONLY,
+};
+
 type ToolResult = {
   content: Array<{ type: string; text?: string }>;
   isError?: boolean;
@@ -291,6 +332,19 @@ describe("MCP host-AI tool inventory", () => {
       expect(tools.map((tool: { name: string }) => tool.name).sort()).toEqual(
         [...HOST_TOOLS].sort(),
       );
+      expect(Object.keys(HOST_TOOL_ANNOTATIONS).sort()).toEqual([...HOST_TOOLS].sort());
+      // tools/list as the SDK serves it: OpenAI requires all three hints as explicit booleans.
+      for (const tool of tools as Array<{
+        name: string;
+        title?: string;
+        annotations?: Record<string, unknown>;
+      }>) {
+        expect(tool.title, tool.name).toBeTruthy();
+        for (const hint of ["readOnlyHint", "destructiveHint", "openWorldHint"]) {
+          expect(tool.annotations?.[hint], `${tool.name}.${hint}`).toBeTypeOf("boolean");
+        }
+        expect(tool.annotations, tool.name).toEqual(HOST_TOOL_ANNOTATIONS[tool.name]);
+      }
 
       // Projects
       const project = await callJson("create_project", {
