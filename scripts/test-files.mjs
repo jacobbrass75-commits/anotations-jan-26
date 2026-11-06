@@ -31,6 +31,7 @@ export const testFiles = [
   "tests/server/staticHeaders.test.ts",
   "tests/server/paidInstagramEntry.integration.test.ts",
   "tests/server/marketingSite.integration.test.ts",
+  "tests/server/indexNowSubmit.test.ts",
   "tests/server/stripeBillingRoutes.integration.test.ts",
   "tests/server/paypalBillingRoutes.integration.test.ts",
   "tests/server/imageRoutes.test.ts",

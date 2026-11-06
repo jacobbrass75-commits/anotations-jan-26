@@ -14,6 +14,9 @@ import {
 } from "../../server/static";
 import { startHttpServer } from "./helpers/http";
 
+// Test-only value; production keys are generated on the server and never committed.
+const INDEXNOW_KEY = "0123456789abcdef0123456789abcdef";
+
 let fixtureRoot: string;
 let productionDist: string;
 let previewDist: string;
@@ -126,7 +129,7 @@ describe("Astro marketing site on the marketing host", () => {
     vi.unstubAllEnvs();
   });
 
-  async function startApp(distPath = productionDist) {
+  async function startApp(distPath = productionDist, indexNowKey?: string) {
     const app = express();
     app.set("trust proxy", true);
     app.use(canonicalRequest);
@@ -135,6 +138,7 @@ describe("Astro marketing site on the marketing host", () => {
       distPath,
       spaPublicPath: spaPublic,
       previewHosts: ["preview.internal"],
+      indexNowKey,
     });
     if (site) app.use(site.middleware);
     app.use(express.static(spaPublic, { index: false }));
@@ -427,6 +431,65 @@ describe("Astro marketing site on the marketing host", () => {
       expect(xml).not.toContain("<loc>");
     } finally {
       await server.close();
+    }
+  });
+
+  it("serves the IndexNow key file on the exact canonical host only", async () => {
+    const server = await startApp(productionDist, ` ${INDEXNOW_KEY}\n`);
+    try {
+      const keyPath = `/${INDEXNOW_KEY}.txt`;
+      const keyFile = await request(server.baseUrl, keyPath);
+      expect(keyFile.status).toBe(200);
+      expect(keyFile.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(keyFile.headers.get("x-robots-tag")).toBe("noindex");
+      expect(keyFile.headers.get("cache-control")).toBe("no-cache");
+      expect(await keyFile.text()).toBe(INDEXNOW_KEY);
+
+      const head = await request(server.baseUrl, keyPath, { method: "HEAD" });
+      expect(head.status).toBe(200);
+      expect(head.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+
+      const www = await request(server.baseUrl, keyPath, { host: "www.scholarmark.ai" });
+      expect(www.status).toBe(308);
+      expect(www.headers.get("location")).toBe(`https://scholarmark.ai${keyPath}`);
+
+      for (const host of ["app.scholarmark.ai", "preview.internal"]) {
+        const other = await request(server.baseUrl, keyPath, { host });
+        expect(await other.text()).toBe(`spa:GET:${keyPath}`);
+      }
+      for (const otherPath of [
+        "/0123456789abcdef0123456789abcde0.txt",
+        `/${INDEXNOW_KEY}.TXT`,
+        `/${INDEXNOW_KEY}.txt/`,
+        `/guides/${INDEXNOW_KEY}.txt`,
+      ]) {
+        const other = await request(server.baseUrl, otherPath);
+        expect(await other.text()).not.toBe(INDEXNOW_KEY);
+      }
+      const post = await request(server.baseUrl, keyPath, { method: "POST" });
+      expect(await post.text()).toBe(`spa:POST:${keyPath}`);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("serves no IndexNow key file by default, for invalid keys, or for a non-indexable release", async () => {
+    const cases: Array<[string, string | undefined, string]> = [
+      [productionDist, undefined, INDEXNOW_KEY],
+      [productionDist, "", INDEXNOW_KEY],
+      [productionDist, INDEXNOW_KEY.toUpperCase(), INDEXNOW_KEY.toUpperCase()],
+      [productionDist, "short-key", "short-key"],
+      [productionDist, `${INDEXNOW_KEY}0`, `${INDEXNOW_KEY}0`],
+      [previewDist, INDEXNOW_KEY, INDEXNOW_KEY],
+    ];
+    for (const [distPath, configured, requested] of cases) {
+      const server = await startApp(distPath, configured);
+      try {
+        const response = await request(server.baseUrl, `/${requested}.txt`);
+        expect(await response.text()).toBe(`spa:GET:/${requested}.txt`);
+      } finally {
+        await server.close();
+      }
     }
   });
 

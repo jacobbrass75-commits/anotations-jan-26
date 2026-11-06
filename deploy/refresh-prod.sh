@@ -45,6 +45,14 @@ app_pm2() {
   fi
 }
 
+run_as_app_user() {
+  if [[ "$(id -un)" == "$APP_PM2_USER" ]]; then
+    "$@"
+  else
+    sudo -H -u "$APP_PM2_USER" env PATH="$PATH" "$@"
+  fi
+}
+
 ensure_app_data_writable() {
   mkdir -p "$APP_DIR/data/uploads"
 
@@ -131,3 +139,12 @@ node "$APP_DIR/scripts/smoke-prod.mjs"
 echo "[deploy] saving PM2 process list"
 app_pm2 save
 pm2 save
+
+# Opt-in (INDEXNOW_SUBMIT_ON_DEPLOY=true in .env), only after every deploy step above succeeded.
+# It reads .env itself, validates the live site, and sends only new or changed public pages.
+# A failure here is reported but does not fail an already-successful deploy.
+echo "[deploy] IndexNow notification (opt-in)"
+if ! run_as_app_user node "$APP_DIR/scripts/indexnow-submit.mjs" --deploy-hook; then
+  echo "[deploy] WARNING: IndexNow notification failed; the site deploy itself succeeded." >&2
+  echo "[deploy] Retry after fixing the cause: cd $APP_DIR && npm run indexnow -- --submit" >&2
+fi
