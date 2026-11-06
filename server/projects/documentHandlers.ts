@@ -25,12 +25,22 @@ import {
   citationDataSchema,
   batchAddDocumentsRequestSchema,
   projectDocuments,
+  annotationCategories,
   type BatchAddDocumentResult,
   type BatchAddDocumentsResponse,
 } from "@shared/schema";
 import { createLogger } from "../logger";
+import { z } from "zod";
 
 const logger = createLogger("projects/documentHandlers");
+
+// The only fields a user may change on a saved project annotation. Anything else in the
+// body (projectDocumentId, positions, search index columns) is dropped, so an edit cannot
+// move an annotation into another project document or overwrite its search index.
+const projectAnnotationEditSchema = z.object({
+  note: z.string().nullable().optional(),
+  category: z.enum(annotationCategories).optional(),
+});
 
 /** Verify the project belongs to the requesting user. Returns the project or sends 403/404. */
 export async function verifyProjectOwnership(req: Request, res: Response, projectId: string) {
@@ -537,7 +547,32 @@ export function registerProjectDocumentRoutes(app: Express): void {
       );
       if (!projectDoc) return;
 
-      const updated = await projectStorage.updateProjectAnnotation(req.params.id, req.body);
+      const parsed = projectAnnotationEditSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid annotation update" });
+      }
+      const edits = parsed.data;
+      const note = edits.note !== undefined ? edits.note : annotation.note;
+      const category = edits.category ?? annotation.category;
+
+      // Rebuild the search index from the edited fields in the same write, so project
+      // search never matches the old note or category. Host-AI requests store text only
+      // and drop the old embedding rather than keep one that describes the old note.
+      const searchIndex = isHostAiRequest(req)
+        ? {
+            searchableContent: await generateSearchableContent(
+              annotation.highlightedText,
+              note,
+              category,
+            ),
+          }
+        : await buildAnnotationSearchIndex(annotation.highlightedText, note, category);
+
+      const updated = await projectStorage.updateProjectAnnotation(req.params.id, {
+        ...edits,
+        searchableContent: searchIndex.searchableContent,
+        searchEmbedding: searchIndex.searchEmbedding ?? null,
+      });
       if (!updated) {
         return res.status(404).json({ error: "Annotation not found" });
       }

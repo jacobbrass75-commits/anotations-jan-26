@@ -83,7 +83,7 @@ export interface IProjectStorage {
   updateProjectAnnotation(
     id: string,
     data: Partial<
-      InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] }
+      InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] | null }
     >,
   ): Promise<ProjectAnnotation | undefined>;
   deleteProjectAnnotation(id: string): Promise<void>;
@@ -289,7 +289,7 @@ export const projectStorage: IProjectStorage = {
   async updateProjectAnnotation(
     id: string,
     data: Partial<
-      InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] }
+      InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] | null }
     >,
   ): Promise<ProjectAnnotation | undefined> {
     const { category, ...rest } = data;
