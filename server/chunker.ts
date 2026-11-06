@@ -73,6 +73,16 @@ function findSentenceEnd(text: string, targetLength: number): number {
   return bestPos;
 }
 
+/**
+ * Canonicalize line breaks to LF and change nothing else: spacing, tabs, and leading or
+ * trailing whitespace are kept. Multipart form fields always carry line breaks as CRLF on
+ * the wire, so LF is the only line-break form a pasted-text field can round-trip exactly.
+ */
+export function normalizeLineEndings(content: string): string {
+  return content.replace(/\r\n?/g, "\n");
+}
+
+/** Legacy cleanup for uploaded .txt files and web pastes: also collapses spaces and trims. */
 export function extractTextFromTxt(content: string): string {
   // Clean up the text, normalize whitespace
   return content

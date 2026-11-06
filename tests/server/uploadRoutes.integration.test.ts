@@ -319,6 +319,73 @@ describe("upload route hardening", () => {
     }
   });
 
+  it("keeps legacy paste cleanup by default and stores verbatim text when asked", async () => {
+    const { server, token, sqlite } = await createUploadApp();
+    const rawText = "\n  First  line\twith spacing.\r\nSecond line of pasted text.\n\n";
+    const upload = async (fields: Record<string, string>) => {
+      const form = new FormData();
+      for (const [key, value] of Object.entries(fields)) form.append(key, value);
+      const response = await fetch(`${server.baseUrl}/api/upload-text`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    const readSource = async (id: string) => {
+      const response = await fetch(`${server.baseUrl}/api/documents/${id}/source`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.status).toBe(200);
+      return Buffer.from(await response.arrayBuffer()).toString("utf8");
+    };
+
+    try {
+      // Legacy (web paste box): whitespace is cleaned up and trimmed, as before.
+      const legacy = await upload({ title: "Legacy", text: rawText });
+      expect(legacy.status).toBe(200);
+      expect(legacy.body.fullText).toBe("First line with spacing.\nSecond line of pasted text.");
+
+      // Verbatim (MCP): only line breaks change, to LF; the attachment matches the stored text.
+      const verbatim = await upload({ title: "Verbatim", text: rawText, verbatim: "true" });
+      expect(verbatim.status).toBe(200);
+      const expected = "\n  First  line\twith spacing.\nSecond line of pasted text.\n\n";
+      expect(verbatim.body.fullText).toBe(expected);
+      expect(await readSource(verbatim.body.id)).toBe(expected);
+      const chunks = sqlite
+        .prepare("SELECT text, start_position FROM text_chunks WHERE document_id = ?")
+        .all(verbatim.body.id) as Array<{ text: string; start_position: number }>;
+      expect(chunks.length).toBeGreaterThan(0);
+      for (const chunk of chunks) {
+        expect(expected.slice(chunk.start_position, chunk.start_position + chunk.text.length)).toBe(
+          chunk.text,
+        );
+      }
+
+      // Existing thresholds still apply to verbatim text, measured after cleanup.
+      for (const text of ["", " \n\t\r\n ", "  too short\n\n"]) {
+        const rejected = await upload({ text, verbatim: "true" });
+        expect(rejected.status, JSON.stringify(text)).toBe(400);
+        expect(rejected.body.message).toContain("at least a few sentences");
+      }
+
+      // Storage is charged for the bytes actually saved for each source. A legacy paste keeps
+      // the raw field, which multipart encoding delivers with CRLF line breaks.
+      const legacyRaw = rawText.replace(/\r?\n/g, "\r\n");
+      expect(await readSource(legacy.body.id)).toBe(legacyRaw);
+      const { storage_used } = sqlite
+        .prepare("SELECT storage_used FROM users WHERE id = ?")
+        .get("upload-user") as { storage_used: number };
+      expect(storage_used).toBe(Buffer.byteLength(legacyRaw) + Buffer.byteLength(expected));
+      const count = sqlite
+        .prepare("SELECT COUNT(*) AS n FROM documents WHERE user_id = ?")
+        .get("upload-user") as { n: number };
+      expect(count.n).toBe(2);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("deletes an owned source, project links, saved file, and storage usage", async () => {
     const { server, token, sqlite } = await createUploadApp();
     const form = new FormData();

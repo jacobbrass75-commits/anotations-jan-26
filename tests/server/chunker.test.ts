@@ -1,4 +1,4 @@
-import { chunkText, extractTextFromTxt } from "../../server/chunker";
+import { chunkText, extractTextFromTxt, normalizeLineEndings } from "../../server/chunker";
 
 describe("chunker", () => {
   it("prefers ending the first chunk on a sentence boundary when one is nearby", () => {
@@ -17,5 +17,11 @@ describe("chunker", () => {
 
   it("normalizes plain-text document content", () => {
     expect(extractTextFromTxt("line 1\r\nline\t\t2  \rline  3")).toBe("line 1\nline 2 \nline 3");
+  });
+
+  it("canonicalizes only line breaks for verbatim text", () => {
+    expect(normalizeLineEndings("\n line 1\r\nline\t\t2  \rline  3\n\n")).toBe(
+      "\n line 1\nline\t\t2  \nline  3\n\n",
+    );
   });
 });
