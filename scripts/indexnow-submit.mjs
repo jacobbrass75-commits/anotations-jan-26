@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * IndexNow notification for the public marketing pages on https://scholarmark.ai.
  *

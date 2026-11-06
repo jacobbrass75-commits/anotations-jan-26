@@ -2,8 +2,10 @@ import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { INDEXNOW_KEY_PATTERN as SERVER_INDEXNOW_KEY_PATTERN } from "../../server/static";
 import {
   INDEXNOW_ENDPOINT,
+  INDEXNOW_KEY_PATTERN,
   isSubmittableUrl,
   pageFingerprint,
   parseRobotsGroups,
@@ -524,6 +526,26 @@ describe("indexnow robots.txt rules", () => {
     const bingOnly = "User-agent: *\nDisallow: /\n\nUser-agent: bingbot\nAllow: /\n";
     expect(robotsAllowsPath(rules(bingOnly), "/")).toBe(true);
     expect(robotsAllowsPath(robotsRulesFor(bingOnly, "*"), "/")).toBe(false);
+  });
+});
+
+describe("indexnow key rules", () => {
+  it("accepts the same keys as the server's key file route", () => {
+    expect(INDEXNOW_KEY_PATTERN.source).toBe(SERVER_INDEXNOW_KEY_PATTERN.source);
+    expect(INDEXNOW_KEY_PATTERN.test(KEY)).toBe(true);
+    expect(INDEXNOW_KEY_PATTERN.test(`${KEY}${KEY}`)).toBe(true);
+    expect(INDEXNOW_KEY_PATTERN.test(KEY.slice(1))).toBe(false);
+    expect(INDEXNOW_KEY_PATTERN.test(KEY.toUpperCase())).toBe(false);
+    expect(INDEXNOW_KEY_PATTERN.test(`${KEY.slice(1)}-`)).toBe(false);
+  });
+
+  it("has no shebang, which breaks Vitest collection on CRLF (Windows) checkouts", async () => {
+    // Always run as `node scripts/indexnow-submit.mjs`; tests import it as a module.
+    const source = await readFile(
+      new URL("../../scripts/indexnow-submit.mjs", import.meta.url),
+      "utf8",
+    );
+    expect(source.startsWith("#!")).toBe(false);
   });
 });
 

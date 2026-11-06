@@ -8,12 +8,10 @@ import { canonicalRequest } from "../../server/canonicalRequest";
 import { paidInstagramEntry } from "../../server/paidInstagramEntry";
 import {
   HTML_CACHE_CONTROL,
-  INDEXNOW_KEY_PATTERN,
   isMarketingSiteEnabled,
   loadMarketingSite,
   shouldServeMarketingRoot,
 } from "../../server/static";
-import { INDEXNOW_KEY_PATTERN as SCRIPT_INDEXNOW_KEY_PATTERN } from "../../scripts/indexnow-submit.mjs";
 import { startHttpServer } from "./helpers/http";
 
 // Test-only value; production keys are generated on the server and never committed.
@@ -516,15 +514,6 @@ describe("marketing site switches", () => {
     expect(isMarketingSiteEnabled({ SCHOLARMARK_MARKETING_SITE: "spa" })).toBe(false);
     expect(isMarketingSiteEnabled({ SCHOLARMARK_MARKETING_SITE: "true" })).toBe(false);
     expect(isMarketingSiteEnabled({ SCHOLARMARK_MARKETING_SITE: " Astro " })).toBe(true);
-  });
-
-  it("accepts the same IndexNow keys as the submit command", () => {
-    expect(INDEXNOW_KEY_PATTERN.source).toBe(SCRIPT_INDEXNOW_KEY_PATTERN.source);
-    expect(INDEXNOW_KEY_PATTERN.test(INDEXNOW_KEY)).toBe(true);
-    expect(INDEXNOW_KEY_PATTERN.test(`${INDEXNOW_KEY}${INDEXNOW_KEY}`)).toBe(true);
-    expect(INDEXNOW_KEY_PATTERN.test(INDEXNOW_KEY.slice(1))).toBe(false);
-    expect(INDEXNOW_KEY_PATTERN.test(INDEXNOW_KEY.toUpperCase())).toBe(false);
-    expect(INDEXNOW_KEY_PATTERN.test(`${INDEXNOW_KEY.slice(1)}-`)).toBe(false);
   });
 
   it("routes the root by query flags only", () => {
