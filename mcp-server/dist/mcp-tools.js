@@ -452,6 +452,10 @@ function describeBackendError(error) {
             return "Authentication failed. Please reconnect the ScholarMark connector.";
         }
         if (error.status === 403) {
+            const requiredScope = error.body && typeof error.body === "object" ? error.body.requiredScope : undefined;
+            if (typeof requiredScope === "string") {
+                return `This ScholarMark connection lacks "${requiredScope}" permission. Reconnect the ScholarMark connector and approve ${requiredScope} access.`;
+            }
             return "This feature requires a ScholarMark Pro plan.";
         }
         if (error.status === 404) {

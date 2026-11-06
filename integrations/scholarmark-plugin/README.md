@@ -95,9 +95,11 @@ Restart the ChatGPT desktop app and install from the local source. If the Schola
 
 **Behavior QA**: run the sample draft in `listing/review-fixtures/` in text-only and connected modes, and compare the results with `expected-results.md`. No `claude plugin eval` suite is included yet.
 
+**Tool QA (local)**: `npx vitest run tests/server/mcpToolInventory.integration.test.ts` calls all 22 host-mode tools through `mcp-server/server.mjs` against a temporary local backend with synthetic data, and checks readback, missing-data rejection, and read-only scope. It needs `npm ci` in both the repo root and `mcp-server/`. It doesn't stand in for a signed-in production check.
+
 ## Submit
 
-Neither submission has been made. See [`listing/LISTING.md`](listing/LISTING.md) for the owner actions that come first. The privacy policy update and the OpenAI domain-verification route are in the code and need a deploy before submission.
+Neither submission has been made. See [`listing/LISTING.md`](listing/LISTING.md) for the owner actions that come first. The privacy policy update is live, and the OpenAI domain-verification route is deployed and returns 404 until the token is set. The Claude directory draft is saved and waits on publisher terms. OpenAI still needs private test credentials, the domain token, the reviewer login, and the demo video.
 
 - **ChatGPT and Codex**: upload `dist/scholarmark-openai-<version>.zip` in the OpenAI Platform dashboard's Plugins page, connect the MCP server (OAuth with DCR, read from `mcp.json`), complete domain verification, enter reviewer credentials, and submit. Guide: https://developers.openai.com/plugins/deploy/submission
 - **ChatGPT skills-only (text-only audit)**: upload `dist/scholarmark-citation-audit-<version>.zip` as a separate plugin. No MCP connection, review cases, or demo recording are needed. Guide: https://developers.openai.com/plugins/deploy/submission
