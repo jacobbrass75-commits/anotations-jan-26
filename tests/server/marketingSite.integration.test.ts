@@ -8,11 +8,16 @@ import { canonicalRequest } from "../../server/canonicalRequest";
 import { paidInstagramEntry } from "../../server/paidInstagramEntry";
 import {
   HTML_CACHE_CONTROL,
+  INDEXNOW_KEY_PATTERN,
   isMarketingSiteEnabled,
   loadMarketingSite,
   shouldServeMarketingRoot,
 } from "../../server/static";
+import { INDEXNOW_KEY_PATTERN as SCRIPT_INDEXNOW_KEY_PATTERN } from "../../scripts/indexnow-submit.mjs";
 import { startHttpServer } from "./helpers/http";
+
+// Test-only value; production keys are generated on the server and never committed.
+const INDEXNOW_KEY = "0123456789abcdef0123456789abcdef";
 
 let fixtureRoot: string;
 let productionDist: string;
@@ -126,7 +131,7 @@ describe("Astro marketing site on the marketing host", () => {
     vi.unstubAllEnvs();
   });
 
-  async function startApp(distPath = productionDist) {
+  async function startApp(distPath = productionDist, indexNowKey?: string) {
     const app = express();
     app.set("trust proxy", true);
     app.use(canonicalRequest);
@@ -135,6 +140,7 @@ describe("Astro marketing site on the marketing host", () => {
       distPath,
       spaPublicPath: spaPublic,
       previewHosts: ["preview.internal"],
+      indexNowKey,
     });
     if (site) app.use(site.middleware);
     app.use(express.static(spaPublic, { index: false }));
@@ -430,6 +436,65 @@ describe("Astro marketing site on the marketing host", () => {
     }
   });
 
+  it("serves the IndexNow key file on the exact canonical host only", async () => {
+    const server = await startApp(productionDist, ` ${INDEXNOW_KEY}\n`);
+    try {
+      const keyPath = `/${INDEXNOW_KEY}.txt`;
+      const keyFile = await request(server.baseUrl, keyPath);
+      expect(keyFile.status).toBe(200);
+      expect(keyFile.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(keyFile.headers.get("x-robots-tag")).toBe("noindex");
+      expect(keyFile.headers.get("cache-control")).toBe("no-cache");
+      expect(await keyFile.text()).toBe(INDEXNOW_KEY);
+
+      const head = await request(server.baseUrl, keyPath, { method: "HEAD" });
+      expect(head.status).toBe(200);
+      expect(head.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+
+      const www = await request(server.baseUrl, keyPath, { host: "www.scholarmark.ai" });
+      expect(www.status).toBe(308);
+      expect(www.headers.get("location")).toBe(`https://scholarmark.ai${keyPath}`);
+
+      for (const host of ["app.scholarmark.ai", "preview.internal"]) {
+        const other = await request(server.baseUrl, keyPath, { host });
+        expect(await other.text()).toBe(`spa:GET:${keyPath}`);
+      }
+      for (const otherPath of [
+        "/0123456789abcdef0123456789abcde0.txt",
+        `/${INDEXNOW_KEY}.TXT`,
+        `/${INDEXNOW_KEY}.txt/`,
+        `/guides/${INDEXNOW_KEY}.txt`,
+      ]) {
+        const other = await request(server.baseUrl, otherPath);
+        expect(await other.text()).not.toBe(INDEXNOW_KEY);
+      }
+      const post = await request(server.baseUrl, keyPath, { method: "POST" });
+      expect(await post.text()).toBe(`spa:POST:${keyPath}`);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("serves no IndexNow key file by default, for invalid keys, or for a non-indexable release", async () => {
+    const cases: Array<[string, string | undefined, string]> = [
+      [productionDist, undefined, INDEXNOW_KEY],
+      [productionDist, "", INDEXNOW_KEY],
+      [productionDist, INDEXNOW_KEY.toUpperCase(), INDEXNOW_KEY.toUpperCase()],
+      [productionDist, "short-key", "short-key"],
+      [productionDist, `${INDEXNOW_KEY}0`, `${INDEXNOW_KEY}0`],
+      [previewDist, INDEXNOW_KEY, INDEXNOW_KEY],
+    ];
+    for (const [distPath, configured, requested] of cases) {
+      const server = await startApp(distPath, configured);
+      try {
+        const response = await request(server.baseUrl, `/${requested}.txt`);
+        expect(await response.text()).toBe(`spa:GET:/${requested}.txt`);
+      } finally {
+        await server.close();
+      }
+    }
+  });
+
   it("falls back to the SPA root when the marketing build is missing", async () => {
     const missing = path.join(fixtureRoot, "missing");
     expect(loadMarketingSite({ distPath: missing, spaPublicPath: spaPublic })).toBeNull();
@@ -451,6 +516,15 @@ describe("marketing site switches", () => {
     expect(isMarketingSiteEnabled({ SCHOLARMARK_MARKETING_SITE: "spa" })).toBe(false);
     expect(isMarketingSiteEnabled({ SCHOLARMARK_MARKETING_SITE: "true" })).toBe(false);
     expect(isMarketingSiteEnabled({ SCHOLARMARK_MARKETING_SITE: " Astro " })).toBe(true);
+  });
+
+  it("accepts the same IndexNow keys as the submit command", () => {
+    expect(INDEXNOW_KEY_PATTERN.source).toBe(SCRIPT_INDEXNOW_KEY_PATTERN.source);
+    expect(INDEXNOW_KEY_PATTERN.test(INDEXNOW_KEY)).toBe(true);
+    expect(INDEXNOW_KEY_PATTERN.test(`${INDEXNOW_KEY}${INDEXNOW_KEY}`)).toBe(true);
+    expect(INDEXNOW_KEY_PATTERN.test(INDEXNOW_KEY.slice(1))).toBe(false);
+    expect(INDEXNOW_KEY_PATTERN.test(INDEXNOW_KEY.toUpperCase())).toBe(false);
+    expect(INDEXNOW_KEY_PATTERN.test(`${INDEXNOW_KEY.slice(1)}-`)).toBe(false);
   });
 
   it("routes the root by query flags only", () => {

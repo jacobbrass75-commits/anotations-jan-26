@@ -11,6 +11,8 @@ exactly as before.
 | `SCHOLARMARK_MARKETING_SITE`          | `astro` enables, anything else (default `spa`) disables                                      | `scripts/build.ts`, server startup, `scripts/smoke-prod.mjs` |
 | `SITE_RELEASE_ENV`                    | `production` makes the Astro build indexable; `staging`/`preview` builds are `noindex`       | Astro build (forwarded by `scripts/build.ts`)                |
 | `SCHOLARMARK_MARKETING_PREVIEW_HOSTS` | Optional comma list of extra hosts treated as the marketing host (QA only, e.g. `localhost`) | server startup                                               |
+| `INDEXNOW_KEY`                        | Optional IndexNow key, 32 or 64 lowercase hex characters, generated on the server            | server startup, `scripts/indexnow-submit.mjs`                |
+| `INDEXNOW_SUBMIT_ON_DEPLOY`           | `true` lets a successful deploy send new or changed pages to IndexNow; default off           | `scripts/indexnow-submit.mjs --deploy-hook`                  |
 
 Set these in `/opt/app/.env` only. Do not export them in the deploy shell: PM2 keeps
 exported variables, and dotenv never overrides an existing one.
@@ -21,10 +23,11 @@ On `scholarmark.ai` (`www` and HTTP are still 308-canonicalized first):
 
 | Path                                                                                                | Served by                                                                                                                                                                                                                                                                    |
 | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                                                                                                 | Astro, except paid Instagram UTMs, `ref`, `code`, `invite`, `sm_landing`, `sm_direct_signup`, or `embedded_auth`. Those keep the SPA landing. Auth cookies (e.g. Clerk `__client_uat`) are ignored; returning users use the header Sign in link to `app.scholarmark.ai`.          |
+| `/`                                                                                                 | Astro, except paid Instagram UTMs, `ref`, `code`, `invite`, `sm_landing`, `sm_direct_signup`, or `embedded_auth`. Those keep the SPA landing. Auth cookies (e.g. Clerk `__client_uat`) are ignored; returning users use the header Sign in link to `app.scholarmark.ai`.     |
 | `/guides`, `/guides/*`                                                                              | Astro. The canonical trailing-slash form is enforced with a 308 redirect; unknown guides return the Astro 404.                                                                                                                                                               |
 | `/_astro/*`                                                                                         | Astro hashed assets on any host, `immutable`, and a 404 (never SPA HTML) on a miss.                                                                                                                                                                                          |
 | `/robots.txt`, `/sitemap.xml`                                                                       | Composed by the server. Indexable release: app-private paths disallowed, Astro sitemap plus legacy public SPA pages (`/pricing`, `/faq`, `/blog`, `/blog/*`, `/privacy`, `/terms`, `/support`). Non-indexable release: Astro's blocking robots and empty sitemap, unchanged. |
+| `/<INDEXNOW_KEY>.txt`                                                                               | The key as `text/plain`, only when `INDEXNOW_KEY` is valid, the release is indexable, and the host is exactly `scholarmark.ai`. Otherwise the path is not special.                                                                                                           |
 | other Astro root files (e.g. `/og/*.png`)                                                           | Astro, if the SPA build has no file with the same path.                                                                                                                                                                                                                      |
 | everything else (`/blog`, `/pricing`, `/start`, `/summer`, `/invite`, `/sign-*`, `/api`, OAuth/MCP) | Unchanged SPA/API behavior.                                                                                                                                                                                                                                                  |
 
@@ -111,6 +114,65 @@ SCHOLARMARK_MARKETING_PREVIEW_HOSTS=localhost npm start
 
 After the production flip, check from a phone that a paid Instagram ad URL still opens
 the SPA landing in the Instagram in-app browser.
+
+## IndexNow
+
+IndexNow tells Bing and the other participating search engines (they share notifications)
+that public URLs were added or changed. It does not guarantee crawling or indexing, and it
+says nothing about how any engine or assistant ranks or recommends the site.
+
+Scope: only `https://scholarmark.ai/`, `https://scholarmark.ai/guides/`, and canonical guide
+articles `https://scholarmark.ai/guides/<slug>/` taken from the live sitemap. Legacy SPA
+pages (`/pricing`, `/blog/*`, ...), app, auth, API, `www`, `app.` and staging URLs are never
+sent.
+
+### One-time setup (on the production server)
+
+Generate the key into `/opt/app/.env` without printing it, then reload the app so it serves
+the key file. The key is not a password, but keep it out of git, chat and logs anyway.
+
+```bash
+cd /opt/app && grep -q '^INDEXNOW_KEY=' .env || printf 'INDEXNOW_KEY=%s\n' "$(openssl rand -hex 16)" >> .env
+```
+
+```bash
+sudo -H -u deploy pm2 reload sourceannotator --update-env
+```
+
+### Submitting
+
+Run as the `deploy` user from `/opt/app`. The command reads `.env`, then checks the live
+`robots.txt` (not blocking), `sitemap.xml` (lists the homepage and guide hub), the key file
+(`200`, `text/plain`, exactly the key, no redirect; an SPA HTML fallback fails), and every
+eligible page (`200` HTML, not `noindex`, self-canonical). Any failure stops it before the
+IndexNow request.
+
+```bash
+npm run indexnow
+```
+
+That dry run sends nothing and lists the new or changed URLs. Then:
+
+```bash
+npm run indexnow -- --submit
+```
+
+It sends one POST to `https://api.indexnow.org/indexnow` with `host`, `key`, `keyLocation`
+(the root key file) and `urlList`. HTTP `200` means the URLs were received, `202` means
+received with key verification pending; both are recorded in `data/indexnow-state.json`
+(override with `INDEXNOW_STATE_PATH`) with a fingerprint of each page. A later run sends only
+pages whose HTML changed; a rebuild that only renames hashed `/_astro/` assets does not count.
+`400`, `403`, `422`, `429` and anything else are reported, record nothing, and are not retried
+automatically. Fix the cause first (for `429`, wait) before running `--submit` again.
+
+### After deploys (optional)
+
+Set `INDEXNOW_SUBMIT_ON_DEPLOY=true` in `/opt/app/.env`. `deploy/refresh-prod.sh` then runs
+`scripts/indexnow-submit.mjs --deploy-hook` as its last step, after the smoke checks and
+`pm2 save` passed, so new or edited guides are sent automatically. With the flag unset, or a
+release that isn't `astro` + `production`, the hook sends nothing. A hook failure is printed
+as a warning and does not change the deploy's result, because the site deploy has already
+succeeded; re-run `npm run indexnow -- --submit` once fixed. There is no scheduler.
 
 ## Rollback
 

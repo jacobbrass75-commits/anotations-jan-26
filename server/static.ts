@@ -12,6 +12,14 @@ export const MARKETING_SITE_ENV = "SCHOLARMARK_MARKETING_SITE";
 export const MARKETING_PREVIEW_HOSTS_ENV = "SCHOLARMARK_MARKETING_PREVIEW_HOSTS";
 export const MARKETING_ORIGIN = "https://scholarmark.ai";
 
+/**
+ * Optional IndexNow ownership key. When valid, the key file `/<key>.txt` is served on the exact
+ * canonical host of an indexable release only. Same rule as scripts/indexnow-submit.mjs.
+ */
+export const INDEXNOW_KEY_ENV = "INDEXNOW_KEY";
+export const INDEXNOW_KEY_PATTERN = /^(?:[0-9a-f]{32}|[0-9a-f]{64})$/;
+const INDEXNOW_KEY_HOST = "scholarmark.ai";
+
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const PUBLIC_FILE_CACHE_CONTROL = "public, max-age=3600";
 const MAX_MARKETING_FILES = 20_000;
@@ -343,6 +351,25 @@ export interface MarketingSiteOptions {
   distPath: string;
   spaPublicPath: string;
   previewHosts?: string[];
+  /** Raw INDEXNOW_KEY value; ignored unless it matches INDEXNOW_KEY_PATTERN. */
+  indexNowKey?: string;
+}
+
+/** Returns the key file path (`/<key>.txt`) to serve, or null. Never logs the key itself. */
+function resolveIndexNowKeyPath(rawKey: string | undefined, indexable: boolean): string | null {
+  const key = rawKey?.trim();
+  if (!key) return null;
+  if (!INDEXNOW_KEY_PATTERN.test(key)) {
+    staticLogger.warn(
+      "INDEXNOW_KEY is not 32 or 64 lowercase hex characters; IndexNow key file not served",
+    );
+    return null;
+  }
+  if (!indexable) {
+    staticLogger.info("marketing release is not indexable; IndexNow key file not served");
+    return null;
+  }
+  return `/${key}.txt`;
 }
 
 /**
@@ -372,6 +399,7 @@ export function loadMarketingSite(options: MarketingSiteOptions): MarketingSite 
   );
   const isMarketingHost = (host: string) =>
     isScholarMarkMarketingHost(host) || previewHosts.has(host.toLowerCase());
+  const indexNowKeyPath = resolveIndexNowKeyPath(options.indexNowKey, manifest.indexable);
 
   if (manifest.ignoredPages.length > 0) {
     staticLogger.warn(
@@ -385,6 +413,7 @@ export function loadMarketingSite(options: MarketingSiteOptions): MarketingSite 
       pages: manifest.pages.size + 1,
       files: manifest.files.size,
       indexable: manifest.indexable,
+      indexNowKeyFile: indexNowKeyPath !== null,
     },
     "serving Astro marketing site on the marketing host",
   );
@@ -467,6 +496,18 @@ export function loadMarketingSite(options: MarketingSiteOptions): MarketingSite 
 
     if (!onMarketingHost) return next();
 
+    // Exact canonical host and exact path only; `www`, preview hosts and other `.txt` paths
+    // never get a key response.
+    if (
+      indexNowKeyPath !== null &&
+      pathname === indexNowKeyPath &&
+      (req.hostname || "").toLowerCase() === INDEXNOW_KEY_HOST
+    ) {
+      setMarketingHeaders(res, pathname, "no-cache");
+      res.setHeader("X-Robots-Tag", "noindex");
+      return res.type("text/plain").send(indexNowKeyPath.slice(1, -".txt".length));
+    }
+
     if (pathname === "/") {
       const queryStart = req.originalUrl.indexOf("?");
       const search = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
@@ -496,6 +537,7 @@ export function servePublicStatic(app: Express) {
       distPath: path.resolve(__dirname, "marketing"),
       spaPublicPath: distPath,
       previewHosts: (process.env[MARKETING_PREVIEW_HOSTS_ENV] ?? "").split(",").filter(Boolean),
+      indexNowKey: process.env[INDEXNOW_KEY_ENV],
     });
     if (marketingSite) app.use(marketingSite.middleware);
   }
