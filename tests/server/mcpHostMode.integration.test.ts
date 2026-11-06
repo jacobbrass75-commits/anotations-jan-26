@@ -199,7 +199,12 @@ describe("MCP host-AI mode", () => {
       expect(names).not.toContain("compile_paper");
       for (const tool of tools) {
         expect(tool.title, tool.name).toBeTruthy();
-        expect(tool.annotations?.readOnlyHint, tool.name).toBeTypeOf("boolean");
+        for (const hint of ["readOnlyHint", "destructiveHint", "openWorldHint"] as const) {
+          expect(tool.annotations?.[hint], `${tool.name}.${hint}`).toBeTypeOf("boolean");
+        }
+        if (tool.annotations?.readOnlyHint) {
+          expect(tool.annotations.destructiveHint, tool.name).toBe(false);
+        }
       }
       expect(client.getInstructions()).toContain("save_annotations");
       expect(
@@ -342,6 +347,19 @@ describe("MCP host-AI mode", () => {
       expect(tools.map((tool: { name: string }) => tool.name)).toEqual(
         expect.arrayContaining(["send_message", "compile_paper", "save_annotations"]),
       );
+      for (const tool of tools as Array<{
+        name: string;
+        title?: string;
+        annotations?: Record<string, unknown>;
+      }>) {
+        expect(tool.title, tool.name).toBeTruthy();
+        for (const hint of ["readOnlyHint", "destructiveHint", "openWorldHint"]) {
+          expect(tool.annotations?.[hint], `${tool.name}.${hint}`).toBeTypeOf("boolean");
+        }
+        if (tool.annotations?.readOnlyHint) {
+          expect(tool.annotations.destructiveHint, tool.name).toBe(false);
+        }
+      }
       await client.close();
     } finally {
       await server.close();
