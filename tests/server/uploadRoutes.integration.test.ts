@@ -409,7 +409,7 @@ describe("upload route hardening", () => {
     }
   });
 
-  it("requires Max for GPT-4o Vision OCR", async () => {
+  it("requires Premium (internal max) for GPT-4o Vision OCR", async () => {
     const { server, token } = await createUploadApp({ tier: "pro" });
     const form = new FormData();
     form.append(
@@ -429,6 +429,7 @@ describe("upload route hardening", () => {
 
       expect(response.status).toBe(403);
       expect(body).toMatchObject({
+        message: "GPT-4o Vision OCR requires the Premium plan.",
         currentTier: "pro",
         requiredTier: "max",
       });

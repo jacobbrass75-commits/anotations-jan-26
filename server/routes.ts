@@ -28,6 +28,7 @@ import { registerSiteAnalyticsRoutes } from "./siteAnalyticsRoutes";
 import { registerCampaignRoutes, trackCampaignActivation } from "./campaignRoutes";
 import { registerPayPalBillingRoutes } from "./paypalBillingRoutes";
 import { registerStripeBillingRoutes } from "./stripeBillingRoutes";
+import { BILLING_PLAN_LABELS } from "@shared/billingPlans";
 import type { AnnotationCategory, Document } from "@shared/schema";
 import {
   createZipFromImageUploads,
@@ -224,7 +225,7 @@ function resolveVisionOcrModel(
     res.status(403).json({
       message:
         model === "gpt-4o"
-          ? "GPT-4o Vision OCR requires the Max plan."
+          ? `GPT-4o Vision OCR requires the ${BILLING_PLAN_LABELS.max} plan.`
           : "Vision OCR requires the Pro plan.",
       currentTier: req.user!.tier,
       requiredTier,
