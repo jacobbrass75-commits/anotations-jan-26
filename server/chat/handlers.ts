@@ -211,37 +211,26 @@ function finalizeWritingUsage(input: {
 
 type ProviderMessageStream = ReturnType<Anthropic["messages"]["stream"]>;
 
+type ProviderStreamOutcome =
+  | { kind: "message"; message: Anthropic.Message }
+  | { kind: "aborted"; error: Error }
+  | { kind: "failed"; error: Error };
+
 /**
- * Subscribes to how a provider stream ends. The SDK ends a stream with "message", or
+ * Resolves with how a provider stream ended. The SDK ends a stream with "message", or
  * with "abort" (an APIUserAbortError, for an abort ScholarMark requested) or "error";
- * an "abort" or "error" without a listener becomes an unhandled rejection. Exactly one
- * outcome handler runs, so accounting cannot run twice or not at all.
+ * an "abort" or "error" without a listener becomes an unhandled rejection. The promise
+ * settles once and never rejects. Callers await it inside their own try, so a failure
+ * while handling the outcome reaches the route's normal cleanup.
  */
-function onProviderStreamOutcome(
+function waitForProviderStreamOutcome(
   stream: ProviderMessageStream,
-  outcome: {
-    message: (message: Anthropic.Message) => void | Promise<void>;
-    aborted: (error: Error) => void | Promise<void>;
-    failed: (error: Error) => void | Promise<void>;
-  },
-): void {
-  let settled = false;
-  const once =
-    <T>(handler: (value: T) => void | Promise<void>) =>
-    (value: T) => {
-      if (settled) return;
-      settled = true;
-      try {
-        void Promise.resolve(handler(value)).catch((error) => {
-          logger.error({ err: error }, "Provider stream outcome handling failed:");
-        });
-      } catch (error) {
-        logger.error({ err: error }, "Provider stream outcome handling failed:");
-      }
-    };
-  stream.on("message", once(outcome.message));
-  stream.on("abort", once(outcome.aborted));
-  stream.on("error", once(outcome.failed));
+): Promise<ProviderStreamOutcome> {
+  return new Promise((resolve) => {
+    stream.on("message", (message: Anthropic.Message) => resolve({ kind: "message", message }));
+    stream.on("abort", (error: Error) => resolve({ kind: "aborted", error }));
+    stream.on("error", (error: Error) => resolve({ kind: "failed", error }));
+  });
 }
 
 /**
@@ -1084,6 +1073,13 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
         sendContextWarningIfNeeded(usageEstimate);
         let deepDiveAllowed = usageEstimate.warningLevel !== "critical";
 
+        // Charged work is counted as soon as the provider reports it, before any
+        // processing that could fail, so a later failure cannot refund billed tokens.
+        const countTurnUsage = (usage: { input_tokens?: number; output_tokens?: number }) => {
+          totalInputTokens += usage.input_tokens || 0;
+          totalOutputTokens += usage.output_tokens || 0;
+        };
+
         const runTurn = async (
           messagesForTurn: AnthropicHistoryMessage[],
         ): Promise<StreamTurnResult> => {
@@ -1107,6 +1103,10 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
               title: "ScholarMark Writing Chat",
             });
 
+            countTurnUsage({
+              input_tokens: result.usage.promptTokens,
+              output_tokens: result.usage.completionTokens,
+            });
             const fullText = result.output;
             parser.pushText(fullText);
             toolParser.pushText(fullText);
@@ -1127,75 +1127,62 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
             };
           }
 
-          return new Promise<StreamTurnResult>((resolve, reject) => {
-            let fullText = "";
-            const detectedRequests: ToolRequest[] = [];
-            const parser = createDocumentStreamParser((event) => {
-              if (isClosed() || res.writableEnded) return;
-              sendEvent(event as Record<string, unknown>);
-            });
-            const toolParser = createToolRequestParser((request) => {
-              detectedRequests.push(request);
-            });
-
-            // Cache the system prompt: it carries the (large) source block and is
-            // byte-stable across escalation rounds and conversation turns, so every
-            // call after the first within the cache TTL reads it at ~0.1x input cost.
-            const stream = anthropic.messages.stream({
-              model: models.chat,
-              max_tokens: CHAT_MAX_TOKENS,
-              system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
-              messages: messagesForTurn,
-            });
-
-            activeStream = stream;
-
-            stream.on("text", (text) => {
-              fullText += text;
-              parser.pushText(text);
-              toolParser.pushText(text);
-            });
-
-            const failTurn = (error: Error) => {
-              parser.finish({ finalizeDocument: false });
-              toolParser.finish();
-              activeStream = null;
-              reject(error);
-            };
-
-            onProviderStreamOutcome(stream, {
-              message: (message) => {
-                parser.finish({ finalizeDocument: message.stop_reason !== "max_tokens" });
-                toolParser.finish();
-                activeStream = null;
-
-                resolve({
-                  fullText,
-                  usage: message.usage || {},
-                  toolRequests: detectedRequests,
-                  stopReason: message.stop_reason,
-                });
-              },
-              aborted: (error) => {
-                if (!isClientCancellation(clientGone, error)) {
-                  failTurn(error);
-                  return;
-                }
-                parser.finish({ finalizeDocument: false });
-                toolParser.finish();
-                activeStream = null;
-                providerCallCancelled = true;
-                resolve({
-                  fullText,
-                  usage: partialStreamUsage(stream, fullText),
-                  toolRequests: [],
-                  stopReason: null,
-                  cancelled: true,
-                });
-              },
-              failed: failTurn,
-            });
+          let fullText = "";
+          const detectedRequests: ToolRequest[] = [];
+          const parser = createDocumentStreamParser((event) => {
+            if (isClosed() || res.writableEnded) return;
+            sendEvent(event as Record<string, unknown>);
           });
+          const toolParser = createToolRequestParser((request) => {
+            detectedRequests.push(request);
+          });
+
+          // Cache the system prompt: it carries the (large) source block and is
+          // byte-stable across escalation rounds and conversation turns, so every
+          // call after the first within the cache TTL reads it at ~0.1x input cost.
+          const stream = anthropic.messages.stream({
+            model: models.chat,
+            max_tokens: CHAT_MAX_TOKENS,
+            system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+            messages: messagesForTurn,
+          });
+
+          activeStream = stream;
+
+          stream.on("text", (text) => {
+            fullText += text;
+            parser.pushText(text);
+            toolParser.pushText(text);
+          });
+
+          const outcome = await waitForProviderStreamOutcome(stream);
+          activeStream = null;
+
+          if (outcome.kind === "message") {
+            const usage = outcome.message.usage || {};
+            countTurnUsage(usage);
+            parser.finish({ finalizeDocument: outcome.message.stop_reason !== "max_tokens" });
+            toolParser.finish();
+            return {
+              fullText,
+              usage,
+              toolRequests: detectedRequests,
+              stopReason: outcome.message.stop_reason,
+            };
+          }
+
+          if (outcome.kind === "aborted" && isClientCancellation(clientGone, outcome.error)) {
+            providerCallCancelled = true;
+            const usage = partialStreamUsage(stream, fullText);
+            countTurnUsage(usage);
+            parser.finish({ finalizeDocument: false });
+            toolParser.finish();
+            return { fullText, usage, toolRequests: [], stopReason: null, cancelled: true };
+          }
+
+          parser.finish({ finalizeDocument: false });
+          toolParser.finish();
+          throw outcome.error;
         };
 
         const isFirstExchange = history.filter((message) => message.role === "user").length === 1;
@@ -1213,8 +1200,6 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
           const turn = await runTurn(messagesForTurn);
           const inputTokens = turn.usage.input_tokens || 0;
           const outputTokens = turn.usage.output_tokens || 0;
-          totalInputTokens += inputTokens;
-          totalOutputTokens += outputTokens;
 
           sendWritingStatus("Saving the generated draft...", "saving", 88);
           const linkedAssistantContent = applyJumpLinksToMarkdown(
@@ -1491,14 +1476,17 @@ ${chunkContext}`;
         }
 
         if (usageRequestId) {
+          // Cleared first: if settlement fails, the run stays reserved (counted), and
+          // the catch below must not refund it.
+          const requestId = usageRequestId;
+          usageRequestId = null;
           finalizeWritingUsage({
-            requestId: usageRequestId,
+            requestId,
             model: usageCreditModel,
             inputTokens: totalInputTokens,
             outputTokens: totalOutputTokens,
             abandonedAfterProviderCall: providerCallCancelled,
           });
-          usageRequestId = null;
         }
 
         if (!clientGone.aborted && !res.writableEnded) {
@@ -1515,17 +1503,25 @@ ${chunkContext}`;
           res.end();
         }
       } catch (error) {
-        if (usageRequestId) {
-          finalizeWritingUsage({
-            requestId: usageRequestId,
-            model: usageCreditModel,
-            inputTokens: totalInputTokens,
-            outputTokens: totalOutputTokens,
-            abandonedAfterProviderCall: providerCallCancelled,
-          });
-        }
         stopHeartbeat?.();
         stopHeartbeat = null;
+        if (usageRequestId) {
+          const requestId = usageRequestId;
+          try {
+            finalizeWritingUsage({
+              requestId,
+              model: usageCreditModel,
+              inputTokens: totalInputTokens,
+              outputTokens: totalOutputTokens,
+              abandonedAfterProviderCall: providerCallCancelled,
+            });
+          } catch (ledgerError) {
+            logger.error(
+              { err: ledgerError, requestId },
+              "Failed to finalize chat usage; the run stays reserved",
+            );
+          }
+        }
         if (error instanceof ClientDisconnectedError) return;
         logger.error({ err: error }, "Error sending message:");
         if (clientGone.aborted || res.destroyed) return;
@@ -1716,84 +1712,70 @@ ${chunkContext}`;
           }
         });
 
-        const settleCancelledRun = async () => {
-          activeStream = null;
+        const outcome = await waitForProviderStreamOutcome(stream);
+        activeStream = null;
+
+        if (outcome.kind === "aborted" && isClientCancellation(clientGone, outcome.error)) {
           // The client left mid-stream. Part of the output was already delivered and
           // billed, so the run stays counted at the usage observed so far.
           const usage = partialStreamUsage(stream, streamedText);
-          if (usageRequestId) {
-            finalizeWritingUsage({
-              requestId: usageRequestId,
-              model: usageCreditModel,
-              inputTokens: usage.input_tokens,
-              outputTokens: usage.output_tokens,
-              abandonedAfterProviderCall: true,
-            });
-            usageRequestId = null;
-          }
           await recordUserTokenUsage(
             req.user!.userId,
             usage.input_tokens + usage.output_tokens,
             "chat_compile",
           );
-        };
-
-        const reportStreamFailure = (error: Error) => {
-          activeStream = null;
           if (usageRequestId) {
-            usageLedger.refund(usageRequestId);
+            const requestId = usageRequestId;
             usageRequestId = null;
+            finalizeWritingUsage({
+              requestId,
+              model: usageCreditModel,
+              inputTokens: usage.input_tokens,
+              outputTokens: usage.output_tokens,
+              abandonedAfterProviderCall: true,
+            });
           }
-          logger.error({ err: error }, "Compile stream error:");
-          if (!isAborted()) {
-            stopHeartbeat?.();
-            stopHeartbeat = null;
-            res.write(
-              `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Compile failed") })}\n\n`,
-            );
-            res.end();
-          }
-        };
+          return;
+        }
+        // Provider failures, and aborts ScholarMark did not request, refund in the catch.
+        if (outcome.kind !== "message") throw outcome.error;
 
-        onProviderStreamOutcome(stream, {
-          message: async (message) => {
-            const inputTokens = message?.usage?.input_tokens || 0;
-            const outputTokens = message?.usage?.output_tokens || 0;
-            activeStream = null;
-            await recordUserTokenUsage(
-              req.user!.userId,
-              inputTokens + outputTokens,
-              "chat_compile",
-            );
-            if (usageRequestId) {
-              usageLedger.settle(
-                usageRequestId,
-                estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
-              );
-              usageRequestId = null;
-            }
-            if (isAborted()) return;
-            stopHeartbeat?.();
-            stopHeartbeat = null;
-            if (message.stop_reason === "max_tokens") {
-              res.write(
-                `data: ${JSON.stringify({ type: "error", error: "Compilation reached the output limit. The result is incomplete; compile smaller sections." })}\n\n`,
-              );
-            } else {
-              res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-            }
-            res.end();
-          },
-          aborted: (error) =>
-            isClientCancellation(clientGone, error)
-              ? settleCancelledRun()
-              : reportStreamFailure(error),
-          failed: reportStreamFailure,
-        });
-      } catch (error) {
-        if (usageRequestId) usageLedger.refund(usageRequestId);
+        const { message } = outcome;
+        const inputTokens = message.usage?.input_tokens || 0;
+        const outputTokens = message.usage?.output_tokens || 0;
+        await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_compile");
+        if (usageRequestId) {
+          // Cleared first: if settlement fails, the run stays reserved (counted), and
+          // the catch below must not refund it.
+          const requestId = usageRequestId;
+          usageRequestId = null;
+          usageLedger.settle(
+            requestId,
+            estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
+          );
+        }
+        if (isAborted()) return;
         stopHeartbeat?.();
         stopHeartbeat = null;
+        if (message.stop_reason === "max_tokens") {
+          res.write(
+            `data: ${JSON.stringify({ type: "error", error: "Compilation reached the output limit. The result is incomplete; compile smaller sections." })}\n\n`,
+          );
+        } else {
+          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+        }
+        res.end();
+      } catch (error) {
+        stopHeartbeat?.();
+        stopHeartbeat = null;
+        if (usageRequestId) {
+          const requestId = usageRequestId;
+          try {
+            usageLedger.refund(requestId);
+          } catch (ledgerError) {
+            logger.error({ err: ledgerError, requestId }, "Failed to refund compile usage");
+          }
+        }
         if (error instanceof ClientDisconnectedError) return;
         logger.error({ err: error }, "Compile error:");
         if (clientGone.aborted || res.destroyed) return;
@@ -1916,75 +1898,64 @@ ${chunkContext}`;
           }
         });
 
-        const settleCancelledRun = async () => {
-          activeStream = null;
+        const outcome = await waitForProviderStreamOutcome(stream);
+        activeStream = null;
+
+        if (outcome.kind === "aborted" && isClientCancellation(clientGone, outcome.error)) {
           // The client left mid-stream. Part of the output was already delivered and
           // billed, so the run stays counted at the usage observed so far.
           const usage = partialStreamUsage(stream, streamedText);
-          if (usageRequestId) {
-            finalizeWritingUsage({
-              requestId: usageRequestId,
-              model: usageCreditModel,
-              inputTokens: usage.input_tokens,
-              outputTokens: usage.output_tokens,
-              abandonedAfterProviderCall: true,
-            });
-            usageRequestId = null;
-          }
           await recordUserTokenUsage(
             req.user!.userId,
             usage.input_tokens + usage.output_tokens,
             "chat_verify",
           );
-        };
-
-        const reportStreamFailure = (error: Error) => {
-          activeStream = null;
           if (usageRequestId) {
-            usageLedger.refund(usageRequestId);
+            const requestId = usageRequestId;
             usageRequestId = null;
+            finalizeWritingUsage({
+              requestId,
+              model: usageCreditModel,
+              inputTokens: usage.input_tokens,
+              outputTokens: usage.output_tokens,
+              abandonedAfterProviderCall: true,
+            });
           }
-          logger.error({ err: error }, "Verify stream error:");
-          if (!isAborted()) {
-            stopHeartbeat?.();
-            stopHeartbeat = null;
-            res.write(
-              `data: ${JSON.stringify({ type: "error", error: sanitizeSseError(error, "Verify failed") })}\n\n`,
-            );
-            res.end();
-          }
-        };
+          return;
+        }
+        // Provider failures, and aborts ScholarMark did not request, refund in the catch.
+        if (outcome.kind !== "message") throw outcome.error;
 
-        onProviderStreamOutcome(stream, {
-          message: async (message) => {
-            const inputTokens = message?.usage?.input_tokens || 0;
-            const outputTokens = message?.usage?.output_tokens || 0;
-            activeStream = null;
-            await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_verify");
-            if (usageRequestId) {
-              usageLedger.settle(
-                usageRequestId,
-                estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
-              );
-              usageRequestId = null;
-            }
-            if (!isAborted()) {
-              stopHeartbeat?.();
-              stopHeartbeat = null;
-              res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-              res.end();
-            }
-          },
-          aborted: (error) =>
-            isClientCancellation(clientGone, error)
-              ? settleCancelledRun()
-              : reportStreamFailure(error),
-          failed: reportStreamFailure,
-        });
-      } catch (error) {
-        if (usageRequestId) usageLedger.refund(usageRequestId);
+        const { message } = outcome;
+        const inputTokens = message.usage?.input_tokens || 0;
+        const outputTokens = message.usage?.output_tokens || 0;
+        await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_verify");
+        if (usageRequestId) {
+          // Cleared first: if settlement fails, the run stays reserved (counted), and
+          // the catch below must not refund it.
+          const requestId = usageRequestId;
+          usageRequestId = null;
+          usageLedger.settle(
+            requestId,
+            estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
+          );
+        }
+        if (isAborted()) return;
         stopHeartbeat?.();
         stopHeartbeat = null;
+        res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+        res.end();
+      } catch (error) {
+        stopHeartbeat?.();
+        stopHeartbeat = null;
+        if (usageRequestId) {
+          const requestId = usageRequestId;
+          try {
+            usageLedger.refund(requestId);
+          } catch (ledgerError) {
+            logger.error({ err: ledgerError, requestId }, "Failed to refund verify usage");
+          }
+        }
         if (error instanceof ClientDisconnectedError) return;
         logger.error({ err: error }, "Verify error:");
         if (clientGone.aborted || res.destroyed) return;

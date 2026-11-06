@@ -410,6 +410,56 @@ describe("chat streaming cancellation over HTTP", () => {
     },
   );
 
+  it.each(["messages", "compile", "verify"] as const)(
+    "%s: a failed usage settlement still ends the response and keeps the run counted",
+    async (operation) => {
+      const { server, token } = await createApp("max", "opus");
+      sqlite
+        .prepare(
+          "INSERT INTO messages (id, conversation_id, role, content, tokens_used, created_at) VALUES (?, ?, ?, ?, 0, ?)",
+        )
+        .run("message-1", "conversation-1", "assistant", "# Draft\nAn argument.", Date.now());
+      const { usageLedger } = await import("../../server/db");
+      const settle = vi.spyOn(usageLedger, "settle").mockImplementation(() => {
+        throw new Error("SQLITE_BUSY: database is locked");
+      });
+      const refund = vi.spyOn(usageLedger, "refund");
+      streamScripts.push((stream) => {
+        stream.emitText("A complete answer.");
+        stream.finish({ stop_reason: "end_turn", usage: { input_tokens: 40, output_tokens: 10 } });
+      });
+
+      try {
+        const response = await fetch(
+          `${server.baseUrl}/api/chat/conversations/conversation-1/${operation}`,
+          {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({
+              content: "Draft a sentence.",
+              compiledContent: "# Draft\nAn argument.",
+            }),
+            signal: AbortSignal.timeout(3_000),
+          },
+        );
+        // The stream ends (no hung heartbeat) and reports the failure.
+        const body = await response.text();
+
+        expect(response.status).toBe(200);
+        expect(body).toContain('"type":"error"');
+        expect(body).not.toContain('"type":"done"');
+        expect(settle).toHaveBeenCalledTimes(1);
+        // Billed work is never refunded: the reservation stays counted as reserved.
+        expect(refund).not.toHaveBeenCalled();
+        expect(reservations()).toEqual([
+          expect.objectContaining({ model: "opus", status: "reserved" }),
+        ]);
+      } finally {
+        await server.close();
+      }
+    },
+  );
+
   it("still reports a provider failure to a connected client and refunds the run", async () => {
     const { server, token } = await createApp("max", "opus");
     streamScripts.push((stream) => stream.fail(new Error("overloaded_error")));
