@@ -68,6 +68,7 @@ const serializeJsonLd = (data: Record<string, unknown>) =>
     <meta name="twitter:description" content={description} />
 
     {jsonLd.map((data) => <script type="application/ld+json" set:html={serializeJsonLd(data)} />)}
+    <slot name="head" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
