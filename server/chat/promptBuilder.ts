@@ -10,7 +10,13 @@ import {
   type WritingSource,
 } from "../writingPipeline";
 import { buildStyleSection } from "../sourceRoles";
-import { isOpenRouterWritingModelId, type OpenRouterWritingModelId } from "../openRouterWriting";
+import type { OpenRouterWritingModelId } from "../openRouterWriting";
+import type { WritingModelChoice } from "../planLimits";
+import {
+  anthropicModelForChoice,
+  parseWritingModelChoice,
+  resolveEffectiveWritingModel,
+} from "../writingModelChoice";
 
 export const MAX_SOURCE_EXCERPT_CHARS = 2000;
 export const MAX_SOURCE_FULLTEXT_CHARS = 30000;
@@ -34,16 +40,6 @@ export const VERIFY_MAX_TOKENS = 8192;
 export const MAX_CONTEXT_ESCALATIONS = 2;
 
 export const MODELS = {
-  precision: {
-    chat: ANTHROPIC_MODELS.opus,
-    compile: ANTHROPIC_MODELS.opus,
-    verify: ANTHROPIC_MODELS.opus,
-  },
-  extended: {
-    chat: ANTHROPIC_MODELS.sonnet,
-    compile: ANTHROPIC_MODELS.sonnet,
-    verify: ANTHROPIC_MODELS.sonnet,
-  },
   research: ANTHROPIC_MODELS.sonnet,
 } as const;
 
@@ -65,16 +61,20 @@ export type WritingProjectContext = Pick<
 export type WritingStyleContext = Pick<WritingStyle, "name" | "description" | "voiceProfile">;
 export type PromptSource = WritingSource | TieredSource;
 export type WritingMode = "precision" | "extended";
-export type WritingModelChoice = "opus" | "sonnet" | "gpt56" | "deepseek";
+export type { WritingModelChoice };
+// The OpenRouter variant is retained for the shared handler code paths, but no
+// end-user model choice routes to it.
 export type ConversationModelSet =
   | {
       provider: "anthropic";
+      choice: WritingModelChoice;
       chat: string;
       compile: string;
       verify: string;
     }
   | {
       provider: "openrouter";
+      choice: WritingModelChoice;
       chat: OpenRouterWritingModelId;
       compile: OpenRouterWritingModelId;
       verify: OpenRouterWritingModelId;
@@ -111,56 +111,42 @@ export function prettyToneLabel(tone?: string): string {
   return tone;
 }
 
+/** Maps a saved or requested value to a model choice without applying tier gates. */
 export function normalizeWritingModel(value: string | null | undefined): WritingModelChoice {
-  if (value === "opus" || value === "sonnet" || value === "gpt56") return value;
-  if (value === "deepseek" && process.env.ENABLE_DEEPSEEK_WRITING !== "false") return value;
-  // Migrate legacy values without pretending that a different model was selected.
-  if (value === "precision") return "opus";
-  if (value === "extended") return "sonnet";
-  if (
-    value === "gpt55" ||
-    value === "openai/gpt-5.5" ||
-    value === "openai/gpt-5.5-2026-04-23" ||
-    value === "openai/gpt-5.6-sol"
-  ) {
-    return "gpt56";
-  }
-  if (value === "deepseek/deepseek-v4-pro" && process.env.ENABLE_DEEPSEEK_WRITING !== "false") {
-    return "deepseek";
-  }
-  if (value === "anthropic/claude-opus-4.8") return "opus";
-  return "sonnet";
+  return parseWritingModelChoice(value) ?? "sonnet";
 }
 
-export function getWritingMode(conv: Pick<Conversation, "writingModel">): WritingMode {
-  return normalizeWritingModel(conv.writingModel) === "opus" ? "precision" : "extended";
+/**
+ * Precision mode (pre-gathered evidence, no chunk requests) is tied to Opus. Pass the
+ * tier so a saved Opus choice the tier no longer covers runs in Sonnet's mode.
+ */
+export function getWritingMode(
+  conv: Pick<Conversation, "writingModel">,
+  tier?: string | null,
+): WritingMode {
+  const choice =
+    tier === undefined
+      ? normalizeWritingModel(conv.writingModel)
+      : resolveEffectiveWritingModel(conv.writingModel, tier);
+  return choice === "opus" ? "precision" : "extended";
 }
 
+/**
+ * Resolves the Claude model a conversation runs on for the caller's tier. Tier gates
+ * always apply: a missing tier is treated as Starter, so Opus is never the default.
+ */
 export function getModelsForConversation(
   conv: Pick<Conversation, "writingModel">,
-  _tier?: string | null,
+  tier: string | null | undefined,
 ): ConversationModelSet {
-  const modelChoice = normalizeWritingModel(conv.writingModel);
-  const openRouterModel =
-    modelChoice === "gpt56"
-      ? "openai/gpt-5.6-sol"
-      : modelChoice === "deepseek"
-        ? "deepseek/deepseek-v4-pro"
-        : null;
-  if (openRouterModel && isOpenRouterWritingModelId(openRouterModel)) {
-    return {
-      provider: "openrouter",
-      chat: openRouterModel,
-      compile: openRouterModel,
-      verify: openRouterModel,
-    };
-  }
-
-  const mode = modelChoice === "opus" ? "precision" : "extended";
-  const selectedModels = MODELS[mode];
+  const choice = resolveEffectiveWritingModel(conv.writingModel, tier);
+  const model = anthropicModelForChoice(choice);
   return {
     provider: "anthropic",
-    ...selectedModels,
+    choice,
+    chat: model,
+    compile: model,
+    verify: model,
   };
 }
 

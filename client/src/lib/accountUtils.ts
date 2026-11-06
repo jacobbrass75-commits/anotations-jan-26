@@ -1,9 +1,11 @@
+import { BILLING_PLAN_LABELS } from "@shared/billingPlans";
+
 export function formatAccountTier(tier: string): string {
   switch (tier) {
     case "max":
-      return "Max";
+      return BILLING_PLAN_LABELS.max;
     case "pro":
-      return "Pro";
+      return BILLING_PLAN_LABELS.pro;
     default:
       return "Free";
   }

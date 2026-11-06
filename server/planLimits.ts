@@ -1,6 +1,11 @@
+import { PREMIUM_OPUS_RUNS_PER_MONTH } from "@shared/billingPlans";
+
 export type PlanTier = "free" | "pro" | "max";
 
-export type WritingCreditModel = "opus" | "gpt" | "sonnet" | "deepseek";
+/** The only in-app AI model choices an end user can make. */
+export const WRITING_MODEL_CHOICES = ["opus", "sonnet", "haiku"] as const;
+export type WritingModelChoice = (typeof WRITING_MODEL_CHOICES)[number];
+export type WritingCreditModel = WritingModelChoice;
 
 export interface AiUsagePlan {
   credits: number;
@@ -33,17 +38,42 @@ export const AI_USAGE_PLANS: Record<PlanTier, AiUsagePlan> = {
 
 export const WRITING_CREDIT_WEIGHTS: Record<WritingCreditModel, number> = {
   opus: 30,
-  gpt: 20,
   sonnet: 10,
-  deepseek: 2,
+  haiku: 2,
 };
 
-export const STARTER_MODEL_USE_LIMITS: Partial<Record<WritingCreditModel, number>> = {
-  opus: 5,
-  sonnet: 5,
-  deepseek: 25,
-  gpt: 0,
+const TIER_WRITING_MODELS: Record<PlanTier, readonly WritingModelChoice[]> = {
+  free: ["sonnet", "haiku"],
+  pro: ["sonnet", "haiku"],
+  max: ["opus", "sonnet", "haiku"],
 };
+
+/**
+ * Per-period run caps by tier, counted in the usage ledger alongside credits and cost.
+ * Every in-app Opus entry point (chat, compile, verify, humanize) shares the Opus cap.
+ */
+export const MODEL_USE_LIMITS: Record<PlanTier, Partial<Record<WritingCreditModel, number>>> = {
+  free: { opus: 0, sonnet: 5, haiku: 25 },
+  pro: { opus: 0 },
+  max: { opus: configuredInt("AI_MAX_OPUS_RUNS", PREMIUM_OPUS_RUNS_PER_MONTH) },
+};
+
+export function isWritingModelAllowedForTier(
+  model: WritingModelChoice,
+  tier: string | null | undefined,
+): boolean {
+  return TIER_WRITING_MODELS[normalizePlanTier(tier)].includes(model);
+}
+
+export function allowedWritingModelsForTier(
+  tier: string | null | undefined,
+): readonly WritingModelChoice[] {
+  return TIER_WRITING_MODELS[normalizePlanTier(tier)];
+}
+
+export function defaultWritingModelForTier(tier: string | null | undefined): WritingModelChoice {
+  return normalizePlanTier(tier) === "free" ? "haiku" : "sonnet";
+}
 
 export function getAiUsagePlan(tier: string | null | undefined): AiUsagePlan {
   return AI_USAGE_PLANS[normalizePlanTier(tier)];

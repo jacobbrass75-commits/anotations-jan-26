@@ -277,8 +277,9 @@ export function registerWritingRoutes(app: Express): void {
             sources.reduce((sum, source) => sum + source.fullText.length, 0)) /
             4,
         );
+        // Claude Sonnet 5.5: USD 2 / 10 per million input / output tokens.
         const estimatedCostCents = Math.ceil(
-          ((estimatedInputTokens * 3 + 8_000 * 15) / 1_000_000) * 100,
+          ((estimatedInputTokens * 2 + 8_000 * 10) / 1_000_000) * 100,
         );
         const usageReservation = usageLedger.reserve({
           userId: usageUser.id,
@@ -291,9 +292,17 @@ export function registerWritingRoutes(app: Express): void {
         });
         if (!usageReservation.ok) {
           usageRequestId = null;
-          return res.status(429).json({
+          return res.status(usageReservation.reason === "conflict" ? 409 : 429).json({
             error: "AI credit allowance reached for this period",
             reason: usageReservation.reason,
+          });
+        }
+        if (usageReservation.idempotent) {
+          // The original request owns this reservation; a replay must not run again on it.
+          usageRequestId = null;
+          return res.status(409).json({
+            error: "This request was already submitted. Send a new request ID to run it again.",
+            reason: "duplicate",
           });
         }
 
@@ -334,7 +343,7 @@ export function registerWritingRoutes(app: Express): void {
         if (usageRequestId) {
           if (tokensUsed > 0) {
             const actualCostCents = Math.ceil(
-              ((inputTokensUsed * 3 + outputTokensUsed * 15) / 1_000_000) * 100,
+              ((inputTokensUsed * 2 + outputTokensUsed * 10) / 1_000_000) * 100,
             );
             usageLedger.settle(usageRequestId, actualCostCents);
           } else {

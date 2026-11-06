@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import {
   BILLING_PLAN_LABELS,
   CURRENT_PRICE_OFFERS,
-  KNOWN_PRICE_OFFERS,
+  tierForLookupKey,
   type BillingPriceOffer,
   type BillingTier,
 } from "@shared/billingPlans";
@@ -40,8 +40,6 @@ const PLAN_CONFIG: Record<BillingTier, StripeBillingPlan> = {
   pro: toStripeBillingPlan("pro", CURRENT_PRICE_OFFERS.pro),
   max: toStripeBillingPlan("max", CURRENT_PRICE_OFFERS.max),
 };
-
-const BILLING_TIERS: BillingTier[] = ["pro", "max"];
 
 const PAID_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
 
@@ -135,31 +133,54 @@ function getLegacyPriceIds(tier: BillingTier): string[] {
   );
 }
 
+// Stripe products whose prices belong to a tier. The legacy USD 14 Pro price lives on
+// its own product, so listing it here keeps it Pro even if its lookup key is removed.
+function getProductIds(tier: BillingTier): string[] {
+  return parseEnvList(
+    tier === "pro" ? process.env.STRIPE_PRO_PRODUCT_IDS : process.env.STRIPE_MAX_PRODUCT_IDS,
+  );
+}
+
+function getPriceProductId(price: Stripe.Price): string | null {
+  const product = price.product as string | { id?: string } | null | undefined;
+  if (typeof product === "string") {
+    return product;
+  }
+  return product?.id ?? null;
+}
+
+// Every configured signal that ties a price to a tier.
+function priceMatchesTier(price: Stripe.Price, tier: BillingTier): boolean {
+  const checkoutPriceId = getCheckoutPriceIdOverride(tier);
+  const productId = getPriceProductId(price);
+  return (
+    (Boolean(checkoutPriceId) && price.id === checkoutPriceId) ||
+    getLegacyPriceIds(tier).includes(price.id) ||
+    tierForLookupKey(price.lookup_key) === tier ||
+    parseTier(price.metadata?.scholarmark_tier) === tier ||
+    (productId !== null && getProductIds(tier).includes(productId))
+  );
+}
+
+// A price with any Pro signal is Pro. Legacy USD 14 Pro and Premium share an amount, so
+// a Pro price must never be promoted to Premium by a conflicting Premium signal.
 function tierForPrice(price: Stripe.Price | null | undefined): BillingTier | null {
   if (!price) {
     return null;
   }
 
-  for (const tier of BILLING_TIERS) {
-    const checkoutPriceId = getCheckoutPriceIdOverride(tier);
-    if (
-      (checkoutPriceId && price.id === checkoutPriceId) ||
-      getLegacyPriceIds(tier).includes(price.id)
-    ) {
-      return tier;
-    }
+  const isPro = priceMatchesTier(price, "pro");
+  const isMax = priceMatchesTier(price, "max");
+  if (isPro && isMax) {
+    logger.error(
+      { priceId: price.id, lookupKey: price.lookup_key ?? null },
+      "[billing] price matches both Pro and Premium configuration; granting Pro",
+    );
   }
-
-  for (const tier of BILLING_TIERS) {
-    if (
-      price.lookup_key &&
-      KNOWN_PRICE_OFFERS[tier].some((offer) => offer.lookupKey === price.lookup_key)
-    ) {
-      return tier;
-    }
+  if (isPro) {
+    return "pro";
   }
-
-  return parseTier(price.metadata?.scholarmark_tier);
+  return isMax ? "max" : null;
 }
 
 // Subscriptions created by ScholarMark checkout carry the purchased tier in metadata.
@@ -257,6 +278,24 @@ function validatePriceForTier(price: Stripe.Price, tier: BillingTier): void {
   );
   if (otherCurrencies.length > 0) {
     throw new Error(`Stripe price for ${expected.label} must not offer non-USD currency options`);
+  }
+  // A pinned price ID can point anywhere, including the legacy USD 14 Pro price that
+  // matches Premium's amount. Only sell a price that belongs to this tier and no other.
+  if (price.lookup_key && price.lookup_key !== expected.lookupKey) {
+    throw new Error(`Stripe price for ${expected.label} must use lookup key ${expected.lookupKey}`);
+  }
+  const otherTier: BillingTier = tier === "pro" ? "max" : "pro";
+  if (priceMatchesTier(price, otherTier)) {
+    throw new Error(
+      `Stripe price for ${expected.label} is configured for ${BILLING_PLAN_LABELS[otherTier]}`,
+    );
+  }
+  const tierProductIds = getProductIds(tier);
+  const productId = getPriceProductId(price);
+  if (tierProductIds.length > 0 && (!productId || !tierProductIds.includes(productId))) {
+    throw new Error(
+      `Stripe price for ${expected.label} must belong to a ${expected.label} product`,
+    );
   }
 }
 
@@ -485,8 +524,8 @@ export function registerStripeBillingRoutes(app: ExpressApp): void {
           },
         ],
         allow_promotion_codes: true,
-        // Pro is advertised as USD 5; keep Stripe from localizing it into another currency.
-        ...(tier === "pro" ? { adaptive_pricing: { enabled: false } } : {}),
+        // Plans are advertised in exact USD; keep Stripe from localizing into another currency.
+        adaptive_pricing: { enabled: false },
         success_url: buildCheckoutSuccessUrl(req),
         cancel_url: buildAppUrl(req, "/pricing", { checkout: "cancelled" }),
         metadata: {

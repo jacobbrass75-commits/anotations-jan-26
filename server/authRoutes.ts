@@ -7,7 +7,7 @@ import { getUserById, sanitizeUser } from "./authStorage";
 import { db, usageLedger } from "./db";
 import { authLimiter } from "./rateLimits";
 import { createLogger } from "./logger";
-import { getAiUsagePlan, normalizePlanTier } from "./planLimits";
+import { getAiUsagePlan, MODEL_USE_LIMITS, normalizePlanTier } from "./planLimits";
 import { resolvePeriod } from "./usageLedger";
 
 const logger = createLogger("authRoutes");
@@ -100,6 +100,13 @@ export function registerAuthRoutes(app: Express): void {
         creditPlan.periodDays,
       );
       const creditUsage = usageLedger.summary(user.id, creditPeriod.start, creditPeriod.end);
+      const opusRunsLimit = MODEL_USE_LIMITS[tier].opus ?? 0;
+      const opusRunsUsed = usageLedger.modelRunsUsed(
+        user.id,
+        "opus",
+        creditPeriod.start,
+        creditPeriod.end,
+      );
 
       return res.json({
         tokensUsed: user.tokensUsed,
@@ -114,6 +121,9 @@ export function registerAuthRoutes(app: Express): void {
         creditsRemaining: Math.max(0, creditPlan.credits - creditUsage.creditsUsed),
         aiCostCentsUsed: creditUsage.costCentsUsed,
         aiCostCeilingCents: creditPlan.costCeilingCents,
+        opusRunsUsed,
+        opusRunsLimit,
+        opusRunsRemaining: Math.max(0, opusRunsLimit - opusRunsUsed),
         creditPeriodEndsAt: creditPeriod.end.toISOString(),
         billingCycleStart: user.billingCycleStart
           ? ((user.billingCycleStart as any).toISOString?.() ?? user.billingCycleStart)

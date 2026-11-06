@@ -1,5 +1,5 @@
 import { spawnSync } from "child_process";
-import { copyFile, mkdir, symlink } from "fs/promises";
+import { copyFile, cp, mkdir, symlink, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -11,7 +11,11 @@ export async function bootstrapTempWorkspace(tempDir: string): Promise<void> {
   await mkdir(join(tempDir, "shared"), { recursive: true });
   await copyFile(join(repoRoot, "tsconfig.json"), join(tempDir, "tsconfig.json"));
   await copyFile(join(repoRoot, "drizzle.config.ts"), join(tempDir, "drizzle.config.ts"));
-  await copyFile(join(repoRoot, "shared", "schema.ts"), join(tempDir, "shared", "schema.ts"));
+  // tsconfig maps @shared/* into this workspace, so server modules that import any
+  // shared file (not only the schema) need the whole directory.
+  await cp(join(repoRoot, "shared"), join(tempDir, "shared"), { recursive: true });
+  // Load the copied shared files as ES modules, matching the repo's package.json.
+  await writeFile(join(tempDir, "package.json"), JSON.stringify({ type: "module" }));
 
   try {
     await symlink(join(repoRoot, "node_modules"), join(tempDir, "node_modules"), "junction");

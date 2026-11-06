@@ -41,6 +41,8 @@ export const testFiles = [
   "tests/server/sseUtils.test.ts",
   "tests/server/chatDocumentFormatting.test.ts",
   "tests/server/humanizer.test.ts",
+  "tests/server/humanizerRoutes.integration.test.ts",
+  "tests/server/mcpChallengeRoute.test.ts",
   "tests/server/analyticsRoutes.integration.test.ts",
   "tests/server/siteAnalyticsRoutes.integration.test.ts",
   "tests/server/metaConversions.test.ts",
