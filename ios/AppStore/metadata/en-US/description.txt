@@ -1,0 +1,22 @@
+ScholarMark keeps track of the sources behind your paper: where each one came from, the exact words you plan to quote, and a citation you can paste into your draft.
+
+CAPTURE A SOURCE
+Paste an article or news link, a DOI or doi.org link, or a book title. Tap Look up details and ScholarMark reads the DOI record from doi.org, or the citation tags on the page you pasted, then lets you check every field before you save. You can also enter the details by hand.
+
+KEEP QUOTES AND NOTES
+Organize sources into projects, one for each paper or class, each with its own citation style, plus an Inbox for anything you have not sorted yet. Write notes on each source, and save quotes with a page number, a category (key quote, argument, evidence, methodology, or note), and your own comment. Search a project by title, author, notes, or quote text.
+
+DRAFT CITATIONS
+See each source formatted in Chicago (17th edition: bibliography entry, footnote, and shortened note), MLA (9th edition), and APA (7th edition). Copy or share a citation, or long-press a quote to copy it with its citation attached.
+
+FIX MISSING DETAILS
+The Review tab lists every source that is missing a field its citation style needs, such as a publication year, a journal volume, or a publisher, and keeps required fields separate from suggestions like DOIs and page ranges. The citation editor flags the same gaps, shows a live preview, and warns you if you already saved a source with the same DOI or link.
+
+EXPORT
+Export a project as a bibliography, Markdown notes and quotes, BibTeX, or RIS for your reference manager, or save a full JSON backup of your library. Exports go through the share sheet, so you can save them to Files, send them by Mail, or AirDrop them.
+
+PRIVATE BY DESIGN
+There is no account to create. Your library is stored on your iPhone or iPad and is included in your normal device backups. The app contacts doi.org or the page you pasted only when you tap Look up details. There is no tracking, advertising, or analytics.
+
+GOOD TO KNOW
+This version does not sync with a ScholarMark web account or between devices; use Export to move your sources. It does not read PDFs. Citation formatting matches ScholarMark on the web, but always check your instructor's requirements before you submit.

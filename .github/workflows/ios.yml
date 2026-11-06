@@ -15,6 +15,11 @@ on:
         description: "Xcode version installed on the runner image (must be 26 or newer)"
         required: false
         default: "26.6"
+      capture_screenshots:
+        description: "Also capture App Store screenshots in simulators (uploaded as an artifact)"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,6 +41,22 @@ defaults:
     shell: bash --noprofile --norc -euo pipefail {0}
 
 jobs:
+  listing:
+    name: App Store listing and screenshot checks
+    # Plain Node, no Xcode: checks ios/AppStore/metadata against Apple's limits and tests the
+    # screenshot checker.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check listing metadata
+        run: node ios/Tools/check-app-store-metadata.mjs
+
+      - name: Test the App Store tools
+        run: node --test ios/Tools/app-store-tools.test.mjs
+
   core-packages:
     name: swift test (local packages)
     # Pinned image label (arm64); never macos-latest, so Xcode/SDK changes are deliberate.
@@ -304,3 +325,61 @@ jobs:
             build/logs/*.log
           if-no-files-found: ignore
           retention-days: 7
+
+  screenshots:
+    name: App Store screenshots (simulators)
+    # Manual only: Actions > iOS > Run workflow > "Also capture App Store screenshots".
+    if: github.event_name == 'workflow_dispatch' && inputs.capture_screenshots
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      SHOTS_DIR: build/AppStoreScreenshots
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          app="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "$app" ]]; then
+            echo "::error::Xcode ${XCODE_VERSION} is not installed on this runner image. Available:"
+            ls -d /Applications/Xcode_*.app || true
+            exit 1
+          fi
+          sudo xcode-select --switch "$app/Contents/Developer"
+          xcodebuild -version
+          node --version
+
+      - name: Generate the Xcode project from project.yml
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install xcodegen
+          fi
+          (cd "$IOS_ROOT" && xcodegen generate --spec project.yml)
+
+      - name: Capture screenshots
+        run: ios/Tools/capture-app-store-screenshots.sh "$SHOTS_DIR"
+
+      - name: Summarize screenshots
+        if: always()
+        run: |
+          {
+            echo "## App Store screenshots"
+            echo "Synthetic sample data, Debug build, $(xcodebuild -version | paste -sd ' ' -)."
+            echo '```'
+            if [[ -d "$SHOTS_DIR" ]]; then
+              node ios/Tools/check-app-store-screenshots.mjs --require iphone-6.3,ipad-13 "$SHOTS_DIR" 2>&1 || true
+            else
+              echo "No screenshots were captured."
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-screenshots-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/AppStoreScreenshots
+          if-no-files-found: ignore
+          retention-days: 14
