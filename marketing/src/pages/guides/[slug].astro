@@ -4,8 +4,10 @@ import { render } from "astro:content";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import CtaBand from "../../components/CtaBand.astro";
 import GuideCard from "../../components/GuideCard.astro";
+import SkillDownload from "../../components/SkillDownload.astro";
 import { SITE_ORIGIN } from "../../config/release";
 import { assertSampleAuditGuidesExist, sampleAuditEntryFor } from "../../lib/sampleAuditEntries";
+import { assertSkillDownloadGuideExists, showsSkillDownload } from "../../lib/skillDownload";
 import {
   formatDay,
   getGuides,
@@ -18,6 +20,7 @@ import {
 export const getStaticPaths = (async () => {
   const guides = await getGuides();
   assertSampleAuditGuidesExist(guides.map((guide) => guide.id));
+  assertSkillDownloadGuideExists(guides.map((guide) => guide.id));
   return guides.map((guide) => ({
     params: { slug: guide.id },
     props: {
@@ -148,7 +151,7 @@ const jsonLd = [
             </a>
           </aside>
         )
-      }
+      }{showsSkillDownload(guide.id) && <SkillDownload />}
     </div>
   </article>
 
