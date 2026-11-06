@@ -74,6 +74,71 @@ export function pageFingerprint(html) {
   return createHash("sha256").update(normalized).digest("hex");
 }
 
+/** robots.txt groups that gate a submission: the default group and Bing's. */
+export const ROBOTS_AGENTS = ["*", "bingbot"];
+
+/**
+ * RFC 9309 groups: one or more consecutive User-agent lines share the Allow/Disallow rules that
+ * follow. Other records (Sitemap, Cloudflare's Content-Signal, comments) are ignored.
+ */
+export function parseRobotsGroups(text) {
+  const groups = [];
+  let current = null;
+  let collectingAgents = false;
+  for (const rawLine of text.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*$/, "").trim();
+    const separator = line.indexOf(":");
+    if (separator <= 0) continue;
+    const field = line.slice(0, separator).trim().toLowerCase();
+    const value = line.slice(separator + 1).trim();
+    if (field === "user-agent") {
+      if (!collectingAgents) {
+        current = { agents: [], rules: [] };
+        groups.push(current);
+      }
+      current.agents.push(value.toLowerCase());
+      collectingAgents = true;
+    } else if (field === "allow" || field === "disallow") {
+      if (current) current.rules.push({ allow: field === "allow", pattern: value });
+      collectingAgents = false;
+    }
+  }
+  return groups;
+}
+
+/**
+ * Rules for one crawler: all groups naming it (merged), else all `*` groups (merged). Blocks
+ * aimed at other bots, such as AI-training crawlers, never apply.
+ */
+export function robotsRulesFor(text, agent) {
+  const groups = parseRobotsGroups(text);
+  const named = agent === "*" ? [] : groups.filter((group) => group.agents.includes(agent));
+  const chosen = named.length > 0 ? named : groups.filter((group) => group.agents.includes("*"));
+  return chosen.flatMap((group) => group.rules);
+}
+
+function robotsPatternMatches(pattern, urlPath) {
+  const anchored = pattern.endsWith("$");
+  const body = anchored ? pattern.slice(0, -1) : pattern;
+  const source = body
+    .split("*")
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${source}${anchored ? "$" : ""}`).test(urlPath);
+}
+
+/** Longest matching rule wins; on a tie Allow wins (RFC 9309). An empty Disallow allows all. */
+export function robotsAllowsPath(rules, urlPath) {
+  let allowLength = -1;
+  let disallowLength = -1;
+  for (const rule of rules) {
+    if (!rule.pattern || !robotsPatternMatches(rule.pattern, urlPath)) continue;
+    if (rule.allow) allowLength = Math.max(allowLength, rule.pattern.length);
+    else disallowLength = Math.max(disallowLength, rule.pattern.length);
+  }
+  return disallowLength <= allowLength;
+}
+
 function hasNoindex(html, headers) {
   if (/noindex/i.test(headers.get("x-robots-tag") ?? "")) return true;
   return (html.match(/<meta\b[^>]*>/gi) ?? []).some(
@@ -184,8 +249,13 @@ export async function runIndexNow({
     const robots = await get(`${SITE_ORIGIN}/robots.txt`);
     const robotsText = await robots.text();
     if (robots.status !== 200) throw new IndexNowError(`robots.txt returned ${robots.status}`);
-    if (/^\s*Disallow:\s*\/\s*$/im.test(robotsText)) {
-      throw new IndexNowError("robots.txt blocks the whole site (non-production release?)");
+    const robotsRules = ROBOTS_AGENTS.map((agent) => [agent, robotsRulesFor(robotsText, agent)]);
+    for (const [agent, rules] of robotsRules) {
+      if (!robotsAllowsPath(rules, "/")) {
+        throw new IndexNowError(
+          `robots.txt blocks the whole site for User-agent: ${agent} (non-production release?)`,
+        );
+      }
     }
 
     const sitemap = await get(`${SITE_ORIGIN}/sitemap.xml`);
@@ -202,6 +272,13 @@ export async function runIndexNow({
     info(
       `sitemap lists ${listed.length} URLs; ${candidates.length} eligible (homepage, guide hub, ${guideCount} guides)`,
     );
+    for (const url of candidates) {
+      for (const [agent, rules] of robotsRules) {
+        if (!robotsAllowsPath(rules, new URL(url).pathname)) {
+          throw new IndexNowError(`robots.txt blocks ${url} for User-agent: ${agent}`);
+        }
+      }
+    }
     if (candidates.length > MAX_URLS_PER_REQUEST) {
       throw new IndexNowError(`${candidates.length} URLs exceed one IndexNow request`);
     }

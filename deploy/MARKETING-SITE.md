@@ -142,7 +142,9 @@ sudo -H -u deploy pm2 reload sourceannotator --update-env
 ### Submitting
 
 Run as the `deploy` user from `/opt/app`. The command reads `.env`, then checks the live
-`robots.txt` (not blocking), `sitemap.xml` (lists the homepage and guide hub), the key file
+`robots.txt` (the `User-agent: *` and `bingbot` rules, per RFC 9309 groups, must allow `/` and
+every eligible page; site-wide blocks for other bots, such as Cloudflare's AI-training groups,
+are ignored), `sitemap.xml` (lists the homepage and guide hub), the key file
 (`200`, `text/plain`, exactly the key, no redirect; an SPA HTML fallback fails), and every
 eligible page (`200` HTML, not `noindex`, self-canonical). Any failure stops it before the
 IndexNow request.

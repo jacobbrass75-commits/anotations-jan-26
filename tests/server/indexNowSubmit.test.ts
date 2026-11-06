@@ -6,7 +6,10 @@ import {
   INDEXNOW_ENDPOINT,
   isSubmittableUrl,
   pageFingerprint,
+  parseRobotsGroups,
   parseSitemapLocs,
+  robotsAllowsPath,
+  robotsRulesFor,
   runIndexNow,
 } from "../../scripts/indexnow-submit.mjs";
 
@@ -44,12 +47,61 @@ function sitemap(locs: string[]) {
 }
 
 /** A healthy production site; tests override single routes. */
+// Shape of the live Cloudflare-managed robots.txt: AI-training bots blocked site-wide (one group
+// with consecutive User-agent lines), two `*` groups that allow / and keep the app's private
+// paths disallowed, and search crawlers left alone.
+const CLOUDFLARE_ROBOTS = [
+  "# As a condition of accessing this website, you agree to abide by the following",
+  "# content signals.",
+  "",
+  "# BEGIN Cloudflare Managed content",
+  "",
+  "User-agent: *",
+  "Content-Signal: search=yes,ai-train=no",
+  "Allow: /",
+  "",
+  "User-agent: Amazonbot",
+  "Disallow: /",
+  "",
+  "User-agent: Applebot-Extended",
+  "Disallow: /",
+  "",
+  "User-agent: Bytespider",
+  "User-agent: CCBot",
+  "Disallow: /",
+  "",
+  "User-agent: ClaudeBot",
+  "Disallow: /",
+  "",
+  "User-agent: Google-Extended",
+  "Disallow: /",
+  "",
+  "User-agent: GPTBot",
+  "User-agent: meta-externalagent",
+  "Disallow: /",
+  "",
+  "# END Cloudflare Managed Content",
+  "",
+  "User-agent: *",
+  "Allow: /",
+  "Disallow: /api/",
+  "Disallow: /dashboard",
+  "Disallow: /projects",
+  "Disallow: /account",
+  "Disallow: /admin",
+  "Disallow: /sign-in",
+  "Disallow: /sign-up",
+  "",
+  `Sitemap: ${SITE}/sitemap.xml`,
+  "",
+].join("\n");
+
 function liveSite(): Map<string, MockResponse> {
   const routes = new Map<string, MockResponse>();
   routes.set(`${SITE}/robots.txt`, {
     status: 200,
     type: "text/plain",
-    body: `User-agent: *\nAllow: /\nDisallow: /dashboard\n\nSitemap: ${SITE}/sitemap.xml\n`,
+    body: CLOUDFLARE_ROBOTS,
   });
   routes.set(`${SITE}/sitemap.xml`, {
     status: 200,
@@ -325,14 +377,35 @@ describe("indexnow-submit", () => {
     ],
     ["a missing key file", (routes) => routes.delete(`${SITE}/${KEY}.txt`), "key file"],
     [
-      "a blocking robots.txt",
+      "a default-blocking staging robots.txt",
       (routes) =>
         routes.set(`${SITE}/robots.txt`, {
           status: 200,
           type: "text/plain",
+          // Exactly what a non-production Astro build serves.
           body: "User-agent: *\nDisallow: /\n",
         }),
-      "robots.txt blocks",
+      "robots.txt blocks the whole site for User-agent: *",
+    ],
+    [
+      "a Bing-specific site-wide block",
+      (routes) =>
+        routes.set(`${SITE}/robots.txt`, {
+          status: 200,
+          type: "text/plain",
+          body: `${CLOUDFLARE_ROBOTS}\nUser-agent: Googlebot\nUser-agent: Bingbot\nDisallow: /\n`,
+        }),
+      "robots.txt blocks the whole site for User-agent: bingbot",
+    ],
+    [
+      "a wildcard block of the guides",
+      (routes) =>
+        routes.set(`${SITE}/robots.txt`, {
+          status: 200,
+          type: "text/plain",
+          body: CLOUDFLARE_ROBOTS.replace("Disallow: /api/", "Disallow: /api/\nDisallow: /guides"),
+        }),
+      `robots.txt blocks ${SITE}/guides/ for User-agent: *`,
     ],
     [
       "an empty staging sitemap",
@@ -403,6 +476,54 @@ describe("indexnow-submit", () => {
     ).toBe(1);
     expect(site.calls).toEqual([]);
     expect(output.join("\n")).toContain("unreadable");
+  });
+});
+
+describe("indexnow robots.txt rules", () => {
+  it("groups consecutive User-agent lines and ignores non-rule records", () => {
+    const groups = parseRobotsGroups(CLOUDFLARE_ROBOTS);
+    expect(groups.map((group) => group.agents)).toEqual([
+      ["*"],
+      ["amazonbot"],
+      ["applebot-extended"],
+      ["bytespider", "ccbot"],
+      ["claudebot"],
+      ["google-extended"],
+      ["gptbot", "meta-externalagent"],
+      ["*"],
+    ]);
+    expect(groups[0].rules).toEqual([{ allow: true, pattern: "/" }]);
+    expect(groups[3].rules).toEqual([{ allow: false, pattern: "/" }]);
+  });
+
+  it("applies only the wildcard and Bing groups, and keeps private paths blocked", () => {
+    for (const agent of ["*", "bingbot", "oai-searchbot"]) {
+      const rules = robotsRulesFor(CLOUDFLARE_ROBOTS, agent);
+      expect(robotsAllowsPath(rules, "/"), agent).toBe(true);
+      expect(robotsAllowsPath(rules, "/guides/scholarmark-vs-zotero/"), agent).toBe(true);
+      expect(robotsAllowsPath(rules, "/dashboard"), agent).toBe(false);
+      expect(robotsAllowsPath(rules, "/api/projects"), agent).toBe(false);
+    }
+    for (const agent of ["gptbot", "ccbot", "claudebot", "google-extended", "meta-externalagent"]) {
+      expect(robotsAllowsPath(robotsRulesFor(CLOUDFLARE_ROBOTS, agent), "/"), agent).toBe(false);
+    }
+  });
+
+  it("uses longest match, Allow on ties, wildcards and end anchors", () => {
+    const rules = (text: string) => robotsRulesFor(text, "bingbot");
+    expect(robotsAllowsPath(rules("User-agent: *\nDisallow: /\n"), "/")).toBe(false);
+    expect(robotsAllowsPath(rules("User-agent: *\nDisallow:\n"), "/")).toBe(true);
+    expect(robotsAllowsPath(rules(""), "/")).toBe(true);
+    expect(robotsAllowsPath(rules("User-agent: *\nDisallow: /*\n"), "/")).toBe(false);
+    expect(robotsAllowsPath(rules("User-agent: *\nDisallow: /$\n"), "/")).toBe(false);
+    expect(robotsAllowsPath(rules("User-agent: *\nDisallow: /$\n"), "/guides/")).toBe(true);
+    expect(
+      robotsAllowsPath(rules("User-agent: *\nDisallow: /\nAllow: /guides/\n"), "/guides/a/"),
+    ).toBe(true);
+    // A Bing group replaces the wildcard groups for Bing.
+    const bingOnly = "User-agent: *\nDisallow: /\n\nUser-agent: bingbot\nAllow: /\n";
+    expect(robotsAllowsPath(rules(bingOnly), "/")).toBe(true);
+    expect(robotsAllowsPath(robotsRulesFor(bingOnly, "*"), "/")).toBe(false);
   });
 });
 
