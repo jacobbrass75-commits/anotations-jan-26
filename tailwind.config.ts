@@ -2,7 +2,11 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
-  content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
+  // Globs resolve against this file, so a dev server started from another cwd still scans the app.
+  content: {
+    relative: true,
+    files: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
+  },
   theme: {
     extend: {
       borderRadius: {
