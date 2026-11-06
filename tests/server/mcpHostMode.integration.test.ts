@@ -342,6 +342,19 @@ describe("MCP host-AI mode", () => {
       expect(tools.map((tool: { name: string }) => tool.name)).toEqual(
         expect.arrayContaining(["send_message", "compile_paper", "save_annotations"]),
       );
+
+      // The tool must not pin a model: a Pro user gets the tier default (Sonnet),
+      // not a Premium-only Opus choice that the backend rejects with 403.
+      const project = parseToolJson(
+        await client.callTool({ name: "create_project", arguments: { name: "Rivers" } }),
+      );
+      const conversation = parseToolJson(
+        await client.callTool({
+          name: "start_conversation",
+          arguments: { project_id: project.id, title: "Draft" },
+        }),
+      );
+      expect(conversation).toMatchObject({ projectId: project.id, writingModel: "sonnet" });
       await client.close();
     } finally {
       await server.close();
