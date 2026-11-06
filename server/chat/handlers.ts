@@ -209,6 +209,41 @@ function finalizeWritingUsage(input: {
   }
 }
 
+type ProviderMessageStream = ReturnType<Anthropic["messages"]["stream"]>;
+
+/**
+ * Subscribes to how a provider stream ends. The SDK ends a stream with "message", or
+ * with "abort" (an APIUserAbortError, for an abort ScholarMark requested) or "error";
+ * an "abort" or "error" without a listener becomes an unhandled rejection. Exactly one
+ * outcome handler runs, so accounting cannot run twice or not at all.
+ */
+function onProviderStreamOutcome(
+  stream: ProviderMessageStream,
+  outcome: {
+    message: (message: Anthropic.Message) => void | Promise<void>;
+    aborted: (error: Error) => void | Promise<void>;
+    failed: (error: Error) => void | Promise<void>;
+  },
+): void {
+  let settled = false;
+  const once =
+    <T>(handler: (value: T) => void | Promise<void>) =>
+    (value: T) => {
+      if (settled) return;
+      settled = true;
+      try {
+        void Promise.resolve(handler(value)).catch((error) => {
+          logger.error({ err: error }, "Provider stream outcome handling failed:");
+        });
+      } catch (error) {
+        logger.error({ err: error }, "Provider stream outcome handling failed:");
+      }
+    };
+  stream.on("message", once(outcome.message));
+  stream.on("abort", once(outcome.aborted));
+  stream.on("error", once(outcome.failed));
+}
+
 /**
  * Reserves ledger usage before any provider call. The tier is re-read from the
  * database so a stale session cannot unlock a model, and a reused request ID cannot
@@ -1121,25 +1156,34 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
               toolParser.pushText(text);
             });
 
-            stream.on("message", (message) => {
-              parser.finish({ finalizeDocument: message.stop_reason !== "max_tokens" });
-              toolParser.finish();
-              activeStream = null;
-
-              resolve({
-                fullText,
-                usage: message.usage || {},
-                toolRequests: detectedRequests,
-                stopReason: message.stop_reason,
-              });
-            });
-
-            stream.on("error", (error) => {
+            const failTurn = (error: Error) => {
               parser.finish({ finalizeDocument: false });
               toolParser.finish();
               activeStream = null;
+              reject(error);
+            };
 
-              if (isClientCancellation(clientGone, error)) {
+            onProviderStreamOutcome(stream, {
+              message: (message) => {
+                parser.finish({ finalizeDocument: message.stop_reason !== "max_tokens" });
+                toolParser.finish();
+                activeStream = null;
+
+                resolve({
+                  fullText,
+                  usage: message.usage || {},
+                  toolRequests: detectedRequests,
+                  stopReason: message.stop_reason,
+                });
+              },
+              aborted: (error) => {
+                if (!isClientCancellation(clientGone, error)) {
+                  failTurn(error);
+                  return;
+                }
+                parser.finish({ finalizeDocument: false });
+                toolParser.finish();
+                activeStream = null;
                 providerCallCancelled = true;
                 resolve({
                   fullText,
@@ -1148,9 +1192,8 @@ Use the gathered evidence, the accumulated clipboard, and the recent conversatio
                   stopReason: null,
                   cancelled: true,
                 });
-                return;
-              }
-              reject(error);
+              },
+              failed: failTurn,
             });
           });
         };
@@ -1673,53 +1716,30 @@ ${chunkContext}`;
           }
         });
 
-        stream.on("message", async (message) => {
-          const inputTokens = message?.usage?.input_tokens || 0;
-          const outputTokens = message?.usage?.output_tokens || 0;
-          await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_compile");
+        const settleCancelledRun = async () => {
+          activeStream = null;
+          // The client left mid-stream. Part of the output was already delivered and
+          // billed, so the run stays counted at the usage observed so far.
+          const usage = partialStreamUsage(stream, streamedText);
           if (usageRequestId) {
-            usageLedger.settle(
-              usageRequestId,
-              estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
-            );
+            finalizeWritingUsage({
+              requestId: usageRequestId,
+              model: usageCreditModel,
+              inputTokens: usage.input_tokens,
+              outputTokens: usage.output_tokens,
+              abandonedAfterProviderCall: true,
+            });
             usageRequestId = null;
           }
-          if (isAborted()) return;
-          stopHeartbeat?.();
-          stopHeartbeat = null;
-          if (message.stop_reason === "max_tokens") {
-            res.write(
-              `data: ${JSON.stringify({ type: "error", error: "Compilation reached the output limit. The result is incomplete; compile smaller sections." })}\n\n`,
-            );
-          } else {
-            res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-          }
-          res.end();
-        });
+          await recordUserTokenUsage(
+            req.user!.userId,
+            usage.input_tokens + usage.output_tokens,
+            "chat_compile",
+          );
+        };
 
-        stream.on("error", async (error) => {
+        const reportStreamFailure = (error: Error) => {
           activeStream = null;
-          if (isClientCancellation(clientGone, error)) {
-            // The client left mid-stream. Part of the output was already delivered and
-            // billed, so the run stays counted at the usage observed so far.
-            const usage = partialStreamUsage(stream, streamedText);
-            if (usageRequestId) {
-              finalizeWritingUsage({
-                requestId: usageRequestId,
-                model: usageCreditModel,
-                inputTokens: usage.input_tokens,
-                outputTokens: usage.output_tokens,
-                abandonedAfterProviderCall: true,
-              });
-              usageRequestId = null;
-            }
-            await recordUserTokenUsage(
-              req.user!.userId,
-              usage.input_tokens + usage.output_tokens,
-              "chat_compile",
-            );
-            return;
-          }
           if (usageRequestId) {
             usageLedger.refund(usageRequestId);
             usageRequestId = null;
@@ -1733,6 +1753,42 @@ ${chunkContext}`;
             );
             res.end();
           }
+        };
+
+        onProviderStreamOutcome(stream, {
+          message: async (message) => {
+            const inputTokens = message?.usage?.input_tokens || 0;
+            const outputTokens = message?.usage?.output_tokens || 0;
+            activeStream = null;
+            await recordUserTokenUsage(
+              req.user!.userId,
+              inputTokens + outputTokens,
+              "chat_compile",
+            );
+            if (usageRequestId) {
+              usageLedger.settle(
+                usageRequestId,
+                estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
+              );
+              usageRequestId = null;
+            }
+            if (isAborted()) return;
+            stopHeartbeat?.();
+            stopHeartbeat = null;
+            if (message.stop_reason === "max_tokens") {
+              res.write(
+                `data: ${JSON.stringify({ type: "error", error: "Compilation reached the output limit. The result is incomplete; compile smaller sections." })}\n\n`,
+              );
+            } else {
+              res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+            }
+            res.end();
+          },
+          aborted: (error) =>
+            isClientCancellation(clientGone, error)
+              ? settleCancelledRun()
+              : reportStreamFailure(error),
+          failed: reportStreamFailure,
         });
       } catch (error) {
         if (usageRequestId) usageLedger.refund(usageRequestId);
@@ -1860,48 +1916,30 @@ ${chunkContext}`;
           }
         });
 
-        stream.on("message", async (message) => {
-          const inputTokens = message?.usage?.input_tokens || 0;
-          const outputTokens = message?.usage?.output_tokens || 0;
-          await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_verify");
+        const settleCancelledRun = async () => {
+          activeStream = null;
+          // The client left mid-stream. Part of the output was already delivered and
+          // billed, so the run stays counted at the usage observed so far.
+          const usage = partialStreamUsage(stream, streamedText);
           if (usageRequestId) {
-            usageLedger.settle(
-              usageRequestId,
-              estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
-            );
+            finalizeWritingUsage({
+              requestId: usageRequestId,
+              model: usageCreditModel,
+              inputTokens: usage.input_tokens,
+              outputTokens: usage.output_tokens,
+              abandonedAfterProviderCall: true,
+            });
             usageRequestId = null;
           }
-          if (!isAborted()) {
-            stopHeartbeat?.();
-            stopHeartbeat = null;
-            res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-            res.end();
-          }
-        });
+          await recordUserTokenUsage(
+            req.user!.userId,
+            usage.input_tokens + usage.output_tokens,
+            "chat_verify",
+          );
+        };
 
-        stream.on("error", async (error) => {
+        const reportStreamFailure = (error: Error) => {
           activeStream = null;
-          if (isClientCancellation(clientGone, error)) {
-            // The client left mid-stream. Part of the output was already delivered and
-            // billed, so the run stays counted at the usage observed so far.
-            const usage = partialStreamUsage(stream, streamedText);
-            if (usageRequestId) {
-              finalizeWritingUsage({
-                requestId: usageRequestId,
-                model: usageCreditModel,
-                inputTokens: usage.input_tokens,
-                outputTokens: usage.output_tokens,
-                abandonedAfterProviderCall: true,
-              });
-              usageRequestId = null;
-            }
-            await recordUserTokenUsage(
-              req.user!.userId,
-              usage.input_tokens + usage.output_tokens,
-              "chat_verify",
-            );
-            return;
-          }
           if (usageRequestId) {
             usageLedger.refund(usageRequestId);
             usageRequestId = null;
@@ -1915,6 +1953,33 @@ ${chunkContext}`;
             );
             res.end();
           }
+        };
+
+        onProviderStreamOutcome(stream, {
+          message: async (message) => {
+            const inputTokens = message?.usage?.input_tokens || 0;
+            const outputTokens = message?.usage?.output_tokens || 0;
+            activeStream = null;
+            await recordUserTokenUsage(req.user!.userId, inputTokens + outputTokens, "chat_verify");
+            if (usageRequestId) {
+              usageLedger.settle(
+                usageRequestId,
+                estimatedModelCostCents(usageCreditModel, inputTokens, outputTokens),
+              );
+              usageRequestId = null;
+            }
+            if (!isAborted()) {
+              stopHeartbeat?.();
+              stopHeartbeat = null;
+              res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+              res.end();
+            }
+          },
+          aborted: (error) =>
+            isClientCancellation(clientGone, error)
+              ? settleCancelledRun()
+              : reportStreamFailure(error),
+          failed: reportStreamFailure,
         });
       } catch (error) {
         if (usageRequestId) usageLedger.refund(usageRequestId);

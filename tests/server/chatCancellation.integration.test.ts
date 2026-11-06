@@ -8,62 +8,94 @@ import { startHttpServer } from "./helpers/http";
 
 // Real HTTP transport with a scripted provider. Each test queues one script per
 // expected provider stream; a stream with no script fails the test loudly.
+//
+// The fake follows @anthropic-ai/sdk MessageStream semantics: abort() emits "abort"
+// (never "error") with an APIUserAbortError and then ends the stream; nothing is
+// emitted after the end; an "abort" or "error" with no listener becomes an unhandled
+// rejection, as in the SDK.
 type ScriptedStream = {
   emitText: (text: string) => void;
   finish: (message: { stop_reason: string; usage: Record<string, number> }) => void;
   fail: (error: Error) => void;
   abortCalls: number;
   currentMessage?: { usage: Record<string, number> };
+  /** Models a race: the final message was already in flight when abort() landed. */
+  deliverBeforeAbort?: () => void;
 };
 
-const { anthropicCreate, anthropicStream, streamScripts, compactionGate } = vi.hoisted(() => {
-  const streamScripts: Array<(stream: ScriptedStream) => void> = [];
-  const compactionGate: { wait: (() => Promise<void>) | null } = { wait: null };
-
-  const anthropicStream = vi.fn(() => {
-    const handlers: Record<string, (value: any) => void> = {};
-    const scripted: ScriptedStream = {
-      emitText: (text) => handlers.text?.(text),
-      finish: (message) => handlers.message?.(message),
-      fail: (error) => handlers.error?.(error),
-      abortCalls: 0,
+const { anthropicCreate, anthropicStream, streamScripts, compactionGate, sdkErrors } = vi.hoisted(
+  () => {
+    const streamScripts: Array<(stream: ScriptedStream) => void> = [];
+    const compactionGate: { wait: (() => Promise<void>) | null } = { wait: null };
+    const sdkErrors: { APIUserAbortError: new () => Error } = {
+      APIUserAbortError: class extends Error {},
     };
-    const stream = {
-      on: vi.fn((event: string, handler: (value: any) => void) => {
-        handlers[event] = handler;
-        if (event === "error") {
-          const script = streamScripts.shift();
-          queueMicrotask(() =>
-            script ? script(scripted) : scripted.fail(new Error("unexpected provider stream")),
-          );
+
+    const anthropicStream = vi.fn(() => {
+      const handlers: Record<string, Array<(value: any) => void>> = {};
+      let ended = false;
+      const emit = (event: string, value?: unknown) => {
+        if (ended) return;
+        const listeners = handlers[event] ?? [];
+        for (const listener of listeners) listener(value);
+        if ((event === "abort" || event === "error") && listeners.length === 0) {
+          void Promise.reject(value);
         }
-        return stream;
-      }),
-      abort: vi.fn(() => {
-        scripted.abortCalls += 1;
-        (stream as any).onAbort?.();
-      }),
-      get currentMessage() {
-        return scripted.currentMessage;
-      },
-      scripted,
-    };
-    return stream;
-  });
+        if (event === "message" || event === "abort" || event === "error") {
+          ended = true;
+          for (const listener of handlers.end ?? []) listener(undefined);
+        }
+      };
+      const scripted: ScriptedStream = {
+        emitText: (text) => emit("text", text),
+        finish: (message) => emit("message", message),
+        fail: (error) => emit("error", error),
+        abortCalls: 0,
+      };
+      const stream = {
+        on: vi.fn((event: string, handler: (value: any) => void) => {
+          (handlers[event] ??= []).push(handler);
+          return stream;
+        }),
+        abort: vi.fn(() => {
+          scripted.abortCalls += 1;
+          if (ended) return;
+          if (scripted.deliverBeforeAbort) {
+            scripted.deliverBeforeAbort();
+            return;
+          }
+          emit("abort", new sdkErrors.APIUserAbortError());
+        }),
+        get currentMessage() {
+          return scripted.currentMessage;
+        },
+        scripted,
+      };
+      const script = streamScripts.shift();
+      queueMicrotask(() =>
+        script ? script(scripted) : scripted.fail(new Error("unexpected provider stream")),
+      );
+      return stream;
+    });
 
-  return {
-    streamScripts,
-    compactionGate,
-    anthropicStream,
-    anthropicCreate: vi.fn(async () => ({
-      content: [{ type: "text", text: JSON.stringify({ newEvidence: [], sectionsWorkedOn: [] }) }],
-      usage: { input_tokens: 1, output_tokens: 1 },
-    })),
-  };
-});
+    return {
+      streamScripts,
+      compactionGate,
+      sdkErrors,
+      anthropicStream,
+      anthropicCreate: vi.fn(async () => ({
+        content: [
+          { type: "text", text: JSON.stringify({ newEvidence: [], sectionsWorkedOn: [] }) },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })),
+    };
+  },
+);
 
 vi.mock("@anthropic-ai/sdk", async () => {
   const actual = await vi.importActual<typeof import("@anthropic-ai/sdk")>("@anthropic-ai/sdk");
+  sdkErrors.APIUserAbortError = actual.APIUserAbortError as unknown as new () => Error;
   const Anthropic: any = vi.fn().mockImplementation(function AnthropicMock() {
     return { messages: { create: anthropicCreate, stream: anthropicStream } };
   });
@@ -96,8 +128,12 @@ describe("chat streaming cancellation over HTTP", () => {
   let tempDir = "";
   let sqlite: any = null;
   const originalCwd = process.cwd();
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown) => unhandled.push(reason);
 
   beforeEach(async () => {
+    unhandled.length = 0;
+    process.on("unhandledRejection", onUnhandled);
     tempDir = await mkdtemp(join(tmpdir(), "scholarmark-chat-cancel-"));
     vi.resetModules();
     vi.clearAllMocks();
@@ -108,6 +144,10 @@ describe("chat streaming cancellation over HTTP", () => {
   });
 
   afterEach(async () => {
+    await delay(20);
+    process.off("unhandledRejection", onUnhandled);
+    // An SDK "abort" or "error" event nobody handles surfaces here.
+    expect(unhandled).toEqual([]);
     sqlite?.close();
     sqlite = null;
     process.chdir(originalCwd);
@@ -212,16 +252,12 @@ describe("chat streaming cancellation over HTTP", () => {
   });
 
   it("aborts the provider stream when the client disconnects mid-stream", async () => {
-    const { APIUserAbortError } =
-      await vi.importActual<typeof import("@anthropic-ai/sdk")>("@anthropic-ai/sdk");
     const { server, token } = await createApp("max", "opus");
     let release: () => void = () => {};
     streamScripts.push((stream) => {
       stream.currentMessage = { usage: { input_tokens: 30_000, output_tokens: 5_000 } };
       stream.emitText("Most of a draft");
-      // The provider would keep generating until aborted.
-      const parent = anthropicStream.mock.results.at(-1)!.value as any;
-      parent.onAbort = () => stream.fail(new APIUserAbortError());
+      // The provider keeps generating until aborted; a late finish is dropped after abort.
       release = () => stream.finish({ stop_reason: "end_turn", usage: {} });
     });
 
@@ -289,11 +325,11 @@ describe("chat streaming cancellation over HTTP", () => {
 
   it("does not start another tool iteration after the client disconnects", async () => {
     const { server, token } = await createApp("pro", "sonnet");
-    let finishFirst: () => void = () => {};
     streamScripts.push((stream) => {
       stream.emitText("Need more context.");
-      // The provider finishes the turn even though an abort was requested (a race).
-      finishFirst = () => {
+      // A race: the turn's final events were already in flight when the abort landed,
+      // so the SDK delivers the finished message instead of an abort.
+      stream.deliverBeforeAbort = () => {
         stream.emitText(
           '<chunk_request document_id="doc-1" annotation_id="missing">nearby text</chunk_request>',
         );
@@ -306,18 +342,19 @@ describe("chat streaming cancellation over HTTP", () => {
       const response = await sendMessage(server.baseUrl, token, controller.signal);
       expect(response.status).toBe(200);
       await waitFor(() => anthropicStream.mock.calls.length === 1);
-      controller.abort();
       await delay(30);
-      finishFirst();
+      controller.abort();
       await waitFor(() => reservations()[0]?.status === "settled");
       await delay(100);
 
+      const stream = anthropicStream.mock.results[0].value as any;
+      expect(stream.scripted.abortCalls).toBe(1);
+      // The retrieval round would start a second paid stream; it must not.
       expect(anthropicStream).toHaveBeenCalledTimes(1);
       expect(reservations()).toEqual([
         expect.objectContaining({ model: "sonnet", status: "settled", actual_cost_cents: 1 }),
       ]);
     } finally {
-      finishFirst();
       await server.close();
     }
   });
@@ -325,8 +362,6 @@ describe("chat streaming cancellation over HTTP", () => {
   it.each(["compile", "verify"] as const)(
     "aborts the %s stream on disconnect and keeps the run counted",
     async (operation) => {
-      const { APIUserAbortError } =
-        await vi.importActual<typeof import("@anthropic-ai/sdk")>("@anthropic-ai/sdk");
       const { server, token } = await createApp("max", "opus");
       sqlite
         .prepare(
@@ -342,8 +377,6 @@ describe("chat streaming cancellation over HTTP", () => {
       streamScripts.push((stream) => {
         stream.currentMessage = { usage: { input_tokens: 30_000, output_tokens: 1 } };
         stream.emitText("x".repeat(20_000));
-        const parent = anthropicStream.mock.results.at(-1)!.value as any;
-        parent.onAbort = () => stream.fail(new APIUserAbortError());
       });
 
       try {

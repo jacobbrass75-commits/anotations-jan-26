@@ -57,6 +57,7 @@ export const testFiles = [
   "tests/server/rateLimits.integration.test.ts",
   "tests/server/chatRoutes.integration.test.ts",
   "tests/server/chatCancellation.integration.test.ts",
+  "tests/server/chatCancellationSdk.integration.test.ts",
   "tests/server/extensionRoutes.integration.test.ts",
   "tests/server/projectRoutes.integration.test.ts",
   "tests/server/uploadRoutes.integration.test.ts",
