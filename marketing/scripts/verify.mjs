@@ -250,6 +250,15 @@ async function verifyDist(dist, expect) {
       if (/^(?:https?:)?\/\//i.test(tag.attrs.href ?? "")) fail(where, `third-party <link rel="${tag.attrs.rel}">: ${tag.attrs.href}`);
     }
     if (tags(html, "form").length) fail(where, "<form> is not expected on the marketing site");
+    // Visitors never type data into the site. The only controls are the sample check's radio
+    // buttons and the disabled checkboxes Markdown renders for task lists in guide prose.
+    if (tags(html, "textarea").length || tags(html, "select").length) fail(where, "text-entry controls are not allowed");
+    for (const input of tags(html, "input")) {
+      const taskList = input.attrs.type === "checkbox" && "disabled" in input.attrs && inProse(input.index);
+      if (input.attrs.type !== "radio" && !taskList) {
+        fail(where, `<input type="${input.attrs.type ?? "text"}"> is not allowed outside the sample check`);
+      }
+    }
     // Astro inlines small scripts, so inline code gets the same tracker and network checks as bundles.
     for (const match of html.matchAll(/<script\b(?![^>]*application\/ld\+json)[^>]*>([\s\S]*?)<\/script>/gi)) {
       const tracker = match[1].match(TRACKER_PATTERN);
@@ -323,6 +332,8 @@ async function verifyDist(dist, expect) {
     if (isGuide && !/<article class="guide"/.test(html)) fail(where, "guide page missing article layout");
   }
 
+  errors.push(...sampleAuditChecks(pages, expect));
+
   if (expect.priceLive && !visibleText(pages.get("/")).includes("$5/month")) {
     fail("/", "PUBLIC_PRO_PRICE_LIVE=true but $5/month is not shown");
   }
@@ -363,6 +374,53 @@ async function verifyDist(dist, expect) {
   }
 
   if (expect.fixtures) errors.push(...fixtureChecks(pages));
+  return errors;
+}
+
+/**
+ * The homepage sample citation check: synthetic, labeled, usable without JavaScript, and
+ * linked from a small set of guides. Behaviour in a browser is checked separately.
+ */
+function sampleAuditChecks(pages, expect) {
+  const errors = [];
+  const fail = (where, message) => errors.push(`${where}: ${message}`);
+  const home = pages.get("/") ?? "";
+  const start = home.indexOf('id="sample-audit"');
+  const end = home.indexOf("</section>", home.indexOf('class="audit-cta"', start));
+  if (start === -1 || end === -1) {
+    fail("/", "sample citation check section (#sample-audit) is missing");
+    return errors;
+  }
+  const sample = home.slice(start, end);
+  const text = visibleText(sample);
+  if (!/Synthetic example/.test(text)) fail("/#sample-audit", 'missing the "Synthetic example" label');
+  if (!/nothing you choose here is sent anywhere/i.test(text)) fail("/#sample-audit", "missing the no-data-sent notice");
+
+  const radios = tags(sample, "input").filter((tag) => tag.attrs.name === "sample-audit-citation");
+  if (radios.length !== 3) fail("/#sample-audit", `expected 3 citation choices, found ${radios.length}`);
+  if (radios.filter((tag) => "checked" in tag.attrs).length !== 1) fail("/#sample-audit", "exactly one citation must be selected by default");
+  const panels = tags(sample, "article").map((tag) => tag.attrs["data-panel"]);
+  if (JSON.stringify(panels) !== JSON.stringify(radios.map((tag) => tag.attrs.value))) {
+    fail("/#sample-audit", `each choice needs a result panel in the same order: ${panels.join(", ")}`);
+  }
+  for (const status of ["Matches source", "Wording differs", "Page differs"]) {
+    if (!text.includes(status)) fail("/#sample-audit", `missing the "${status}" result`);
+  }
+  if ((sample.match(/Your next step/g) ?? []).length !== 3) fail("/#sample-audit", "every result needs a next step");
+  if (!/<ins\b/.test(sample)) fail("/#sample-audit", "the changed word is not marked with <ins>");
+  if (!/<a [^>]*data-cta="sample_audit"[^>]*data-signup|<a [^>]*data-signup[^>]*data-cta="sample_audit"/.test(sample)) {
+    fail("/#sample-audit", "missing the sample's signup CTA");
+  }
+  if (!home.includes('href="#sample-audit"')) fail("/", "hero does not link to the sample check");
+
+  // Guide entries: real guides only (fixture builds use other slugs).
+  if (!expect.fixtures) {
+    const linked = [...pages].filter(([route, html]) => route.startsWith("/guides/") && html.includes('id="guide-sample-title"'));
+    if (linked.length === 0 || linked.length > 5) fail("guides", `expected 1–5 guides to link to the sample check, found ${linked.length}`);
+    for (const [route, html] of linked) {
+      if (!html.includes('href="/#sample-audit"')) fail(route, "sample entry does not link to /#sample-audit");
+    }
+  }
   return errors;
 }
 

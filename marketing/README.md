@@ -17,6 +17,7 @@ Run from `marketing/` (Node 22.22 or newer):
 | `npm run dev`         | Local dev server                                                   |
 | `npm run build`       | Static build into `dist/`                                          |
 | `npm run check`       | `astro check` (types, content schema, templates)                   |
+| `npm test`            | Unit tests for the attribution helpers (Node's built-in runner)    |
 | `npm run verify`      | Build the fixture matrix and check routes, links, SEO and copy     |
 | `npm run verify:dist` | Check an existing `dist/` built from the real guides               |
 
@@ -51,11 +52,30 @@ Signup CTAs go to the same URL the current landing page uses:
 `https://app.scholarmark.ai/sign-up?redirect_url=/pricing?onboarding=1&source=summer`.
 
 `src/scripts/attribution.ts` copies `utm_*` and `fbclid` from the landing URL onto signup
-links (kept in `sessionStorage` for the visit), and adds `embedded_auth=1` in Instagram and
-Facebook in-app browsers, matching `buildAttributedSignupUrl` in the app. The marketing site
+links and links to the app pricing page (kept in `sessionStorage` for the visit), and adds
+`embedded_auth=1` to signup links in Instagram and Facebook in-app browsers, matching
+`buildAttributedSignupUrl` in the app. Pricing links need the campaign too: the app reads
+attribution from the URL of the first app page it sees, so a visitor who went to pricing
+first would otherwise reach the app, and sign up from there, with no campaign. Sign-in,
+legal and support links are left alone. The pure helpers live in `attributionCore.ts` and are
+covered by `npm test`. The marketing site
 itself loads no analytics, pixels or third-party resources (fonts are self-hosted), sets no
 cookies, and its client script sends nothing anywhere, so it needs no consent banner. The app's consent-gated Meta measurement
 takes over after signup.
+
+## Sample citation check
+
+The homepage section `#sample-audit` (`src/components/SampleAudit.astro`) lets a visitor pick one
+of three citations in a synthetic draft and see it beside the source page: one matches, one has
+an added word, one cites the wrong page. It is built from the synthetic Riverside survey used for
+plugin QA (`integrations/scholarmark-plugin/listing/review-fixtures/`), and is labeled as such.
+
+- Results are pre-written in `src/lib/sampleAudit.ts`; the build fails if a result contradicts
+  the source text it shows (a "match" that isn't verbatim, or a page that doesn't hold the passage).
+- It needs no JavaScript: the choices are native radio buttons and CSS shows the selected result.
+  Browsers without `:has()` show all three results in order. Nothing is typed in or sent anywhere.
+- A few guides link to it after their own text (`src/lib/sampleAuditEntries.ts`). A real build
+  fails if one of those guides is renamed or removed.
 
 ## Writing guides
 
@@ -91,10 +111,12 @@ src/
   content.config.ts       guides collection schema
   layouts/BaseLayout.astro  head/SEO, header, footer, skip link
   components/             Button, Logo, SiteHeader, SiteFooter, CtaBand, GuideCard,
-                          WorkspaceIllustration (HTML/CSS, labeled as an illustration)
+                          WorkspaceIllustration (HTML/CSS, labeled as an illustration),
+                          SampleAudit (synthetic sample citation check)
   lib/                    links, guide helpers, rehype link normalizer
   pages/                  index, guides/, guides/[slug]/, 404, robots.txt, sitemap.xml
   styles/global.css       design tokens and shared primitives
 scripts/verify.mjs        route and link verification
+tests/attribution.test.ts unit tests for signup and pricing attribution
 tests/fixtures/           fixture guides used only by `npm run verify`
 ```
