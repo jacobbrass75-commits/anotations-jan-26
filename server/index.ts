@@ -16,13 +16,14 @@ import { globalLimiter } from "./rateLimits";
 import { createLogger } from "./logger";
 import { canonicalRequest } from "./canonicalRequest";
 import { paidInstagramEntry } from "./paidInstagramEntry";
+import { getAppTrustProxySetting, resolveListenHost } from "./networkTrust";
 
 assertProductionConfig(process.env, { phase: "runtime" });
 
 const app = express();
 const httpServer = createServer(app);
 app.disable("x-powered-by");
-app.set("trust proxy", true);
+app.set("trust proxy", getAppTrustProxySetting());
 app.use(canonicalRequest);
 app.use(paidInstagramEntry);
 if (process.env.NODE_ENV === "production") {
@@ -211,8 +212,9 @@ app.use((req, res, next) => {
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Default to 5001 if not specified (different from ScholarMark's 5000).
   const port = parseInt(process.env.PORT || "5001", 10);
-  httpServer.listen(port, "0.0.0.0", () => {
-    log(`serving on port ${port}`);
+  const host = resolveListenHost();
+  httpServer.listen(port, host, () => {
+    log(`serving on ${host}:${port}`);
     log(`Open http://localhost:${port} in your browser`);
   });
 })();

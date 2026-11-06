@@ -430,7 +430,20 @@ function chunkBySize<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-async function preprocessImageForVision(
+// sharp >= 0.35 removed the deprecated `failOnError` constructor option (it is
+// silently ignored), so tolerate truncated/slightly corrupt camera captures via
+// `failOn: "none"`, which is what `failOnError: false` used to map to.
+// sharp's default `limitInputPixels` cap stays in force.
+const SHARP_INPUT_OPTIONS = { failOn: "none" } as const;
+
+/**
+ * Preprocess one extracted page image for vision OCR. Decodes `input` (the bytes already
+ * written to `inputPath`) from memory so libvips never opens the temp file: its operation
+ * cache can keep a native handle after decoding (seen with truncated input on Windows),
+ * which blocks deleting the temp input. Returns `inputPath` as the fallback on failure.
+ */
+export async function preprocessImageForVision(
+  input: Buffer,
   inputPath: string,
   outputDir: string,
   outputName: string,
@@ -439,11 +452,11 @@ async function preprocessImageForVision(
     const sharpModule = await import("sharp");
     const sharpFactory = (sharpModule as { default?: any }).default || (sharpModule as any);
 
-    const metadata = await sharpFactory(inputPath, { failOnError: false }).metadata();
+    const metadata = await sharpFactory(input, SHARP_INPUT_OPTIONS).metadata();
     const width = metadata.width ?? 0;
     const height = metadata.height ?? 0;
 
-    let pipeline = sharpFactory(inputPath, { failOnError: false }).rotate();
+    let pipeline = sharpFactory(input, SHARP_INPUT_OPTIONS).rotate();
 
     // Phone captures often arrive landscape even for portrait documents.
     if (width > 0 && height > 0 && width * 100 >= height * DEFAULT_HEIC_ROTATE_THRESHOLD_PCT) {
@@ -1128,6 +1141,7 @@ export async function processImageWithVisionOcr(
         const outputPath = join(extractedImageDir, `image_${index + 1}.jpg`);
         await writeFile(outputPath, convertedBuffer);
         const preprocessedPath = await preprocessImageForVision(
+          convertedBuffer,
           outputPath,
           preprocessedImageDir,
           `image_${index + 1}`,
@@ -1241,6 +1255,7 @@ export async function processImageGroupWithVisionOcr(
           const outputPath = join(extractedDir, `page_${index + 1}_${frame + 1}.jpg`);
           await writeFile(outputPath, convertedBuffer);
           const preprocessedPath = await preprocessImageForVision(
+            convertedBuffer,
             outputPath,
             preprocessedDir,
             `page_${index + 1}_${frame + 1}`,

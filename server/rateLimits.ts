@@ -12,7 +12,8 @@ const commonOptions = {
   standardHeaders: true,
   legacyHeaders: false,
   validate: {
-    // ScholarMark intentionally trusts nginx/Cloudflare proxy headers.
+    // req.ip comes from the Express "trust proxy" list in server/networkTrust.ts
+    // (loopback nginx plus Cloudflare edges).
     trustProxy: false,
   },
 };

@@ -34,7 +34,7 @@ function asErrorResult(message) {
         ],
     };
 }
-const READ_ONLY = { readOnlyHint: true, openWorldHint: false };
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 function asRetrievalResult(payload) {
     return { ...asTextResult(payload), structuredContent: payload };
 }
@@ -42,6 +42,9 @@ const WRITES = { readOnlyHint: false, destructiveHint: false, idempotentHint: fa
 const OVERWRITES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
 const DELETES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
 // Directory listings (Claude connectors, ChatGPT apps) require a title and safety hints on every tool.
+// OpenAI's plugin guidelines require readOnlyHint, destructiveHint, and openWorldHint to be set
+// explicitly as booleans on every tool, read-only tools included. openWorldHint stays false:
+// every tool only reaches the signed-in user's own ScholarMark account.
 const TOOL_METADATA = {
     get_projects: { title: "List projects", annotations: READ_ONLY },
     create_project: { title: "Create project", annotations: WRITES },

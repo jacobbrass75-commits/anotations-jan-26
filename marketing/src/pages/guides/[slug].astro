@@ -5,6 +5,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import CtaBand from "../../components/CtaBand.astro";
 import GuideCard from "../../components/GuideCard.astro";
 import { SITE_ORIGIN } from "../../config/release";
+import { assertSampleAuditGuidesExist, sampleAuditEntryFor } from "../../lib/sampleAuditEntries";
 import {
   formatDay,
   getGuides,
@@ -16,6 +17,7 @@ import {
 
 export const getStaticPaths = (async () => {
   const guides = await getGuides();
+  assertSampleAuditGuidesExist(guides.map((guide) => guide.id));
   return guides.map((guide) => ({
     params: { slug: guide.id },
     props: {
@@ -38,6 +40,7 @@ const { title, description, category, published, updated } = guide.data;
 const url = new URL(guidePath(guide), SITE_ORIGIN).toString();
 const minutes = readingMinutes(guide.body);
 const toc = headings.filter((heading) => heading.depth === 2);
+const sampleEntry = sampleAuditEntryFor(guide.id);
 
 const jsonLd = [
   {
@@ -131,6 +134,21 @@ const jsonLd = [
           the original source, and follow your course's policy on AI-assisted work.
         </p>
       </aside>
+
+      {
+        sampleEntry && (
+          <aside class="guide__sample card" aria-labelledby="guide-sample-title">
+            <p class="guide__sample-tag">Synthetic example</p>
+            <p class="guide__sample-title" id="guide-sample-title">
+              {sampleEntry.title}
+            </p>
+            <p>{sampleEntry.copy}</p>
+            <a href="/#sample-audit">
+              Open the sample citation check <span aria-hidden="true">→</span>
+            </a>
+          </aside>
+        )
+      }
     </div>
   </article>
 
@@ -241,6 +259,43 @@ const jsonLd = [
     background: var(--warn-soft);
     color: var(--ink-soft);
     font-size: 0.975rem;
+  }
+
+  .guide__sample {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1.25rem 1.5rem;
+    font-size: 0.975rem;
+  }
+
+  .guide__sample p {
+    color: var(--ink-soft);
+  }
+
+  .guide__sample .guide__sample-tag {
+    justify-self: start;
+    padding: 0.05rem 0.5rem;
+    border: 1px dashed var(--muted);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .guide__sample .guide__sample-title {
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+
+  .guide__sample a {
+    justify-self: start;
+    padding-block: 0.25rem;
+    font-weight: 600;
   }
 
   .guide__after {

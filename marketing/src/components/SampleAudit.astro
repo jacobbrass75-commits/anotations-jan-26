@@ -1,0 +1,650 @@
+---
+/**
+ * Interactive sample citation check for the homepage. All content is synthetic and
+ * pre-written (see src/lib/sampleAudit.ts). It works without JavaScript: the citation
+ * choices are native radio buttons and CSS shows the matching result. Browsers without
+ * :has() show every result in order instead.
+ */
+import Button from "./Button.astro";
+import { SAMPLE_SOURCE, buildSampleAudit } from "../lib/sampleAudit";
+import { getGuides, guidePath } from "../lib/guides";
+import { links } from "../lib/links";
+
+const items = buildSampleAudit();
+const shortTitle = "2024 Survey Report";
+// Link the guide that walks through the full check; fall back to the listing if it's renamed.
+const checkGuide = (await getGuides()).find((guide) => guide.id === "pre-submission-quote-and-citation-check");
+const GUIDE = checkGuide
+  ? { href: guidePath(checkGuide), label: "Read the full pre-submission quote check" }
+  : { href: "/guides/", label: "Read the citation guides" };
+---
+
+<section class="section audit-section" id="sample-audit" aria-labelledby="audit-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Sample citation check</p>
+      <h2 id="audit-title">Compare a quote with its source page before you hand it in.</h2>
+      <p class="lede">
+        Pick a citation from this sample draft to see it beside the original passage. One matches,
+        one has a word that isn't in the source, and one cites the wrong page.
+      </p>
+    </div>
+
+    <p class="audit-notice" id="audit-notice">
+      <span class="audit-notice__tag">Synthetic example</span>
+      <span>
+        The survey, the Riverside Garden Collective and the draft are invented for this demo, and the
+        results are written in advance. Nothing is uploaded or checked live, and nothing you choose
+        here is sent anywhere.
+      </span>
+    </p>
+
+    <div class="audit">
+      <fieldset class="audit__draft" aria-describedby="audit-notice">
+        <legend class="audit__legend">
+          <span class="audit__legend-title">Sample draft</span>
+          <span class="audit__legend-hint">Choose a citation to check</span>
+        </legend>
+        <ol class="audit-options">
+          {
+            items.map((item, index) => (
+              <li>
+                <label class="audit-option">
+                  <input
+                    class="audit-option__input"
+                    type="radio"
+                    name="sample-audit-citation"
+                    value={item.id}
+                    checked={index === 0}
+                  />
+                  <span class="audit-option__body">
+                    <span class="audit-option__num">Citation {index + 1}</span>
+                    <span class="audit-option__text">
+                      {item.lead} <span class="audit-option__quote">“{item.draftQuote}”</span>{" "}
+                      <span class="audit-option__cite">{item.citation}</span>.
+                    </span>
+                    <span class={`audit-chip audit-chip--${item.id}`}>{item.status}</span>
+                  </span>
+                </label>
+              </li>
+            ))
+          }
+        </ol>
+      </fieldset>
+
+      <div class="audit__results">
+        {
+          items.map((item, index) => (
+            <article class="audit-panel" data-panel={item.id} aria-labelledby={`audit-${item.id}-title`}>
+              <header class="audit-panel__head">
+                <span class={`audit-chip audit-chip--${item.id}`}>{item.status}</span>
+                <h3 id={`audit-${item.id}-title`}>
+                  <span class="visually-hidden">Citation {index + 1}: </span>
+                  {item.headline}
+                </h3>
+              </header>
+
+              <dl class="audit-checks">
+                <div class={item.id === "wording" ? "is-off" : "is-ok"}>
+                  <dt>Wording</dt>
+                  <dd>{item.wording}</dd>
+                </div>
+                <div class={item.id === "page" ? "is-off" : "is-ok"}>
+                  <dt>Page</dt>
+                  <dd>{item.page}</dd>
+                </div>
+              </dl>
+
+              <div class="audit-compare">
+                <figure class="audit-quote">
+                  <figcaption>
+                    In your draft <span class="audit-pill">cited p. {item.citedPage}</span>
+                  </figcaption>
+                  {/* Kept on one line so no stray spaces appear inside the quotation marks. */}
+                  <blockquote>“{item.quote.map((part) => ("text" in part ? part.text : <ins><span class="visually-hidden">added word: </span>{part.added}</ins>))}”</blockquote>
+                </figure>
+
+                <figure class="audit-page">
+                  <figcaption>
+                    Original source{" "}
+                    <span class={`audit-pill${item.citedPage !== item.foundPage ? " audit-pill--found" : ""}`}>
+                      page {item.foundPage} of {SAMPLE_SOURCE.pageCount}
+                    </span>
+                  </figcaption>
+                  <div class="audit-page__sheet">
+                    <p class="audit-page__running">
+                      <span>{SAMPLE_SOURCE.author}</span>
+                      <span>{shortTitle}</span>
+                    </p>
+                    {item.sourcePage.before.map((line, lineIndex) =>
+                      lineIndex === 0 ? <p class="audit-page__heading">{line}</p> : <p>{line}</p>,
+                    )}
+                    <p>{item.sourcePage.line.before}<mark>{item.sourcePage.line.match}</mark>{item.sourcePage.line.after}</p>
+                    {item.sourcePage.after.map((line) => (
+                      <p>{line}</p>
+                    ))}
+                    <p class="audit-page__folio" aria-hidden="true">
+                      {item.foundPage}
+                    </p>
+                  </div>
+                </figure>
+              </div>
+
+              <p class="audit-source">
+                <span class="audit-source__label">Source</span>{" "}
+                {SAMPLE_SOURCE.author}. ({SAMPLE_SOURCE.year}). <cite>{SAMPLE_SOURCE.title}</cite>, p.&nbsp;{item.foundPage}.
+                <span class="audit-source__note">Synthetic report.</span>
+              </p>
+
+              <div class={`audit-next audit-next--${item.id}`}>
+                <h4>Your next step</h4>
+                <p>{item.nextStep}</p>
+              </div>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+
+    <div class="audit-cta">
+      <p>
+        In your own project, the source is the PDF or scan you uploaded. Look up a quote in its text to
+        compare the wording and page the same way, then decide what to change.
+      </p>
+      <div class="btn-row btn-row--stack-mobile">
+        <Button href={links.signup} signup data-cta="sample_audit">Check quotes in your own sources</Button>
+        <a class="audit-cta__guide" href={GUIDE.href}>
+          {GUIDE.label}&nbsp;<span aria-hidden="true">→</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .audit-section {
+    padding-top: clamp(3rem, 7vw, 5rem);
+  }
+
+  .audit-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem 0.75rem;
+    max-width: 52rem;
+    margin-bottom: 1.5rem;
+    padding: 0.85rem 1rem;
+    border: 1px dashed var(--rule-strong);
+    border-radius: var(--radius);
+    background: var(--card);
+    color: var(--ink-soft);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
+
+  .audit-notice > span:last-child {
+    flex: 1 1 18rem;
+  }
+
+  .audit-notice__tag {
+    flex: none;
+    padding: 0.1rem 0.55rem;
+    border: 1px dashed var(--muted);
+    border-radius: 999px;
+    color: var(--ink);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .audit {
+    display: grid;
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  /* Draft column: the citation choices */
+
+  .audit__draft {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .audit__legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    width: 100%;
+    margin-bottom: 0.75rem;
+    padding: 0;
+  }
+
+  .audit__legend-title {
+    font-family: var(--serif);
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .audit__legend-hint {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  .audit-options {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .audit-option {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+
+  .audit-option:hover {
+    border-color: var(--rule-strong);
+  }
+
+  .audit-option:has(:checked) {
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow:
+      inset 3px 0 0 var(--accent),
+      var(--shadow-card);
+  }
+
+  .audit-option:has(:focus-visible) {
+    outline: 3px solid var(--focus);
+    outline-offset: 3px;
+  }
+
+  .audit-option__input {
+    flex: none;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin: 0.2rem 0 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  /* The whole card shows focus, so the input's own ring would be doubled where :has() works. */
+  .audit-option:has(:focus-visible) .audit-option__input {
+    outline: none;
+  }
+
+  .audit-option__body {
+    display: grid;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .audit-option__num {
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 650;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .audit-option__text {
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.55;
+  }
+
+  .audit-option__quote {
+    background: linear-gradient(transparent 62%, var(--highlight) 62%);
+  }
+
+  .audit-option__cite {
+    color: var(--ink-soft);
+  }
+
+  /* Status chips: the text carries the meaning, colour only reinforces it. */
+
+  .audit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    justify-self: start;
+    padding: 0.15rem 0.6rem 0.15rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 650;
+    line-height: 1.4;
+  }
+
+  .audit-chip::before {
+    display: grid;
+    place-items: center;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .audit-chip--match {
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+
+  .audit-chip--match::before {
+    content: "✓";
+    background: var(--ok);
+  }
+
+  .audit-chip--wording,
+  .audit-chip--page {
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+
+  .audit-chip--wording::before,
+  .audit-chip--page::before {
+    content: "!";
+    background: var(--warn);
+  }
+
+  /* Result panel */
+
+  .audit__results {
+    display: grid;
+    gap: 1.25rem;
+    min-width: 0;
+  }
+
+  .audit-panel {
+    display: grid;
+    gap: 1.25rem;
+    min-width: 0;
+    padding: clamp(1.1rem, 3vw, 1.75rem);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    box-shadow: var(--shadow-frame);
+  }
+
+  @supports selector(:has(*)) {
+    .audit-panel {
+      display: none;
+    }
+
+    .audit:has([value="match"]:checked) [data-panel="match"],
+    .audit:has([value="wording"]:checked) [data-panel="wording"],
+    .audit:has([value="page"]:checked) [data-panel="page"] {
+      display: grid;
+    }
+  }
+
+  .audit-panel__head {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .audit-panel__head h3 {
+    font-size: clamp(1.35rem, 2.6vw, 1.65rem);
+  }
+
+  .audit-checks {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+  }
+
+  .audit-checks > div {
+    display: grid;
+    grid-template-columns: 5.5rem 1fr;
+    gap: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: var(--radius);
+    font-size: 0.9375rem;
+  }
+
+  .audit-checks .is-ok {
+    background: var(--ok-soft);
+  }
+
+  .audit-checks .is-off {
+    background: var(--warn-soft);
+  }
+
+  .audit-checks dt {
+    font-weight: 650;
+  }
+
+  .audit-checks .is-ok dt {
+    color: var(--ok);
+  }
+
+  .audit-checks .is-off dt {
+    color: var(--warn);
+  }
+
+  .audit-checks dd {
+    margin: 0;
+    color: var(--ink-soft);
+  }
+
+  .audit-compare {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .audit-compare figure {
+    display: grid;
+    gap: 0.5rem;
+    align-content: start;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .audit-compare figcaption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .audit-pill {
+    padding: 0.05rem 0.5rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--ink-soft);
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+
+  .audit-pill--found {
+    border-color: var(--ok);
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+
+  .audit-quote blockquote {
+    margin: 0;
+    padding: 0.9rem 1rem;
+    border-left: 3px solid var(--rule-strong);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.55;
+  }
+
+  .audit-quote ins {
+    padding: 0 0.2rem;
+    border-radius: 0.2rem;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-weight: 650;
+    text-decoration: underline wavy var(--accent);
+    text-underline-offset: 0.2em;
+  }
+
+  .audit-page__sheet {
+    display: grid;
+    gap: 0.6rem;
+    padding: 1rem 1.1rem 0.8rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    box-shadow: 0 1px 0 rgb(29 26 23 / 6%), 0 10px 24px -18px rgb(29 26 23 / 45%);
+    color: var(--ink-soft);
+    font-family: var(--serif);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+
+  .audit-page__running {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--rule);
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.75rem;
+  }
+
+  .audit-page__heading {
+    color: var(--ink);
+    font-weight: 650;
+  }
+
+  .audit-page__sheet mark {
+    padding: 0.05rem 0.15rem;
+    border-radius: 0.2rem;
+    background: var(--highlight);
+    box-shadow: inset 0 -2px 0 var(--highlight-edge);
+    color: var(--ink);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .audit-page__folio {
+    justify-self: center;
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.75rem;
+  }
+
+  .audit-source {
+    color: var(--ink-soft);
+    font-size: 0.9375rem;
+  }
+
+  .audit-source__note {
+    color: var(--muted);
+  }
+
+  .audit-source__label {
+    margin-right: 0.35rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 650;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .audit-next {
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem 1.1rem;
+    border-left: 3px solid var(--ok);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--paper-deep);
+  }
+
+  .audit-next--wording,
+  .audit-next--page {
+    border-left-color: var(--highlight-edge);
+  }
+
+  .audit-next h4 {
+    font-family: var(--sans);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .audit-next p {
+    color: var(--ink);
+  }
+
+  /* After the demo */
+
+  .audit-cta {
+    display: grid;
+    gap: 1rem;
+    max-width: 46rem;
+    margin-top: 2rem;
+  }
+
+  .audit-cta p {
+    color: var(--muted);
+  }
+
+  .audit-cta__guide {
+    padding-block: 0.5rem;
+    font-weight: 600;
+  }
+
+  @media (min-width: 44rem) {
+    .audit-compare {
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .audit {
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+      gap: 2rem;
+    }
+
+    .audit__draft {
+      position: sticky;
+      top: 5.5rem;
+    }
+
+    .audit-compare {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (min-width: 76rem) {
+    .audit-compare {
+      grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    }
+  }
+</style>

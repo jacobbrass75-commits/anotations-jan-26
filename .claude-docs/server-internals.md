@@ -12,7 +12,7 @@ All server code lives in `/server/`.
 - **Error handler**: Returns `{message}` with appropriate status code
 - Calls `registerRoutes()` to set up all API routes
 - In dev: uses Vite dev server with HMR. In prod: serves static build
-- Listens on `0.0.0.0:5001` (or `PORT` env var)
+- Listens on `PORT` (default 5001); binds `127.0.0.1` in production and `0.0.0.0` otherwise, overridable with `BIND_HOST` (see `server/networkTrust.ts`)
 - **Exports**: `log(message, source?)` for formatted console logging
 
 ---
