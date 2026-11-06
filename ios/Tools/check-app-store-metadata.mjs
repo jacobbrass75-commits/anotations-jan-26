@@ -117,8 +117,12 @@ export function checkMetadata(dir = DEFAULT_DIR) {
       if (spec.required && !value.trim()) problems.push(`${locale}/${file}: required field is empty`);
       if (/TODO|TBD|\[.*?\]|lorem ipsum/i.test(value)) problems.push(`${locale}/${file}: contains a placeholder`);
       if (spec.url) {
-        let ok = false;
-        try { ok = new URL(value).protocol === "https:"; } catch {}
+        let ok;
+        try {
+          ok = new URL(value).protocol === "https:";
+        } catch {
+          ok = false; // not a parseable URL
+        }
         if (!ok) problems.push(`${locale}/${file}: must be a full https:// URL`);
         rows.push({ field: `${locale} ${spec.label}`, size: value, limit: "full URL with protocol" });
         continue;
