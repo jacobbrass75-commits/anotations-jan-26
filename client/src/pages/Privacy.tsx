@@ -51,6 +51,20 @@ const sections = [
     ],
   },
   {
+    id: "ios",
+    title: "ScholarMark For iPhone And iPad",
+    body: [
+      "The ScholarMark app for iPhone and iPad (the iOS app) works without a ScholarMark account and does not connect to or sync with the ScholarMark web service. The account, billing, campaign, advertising measurement, connector, and server-side data described elsewhere in this policy is not collected through the iOS app. If you also use the web app, the rest of this policy applies to that use.",
+      "Projects, sources, citation details, notes, and quotes you enter in the iOS app are stored in the app's own storage on your device, protected by iOS Data Protection. ScholarMark does not receive them. They are included in your device backups, such as iCloud Backup or a backup to your computer, when you have backups turned on, and those backups follow your Apple and device settings.",
+      "The iOS app uses the internet only when you tap Look up details for a DOI or link you entered. For a DOI, or a link that contains a DOI, the app sends the DOI to doi.org, which can redirect the request to the DOI registration agency that holds the record, such as Crossref or DataCite. For any other link, the app requests that page from its website over HTTPS and follows any redirects the site sends. If the page names a DOI, the app then looks up that DOI at doi.org.",
+      "A lookup request includes the DOI or the page address you entered, standard connection information such as your device's IP address, a User-Agent that identifies the request as a ScholarMark iOS citation lookup, and any cookies those sites set during earlier lookups. The app does not add your library content, ScholarMark account details, or a device identifier. iOS can keep those cookies and a cache of lookup responses in the app's storage on your device.",
+      "doi.org, the registration agencies, and the websites you look up receive those requests and handle them under their own terms and privacy policies. ScholarMark does not control what they log or keep.",
+      "Open source opens a source's link outside the app, in your default browser or the app that handles that link. Copy, Share citation, Export, and Export full library backup send text or files only where you choose, through the iOS clipboard or share sheet, and the app or service you choose handles them from there. To share a file, the iOS app first writes a temporary copy in its storage on your device.",
+      "The iOS app contains no analytics, advertising measurement, tracking, or third-party SDKs. It does not use the Meta Pixel or Conversions API described in this policy.",
+      "Your iOS library stays on your device until you delete it. In the app's Settings tab, Delete all projects and sources removes your projects, sources, notes, and quotes from the app. Temporary export copies can remain until iOS clears them or you delete the app. Deleting the app removes everything it stored on the device, including cookies and cached lookup responses. Neither step removes copies in existing device backups or in files you exported or shared. Because ScholarMark does not receive your iOS library, it has no copy to delete on request. For questions about the iOS app, contact support@scholarmark.ai.",
+    ],
+  },
+  {
     title: "Service Providers",
     body: [
       "ScholarMark may use service providers for hosting, authentication, storage, analytics, payment, email, and AI-assisted research features. These providers are used to operate ScholarMark and are not permitted to use your data for unrelated purposes.",
@@ -116,15 +130,17 @@ export default function Privacy() {
             ScholarMark Privacy Policy
           </h1>
           <p className="text-sm text-muted-foreground">
-            Last updated November 5, 2026. This policy explains how ScholarMark handles data for the
-            web app, the Chrome extension, and the MCP connector for Claude, ChatGPT, and Codex.
+            Last updated November 6, 2026. This policy explains how ScholarMark handles data for the
+            web app, the Chrome extension, the MCP connector for Claude, ChatGPT, and Codex, and the
+            ScholarMark app for iPhone and iPad. The iOS app works on your device without a
+            ScholarMark account; its section below says exactly what it sends and when.
           </p>
         </div>
 
         <Card className="eva-clip-panel border-border bg-card/80">
           <CardContent className="p-6 space-y-8">
             {sections.map((section) => (
-              <section key={section.title} className="space-y-3">
+              <section key={section.title} id={section.id} className="space-y-3 scroll-mt-6">
                 <h2 className="text-lg font-sans uppercase tracking-[0.12em] text-primary">
                   {section.title}
                 </h2>

@@ -9,13 +9,21 @@ Apple pages used (checked 2026-11-06):
 - [App privacy reference](https://developer.apple.com/help/app-store-connect/reference/app-privacy/app-privacy-details)
 - [Set an app age rating](https://developer.apple.com/help/app-store-connect/manage-app-information/set-an-app-age-rating)
 - [Age ratings values and definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions)
+- [App Review Guidelines 5.1.1(i), Privacy Policies](https://developer.apple.com/app-store/review/guidelines/#data-collection-and-storage)
+- [`URLSession.shared`](https://developer.apple.com/documentation/foundation/urlsession/shared),
+  [`URLSessionConfiguration.default`](https://developer.apple.com/documentation/foundation/urlsessionconfiguration/default),
+  and [HTTP redirection](https://developer.apple.com/documentation/foundation/urlsessiontaskdelegate/urlsession(_:task:willperformhttpredirection:newrequest:completionhandler:))
+- [Optimizing your app's data for iCloud backup](https://developer.apple.com/documentation/foundation/optimizing-your-app-s-data-for-icloud-backup)
 
 ## What the app does with data (evidence)
 
 | Behavior | Where | Fact |
 |---|---|---|
-| Storage | `ScholarMarkCore/.../LibraryRepository.swift` | One JSON file in Application Support, written atomically with Data Protection (`completeFileProtectionUnlessOpen`). It is part of normal device backups. Nothing is sent to ScholarMark servers. |
-| Network | `ScholarMarkCore/.../MetadataLookup.swift` | The only `URLSession` use in the app. It runs only when the user taps **Look up details**. A DOI goes to `https://doi.org/<doi>` with `Accept: application/vnd.citationstyles.csl+json`; doi.org can redirect to the registration agency (for example Crossref or DataCite) that serves the record. A pasted link is fetched from that site, upgraded to HTTPS. If the page names a DOI, that DOI is then looked up at doi.org. The User-Agent is `ScholarMark-iOS/0.1 (citation lookup)`. No account, token, cookie, or device identifier is added. |
+| Storage | `ScholarMarkCore/.../LibraryRepository.swift` | One JSON file in Application Support, written atomically with Data Protection (`completeFileProtectionUnlessOpen`). Apple: when iCloud Backup is on it backs up the app's data, and excludes only `tmp/` and `Library/Caches` by default, so the library is in device backups. Nothing is sent to ScholarMark servers. |
+| Temporary files | `ExportView.swift`, `SettingsView.swift` | Export files and the full JSON backup are written to `tmp/Exports/` so the share sheet gets a real file. The Settings tab rewrites the backup file whenever the library changes. Nothing deletes these files; iOS purges `tmp/` on its own schedule. |
+| Delete all | `LibraryStore.deleteEverything()`, `LibraryRepository.deleteAll()` | Removes `library.json` only. It leaves `tmp/Exports/` and any `library-unreadable-<time>.json` that **Start fresh** set aside after a damaged load. Deleting the app removes the whole container. |
+| Network | `ScholarMarkCore/.../MetadataLookup.swift` | The only `URLSession` use in the app. It runs only when the user taps **Look up details**. A DOI goes to `https://doi.org/<doi>` with `Accept: application/vnd.citationstyles.csl+json`; doi.org can redirect to the registration agency (for example Crossref or DataCite) that serves the record. A link that contains a DOI (`CaptureInput.classify`) is treated as that DOI: only doi.org is contacted and the publisher page is not fetched. Any other link is fetched from its site with its full path and query, upgraded to HTTPS. If the page names a DOI, that DOI is then looked up at doi.org. The User-Agent is `ScholarMark-iOS/0.1 (citation lookup)`. The app adds no account, token, or device identifier. |
+| Cookies, cache, redirects | `URLSessionLoader` uses `URLSession.shared` | Apple: the shared session "uses the shared URLCache, HTTPCookieStorage, and URLCredentialStorage objects", and the default configuration "uses a persistent disk-based cache" and stores cookies. So a cookie a lookup site sets is kept in the app's container and sent back to that site on a later lookup, and responses can be cached on the device. The shared session has no delegate, so it follows redirects, including to other hosts. If you want lookups to keep nothing between requests, switching the loader to `URLSessionConfiguration.ephemeral` is a one-line change; the policy wording would then need its cookie sentence updated. |
 | Links | `SourceDetailView.swift` | **Open source** is a SwiftUI `Link`, so the system opens the URL in the default browser. The app has no web view. |
 | Sharing | `ExportView.swift`, `SettingsView.swift`, `SourceDetailView.swift` | Citations and export files reach other apps only through the system share sheet (`ShareLink`) or the clipboard, when the user chooses. |
 | SDKs | `Package.swift`, `project.yml` | No third-party packages. The app links only Apple frameworks and the local `ScholarMarkCore` package. |
@@ -27,7 +35,7 @@ Apple pages used (checked 2026-11-06):
 
 | Question | Answer this build supports |
 |---|---|
-| Privacy Policy URL | `https://app.scholarmark.ai/privacy`. Add an iOS section first ([below](#privacy-policy-url)). |
+| Privacy Policy URL | `https://app.scholarmark.ai/privacy`. The iOS section is drafted in the page but not deployed ([below](#privacy-policy-url)). |
 | User Privacy Choices URL (optional) | Leave empty. The app has no server-side data to manage. |
 | Do you or your third-party partners collect data from this app? | **No, we do not collect data from this app.** The product page will show "Data Not Collected". |
 | Tracking | **No.** No data is linked with third-party data for advertising or shared with data brokers. The manifest sets `NSPrivacyTracking` to false. |
@@ -37,7 +45,8 @@ a way that allows you and/or your third-party partners to access it for a period
 is necessary to service the transmitted request in real time." ScholarMark (the developer) has no
 server in this flow and receives nothing. The app integrates no SDK that sends data anywhere.
 doi.org, the DOI registration agencies, and the sites a user pastes do receive an ordinary web
-request: the DOI or URL, the device's IP address, and the User-Agent above. That happens only
+request: the DOI or URL, the device's IP address, the User-Agent above, and any cookie that
+site set on an earlier lookup. That happens only
 because the user asked to look up that address, the same as opening it in a browser. Those
 services are not partners integrated into the app. If your counsel reads "third-party partners"
 more broadly, the closest disclosure would be **Browsing History** or **Other Data** (the
@@ -46,22 +55,35 @@ Decide this before you submit; it is not a technical question.
 
 ## Privacy Policy URL
 
-App Store Connect requires a privacy policy URL for iOS apps. The current policy
-(`client/src/pages/Privacy.tsx`, last updated November 5, 2026) covers the web app, the Chrome
-extension, and the MCP connector. It does not mention the iOS app. Its "What ScholarMark
-Collects" list also describes account and server-side data that the iOS app never sends, so a
-reviewer or user could read it as applying to the app.
+App Store Connect requires a privacy policy URL for iOS apps. Before this change the policy
+(`client/src/pages/Privacy.tsx`, last updated November 5, 2026) covered the web app, the Chrome
+extension, and the MCP connector only, and its "What ScholarMark Collects" list describes account
+and server-side data that the iOS app never sends.
 
-Draft wording for your review. **Not published; this changes a legal document**:
+The iOS section is now in the page as **ScholarMark For iPhone And iPad**, placed with the other
+product sections (after the connector, before Service Providers) and reachable at
+`https://app.scholarmark.ai/privacy#ios` once deployed. The intro now names the iOS app and says
+it runs without an account. The web, extension, and connector sections are unchanged.
+`tests/client/privacyPolicy.test.tsx` checks the section order, the anchor, and that every iOS
+control the policy names exists in the Swift views. **It is not published.** This changes a legal
+document, so it needs the publisher's review before it is deployed.
 
-> **ScholarMark for iPhone and iPad.** The iOS app works without a ScholarMark account and does
-> not send your library to ScholarMark. Projects, sources, notes, and quotes are stored on your
-> device and are included in your device backups. When you tap Look up details, the app sends the
-> DOI you entered to doi.org (which may pass the request to the DOI's registration agency), or
-> requests the web page you pasted from that site, to read its citation details. Those services
-> receive the address you asked for and standard request information such as your IP address. The
-> app contains no analytics, advertising, or tracking. To remove the app's data, use Settings →
-> Delete all projects and sources, or delete the app.
+How the section covers Guideline 5.1.1(i), which says the policy must "identify what data, if any,
+the app/service collects, how it collects that data, and all uses of that data", address third
+parties that receive user data, and "explain its data retention/deletion policies":
+
+| 5.1.1(i) item | Where the iOS section answers it |
+|---|---|
+| What is collected | Bullets 1, 2, 7: no account, ScholarMark receives no library data, no analytics, advertising measurement, tracking, or SDKs. |
+| What leaves the device, and when | Bullets 3, 4, 6: lookups only on **Look up details** (DOI to doi.org, other links to their site, with what each request carries, cookies included); Open source, Copy, Share, and Export only where the user sends them. |
+| Third parties | Bullet 5: doi.org, registration agencies, and looked-up sites act under their own policies; ScholarMark makes no claim about what they keep. No third party receives data from ScholarMark through the app. |
+| Retention and deletion | Bullets 2, 8: the library stays on the device; what Delete all and deleting the app remove, and what neither removes (backups, shared exports). |
+
+The guideline also requires a privacy policy link "within the app in an easily accessible
+manner". The app does not have one yet: Settings shows a privacy summary but no link to
+`https://app.scholarmark.ai/privacy`. Adding one (a `Link` in the Settings tab's Privacy section)
+is an app change that needs an Xcode build, so it is listed as a remaining step rather than made
+here.
 
 ## Age rating (App Store Connect → App Information → Age Ratings)
 
