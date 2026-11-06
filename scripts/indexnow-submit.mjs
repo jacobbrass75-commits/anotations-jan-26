@@ -38,7 +38,7 @@ const ERROR_MEANINGS = {
   429: "too many requests (treated as potential spam)",
 };
 
-class IndexNowError extends Error {}
+export class IndexNowError extends Error {}
 
 /** Only the apex homepage, guide hub and guide articles. Everything else is dropped. */
 export function isSubmittableUrl(value) {
@@ -67,9 +67,76 @@ export function parseSitemapLocs(xml) {
   return Array.from(xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/g), ([, loc]) => decodeXml(loc));
 }
 
-/** Hashed `/_astro/` asset names change with any CSS/JS rebuild; they don't make a page "changed". */
+// Cloudflare email obfuscation rewrites `href="mailto:x"` to `href="/cdn-cgi/l/email-protection#<hex>"`
+// and the visible address to `<span class="__cf_email__" data-cfemail="<hex>">`. The hex is a
+// random key byte followed by the UTF-8 address XORed with it, so it differs on every response.
+const CF_EMAIL_HREF = /(\shref\s*=\s*)(["'])\/cdn-cgi\/l\/email-protection#((?:(?!\2)[^>])*)\2/gi;
+const START_TAG = /<[A-Za-z][^>]*>/g;
+const CF_EMAIL_ATTR = /(\sdata-cfemail\s*=\s*)(["'])((?:(?!\2)[^>])*)\2/gi;
+const EMAIL_ADDRESS =
+  /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+
+/** Decodes one Cloudflare email-protection value, or returns null if it isn't a valid address. */
+export function decodeCloudflareEmail(encoded) {
+  if (!/^(?:[0-9a-f]{2}){2,}$/i.test(encoded)) return null;
+  const key = Number.parseInt(encoded.slice(0, 2), 16);
+  const bytes = [];
+  for (let index = 2; index < encoded.length; index += 2) {
+    bytes.push(Number.parseInt(encoded.slice(index, index + 2), 16) ^ key);
+  }
+  let address;
+  try {
+    address = new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bytes));
+  } catch {
+    return null;
+  }
+  return EMAIL_ADDRESS.test(address) ? address : null;
+}
+
+function escapeAttribute(value) {
+  return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+}
+
+/**
+ * Replaces each Cloudflare email-protection value with the address it encodes, so a fingerprint
+ * changes when the address changes but not when Cloudflare picks a new XOR key. Only those two
+ * attribute values (the href on `<a>` start tags, data-cfemail on any start tag) are touched. A value that doesn't decode to an address throws, so an unknown
+ * encoding stops the run instead of looking like a changed (or unchanged) page.
+ */
+export function normalizeCloudflareEmails(html) {
+  const decode = (encoded) => {
+    const address = decodeCloudflareEmail(encoded);
+    if (address === null) {
+      throw new IndexNowError(
+        `unrecognized Cloudflare email-protection value "${encoded.slice(0, 80)}"`,
+      );
+    }
+    return escapeAttribute(address);
+  };
+  // Start tags only, so page text that merely mentions these attributes is left alone.
+  return html.replace(START_TAG, (tag) => {
+    const linked = /^<a\s/i.test(tag)
+      ? tag.replace(
+          CF_EMAIL_HREF,
+          (_match, prefix, quote, encoded) => `${prefix}${quote}mailto:${decode(encoded)}${quote}`,
+        )
+      : tag;
+    return linked.replace(
+      CF_EMAIL_ATTR,
+      (_match, prefix, quote, encoded) => `${prefix}${quote}${decode(encoded)}${quote}`,
+    );
+  });
+}
+
+/**
+ * Hashed `/_astro/` asset names change with any CSS/JS rebuild, and Cloudflare re-encodes email
+ * addresses per response; neither makes a page "changed". Every other byte of the page counts.
+ */
 export function pageFingerprint(html) {
-  const normalized = html.replace(/\/_astro\/[A-Za-z0-9._-]+/g, "/_astro/");
+  const normalized = normalizeCloudflareEmails(html).replace(
+    /\/_astro\/[A-Za-z0-9._-]+/g,
+    "/_astro/",
+  );
   return createHash("sha256").update(normalized).digest("hex");
 }
 
@@ -309,8 +376,37 @@ export async function runIndexNow({
       if (canonical !== url) {
         throw new IndexNowError(`${url} has canonical ${canonical ?? "(none)"}, not itself`);
       }
-      fingerprints[url] = pageFingerprint(html);
+      try {
+        fingerprints[url] = pageFingerprint(html);
+      } catch (error) {
+        if (error instanceof IndexNowError) throw new IndexNowError(`${url}: ${error.message}`);
+        throw error;
+      }
       if (state.urls[url]?.fingerprint !== fingerprints[url]) changed.push(url);
+    }
+
+    if (mode === "rebaseline") {
+      // Library-only (see scripts/oneoff/): replace stored fingerprints of pages already received
+      // by IndexNow, after the same live checks, keeping each receipt's status and time. No POST.
+      const stored = Object.keys(state.urls);
+      const notStored = candidates.filter((url) => !state.urls[url]);
+      const notLive = stored.filter((url) => !candidates.includes(url));
+      const notReceived = stored.filter((url) => ![200, 202].includes(state.urls[url].status));
+      if (notStored.length > 0 || notLive.length > 0 || notReceived.length > 0) {
+        throw new IndexNowError(
+          `rebaseline needs the live eligible URLs to equal the recorded 200/202 receipts (not recorded: ${notStored.length}, recorded but not live: ${notLive.length}, other status: ${notReceived.length}); nothing changed`,
+        );
+      }
+      const rebaselinedAt = now().toISOString();
+      const urls = {};
+      for (const url of candidates) {
+        urls[url] = { ...state.urls[url], fingerprint: fingerprints[url], rebaselinedAt };
+      }
+      await writeState(statePath, { version: 1, host: SITE_HOST, urls });
+      info(
+        `rebaselined ${candidates.length} fingerprints (${changed.length} differed); receipts kept; nothing sent`,
+      );
+      return 0;
     }
 
     if (changed.length === 0) {

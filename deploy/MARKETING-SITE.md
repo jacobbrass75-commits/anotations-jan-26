@@ -163,7 +163,10 @@ It sends one POST to `https://api.indexnow.org/indexnow` with `host`, `key`, `ke
 (the root key file) and `urlList`. HTTP `200` means the URLs were received, `202` means
 received with key verification pending; both are recorded in `data/indexnow-state.json`
 (override with `INDEXNOW_STATE_PATH`) with a fingerprint of each page. A later run sends only
-pages whose HTML changed; a rebuild that only renames hashed `/_astro/` assets does not count.
+pages whose HTML changed; a rebuild that only renames hashed `/_astro/` assets does not count,
+and neither does Cloudflare email obfuscation, which re-encodes the footer address with a random
+key on every response (the fingerprint uses the decoded address, so a real address change still
+counts; an encoding that doesn't decode to an address stops the run).
 `400`, `403`, `422`, `429` and anything else are reported, record nothing, and are not retried
 automatically. Fix the cause first (for `429`, wait) before running `--submit` again.
 
