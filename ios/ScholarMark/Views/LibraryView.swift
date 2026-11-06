@@ -73,7 +73,7 @@ struct LibraryView: View {
                 }
             }
             .sheet(isPresented: $showingCapture) {
-                CaptureSourceView(initialScope: .inbox) { source in
+                CaptureSourceView(initialScope: .inbox, initialInput: captureInitialInput) { source in
                     path.append(.source(source.id))
                 }
             }
@@ -90,8 +90,37 @@ struct LibraryView: View {
                     store.update { $0.deleteProject(project.id, keepSources: false) }
                 }
             }
+            #if DEBUG
+            .task { await openScreenshotScene() }
+            #endif
         }
     }
+
+    private var captureInitialInput: String {
+        #if DEBUG
+        if ScreenshotScene.current == .capture { return ScreenshotScene.captureInput }
+        #endif
+        return ""
+    }
+
+    #if DEBUG
+    /// Opens the screen an App Store screenshot run asked for (see Support/ScreenshotMode.swift).
+    private func openScreenshotScene() async {
+        guard ScreenshotScene.shouldRun("library", for: .project, .source, .export, .capture) else { return }
+        if ScreenshotScene.current == .capture {
+            try? await Task.sleep(for: .seconds(1))
+            showingCapture = true
+            return
+        }
+        guard let project = store.library.projects.first(where: { $0.name == ScreenshotScene.featuredProjectName }) else { return }
+        var route: [LibraryRoute] = [.scope(.project(project.id))]
+        if ScreenshotScene.current == .source,
+           let source = store.library.sources(in: .project(project.id)).first(where: { !$0.quotes.isEmpty }) {
+            route.append(.source(source.id))
+        }
+        path = route
+    }
+    #endif
 }
 
 private struct ScopeRow: View {

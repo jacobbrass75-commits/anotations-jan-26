@@ -1,19 +1,24 @@
 import SwiftUI
 import ScholarMarkCore
 
+enum RootTab: Hashable {
+    case library, review, settings
+}
+
 struct RootView: View {
     @Environment(LibraryStore.self) private var store
+    @State private var selectedTab = RootView.initialTab
 
     var body: some View {
-        TabView {
-            Tab("Library", systemImage: "books.vertical") {
+        TabView(selection: $selectedTab) {
+            Tab("Library", systemImage: "books.vertical", value: RootTab.library) {
                 LibraryView()
             }
-            Tab("Review", systemImage: "checklist") {
+            Tab("Review", systemImage: "checklist", value: RootTab.review) {
                 ReviewView()
             }
             .badge(store.sourcesNeedingReview)
-            Tab("Settings", systemImage: "gearshape") {
+            Tab("Settings", systemImage: "gearshape", value: RootTab.settings) {
                 SettingsView()
             }
         }
@@ -24,6 +29,17 @@ struct RootView: View {
                 StorageProblemBanner(message: problem, canStartFresh: false)
             }
         }
+    }
+
+    nonisolated private static var initialTab: RootTab {
+        #if DEBUG
+        switch ScreenshotScene.current {
+        case .review: return .review
+        case .settings: return .settings
+        default: break
+        }
+        #endif
+        return .library
     }
 }
 

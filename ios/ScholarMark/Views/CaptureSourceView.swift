@@ -17,10 +17,11 @@ struct CaptureSourceView: View {
     @State private var reviewDraft: ReviewDraft?
     @FocusState private var inputFocused: Bool
 
-    init(initialScope: ProjectScope, onSaved: @escaping (ResearchSource) -> Void) {
+    init(initialScope: ProjectScope, initialInput: String = "", onSaved: @escaping (ResearchSource) -> Void) {
         self.initialScope = initialScope
         self.onSaved = onSaved
         _scope = State(initialValue: initialScope)
+        _input = State(initialValue: initialInput)
     }
 
     private var classified: CaptureInput { CaptureInput.classify(input) }

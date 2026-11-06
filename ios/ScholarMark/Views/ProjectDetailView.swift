@@ -110,6 +110,15 @@ struct ProjectDetailView: View {
         .navigationDestination(item: $capturedSourceID) { id in
             SourceDetailView(sourceID: id)
         }
+        #if DEBUG
+        .task {
+            // App Store screenshot run (see Support/ScreenshotMode.swift). Waits for the push
+            // transition to finish so the sheet is not dropped.
+            guard ScreenshotScene.shouldRun("export", for: .export) else { return }
+            try? await Task.sleep(for: .seconds(1))
+            showingExport = true
+        }
+        #endif
     }
 }
 

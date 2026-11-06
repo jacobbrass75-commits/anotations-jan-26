@@ -1,0 +1,15 @@
+ScholarMark for iOS needs no account, sign-in, or purchase. All data is stored on the device; this app has no server of its own.
+
+How to try the main features:
+1. Library tab: tap + (Capture source). Paste the DOI 10.1038/nature12373 and tap "Look up details". The app requests the citation record from doi.org, so this step needs an internet connection. Check the fields and tap "Save source". Offline, tap "Enter details manually" instead.
+2. On the saved source: switch between Chicago, MLA, and APA to see the draft citations, type a note, and tap "Add quote" to save a quote with a page number. Long-press the quote to copy it with its citation.
+3. Library tab: tap "New project" (shown in the Projects section while it is empty, and always in the toolbar; on iPhone, under the ellipsis button). Each project has its own citation style. Use "Move to" on a source screen to file a source in a project.
+4. Review tab: lists sources missing fields their citation style requires. To see an entry, capture a book title, tap "Enter details manually", and save it with only the title.
+5. Open a project or the Inbox and choose Export from the toolbar (on iPhone, under the ellipsis button) to copy or share a bibliography, Markdown notes, BibTeX, RIS, or a JSON backup.
+6. Settings tab: default citation style, a full library backup, and "Delete all projects and sources".
+
+Network use: requests are made only when the user taps "Look up details": to doi.org for a DOI (doi.org may redirect to the DOI registration agency that holds the record), or to the web page the user pasted. "Open source" opens the source's link in the system browser. There are no analytics, advertising, or tracking SDKs, and no in-app purchases or links to outside purchases.
+
+This version does not connect to or sync with a ScholarMark web account.
+
+Encryption: only standard HTTPS through URLSession; the build sets ITSAppUsesNonExemptEncryption to NO.
