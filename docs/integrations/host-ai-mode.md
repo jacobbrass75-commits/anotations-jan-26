@@ -42,6 +42,19 @@ These tools are hidden in host-AI mode because they spend ScholarMark credits: `
 
 Every tool has a `title` and `readOnlyHint`, `destructiveHint`, and `openWorldHint` annotations. Both connector directories check for these.
 
+## Stored Text And The Original Attachment
+
+Each source has two copies of its text:
+
+- **Stored text** is `fullText`. `read_source_text`, `fetch`, `search`, `find_quote_in_source`, and annotation positions all use it, and every character offset refers to it.
+- **The original attachment** is the file served by `GET /api/documents/:id/source`.
+
+`save_source` and `upload_text_to_project` send the text with `verbatim=true` to `/api/upload-text`. The backend then keeps it as given, including leading and trailing whitespace, tabs, runs of spaces, and a final newline. Line breaks are the one exception: multipart form fields always carry them as CRLF, so they're stored as LF. The original attachment holds the same bytes as the stored text. The tool result reports `characters`, `inputCharacters`, and `storedVerbatim`. When `storedVerbatim` is false, which happens when the input used CR or CRLF line breaks, `storedTextNote` explains the difference. In that case, take offsets from `read_source_text`.
+
+Blank text is refused by the MCP server. The backend applies the existing minimum (10 characters after whitespace cleanup) in both modes.
+
+The web paste box sends no `verbatim` field, so it keeps the legacy cleanup: line breaks become LF, tabs become spaces, runs of spaces collapse, and the ends are trimmed. Its original attachment is the raw form field. `.txt` and PDF files sent to `/api/upload`, including through `upload_file_to_project`, are also cleaned up, and their original attachment is the uploaded file byte for byte. Sources saved before this change keep the stored text they already have.
+
 ## Connecting
 
 - Claude (web, desktop, mobile): `Customize > Connectors > Add custom connector` with `https://mcp.scholarmark.ai/mcp`. See [claude-mcp.md](claude-mcp.md).

@@ -355,11 +355,13 @@ describe("MCP host-AI tool inventory", () => {
       const projects = await callJson("get_projects", {});
       expect(projects.map((p: { id: string }) => p.id)).toContain(project.id);
 
-      // save_source with the synthetic review fixture, verbatim
-      // Windows checkouts may carry CRLF; the backend stores LF without a trailing newline.
-      const fixtureText = (await readFile(join(fixtureDir, "riverside-survey-source.txt"), "utf8"))
-        .replace(/\r\n/g, "\n")
-        .trimEnd();
+      // save_source with the synthetic review fixture, verbatim, final LF included.
+      // Windows checkouts may carry CRLF; multipart fields carry line breaks as CRLF, so the
+      // backend stores LF, which is what a LF checkout holds byte for byte.
+      const fixtureText = (
+        await readFile(join(fixtureDir, "riverside-survey-source.txt"), "utf8")
+      ).replace(/\r\n/g, "\n");
+      expect(fixtureText.endsWith(".\n")).toBe(true);
       const saved = await callJson("save_source", {
         text: fixtureText,
         title: "Riverside survey (synthetic)",
@@ -368,6 +370,12 @@ describe("MCP host-AI tool inventory", () => {
         key_concepts: ["retention", "mentoring"],
       });
       expect(saved.projectDocumentId).toBeTruthy();
+      expect(saved).toMatchObject({
+        characters: fixtureText.length,
+        inputCharacters: fixtureText.length,
+        storedVerbatim: true,
+      });
+      expect(saved.storedTextNote).toBeUndefined();
       const pd = saved.projectDocumentId as string;
 
       const page = await callJson("read_source_text", {
@@ -383,6 +391,69 @@ describe("MCP host-AI tool inventory", () => {
         max_chars: 100000,
       });
       expect(page.text + rest.text).toBe(fixtureText);
+      expect(rest.totalCharacters).toBe(fixtureText.length);
+      expect(rest.nextOffset).toBeNull();
+      expect(rest.text.endsWith("\n")).toBe(true);
+      // The original attachment holds the same bytes as the stored retrieval text.
+      const attachment = await fetch(`${server.baseUrl}/api/documents/${saved.documentId}/source`, {
+        headers: { Authorization: `Bearer ${tokens.readWrite}` },
+      });
+      expect(attachment.status).toBe(200);
+      expect(Buffer.from(await attachment.arrayBuffer()).equals(Buffer.from(fixtureText))).toBe(
+        true,
+      );
+
+      // Edge whitespace, tabs, and runs of spaces round-trip exactly, and offsets from the
+      // caller's own copy match the stored text.
+      const spacedText =
+        "\n\n  Leading indent stays in the stored text.\n\tTabbed  line with  double spaces keeps" +
+        " its exact offsets for quotes.\n\nTrailing paragraph ends with blank lines.\n\n";
+      const spaced = await callJson("save_source", {
+        text: spacedText,
+        title: "Whitespace round trip (synthetic)",
+        project_id: project.id,
+      });
+      expect(spaced).toMatchObject({
+        characters: spacedText.length,
+        inputCharacters: spacedText.length,
+        storedVerbatim: true,
+      });
+      const spacedPage = await callJson("read_source_text", {
+        project_document_id: spaced.projectDocumentId,
+      });
+      expect(spacedPage.text).toBe(spacedText);
+      expect(spacedPage.totalCharacters).toBe(spacedText.length);
+      const spacedQuote = "\tTabbed  line with  double spaces";
+      const spacedOffset = spacedText.indexOf(spacedQuote);
+      const located = await callJson("find_quote_in_source", {
+        project_document_id: spaced.projectDocumentId,
+        quote: "Tabbed  line with  double spaces",
+      });
+      expect(located.found).toBe(true);
+      expect(located.match.startPosition).toBe(spacedOffset + 1);
+      expect(located.match.matchedText).toBe("Tabbed  line with  double spaces");
+      const spacedAnnotation = await callJson("save_annotations", {
+        project_document_id: spaced.projectDocumentId,
+        annotations: [
+          { quote: "keeps its exact offsets for quotes.", category: "evidence", note: "x" },
+        ],
+      });
+      expect(spacedAnnotation.savedCount).toBe(1);
+      expect(spacedAnnotation.saved[0].startPosition).toBe(
+        spacedText.indexOf("keeps its exact offsets for quotes."),
+      );
+      expect(spacedAnnotation.saved[0].endPosition).toBe(
+        spacedText.indexOf("keeps its exact offsets for quotes.") +
+          "keeps its exact offsets for quotes.".length,
+      );
+
+      // Blank and too-short text are refused with the existing thresholds; nothing is stored.
+      expect(errorText(await call("save_source", { text: " \n\t \n" }))).toContain(
+        "text is required",
+      );
+      expect(errorText(await call("save_source", { text: "  too short\n" }))).toContain(
+        "at least a few sentences",
+      );
 
       // Summary write + readback
       await callJson("save_source_summary", {
@@ -490,12 +561,20 @@ describe("MCP host-AI tool inventory", () => {
       });
       expect(attached.projectDocument?.id).toBeTruthy();
 
+      // CRLF input: line breaks are stored as LF and the result says so; nothing else changes.
+      const pastedText = "Synthetic pasted text about rainwater barrels.\r\n  Second line.\r\n";
       const pasted = await callJson("upload_text_to_project", {
         project_id: second.id,
         title: "Pasted synthetic text",
-        text: "Synthetic pasted text about rainwater barrels.",
+        text: pastedText,
       });
       expect(pasted.projectDocument?.id).toBeTruthy();
+      expect(pasted.document.fullText).toBe(pastedText.replace(/\r\n/g, "\n"));
+      expect(pasted).toMatchObject({
+        storedVerbatim: false,
+        inputCharacters: pastedText.length,
+        storedTextNote: expect.stringContaining("stored as LF"),
+      });
       const uploadedFile = await callJson("upload_file_to_project", {
         project_id: second.id,
         filename: "synthetic-notes.txt",

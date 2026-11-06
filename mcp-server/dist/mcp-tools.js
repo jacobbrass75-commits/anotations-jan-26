@@ -213,6 +213,47 @@ function parseRequiredString(input, key) {
     }
     return value.trim();
 }
+// Source text is passed through untouched: trimming would drop a trailing newline or leading
+// whitespace and shift the stored offsets away from the text the user gave. Blank text is
+// still rejected here; the backend applies its minimum-length check.
+function parseRequiredText(input, key) {
+    const value = input[key];
+    if (typeof value !== "string" || value.trim().length === 0) {
+        throw new Error(`${key} is required`);
+    }
+    return value;
+}
+// Asks /api/upload-text to store the text as given. Multipart fields carry line breaks as
+// CRLF, so the backend stores LF; everything else (spacing, edge whitespace) is kept.
+function buildVerbatimTextForm(text, title) {
+    const formData = new FormData();
+    if (title) {
+        formData.append("title", title);
+    }
+    formData.append("text", text);
+    formData.append("verbatim", "true");
+    return formData;
+}
+// Reports whether the stored text matches the input exactly, so the host knows its own copy's
+// offsets are valid. The only expected difference is CR or CRLF line breaks stored as LF.
+function describeStoredText(document, text) {
+    const stored = typeof document?.fullText === "string" ? document.fullText : null;
+    if (stored === null) {
+        return { storedVerbatim: null, inputCharacters: text.length };
+    }
+    const storedVerbatim = stored === text;
+    return {
+        storedVerbatim,
+        inputCharacters: text.length,
+        ...(storedVerbatim
+            ? {}
+            : {
+                storedTextNote: text.replace(/\r\n?/g, "\n") === stored
+                    ? "Line breaks were stored as LF. Use offsets from read_source_text."
+                    : "The stored text differs from the input. Use offsets from read_source_text.",
+            }),
+    };
+}
 function parseOptionalString(input, key) {
     const value = input[key];
     if (typeof value !== "string") {
@@ -691,7 +732,7 @@ export function registerScholarMarkTools(server, options) {
         properties: {
             project_id: { type: "string", description: "ScholarMark project ID" },
             title: { type: "string", description: "Source title or filename" },
-            text: { type: "string", description: "Source text to save and index" },
+            text: { type: "string", description: "Source text to save and index, stored verbatim (line breaks as LF)" },
             folder_id: { type: "string", description: "Optional project folder ID" },
             source_role: {
                 type: "string",
@@ -703,13 +744,8 @@ export function registerScholarMarkTools(server, options) {
         required: ["project_id", "text"],
         additionalProperties: false,
     }, async (input, context) => withToken(context, async (token) => {
-        const text = parseRequiredString(input, "text");
-        const formData = new FormData();
-        const title = parseOptionalString(input, "title");
-        if (title) {
-            formData.append("title", title);
-        }
-        formData.append("text", text);
+        const text = parseRequiredText(input, "text");
+        const formData = buildVerbatimTextForm(text, parseOptionalString(input, "title"));
         const document = await client.requestFormData("POST", "/api/upload-text", token, formData);
         const documentId = typeof document?.id === "string" ? document.id : "";
         if (!documentId) {
@@ -719,6 +755,7 @@ export function registerScholarMarkTools(server, options) {
         return asTextResult({
             document,
             projectDocument,
+            ...describeStoredText(document, text),
         });
     }));
     register("upload_file_to_project", "Upload a base64-encoded file as a ScholarMark source and attach it to a project", {
@@ -1051,7 +1088,7 @@ export function registerScholarMarkTools(server, options) {
     register("save_source", "Save a document the user pasted or shared as a ScholarMark source. Pass the full text exactly as given. Optionally attach it to a project and include your own summary, key concepts, and citation in the same call.", {
         type: "object",
         properties: {
-            text: { type: "string", description: "Full source text, verbatim" },
+            text: { type: "string", description: "Full source text, verbatim. Stored as given, including leading and trailing whitespace; line breaks are stored as LF." },
             title: { type: "string", description: "Source title" },
             project_id: { type: "string", description: "Optional project ID to attach the source to" },
             source_role: {
@@ -1068,18 +1105,13 @@ export function registerScholarMarkTools(server, options) {
         required: ["text"],
         additionalProperties: false,
     }, async (input, context) => withToken(context, async (token) => {
-        const text = parseRequiredString(input, "text");
+        const text = parseRequiredText(input, "text");
         const citation = parseOptionalCitation(input);
         const projectId = parseOptionalString(input, "project_id");
         if (citation && !projectId) {
             throw new Error("citation requires project_id, because citations are stored per project");
         }
-        const formData = new FormData();
-        const title = parseOptionalString(input, "title");
-        if (title) {
-            formData.append("title", title);
-        }
-        formData.append("text", text);
+        const formData = buildVerbatimTextForm(text, parseOptionalString(input, "title"));
         const document = await client.requestFormData("POST", "/api/upload-text", token, formData);
         const documentId = typeof document?.id === "string" ? document.id : "";
         if (!documentId) {
@@ -1098,6 +1130,7 @@ export function registerScholarMarkTools(server, options) {
             projectDocumentId: projectDocument?.id ?? null,
             title: document.filename,
             characters: typeof document.fullText === "string" ? document.fullText.length : text.length,
+            ...describeStoredText(document, text),
             summary,
             next: projectDocument
                 ? "Ask the user what they are looking for in this source, then read it with read_source_text and save findings with save_annotations."

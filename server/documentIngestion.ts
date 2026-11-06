@@ -14,6 +14,11 @@ export interface CreateTextBackedDocumentInput {
   userId: string;
   /** Skip the background AI summary (host-AI mode supplies its own). Defaults to true. */
   generateSummary?: boolean;
+  /**
+   * Store `fullText` exactly as given, without trimming, so stored offsets match the caller's
+   * text. The minimum-length check still applies to the trimmed text. Defaults to false.
+   */
+  preserveText?: boolean;
 }
 
 const DEFAULT_PASTED_SOURCE_NAME = "Pasted Source";
@@ -45,11 +50,12 @@ export async function createTextBackedDocument({
   sourceBuffer,
   userId,
   generateSummary = true,
+  preserveText = false,
 }: CreateTextBackedDocumentInput): Promise<Document> {
-  const normalizedText = fullText.trim();
-  if (normalizedText.length < 10) {
+  if (fullText.trim().length < 10) {
     throw new Error("Could not extract text from file");
   }
+  const normalizedText = preserveText ? fullText : fullText.trim();
 
   const doc = await storage.createDocument({
     filename,

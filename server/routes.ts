@@ -5,7 +5,7 @@ import { join } from "path";
 import { PDFParse } from "pdf-parse";
 import { storage } from "./storage";
 import { db, sqlite } from "./db";
-import { extractTextFromTxt } from "./chunker";
+import { extractTextFromTxt, normalizeLineEndings } from "./chunker";
 import {
   getEmbeddingWithUsage,
   searchDocument,
@@ -555,10 +555,19 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
       let reservedStorageBytes = 0;
       try {
         const rawText = typeof req.body.text === "string" ? req.body.text : "";
-        const normalizedText = extractTextFromTxt(rawText);
-        const textBytes = Buffer.byteLength(rawText, "utf-8");
+        // Opt-in for callers that promise verbatim storage (MCP save_source and
+        // upload_text_to_project): keep spacing and leading/trailing whitespace, only
+        // canonicalizing line breaks to LF. The web paste box keeps the legacy cleanup.
+        const verbatim = req.body.verbatim === "true";
+        const cleanedText = extractTextFromTxt(rawText);
+        const storedText = verbatim ? normalizeLineEndings(rawText) : cleanedText;
+        // Verbatim sources save the stored text as the original attachment, so the two match
+        // byte for byte; legacy pastes keep the raw field as their attachment.
+        const sourceBuffer = Buffer.from(verbatim ? storedText : rawText, "utf-8");
+        const textBytes = sourceBuffer.length;
 
-        if (!normalizedText || normalizedText.length < 10) {
+        // Blank and too-short checks use the cleaned text in both modes.
+        if (!cleanedText || cleanedText.length < 10) {
           return res.status(400).json({
             message: "Paste at least a few sentences so ScholarMark can create a usable source.",
           });
@@ -572,10 +581,11 @@ export async function registerRoutes(httpServer: Server, app: ExpressApp): Promi
         const filename = normalizePastedSourceFilename(title);
         const doc = await createTextBackedDocument({
           filename,
-          fullText: normalizedText,
-          sourceBuffer: Buffer.from(rawText, "utf-8"),
+          fullText: storedText,
+          sourceBuffer,
           userId: req.user!.userId,
           generateSummary: !isHostAiRequest(req),
+          preserveText: verbatim,
         });
         reservedStorageBytes = 0;
 
