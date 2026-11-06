@@ -27,6 +27,8 @@ integrations/scholarmark-plugin/
     ├── validate.mjs                 # offline checks, plus optional --live and --claude-cli
     ├── package.mjs                  # builds dist/*.zip deterministically and re-validates each archive
     ├── skills-only.mjs              # derives the text-only skill copy for the skills-only package
+    ├── claude-skill.mjs             # lays that copy out as the native Claude skill ZIP and validates it
+    ├── zip.mjs                      # deterministic ZIP writer and reader shared by the packagers
     └── build-icons.mjs              # renders the PNG icons from logo.svg with the repo's sharp
 ```
 
@@ -34,9 +36,11 @@ One folder serves both ecosystems. Claude Code and claude.ai read `.claude-plugi
 
 The packager also builds `scholarmark-citation-audit-<version>.zip`, a skills-only OpenAI package listed as **ScholarMark Citation Audit**. It has no `mcp.json`, `review`, hooks, or server metadata, so it can be published without MCP review. Its manifest and README live in `skills-only/`. `skills-only.mjs` derives its skill from the canonical `plugin/skills/citation-audit` by removing the connected-mode passages and `references/scholarmark-tools.md`. Each edit must match exactly once, so the build fails if the canonical skill changes in a way the derivation doesn't cover. OpenAI doesn't support adding a server to a skills-only listing later, so this package has its own name and display name, and the combined `scholarmark` listing remains the path for connected features. `validate.mjs --target skills-only` checks it.
 
+It also builds `scholarmark-citation-audit-skill-<version>.zip`, a native Claude custom skill for direct upload (claude.ai **Customize → Skills → Add → Upload skill**, or unzipped into `~/.claude/skills/`). `claude-skill.mjs` takes the same text-only skill and lays it out as one top-level `citation-audit/` folder holding `SKILL.md` and its Markdown references, with no manifest, MCP config, assets, or scripts. The description is shortened to fit claude.ai's 200-character upload limit, and the archive is checked against the upload rules every time it's built. The marketing build generates the same bytes into `downloads/` for the manual download on `/guides/how-to-verify-ai-generated-citations/`; no ZIP is checked in.
+
 ## Requirements
 
-- Node 22.2 or later (`zlib.crc32`). `validate.mjs` and `package.mjs` use only Node built-ins.
+- Node 20 or later. `validate.mjs`, `package.mjs`, and `zip.mjs` use only Node built-ins, with a CRC-32 fallback where `zlib.crc32` is missing.
 - For `build-icons.mjs` only: `npm ci` at the repository root, for `sharp`.
 - Optional: Claude Code 2.1.281 or later for `--claude-cli`. Tested with 2.1.296.
 

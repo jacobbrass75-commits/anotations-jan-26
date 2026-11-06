@@ -16,6 +16,8 @@ import { startHttpServer } from "./helpers/http";
 
 // Test-only value; production keys are generated on the server and never committed.
 const INDEXNOW_KEY = "0123456789abcdef0123456789abcdef";
+const SKILL_ZIP = "scholarmark-citation-audit-skill-1.0.0.zip";
+const SKILL_ZIP_PATH = `/downloads/${SKILL_ZIP}`;
 
 let fixtureRoot: string;
 let productionDist: string;
@@ -58,6 +60,9 @@ function writeAstroBuild(root: string, release: "production" | "preview") {
   writeFixture(root, "pricing/index.html", page("astro-pricing", null));
   writeFixture(root, "og/home.png", "png-bytes");
   writeFixture(root, "favicon.svg", "astro-favicon");
+  writeFixture(root, `downloads/${SKILL_ZIP}`, "skill-zip-bytes");
+  writeFixture(root, "downloads/notes.txt", "not-for-download");
+  writeFixture(root, `downloads/${SKILL_ZIP}.bak`, "not-for-download");
   writeFixture(root, ".well-known/security.txt", "astro-dotfile");
   writeFixture(
     root,
@@ -470,6 +475,79 @@ describe("Astro marketing site on the marketing host", () => {
       expect(await post.text()).toBe(`spa:POST:${keyPath}`);
     } finally {
       await server.close();
+    }
+  });
+
+  it("serves the exact skill ZIP as a noindex attachment on the canonical host only", async () => {
+    const server = await startApp();
+    try {
+      const zip = await request(server.baseUrl, SKILL_ZIP_PATH);
+      expect(zip.status).toBe(200);
+      expect(zip.headers.get("content-type")).toBe("application/zip");
+      expect(zip.headers.get("content-disposition")).toBe(`attachment; filename="${SKILL_ZIP}"`);
+      expect(zip.headers.get("x-robots-tag")).toBe("noindex");
+      expect(zip.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(zip.headers.get("x-scholarmark-surface")).toBe("marketing");
+      expect(zip.headers.get("cache-control")).toBe("public, max-age=3600");
+      expect(await zip.text()).toBe("skill-zip-bytes");
+
+      const head = await request(server.baseUrl, SKILL_ZIP_PATH, { method: "HEAD" });
+      expect(head.status).toBe(200);
+      expect(head.headers.get("content-disposition")).toBe(`attachment; filename="${SKILL_ZIP}"`);
+
+      const www = await request(server.baseUrl, SKILL_ZIP_PATH, { host: "www.scholarmark.ai" });
+      expect(www.status).toBe(308);
+      expect(www.headers.get("location")).toBe(`https://scholarmark.ai${SKILL_ZIP_PATH}`);
+
+      // App and preview hosts keep their existing behavior.
+      for (const host of ["app.scholarmark.ai", "preview.internal"]) {
+        const other = await request(server.baseUrl, SKILL_ZIP_PATH, { host });
+        expect(await other.text(), host).toBe(`spa:GET:${SKILL_ZIP_PATH}`);
+      }
+      // Nothing else under downloads/ is a public file, and near-miss paths don't match.
+      for (const otherPath of [
+        "/downloads/notes.txt",
+        `${SKILL_ZIP_PATH}.bak`,
+        `${SKILL_ZIP_PATH}/`,
+        SKILL_ZIP_PATH.toUpperCase(),
+        "/downloads/",
+        "/downloads",
+        `/${SKILL_ZIP}`,
+      ]) {
+        const other = await request(server.baseUrl, otherPath);
+        expect(other.headers.get("content-disposition"), otherPath).toBeNull();
+        expect(await other.text(), otherPath).toBe(`spa:GET:${otherPath}`);
+      }
+      const guidesPath = await request(server.baseUrl, `/guides${SKILL_ZIP_PATH}`);
+      expect(guidesPath.status).toBe(404);
+      const post = await request(server.baseUrl, SKILL_ZIP_PATH, { method: "POST" });
+      expect(await post.text()).toBe(`spa:POST:${SKILL_ZIP_PATH}`);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("serves no skill ZIP when the build has none or more than one", async () => {
+    const missing = path.join(fixtureRoot, "no-download");
+    const twoVersions = path.join(fixtureRoot, "two-downloads");
+    writeAstroBuild(missing, "production");
+    fs.rmSync(path.join(missing, "downloads", SKILL_ZIP));
+    writeAstroBuild(twoVersions, "production");
+    writeFixture(twoVersions, "downloads/scholarmark-citation-audit-skill-1.0.1.zip", "newer");
+
+    for (const distPath of [missing, twoVersions]) {
+      const server = await startApp(distPath);
+      try {
+        for (const urlPath of [
+          SKILL_ZIP_PATH,
+          "/downloads/scholarmark-citation-audit-skill-1.0.1.zip",
+        ]) {
+          const response = await request(server.baseUrl, urlPath);
+          expect(await response.text(), `${distPath} ${urlPath}`).toBe(`spa:GET:${urlPath}`);
+        }
+      } finally {
+        await server.close();
+      }
     }
   });
 

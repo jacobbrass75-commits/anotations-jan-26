@@ -20,6 +20,14 @@ export const INDEXNOW_KEY_ENV = "INDEXNOW_KEY";
 export const INDEXNOW_KEY_PATTERN = /^(?:[0-9a-f]{32}|[0-9a-f]{64})$/;
 const INDEXNOW_KEY_HOST = "scholarmark.ai";
 
+/**
+ * The Claude skill ZIP that the Astro build writes to `downloads/`. Only one file with this
+ * exact versioned name is served, as an attachment, on the exact canonical host. Nothing else
+ * under `downloads/` is ever served.
+ */
+const SKILL_DOWNLOAD_PATTERN = /^downloads\/(scholarmark-citation-audit-skill-\d+\.\d+\.\d+\.zip)$/;
+const SKILL_DOWNLOAD_HOST = "scholarmark.ai";
+
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const PUBLIC_FILE_CACHE_CONTROL = "public, max-age=3600";
 const MAX_MARKETING_FILES = 20_000;
@@ -112,8 +120,15 @@ interface SitemapEntry {
   lastmod?: string;
 }
 
+interface SkillDownload {
+  path: string;
+  fileName: string;
+  filePath: string;
+}
+
 interface MarketingManifest {
   rootPage: MarketingPage;
+  skillDownload: SkillDownload | null;
   pages: Map<string, MarketingPage>;
   files: Map<string, { filePath: string; cacheControl: string }>;
   notFoundHtml: Buffer | null;
@@ -257,6 +272,7 @@ function buildMarketingManifest(distPath: string, spaPublicPath: string): Market
   const pages = new Map<string, MarketingPage>();
   const files = new Map<string, { filePath: string; cacheControl: string }>();
   const ignoredPages: string[] = [];
+  const skillDownloads: SkillDownload[] = [];
   let notFoundHtml: Buffer | null = null;
 
   for (const relativePath of listMarketingFiles(distPath)) {
@@ -274,6 +290,10 @@ function buildMarketingManifest(distPath: string, spaPublicPath: string): Market
       pages.set(route, readPage(filePath));
     } else if (relativePath.startsWith("guides/")) {
       files.set(urlPath, { filePath, cacheControl: PUBLIC_FILE_CACHE_CONTROL });
+    } else if (relativePath.startsWith("downloads/")) {
+      // Never a generic public file: only the exact skill ZIP gets its own route below.
+      const fileName = SKILL_DOWNLOAD_PATTERN.exec(relativePath)?.[1];
+      if (fileName) skillDownloads.push({ path: urlPath, fileName, filePath });
     } else if (isHtml) {
       // Only `/` and `/guides` are reserved for Astro; SPA routes keep their pages.
       ignoredPages.push(urlPath);
@@ -328,8 +348,16 @@ function buildMarketingManifest(distPath: string, spaPublicPath: string): Market
     sitemap = astroSitemap ?? renderSitemap([]);
   }
 
+  if (skillDownloads.length > 1) {
+    staticLogger.error(
+      { downloads: skillDownloads.map((download) => download.path) },
+      "marketing build has more than one skill ZIP; serving none",
+    );
+  }
+
   return {
     rootPage,
+    skillDownload: skillDownloads.length === 1 ? skillDownloads[0] : null,
     pages,
     files,
     notFoundHtml,
@@ -414,6 +442,7 @@ export function loadMarketingSite(options: MarketingSiteOptions): MarketingSite 
       files: manifest.files.size,
       indexable: manifest.indexable,
       indexNowKeyFile: indexNowKeyPath !== null,
+      skillDownload: manifest.skillDownload?.path ?? null,
     },
     "serving Astro marketing site on the marketing host",
   );
@@ -506,6 +535,22 @@ export function loadMarketingSite(options: MarketingSiteOptions): MarketingSite 
       setMarketingHeaders(res, pathname, "no-cache");
       res.setHeader("X-Robots-Tag", "noindex");
       return res.type("text/plain").send(indexNowKeyPath.slice(1, -".txt".length));
+    }
+
+    // Exact canonical host and exact versioned path only. `www` is redirected to the canonical
+    // host before this runs; preview hosts and every other path fall through unchanged.
+    const skillDownload = manifest.skillDownload;
+    if (
+      skillDownload !== null &&
+      pathname === skillDownload.path &&
+      (req.hostname || "").toLowerCase() === SKILL_DOWNLOAD_HOST
+    ) {
+      setMarketingHeaders(res, pathname, PUBLIC_FILE_CACHE_CONTROL);
+      res.setHeader("X-Robots-Tag", "noindex");
+      res.attachment(skillDownload.fileName);
+      return res.sendFile(skillDownload.filePath, { cacheControl: false }, (error) => {
+        if (error && !res.headersSent) sendNotFound(res, pathname, null);
+      });
     }
 
     if (pathname === "/") {

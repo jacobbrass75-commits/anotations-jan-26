@@ -1,0 +1,115 @@
+---
+import Button from "./Button.astro";
+import { skillDownloadPath, skillVersion } from "../lib/skillDownload";
+// Styles are inline so they ship only on the guide that shows the download, leaving the
+// shared guide stylesheet (and every other guide page) unchanged.
+---
+
+<aside class="skill card" aria-labelledby="guide-skill-title">
+  <p class="skill__tag">Manual download · Claude skill</p>
+  <h2 class="skill__title" id="guide-skill-title">Run this check in Claude</h2>
+  <p>
+    The ScholarMark Citation Audit skill gives Claude the checks in this guide. Paste your draft
+    and the source passages you have, and it reports a status, a confidence level and a next step
+    for each claim, quotation, page number and DOI, along with what it couldn't check.
+  </p>
+
+  <ol class="skill__steps">
+    <li>Download the ZIP. Keep it zipped.</li>
+    <li>
+      In Claude, open <strong>Customize → Skills</strong>, choose <strong>Add</strong>, then
+      <strong>Upload skill</strong>, and pick the file. Some accounts show this under
+      <strong>Plugins</strong>. Skills need code execution turned on in Settings → Capabilities.
+    </li>
+    <li>In Claude Code, unzip it into <code>~/.claude/skills/</code> instead.</li>
+  </ol>
+
+  <p class="skill__prompt-label">Then try:</p>
+  <p class="skill__prompt">
+    “Audit the citations in this paragraph against the source excerpts I’ve pasted below. Flag
+    quotes that don’t match word for word and page numbers you can’t confirm.”
+  </p>
+
+  <p class="skill__fine">
+    The skill works on text in the chat. It needs no account and stores nothing. Searching your
+    saved ScholarMark library uses the separate ScholarMark connector. Features vary by Claude plan
+    and app; DOI lookups need web access. This is a manual download, not an app directory listing.
+  </p>
+
+  <Button href={skillDownloadPath} variant="secondary" download>
+    Download the skill (ZIP, v{skillVersion})
+  </Button>
+</aside>
+
+<style is:inline>
+  .skill {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1.25rem 1.5rem;
+    font-size: 0.975rem;
+  }
+
+  .skill p,
+  .skill li {
+    color: var(--ink-soft);
+  }
+
+  .skill__tag {
+    justify-self: start;
+    padding: 0.05rem 0.5rem;
+    border: 1px dashed var(--muted);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .skill .skill__title {
+    margin: 0;
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+
+  .skill__steps {
+    display: grid;
+    gap: 0.4rem;
+    margin: 0;
+    padding-left: 1.25rem;
+  }
+
+  .skill__steps code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
+
+  .skill .skill__prompt-label {
+    margin-bottom: -0.5rem;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .skill .skill__prompt {
+    padding: 0.75rem 1rem;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    background: var(--paper-deep);
+    color: var(--ink);
+    font-family: var(--serif);
+  }
+
+  .skill .skill__fine {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  .skill .btn {
+    justify-self: start;
+  }
+</style>

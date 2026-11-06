@@ -333,6 +333,7 @@ async function verifyDist(dist, expect) {
   }
 
   errors.push(...sampleAuditChecks(pages, expect));
+  errors.push(...skillDownloadChecks(dist, files, pages, expect));
 
   if (expect.priceLive && !visibleText(pages.get("/")).includes("$5/month")) {
     fail("/", "PUBLIC_PRO_PRICE_LIVE=true but $5/month is not shown");
@@ -420,6 +421,29 @@ function sampleAuditChecks(pages, expect) {
     for (const [route, html] of linked) {
       if (!html.includes('href="/#sample-audit"')) fail(route, "sample entry does not link to /#sample-audit");
     }
+  }
+  return errors;
+}
+
+/**
+ * The Claude skill ZIP: every build writes exactly one versioned file to downloads/, and in
+ * a real build only the citation-verification guide links to it.
+ */
+function skillDownloadChecks(dist, files, pages, expect) {
+  const errors = [];
+  const downloads = files
+    .map((file) => path.relative(dist, file).split(path.sep).join("/"))
+    .filter((rel) => rel.startsWith("downloads/"));
+  if (downloads.length !== 1 || !/^downloads\/scholarmark-citation-audit-skill-\d+\.\d+\.\d+\.zip$/.test(downloads[0])) {
+    errors.push(`downloads: expected one scholarmark-citation-audit-skill-<version>.zip, found ${downloads.join(", ") || "none"}`);
+    return errors;
+  }
+  if (expect.fixtures) return errors;
+  const href = `href="/${downloads[0]}"`;
+  const linking = [...pages].filter(([, html]) => html.includes('href="/downloads/')).map(([route]) => route);
+  const target = "/guides/how-to-verify-ai-generated-citations/";
+  if (linking.length !== 1 || linking[0] !== target || !pages.get(target).includes(href)) {
+    errors.push(`downloads: only ${target} should link ${href}; linked from ${linking.join(", ") || "nothing"}`);
   }
   return errors;
 }
