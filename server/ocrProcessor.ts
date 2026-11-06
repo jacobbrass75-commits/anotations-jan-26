@@ -430,7 +430,13 @@ function chunkBySize<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-async function preprocessImageForVision(
+// sharp >= 0.35 removed the deprecated `failOnError` constructor option (it is
+// silently ignored), so tolerate truncated/slightly corrupt camera captures via
+// `failOn: "none"`, which is what `failOnError: false` used to map to.
+// sharp's default `limitInputPixels` cap stays in force.
+const SHARP_INPUT_OPTIONS = { failOn: "none" } as const;
+
+export async function preprocessImageForVision(
   inputPath: string,
   outputDir: string,
   outputName: string,
@@ -439,11 +445,11 @@ async function preprocessImageForVision(
     const sharpModule = await import("sharp");
     const sharpFactory = (sharpModule as { default?: any }).default || (sharpModule as any);
 
-    const metadata = await sharpFactory(inputPath, { failOnError: false }).metadata();
+    const metadata = await sharpFactory(inputPath, SHARP_INPUT_OPTIONS).metadata();
     const width = metadata.width ?? 0;
     const height = metadata.height ?? 0;
 
-    let pipeline = sharpFactory(inputPath, { failOnError: false }).rotate();
+    let pipeline = sharpFactory(inputPath, SHARP_INPUT_OPTIONS).rotate();
 
     // Phone captures often arrive landscape even for portrait documents.
     if (width > 0 && height > 0 && width * 100 >= height * DEFAULT_HEIC_ROTATE_THRESHOLD_PCT) {

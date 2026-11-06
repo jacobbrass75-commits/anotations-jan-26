@@ -34,6 +34,7 @@ export const testFiles = [
   "tests/server/paypalBillingRoutes.integration.test.ts",
   "tests/server/imageRoutes.test.ts",
   "tests/server/documentIngestion.test.ts",
+  "tests/server/ocrImagePreprocess.test.ts",
   "tests/server/backupScript.test.ts",
   "tests/server/restoreDrill.test.ts",
   "tests/server/db.test.ts",
