@@ -10,48 +10,34 @@ describe("Anthropic model configuration", () => {
     vi.unstubAllEnvs();
   });
 
-  it("uses the current Opus and Sonnet models by default", async () => {
+  it("uses the Claude 5.5 models by default", async () => {
     const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
 
-    expect(ANTHROPIC_MODELS.opus).toBe("claude-opus-4-8");
-    expect(ANTHROPIC_MODELS.sonnet).toBe("claude-sonnet-5");
+    expect(ANTHROPIC_MODELS).toEqual({
+      opus: "claude-opus-5-5",
+      sonnet: "claude-sonnet-5-5",
+      haiku: "claude-haiku-5-5",
+    });
   });
 
-  it("uses Claude Fable 5 for the opt-in writing test model by default", async () => {
+  it("no longer configures a Fable model", async () => {
     const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
 
-    expect(ANTHROPIC_MODELS.fable).toBe("claude-fable-5");
+    expect(Object.keys(ANTHROPIC_MODELS)).toEqual(["opus", "sonnet", "haiku"]);
   });
 
-  it("maps older Opus and Sonnet env values to 4.6", async () => {
-    vi.stubEnv("ANTHROPIC_OPUS_MODEL", "claude-opus-4-1-20250805");
-    vi.stubEnv("ANTHROPIC_SONNET_MODEL", "claude-sonnet-4-20250514");
+  it.each([
+    ["ANTHROPIC_OPUS_MODEL", "claude-opus-4-1-20250805", "opus", "claude-opus-5-5"],
+    ["ANTHROPIC_OPUS_MODEL", "claude-opus-4-8", "opus", "claude-opus-5-5"],
+    ["ANTHROPIC_SONNET_MODEL", "claude-sonnet-4-20250514", "sonnet", "claude-sonnet-5-5"],
+    ["ANTHROPIC_SONNET_MODEL", "claude-sonnet-5", "sonnet", "claude-sonnet-5-5"],
+    ["ANTHROPIC_HAIKU_MODEL", "claude-3-5-haiku-20241022", "haiku", "claude-haiku-5-5"],
+    ["ANTHROPIC_HAIKU_MODEL", "claude-haiku-4-5-20251001", "haiku", "claude-haiku-5-5"],
+  ] as const)("maps retired %s=%s to the 5.5 model", async (envName, value, key, expected) => {
+    vi.stubEnv(envName, value);
 
     const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
 
-    expect(ANTHROPIC_MODELS.opus).toBe("claude-opus-4-6");
-    expect(ANTHROPIC_MODELS.sonnet).toBe("claude-sonnet-4-6");
-  });
-
-  it("uses the current Haiku model by default", async () => {
-    const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
-
-    expect(ANTHROPIC_MODELS.haiku).toBe("claude-haiku-4-5-20251001");
-  });
-
-  it("maps removed Claude 3 Haiku env values to Claude Haiku 4.5", async () => {
-    vi.stubEnv("ANTHROPIC_HAIKU_MODEL", "claude-3-haiku-20241022");
-
-    const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
-
-    expect(ANTHROPIC_MODELS.haiku).toBe("claude-haiku-4-5-20251001");
-  });
-
-  it("maps removed Claude 3.5 Haiku env values to Claude Haiku 4.5", async () => {
-    vi.stubEnv("ANTHROPIC_HAIKU_MODEL", "claude-3-5-haiku-20241022");
-
-    const { ANTHROPIC_MODELS } = await import("../../server/aiModels");
-
-    expect(ANTHROPIC_MODELS.haiku).toBe("claude-haiku-4-5-20251001");
+    expect(ANTHROPIC_MODELS[key]).toBe(expected);
   });
 });

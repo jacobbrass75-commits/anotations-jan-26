@@ -22,10 +22,20 @@ function trimSlash(value) {
 
 async function request(path, options = {}) {
   const baseUrl = options.baseUrl || appBaseUrl;
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...options,
-    signal: AbortSignal.timeout(Number(process.env.SMOKE_TIMEOUT_MS || 10_000)),
-  });
+  const method = options.method || "GET";
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...options,
+      signal: AbortSignal.timeout(Number(process.env.SMOKE_TIMEOUT_MS || 10_000)),
+    });
+  } catch (error) {
+    const cause = error?.cause ? ` (cause: ${error.cause.code || error.cause.message || error.cause})` : "";
+    throw new Error(
+      `${options.label ? `${options.label}: ` : ""}${method} ${baseUrl}${path} failed: ${error?.message || error}${cause}`,
+      { cause: error },
+    );
+  }
   const text = await response.text();
   let json = null;
   if (text) {
@@ -45,7 +55,7 @@ function assert(condition, message) {
 }
 
 async function expectStatus(label, path, expected, options = {}) {
-  const result = await request(path, options);
+  const result = await request(path, { ...options, label });
   assert(
     result.response.status === expected,
     `${label} expected ${expected}, got ${result.response.status}: ${result.text.slice(0, 300)}`,
@@ -180,12 +190,25 @@ async function runAppSmoke() {
   const protectedApi = await expectStatus("auth-required API", "/api/auth/me", 401);
   assert(protectedApi.json?.message, "auth-required API did not return a JSON error");
 
-  const protectedModelList = await expectStatus(
-    "auth-required writing model tests",
-    "/api/write/test-models",
+  const protectedWriting = await expectStatus(
+    "auth-required writing API",
+    "/api/write/history",
     401,
   );
-  assert(protectedModelList.json?.message, "writing model tests did not return a JSON auth error");
+  assert(protectedWriting.json?.message, "writing API did not return a JSON auth error");
+
+  // Non-Claude model tests are retired: the gate answers before auth, so even
+  // unauthenticated probes must get its JSON 404 rather than a 401 or a model list.
+  // The POST route is covered by the writing routes integration suite.
+  const retired = await expectStatus(
+    "retired writing model tests GET",
+    "/api/write/test-models",
+    404,
+  );
+  assert(
+    retired.json?.message === "Not found",
+    "retired writing model tests GET did not return the gate's JSON 404",
+  );
 
   const invalidCampaignSignup = await expectStatus(
     "campaign signup validation",
@@ -219,8 +242,16 @@ async function runAppSmoke() {
       "Stripe Pro checkout is not using the USD 5 lookup key",
     );
     assert(
-      stripeConfig.json?.plans?.max?.amountCents === 5000,
-      "Stripe Max price did not report 5000 cents",
+      stripeConfig.json?.plans?.max?.amountCents === 1400,
+      "Stripe Premium price did not report 1400 cents",
+    );
+    assert(
+      stripeConfig.json?.plans?.max?.label === "Premium",
+      "Stripe max plan is not labeled Premium",
+    );
+    assert(
+      stripeConfig.json?.plans?.max?.lookupKey === "scholarmark_max_monthly_usd14",
+      "Stripe Premium checkout is not using the USD 14 lookup key",
     );
   } else {
     console.log("[smoke] Stripe billing config check skipped");

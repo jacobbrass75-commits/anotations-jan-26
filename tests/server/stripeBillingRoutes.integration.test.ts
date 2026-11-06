@@ -83,6 +83,27 @@ function legacyProPrice(overrides: Record<string, unknown> = {}) {
     id: "price_pro_legacy",
     unit_amount: 1400,
     lookup_key: "scholarmark_pro_monthly",
+    product: "prod_pro_legacy",
+    ...overrides,
+  });
+}
+
+function premiumPrice(overrides: Record<string, unknown> = {}) {
+  return monthlyPrice({
+    id: "price_premium_usd14",
+    unit_amount: 1400,
+    lookup_key: "scholarmark_max_monthly_usd14",
+    product: "prod_premium",
+    ...overrides,
+  });
+}
+
+function legacyMaxPrice(overrides: Record<string, unknown> = {}) {
+  return monthlyPrice({
+    id: "price_max_usd50",
+    unit_amount: 5000,
+    lookup_key: "scholarmark_max_monthly",
+    product: "prod_max_legacy",
     ...overrides,
   });
 }
@@ -95,6 +116,8 @@ const BILLING_ENV_KEYS = [
   "STRIPE_MAX_PRICE_ID",
   "STRIPE_PRO_LEGACY_PRICE_IDS",
   "STRIPE_MAX_LEGACY_PRICE_IDS",
+  "STRIPE_PRO_PRODUCT_IDS",
+  "STRIPE_MAX_PRODUCT_IDS",
 ] as const;
 
 function monthlySubscription(overrides: Record<string, unknown> = {}) {
@@ -371,15 +394,15 @@ describe("Stripe billing routes", () => {
     }
   });
 
-  async function postCheckout(baseUrl: string, token: string) {
+  async function postCheckout(baseUrl: string, token: string, tier: "pro" | "max" = "pro") {
     return requestJson<Record<string, unknown>>(baseUrl, "/api/billing/stripe/checkout", {
       method: "POST",
       headers: { authorization: `Bearer ${token}` },
-      body: { tier: "pro" },
+      body: { tier },
     });
   }
 
-  it("advertises USD 5 Pro and unchanged USD 50 Max in the public billing config", async () => {
+  it("advertises USD 5 Pro and USD 14 Premium in the public billing config", async () => {
     const { server } = await createStripeApp();
 
     try {
@@ -397,10 +420,10 @@ describe("Stripe billing routes", () => {
           lookupKey: "scholarmark_pro_monthly_usd5",
         },
         max: {
-          label: "Max",
-          amountCents: 5000,
+          label: "Premium",
+          amountCents: 1400,
           currency: "usd",
-          lookupKey: "scholarmark_max_monthly",
+          lookupKey: "scholarmark_max_monthly_usd14",
         },
       });
     } finally {
@@ -485,26 +508,158 @@ describe("Stripe billing routes", () => {
     }
   });
 
-  it("leaves Max checkout's Adaptive Pricing and promotions unchanged", async () => {
+  it("sells Premium at exact USD 14 with Adaptive Pricing off and promotions kept", async () => {
+    stripeClient.prices.list.mockResolvedValueOnce({ data: [premiumPrice()] });
+    const { server, token } = await createStripeApp();
+
+    try {
+      const response = await postCheckout(server.baseUrl, token, "max");
+
+      expect(response.status).toBe(200);
+      expect(stripeClient.prices.list).toHaveBeenCalledWith(
+        expect.objectContaining({ active: true, lookup_keys: ["scholarmark_max_monthly_usd14"] }),
+      );
+      const params = stripeClient.checkout.sessions.create.mock.calls[0][0];
+      expect(params).toMatchObject({
+        mode: "subscription",
+        payment_method_collection: "always",
+        line_items: [{ price: "price_premium_usd14", quantity: 1 }],
+        allow_promotion_codes: true,
+        adaptive_pricing: { enabled: false },
+        metadata: expect.objectContaining({
+          billingOffer: "paid_first_month",
+          priceOffer: "max_usd14_monthly",
+          tier: "max",
+        }),
+        subscription_data: {
+          metadata: expect.objectContaining({
+            billingOffer: "paid_first_month",
+            priceOffer: "max_usd14_monthly",
+            tier: "max",
+          }),
+        },
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    {
+      name: "the legacy USD 14 Pro price (same amount, Pro lookup key)",
+      env: { STRIPE_MAX_PRICE_ID: "price_pro_legacy" },
+      price: legacyProPrice(),
+    },
+    {
+      name: "a legacy USD 14 Pro price without a lookup key on a Pro product",
+      env: { STRIPE_MAX_PRICE_ID: "price_pro_legacy", STRIPE_PRO_PRODUCT_IDS: "prod_pro_legacy" },
+      price: legacyProPrice({ lookup_key: null }),
+    },
+    {
+      name: "a USD 14 price listed as a legacy Pro price ID",
+      env: { STRIPE_MAX_PRICE_ID: "price_pro_legacy", STRIPE_PRO_LEGACY_PRICE_IDS: "price_pro_legacy" },
+      price: legacyProPrice({ lookup_key: null }),
+    },
+    {
+      name: "a USD 14 price tagged scholarmark_tier=pro",
+      env: { STRIPE_MAX_PRICE_ID: "price_pro_legacy" },
+      price: legacyProPrice({ lookup_key: null, metadata: { scholarmark_tier: "pro" } }),
+    },
+    {
+      name: "the legacy USD 50 Max price",
+      env: { STRIPE_MAX_PRICE_ID: "price_max_usd50" },
+      price: legacyMaxPrice(),
+    },
+    {
+      name: "a USD 14 price outside STRIPE_MAX_PRODUCT_IDS",
+      env: { STRIPE_MAX_PRICE_ID: "price_other", STRIPE_MAX_PRODUCT_IDS: "prod_premium" },
+      price: premiumPrice({ id: "price_other", lookup_key: null, product: "prod_other" }),
+    },
+  ])("fails closed when Premium checkout resolves $name", async ({ env, price }) => {
+    Object.assign(process.env, env);
+    stripeClient.prices.retrieve.mockResolvedValueOnce(price);
+    const { server, token } = await createStripeApp();
+
+    try {
+      const response = await postCheckout(server.baseUrl, token, "max");
+
+      expect(response.status).toBe(502);
+      expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("fails closed when the Premium lookup key resolves to a non-USD-14 price", async () => {
     stripeClient.prices.list.mockResolvedValueOnce({
-      data: [
-        monthlyPrice({ id: "price_max", unit_amount: 5000, lookup_key: "scholarmark_max_monthly" }),
-      ],
+      data: [premiumPrice({ unit_amount: 5000 })],
     });
     const { server, token } = await createStripeApp();
 
     try {
-      const response = await requestJson<Record<string, unknown>>(
-        server.baseUrl,
-        "/api/billing/stripe/checkout",
-        { method: "POST", headers: { authorization: `Bearer ${token}` }, body: { tier: "max" } },
-      );
+      const response = await postCheckout(server.baseUrl, token, "max");
+
+      expect(response.status).toBe(502);
+      expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("uses a pinned STRIPE_MAX_PRICE_ID on a configured Premium product", async () => {
+    process.env.STRIPE_MAX_PRICE_ID = "price_premium_pinned";
+    process.env.STRIPE_MAX_PRODUCT_IDS = "prod_max_legacy,prod_premium";
+    process.env.STRIPE_PRO_PRODUCT_IDS = "prod_pro_legacy,prod_pro";
+    stripeClient.prices.retrieve.mockResolvedValueOnce(
+      premiumPrice({ id: "price_premium_pinned", lookup_key: null }),
+    );
+    const { server, token } = await createStripeApp();
+
+    try {
+      const response = await postCheckout(server.baseUrl, token, "max");
 
       expect(response.status).toBe(200);
-      const params = stripeClient.checkout.sessions.create.mock.calls[0][0];
-      expect(params.line_items).toEqual([{ price: "price_max", quantity: 1 }]);
-      expect(params.allow_promotion_codes).toBe(true);
-      expect(params).not.toHaveProperty("adaptive_pricing");
+      expect(stripeClient.checkout.sessions.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          line_items: [{ price: "price_premium_pinned", quantity: 1 }],
+          adaptive_pricing: { enabled: false },
+        }),
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  // Production pins STRIPE_MAX_PRICE_ID to the USD 50 Max price today. Until the pin
+  // moves to the USD 14 Premium price, Premium checkout must fail closed.
+  it("fails closed while STRIPE_MAX_PRICE_ID still points at the USD 50 Max price", async () => {
+    process.env.STRIPE_MAX_PRICE_ID = "price_max_usd50";
+    stripeClient.prices.retrieve.mockResolvedValueOnce(legacyMaxPrice({ lookup_key: null }));
+    const { server, token } = await createStripeApp();
+
+    try {
+      const response = await postCheckout(server.baseUrl, token, "max");
+
+      expect(response.status).toBe(502);
+      expect(stripeClient.prices.list).not.toHaveBeenCalled();
+      expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("fails closed when Pro checkout resolves a Premium-configured price", async () => {
+    process.env.STRIPE_PRO_PRICE_ID = "price_pro_pinned";
+    stripeClient.prices.retrieve.mockResolvedValueOnce(
+      monthlyPrice({ id: "price_pro_pinned", lookup_key: null, metadata: { scholarmark_tier: "max" } }),
+    );
+    const { server, token } = await createStripeApp();
+
+    try {
+      const response = await postCheckout(server.baseUrl, token);
+
+      expect(response.status).toBe(502);
+      expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
     } finally {
       await server.close();
     }
@@ -575,14 +730,88 @@ describe("Stripe billing routes", () => {
       expectedTier: "pro",
     },
     {
-      name: "the Max lookup key, even with Pro checkout metadata",
-      price: monthlyPrice({
-        id: "price_max",
-        unit_amount: 5000,
-        lookup_key: "scholarmark_max_monthly",
-      }),
+      name: "the legacy USD 50 Max lookup key, even with Pro checkout metadata",
+      price: legacyMaxPrice(),
       subscriptionMetadata: { app: "scholarmark", tier: "pro", userId: "stripe-user" },
       expectedTier: "max",
+    },
+    {
+      name: "the new USD 14 Premium lookup key",
+      price: premiumPrice(),
+      expectedTier: "max",
+    },
+    {
+      name: "a legacy Max price ID listed in STRIPE_MAX_LEGACY_PRICE_IDS",
+      env: { STRIPE_MAX_LEGACY_PRICE_IDS: "price_max_pinned" },
+      price: legacyMaxPrice({ id: "price_max_pinned", lookup_key: null }),
+      subscriptionMetadata: {},
+      expectedTier: "max",
+    },
+    {
+      name: "the legacy USD 14 Pro lookup key, even with Premium checkout metadata",
+      price: legacyProPrice(),
+      subscriptionMetadata: { app: "scholarmark", tier: "max", userId: "stripe-user" },
+      expectedTier: "pro",
+    },
+    {
+      name: "the legacy USD 14 Pro price when STRIPE_MAX_PRICE_ID wrongly points at it",
+      env: { STRIPE_MAX_PRICE_ID: "price_pro_legacy" },
+      price: legacyProPrice(),
+      expectedTier: "pro",
+    },
+    {
+      // Billing portal plan switch: the price changes, the checkout metadata does not.
+      name: "a portal switch from USD 5 Pro to USD 14 Premium",
+      price: premiumPrice(),
+      subscriptionMetadata: { app: "scholarmark", tier: "pro", userId: "stripe-user" },
+      expectedTier: "max",
+    },
+    {
+      name: "a portal switch from USD 14 Premium to USD 5 Pro",
+      price: monthlyPrice(),
+      subscriptionMetadata: { app: "scholarmark", tier: "max", userId: "stripe-user" },
+      expectedTier: "pro",
+    },
+    {
+      // Release step: the pin moves to USD 14 Premium and the old pinned USD 50 Max
+      // price ID moves to the legacy list, so those subscribers keep Premium.
+      name: "a formerly pinned USD 50 Max price moved to STRIPE_MAX_LEGACY_PRICE_IDS",
+      env: {
+        STRIPE_MAX_PRICE_ID: "price_premium_usd14",
+        STRIPE_MAX_LEGACY_PRICE_IDS: "price_max_usd50",
+      },
+      price: legacyMaxPrice({ lookup_key: null }),
+      subscriptionMetadata: {},
+      expectedTier: "max",
+    },
+    {
+      // Why that step is required: repointing the pin alone leaves a pin-only USD 50
+      // price with no remaining signal.
+      name: "a formerly pinned USD 50 Max price when only the pin was moved",
+      env: { STRIPE_MAX_PRICE_ID: "price_premium_usd14" },
+      price: legacyMaxPrice({ lookup_key: null }),
+      subscriptionMetadata: {},
+      expectedTier: "free",
+    },
+    {
+      name: "a USD 14 price on a Pro product, even when tagged scholarmark_tier=max",
+      env: { STRIPE_PRO_PRODUCT_IDS: "prod_pro_legacy" },
+      price: legacyProPrice({ lookup_key: null, metadata: { scholarmark_tier: "max" } }),
+      subscriptionMetadata: { app: "scholarmark", tier: "max", userId: "stripe-user" },
+      expectedTier: "pro",
+    },
+    {
+      name: "a USD 14 price on a Premium product",
+      env: { STRIPE_MAX_PRODUCT_IDS: "prod_premium" },
+      price: premiumPrice({ id: "price_premium_unlisted", lookup_key: null }),
+      subscriptionMetadata: {},
+      expectedTier: "max",
+    },
+    {
+      name: "an unrecognized USD 14 price without ScholarMark metadata",
+      price: premiumPrice({ id: "price_unlisted", lookup_key: null, product: "prod_unknown" }),
+      subscriptionMetadata: {},
+      expectedTier: "free",
     },
     {
       name: "an unrecognized price without ScholarMark metadata",

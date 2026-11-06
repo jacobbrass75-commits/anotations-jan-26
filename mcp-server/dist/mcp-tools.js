@@ -500,6 +500,10 @@ function describeBackendError(error) {
             if (typeof requiredScope === "string") {
                 return `This ScholarMark connection lacks "${requiredScope}" permission. Reconnect the ScholarMark connector and approve ${requiredScope} access.`;
             }
+            const message = error.body && typeof error.body === "object" ? error.body.message : undefined;
+            if (typeof message === "string" && message.trim().length > 0) {
+                return message;
+            }
             return "This feature requires a ScholarMark Pro plan.";
         }
         if (error.status === 404) {
@@ -1015,8 +1019,8 @@ export function registerScholarMarkTools(server, options) {
         const conversation = await client.requestJson("POST", "/api/chat/conversations", token, {
             projectId,
             title: title && title.length > 0 ? title : "New Chat",
-            model: "claude-opus-4-6",
-            writingModel: "precision",
+            // No model is pinned: the backend applies the caller's plan default, and
+            // Opus stays a Premium-only choice made in the app.
         });
         return asTextResult(conversation);
     }));

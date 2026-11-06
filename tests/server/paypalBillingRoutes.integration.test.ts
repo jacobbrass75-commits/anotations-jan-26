@@ -89,7 +89,23 @@ describe("PayPal billing routes", () => {
     };
   }
 
-  it("reports USD 5 Pro and USD 50 Max in the PayPal config", async () => {
+  function mockPayPalFetch(orderResponse: (url: string) => Record<string, unknown>) {
+    const paypalRequests: Array<{ url: string; body: string | undefined }> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!url.startsWith("https://api-m.sandbox.paypal.com")) {
+        return originalFetch(input, init);
+      }
+      paypalRequests.push({ url, body: init?.body as string | undefined });
+      if (url.endsWith("/v1/oauth2/token")) {
+        return new Response(JSON.stringify({ access_token: "paypal_token" }), { status: 200 });
+      }
+      return new Response(JSON.stringify(orderResponse(url)), { status: 201 });
+    }) as typeof fetch;
+    return paypalRequests;
+  }
+
+  it("reports USD 5 Pro and USD 14 Premium in the PayPal config", async () => {
     const { server } = await createPayPalApp();
 
     try {
@@ -99,10 +115,86 @@ describe("PayPal billing routes", () => {
       );
 
       expect(response.status).toBe(200);
+      expect(response.body?.currency).toBe("USD");
       expect(response.body?.plans).toEqual({
         pro: { label: "Pro", amount: "5.00", amountCents: 500 },
-        max: { label: "Max", amount: "50.00", amountCents: 5000 },
+        max: { label: "Premium", amount: "14.00", amountCents: 1400 },
       });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("creates Premium orders for exactly USD 14.00 under the internal max tier", async () => {
+    const { server, token, sqlite: db } = await createPayPalApp();
+    const paypalRequests = mockPayPalFetch(() => ({ id: "ORDER-PREMIUM-14", status: "CREATED" }));
+
+    try {
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/billing/paypal/orders",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: { tier: "max" },
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const orderRequest = paypalRequests.find((request) =>
+        request.url.endsWith("/v2/checkout/orders"),
+      );
+      const purchaseUnit = JSON.parse(orderRequest?.body ?? "{}").purchase_units[0];
+      expect(purchaseUnit.amount).toEqual({ currency_code: "USD", value: "14.00" });
+      expect(purchaseUnit.description).toBe("ScholarMark Premium monthly access");
+      const row = db
+        .prepare(
+          "SELECT tier, amount_cents, currency FROM billing_payments WHERE provider_order_id = ?",
+        )
+        .get("ORDER-PREMIUM-14");
+      expect(row).toEqual({ tier: "max", amount_cents: 1400, currency: "USD" });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("still settles a pending USD 50 Max order and grants Premium", async () => {
+    const { server, token, sqlite: db } = await createPayPalApp();
+    db.prepare(
+      `INSERT INTO billing_payments (
+         id, provider, provider_order_id, user_id, tier, amount_cents, currency, status, raw_response, created_at, updated_at
+       ) VALUES ('pay_legacy', 'paypal', 'ORDER-MAX-50', 'paypal-user', 'max', 5000, 'USD', 'CREATED', '{}', unixepoch(), unixepoch())`,
+    ).run();
+    mockPayPalFetch(() => ({
+      id: "ORDER-MAX-50",
+      status: "COMPLETED",
+      purchase_units: [
+        {
+          payments: {
+            captures: [
+              {
+                id: "CAP-50",
+                status: "COMPLETED",
+                amount: { currency_code: "USD", value: "50.00" },
+              },
+            ],
+          },
+        },
+      ],
+    }));
+
+    try {
+      const response = await requestJson<Record<string, unknown>>(
+        server.baseUrl,
+        "/api/billing/paypal/orders/ORDER-MAX-50/capture",
+        { method: "POST", headers: { authorization: `Bearer ${token}` } },
+      );
+      const { getUserById } = await import("../../server/authStorage");
+      const user = await getUserById("paypal-user");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ completed: true, tier: "max" });
+      expect(user?.tier).toBe("max");
     } finally {
       await server.close();
     }

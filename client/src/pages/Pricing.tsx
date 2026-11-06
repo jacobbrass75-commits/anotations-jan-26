@@ -14,10 +14,20 @@ import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { withRedirectUrl } from "@/lib/redirects";
 import { trackSiteEvent } from "@/lib/siteAnalytics";
-import { PLAN_DISPLAY_PRICES } from "@shared/billingPlans";
+import {
+  BILLING_PLAN_LABELS,
+  HOST_AI_CONNECTOR_SETUP,
+  HOST_AI_CONNECTOR_SUMMARY,
+  MODEL_ACCESS_DISCLAIMER,
+  PLAN_DISPLAY_PRICES,
+  PLAN_MODEL_ACCESS,
+  SCHOLARMARK_MCP_URL,
+  planBillingTerms,
+} from "@shared/billingPlans";
 
 const PRO_PRICE = PLAN_DISPLAY_PRICES.pro;
-const MAX_PRICE = PLAN_DISPLAY_PRICES.max;
+const PREMIUM_PRICE = PLAN_DISPLAY_PRICES.max;
+const PREMIUM_LABEL = BILLING_PLAN_LABELS.max;
 const VENMO_HANDLE = normalizeVenmoHandle(import.meta.env.VITE_VENMO_HANDLE);
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "support@scholarmark.ai";
 
@@ -85,10 +95,22 @@ const features: TierFeature[] = [
   { label: "AI chat", free: "Included, usage-capped", pro: "Yes", max: "Yes" },
   { label: "AI credits/period", free: "250", pro: "600", max: "2,400" },
   {
+    label: "Claude models",
+    free: "Starter caps apply",
+    pro: PLAN_MODEL_ACCESS.pro.join("; "),
+    max: PLAN_MODEL_ACCESS.max.join("; "),
+  },
+  {
     label: "Starter model caps",
     free: "Up to 5 Opus, 5 Sonnet, 25 DeepSeek",
     pro: "Shared Pro allowance",
-    max: "Shared Max allowance",
+    max: `Shared ${PREMIUM_LABEL} allowance`,
+  },
+  {
+    label: "Claude / ChatGPT / Codex connector",
+    free: "Optional, your own AI account",
+    pro: "Optional, your own AI account",
+    max: "Optional, your own AI account",
   },
   {
     label: "AI Writing",
@@ -388,9 +410,7 @@ function StripeCheckoutButton({
       : `Change to ${label} in Billing Portal`
     : status === "loading"
       ? "Opening checkout..."
-      : tier === "pro"
-        ? `Start Pro — $${amount} today`
-        : `Subscribe to ${label} for $${amount}/mo`;
+      : `Start ${label} — $${amount} today`;
 
   return (
     <div className="w-full space-y-2">
@@ -442,12 +462,13 @@ function StripeCheckoutButton({
       >
         {buttonText}
       </Button>
-      {!hasActiveStripeSubscription && tier === "pro" ? (
+      {!hasActiveStripeSubscription ? (
+        <p className="text-xs leading-5 text-muted-foreground">{planBillingTerms(tier)}</p>
+      ) : (
         <p className="text-xs leading-5 text-muted-foreground">
-          Charged today. Renews monthly at ${amount} until canceled. Cancel online in the billing
-          portal; access continues through the paid period.
+          Plan changes are made in the billing portal, which shows the new price before you confirm.
         </p>
-      ) : null}
+      )}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
@@ -650,7 +671,7 @@ export default function Pricing() {
         ) : null}
 
         {/* Tier Cards */}
-        <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2 mb-12">
+        <div className="mx-auto grid grid-cols-1 gap-6 md:grid-cols-3 mb-12">
           {/* Free */}
           <Card className={currentTier === "free" ? "border-primary" : ""}>
             <CardHeader>
@@ -709,12 +730,23 @@ export default function Pricing() {
               <p>500 MB storage</p>
               <p>Chicago, MLA 9, and APA 7 citation formatting</p>
               <p>GPT-4o-mini Vision OCR</p>
+              {PLAN_MODEL_ACCESS.pro.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
               <p>Higher monthly AI credit allowance</p>
               <p>AI writing: Quick Draft + Deep Write</p>
               <p>Source verification included</p>
               <p>DOCX/PDF export</p>
               <p>Chrome extension</p>
               <p>Bibliography generation</p>
+              <p>
+                Optional:{" "}
+                <a href="#connector" className="text-primary underline-offset-4 hover:underline">
+                  use your own Claude or ChatGPT/Codex account
+                </a>{" "}
+                through the ScholarMark connector
+              </p>
+              <p className="text-muted-foreground">{MODEL_ACCESS_DISCLAIMER}</p>
             </CardContent>
             <CardFooter>
               {currentTier === "pro" ? (
@@ -738,35 +770,80 @@ export default function Pricing() {
             </CardFooter>
           </Card>
 
-          {/* Max remains manageable for existing subscribers, but is not an acquisition offer. */}
-          {currentTier === "max" ? (
-            <Card className="border-primary">
-              <CardHeader>
-                <CardTitle>Max</CardTitle>
-                <CardDescription>Higher limits for your thesis</CardDescription>
-                <div className="text-3xl font-bold mt-2">
-                  ${MAX_PRICE}
-                  <span className="text-sm font-normal text-muted-foreground">/mo</span>
+          {/* Premium is the internal "max" tier; legacy Max subscribers are Premium. */}
+          <Card className={currentTier === "max" ? "border-primary" : ""}>
+            <CardHeader>
+              <CardTitle>{PREMIUM_LABEL}</CardTitle>
+              <CardDescription>Higher limits for your thesis</CardDescription>
+              <div className="text-3xl font-bold mt-2">
+                ${PREMIUM_PRICE}
+                <span className="text-sm font-normal text-muted-foreground">/mo</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p>Everything in Pro</p>
+              {PLAN_MODEL_ACCESS.max.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+              <p>No set source/project count limit</p>
+              <p>5 GB storage</p>
+              <p>GPT-4o Vision OCR</p>
+              <p>2,400 AI credits and 2M AI token budget/mo</p>
+              <p>Higher limits for source-grounded drafting</p>
+              <p className="text-muted-foreground">{MODEL_ACCESS_DISCLAIMER}</p>
+            </CardContent>
+            <CardFooter>
+              {currentTier === "max" ? (
+                <div className="w-full space-y-2">
+                  <Button className="w-full" disabled>
+                    Current Plan
+                  </Button>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {PREMIUM_LABEL} was previously called Max. Subscriptions started at an earlier
+                    price renew at the price shown in the billing portal.
+                  </p>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>No set source/project count limit</p>
-                <p>5 GB storage</p>
-                <p>Chicago, MLA 9, and APA 7 citation formatting</p>
-                <p>GPT-4o Vision OCR</p>
-                <p>2M AI token budget/mo</p>
-                <p>Quick Draft + Deep Write</p>
-                <p>Higher limits for source-grounded drafting</p>
-                <p>DOCX/PDF export</p>
-                <p>Everything in Pro</p>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full" disabled>
-                  Current Legacy Plan
-                </Button>
-              </CardFooter>
-            </Card>
-          ) : null}
+              ) : (
+                <PlanCheckoutButton
+                  tier="max"
+                  amount={PREMIUM_PRICE}
+                  label={PREMIUM_LABEL}
+                  accountRef={accountRef}
+                  isSignedIn={isSignedIn}
+                  hasActiveStripeSubscription={hasActiveStripeSubscription}
+                  stripeConfig={stripeConfig}
+                  paypalConfig={paypalConfig}
+                  onSignIn={handleSignIn}
+                  onComplete={handleCheckoutComplete}
+                />
+              )}
+            </CardFooter>
+          </Card>
+        </div>
+
+        <div
+          id="connector"
+          className="mb-12 rounded-lg border border-border px-5 py-4 text-sm leading-6"
+        >
+          <h2 className="text-lg font-semibold">Use your own Claude or ChatGPT/Codex account</h2>
+          <p className="mt-1 text-muted-foreground">{HOST_AI_CONNECTOR_SUMMARY}</p>
+          <p className="mt-2">
+            Connector URL: <code className="rounded bg-muted px-1">{SCHOLARMARK_MCP_URL}</code>
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {HOST_AI_CONNECTOR_SETUP.map((step) => (
+              <li key={step.host}>
+                <span className="font-medium">{step.host}:</span> {step.path}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-muted-foreground">
+            You sign in to ScholarMark when the connector is added. Setup help:{" "}
+            <Link href="/support" className="text-primary underline-offset-4 hover:underline">
+              Support
+            </Link>
+            .
+          </p>
         </div>
 
         {/* Feature Comparison Table */}
@@ -778,9 +855,9 @@ export default function Pricing() {
                 <th className="text-left p-3 font-medium">Feature</th>
                 <th className="text-center p-3 font-medium">Free</th>
                 <th className="text-center p-3 font-medium">Pro (${PRO_PRICE}/mo)</th>
-                {currentTier === "max" ? (
-                  <th className="text-center p-3 font-medium">Legacy Max</th>
-                ) : null}
+                <th className="text-center p-3 font-medium">
+                  {PREMIUM_LABEL} (${PREMIUM_PRICE}/mo)
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -789,7 +866,7 @@ export default function Pricing() {
                   <td className="p-3 font-medium">{f.label}</td>
                   <td className="p-3 text-center text-muted-foreground">{f.free}</td>
                   <td className="p-3 text-center">{f.pro}</td>
-                  {currentTier === "max" ? <td className="p-3 text-center">{f.max}</td> : null}
+                  <td className="p-3 text-center">{f.max}</td>
                 </tr>
               ))}
             </tbody>
@@ -797,12 +874,14 @@ export default function Pricing() {
         </div>
 
         <div className="mt-6 rounded-lg border border-border bg-muted/30 px-4 py-4 text-xs leading-6 text-muted-foreground">
-          Prices are in USD. Pro costs ${PRO_PRICE} today and starts immediately. Stripe renews the
-          subscription for ${PRO_PRICE} each month until you cancel in the online billing portal.
-          Existing subscriptions renew at the price shown in the billing portal. Canceling stops
-          future renewals; paid access continues through the current billing period. Venmo or PayPal
-          payments, when offered, provide one month of access unless ScholarMark confirms otherwise.
-          By subscribing, you agree to the{" "}
+          Prices are in USD and checkout charges exactly USD. Pro costs ${PRO_PRICE} and{" "}
+          {PREMIUM_LABEL} costs ${PREMIUM_PRICE}; you are charged today and access starts
+          immediately. There is no free trial. Stripe renews the subscription at the same price each
+          month until you cancel in the online billing portal. Existing subscriptions, including Max
+          subscriptions started at an earlier price, renew at the price shown in the billing portal.{" "}
+          {MODEL_ACCESS_DISCLAIMER} Canceling stops future renewals; paid access continues through
+          the current billing period. Venmo or PayPal payments, when offered, provide one month of
+          access unless ScholarMark confirms otherwise. By subscribing, you agree to the{" "}
           <Link href="/terms" className="text-primary underline-offset-4 hover:underline">
             Terms
           </Link>{" "}

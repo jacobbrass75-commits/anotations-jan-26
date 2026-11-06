@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth";
 import { getUserById, incrementAiBudgetUsage } from "./authStorage";
@@ -30,29 +30,45 @@ function serializeBudget(snapshot: ReturnType<typeof getOpenRouterBudgetSnapshot
   };
 }
 
-export function registerOpenRouterWritingRoutes(app: Express): void {
-  app.get("/api/write/test-models", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const user = await getUserById(req.user!.userId);
-      if (!user) return res.status(401).json({ message: "Authentication required" });
+/**
+ * GPT and DeepSeek are no longer end-user model choices. These operator test routes
+ * stay registered but answer 404 unless explicitly enabled, so a forged request
+ * cannot reach a non-Claude model.
+ */
+function requireWritingModelTestsEnabled(_req: Request, res: Response, next: NextFunction) {
+  if (process.env.ENABLE_OPENROUTER_WRITING_TESTS === "true") return next();
+  return res.status(404).json({ message: "Not found" });
+}
 
-      const models = await listOpenRouterWritingModels();
-      return res.json({
-        generationSettings: OPENROUTER_WRITING_TEST_SETTINGS,
-        budget: serializeBudget(getOpenRouterBudgetSnapshot(user)),
-        models,
-      });
-    } catch (error) {
-      logger.error({ err: error }, "Failed to list OpenRouter writing test models");
-      if (error instanceof OpenRouterWritingError) {
-        return res.status(error.status).json({ message: error.message });
+export function registerOpenRouterWritingRoutes(app: Express): void {
+  app.get(
+    "/api/write/test-models",
+    requireWritingModelTestsEnabled,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const user = await getUserById(req.user!.userId);
+        if (!user) return res.status(401).json({ message: "Authentication required" });
+
+        const models = await listOpenRouterWritingModels();
+        return res.json({
+          generationSettings: OPENROUTER_WRITING_TEST_SETTINGS,
+          budget: serializeBudget(getOpenRouterBudgetSnapshot(user)),
+          models,
+        });
+      } catch (error) {
+        logger.error({ err: error }, "Failed to list OpenRouter writing test models");
+        if (error instanceof OpenRouterWritingError) {
+          return res.status(error.status).json({ message: error.message });
+        }
+        return res.status(500).json({ message: "Failed to list writing test models" });
       }
-      return res.status(500).json({ message: "Failed to list writing test models" });
-    }
-  });
+    },
+  );
 
   app.post(
     "/api/write/test-models/run",
+    requireWritingModelTestsEnabled,
     requireAuth,
     aiLimiter,
     async (req: Request, res: Response) => {
@@ -70,10 +86,7 @@ export function registerOpenRouterWritingRoutes(app: Express): void {
         }
 
         const model = await getOpenRouterWritingModel(parsed.model);
-        const estimatedCostMicrodollars = estimateWritingTestCostMicrodollars(
-          model,
-          parsed.prompt,
-        );
+        const estimatedCostMicrodollars = estimateWritingTestCostMicrodollars(model, parsed.prompt);
         if (estimatedCostMicrodollars > budget.remainingMicrodollars) {
           return res.status(403).json({
             message: "OpenRouter writing model test budget exceeded",

@@ -1,13 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { ANTHROPIC_MODELS } from "./aiModels";
 import { createLogger } from "./logger";
+import type { WritingModelChoice } from "./planLimits";
+import { anthropicModelForChoice, parseWritingModelChoice } from "./writingModelChoice";
 
 const logger = createLogger("humanizer");
 
 export interface HumanizeOptions {
-  model?: string;
+  /** An entitlement-checked in-app choice. When set, the request runs on that Claude model. */
+  model?: WritingModelChoice;
+  /** Applies to the Gemini path only; Claude 5.5 models reject sampling parameters. */
   temperature?: number;
 }
 
@@ -16,6 +19,8 @@ export interface HumanizeResult {
   provider: "gemini" | "anthropic";
   model: string;
   tokensUsed?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 interface GeminiGenerateResponse {
@@ -32,7 +37,6 @@ interface GeminiGenerateResponse {
 }
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite";
-const DEFAULT_ANTHROPIC_MODEL = ANTHROPIC_MODELS.opus;
 const DEFAULT_TEMPERATURE = 0.7;
 const MAX_ANTHROPIC_TOKENS = 4096;
 const PROMPT_FILE_PATH = join(process.cwd(), "prompts", "humanizer.txt");
@@ -100,7 +104,8 @@ async function humanizeWithGemini(
     throw new Error("GEMINI_API_KEY is not configured");
   }
 
-  const model = options.model || process.env.GEMINI_HUMANIZER_MODEL || DEFAULT_GEMINI_MODEL;
+  // Gemini is a backend humanizer provider, not an end-user model choice.
+  const model = process.env.GEMINI_HUMANIZER_MODEL || DEFAULT_GEMINI_MODEL;
   const temperature = normalizeTemperature(options.temperature);
   const userPrompt = buildUserPrompt(promptTemplate, text);
 
@@ -159,18 +164,16 @@ async function humanizeWithAnthropic(
     throw new Error("ANTHROPIC_API_KEY is not configured");
   }
 
-  const model =
-    (options.model && options.model.startsWith("claude") ? options.model : undefined) ||
-    process.env.HUMANIZER_ANTHROPIC_MODEL ||
-    DEFAULT_ANTHROPIC_MODEL;
-  const temperature = normalizeTemperature(options.temperature);
+  const model = anthropicModelForChoice(options.model ?? defaultAnthropicHumanizerChoice());
   const userPrompt = buildUserPrompt(promptTemplate, text);
 
   const anthropic = new Anthropic({ apiKey });
+  // No temperature/top_p/top_k: Claude 5.5 models reject sampling parameters. Low effort
+  // keeps adaptive thinking from consuming the rewrite's output budget.
   const message = await anthropic.messages.create({
     model,
     max_tokens: MAX_ANTHROPIC_TOKENS,
-    temperature,
+    output_config: { effort: "low" },
     system: "You rewrite content to sound more human and natural. Return only the rewritten text.",
     messages: [{ role: "user", content: userPrompt }],
   });
@@ -187,15 +190,27 @@ async function humanizeWithAnthropic(
     throw new Error("Anthropic returned empty output");
   }
 
-  const tokensUsed =
-    (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0) || undefined;
+  const inputTokens = message.usage?.input_tokens || 0;
+  const outputTokens = message.usage?.output_tokens || 0;
+  const tokensUsed = inputTokens + outputTokens || undefined;
 
   return {
     humanizedText,
     provider: "anthropic",
     model,
     tokensUsed,
+    inputTokens,
+    outputTokens,
   };
+}
+
+/**
+ * The implicit Claude fallback never uses Opus: it runs without a tier check, so an
+ * operator override naming Opus (or an unknown ID) resolves to Sonnet.
+ */
+function defaultAnthropicHumanizerChoice(): WritingModelChoice {
+  const configured = parseWritingModelChoice(process.env.HUMANIZER_ANTHROPIC_MODEL);
+  return configured === "haiku" ? "haiku" : "sonnet";
 }
 
 export async function humanizeText(
@@ -218,6 +233,16 @@ export async function humanizeText(
     throw new Error(
       "No humanizer provider key configured. Set GEMINI_API_KEY or ANTHROPIC_API_KEY.",
     );
+  }
+
+  // An explicit Claude choice runs on that model rather than on the Gemini default.
+  if (options.model) {
+    if (!hasAnthropic) {
+      throw new Error(
+        "No humanizer provider key configured for Claude models. Set ANTHROPIC_API_KEY.",
+      );
+    }
+    return humanizeWithAnthropic(normalizedText, promptTemplate, options);
   }
 
   if (hasGemini) {

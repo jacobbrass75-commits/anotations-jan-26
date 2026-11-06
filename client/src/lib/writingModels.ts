@@ -1,58 +1,67 @@
-export const CORE_WRITING_MODEL_OPTIONS = [
+// The only in-app model choices. Plan access is enforced server-side; the client uses
+// requiredTier to show which choices a plan includes.
+export const WRITING_MODEL_OPTIONS = [
   {
     value: "opus",
-    label: "Claude Opus 4.8",
-    description: "Highest quality",
-    providerModelId: "claude-opus-4-8",
+    label: "Claude Opus 5.5",
+    description: "Highest quality · Premium",
+    providerModelId: "claude-opus-5-5",
+    requiredTier: "max",
   },
   {
     value: "sonnet",
-    label: "Claude Sonnet 5",
+    label: "Claude Sonnet 5.5",
     description: "Fast + capable",
-    providerModelId: "claude-sonnet-5",
+    providerModelId: "claude-sonnet-5-5",
+    requiredTier: "free",
   },
   {
-    value: "gpt56",
-    label: "GPT-5.6 Sol",
-    description: "Flagship writing quality",
-    providerModelId: "gpt-5.6-sol",
+    value: "haiku",
+    label: "Claude Haiku 5.5",
+    description: "Fastest, best value",
+    providerModelId: "claude-haiku-5-5",
+    requiredTier: "free",
   },
 ] as const;
 
-export const DEEPSEEK_WRITING_MODEL_OPTION = {
-  value: "deepseek",
-  label: "DeepSeek V4 Pro",
-  description: "Best value",
-  providerModelId: "deepseek-v4-pro",
-} as const;
+export type WritingModelValue = (typeof WRITING_MODEL_OPTIONS)[number]["value"];
 
-// DeepSeek is the Starter value model. Deployments can explicitly disable it when needed.
-export const WRITING_MODEL_OPTIONS = [
-  ...CORE_WRITING_MODEL_OPTIONS,
-  ...(import.meta.env.VITE_ENABLE_DEEPSEEK_WRITING !== "false"
-    ? [DEEPSEEK_WRITING_MODEL_OPTION]
-    : []),
-] as const;
+export function isWritingModelAvailableForTier(
+  value: WritingModelValue,
+  tier: string | null | undefined,
+): boolean {
+  return value !== "opus" || tier === "max";
+}
 
-export type WritingModelValue = "opus" | "sonnet" | "gpt56" | "deepseek";
+export function defaultWritingModelForTier(tier: string | null | undefined): WritingModelValue {
+  return tier === "max" || tier === "pro" ? "sonnet" : "haiku";
+}
 
+/**
+ * Maps saved and legacy values onto a current choice. Retired GPT choices map to
+ * Sonnet and DeepSeek to Haiku; Opus/Fable/Mythos IDs map to Opus.
+ */
 export function normalizeWritingModelValue(value: string | null | undefined): WritingModelValue {
-  const legacyValue =
-    value === "precision" || value === "anthropic/claude-opus-4.8"
-      ? "opus"
-      : value === "extended"
-        ? "sonnet"
-        : value === "gpt55" ||
-            value === "openai/gpt-5.5" ||
-            value === "openai/gpt-5.5-2026-04-23" ||
-            value === "openai/gpt-5.6-sol"
-          ? "gpt56"
-          : value === "deepseek/deepseek-v4-pro"
-            ? "deepseek"
-            : value;
-  return WRITING_MODEL_OPTIONS.some((option) => option.value === value)
-    ? (value as WritingModelValue)
-    : WRITING_MODEL_OPTIONS.some((option) => option.value === legacyValue)
-      ? (legacyValue as WritingModelValue)
-      : "sonnet";
+  const normalized = value?.trim().toLowerCase() ?? "";
+  if (normalized === "opus" || normalized === "sonnet" || normalized === "haiku") {
+    return normalized;
+  }
+  if (normalized === "precision") return "opus";
+  if (normalized === "extended") return "sonnet";
+  if (/^(gpt|openai\/)/.test(normalized)) return "sonnet";
+  if (/^deepseek/.test(normalized)) return "haiku";
+  const anthropicId = normalized.replace(/^anthropic[./]/, "");
+  if (/(^|[^a-z])(opus|fable|mythos)([^a-z]|$)/.test(anthropicId)) return "opus";
+  if (/(^|[^a-z])haiku([^a-z]|$)/.test(anthropicId)) return "haiku";
+  return "sonnet";
+}
+
+/** The choice to show for a saved value on this plan, mirroring the server fallback. */
+export function effectiveWritingModelForTier(
+  value: string | null | undefined,
+  tier: string | null | undefined,
+): WritingModelValue {
+  if (!value) return defaultWritingModelForTier(tier);
+  const normalized = normalizeWritingModelValue(value);
+  return isWritingModelAvailableForTier(normalized, tier) ? normalized : "sonnet";
 }

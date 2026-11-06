@@ -33,7 +33,8 @@ function toPayPalPlan(tier: BillingTier): { label: string; amount: string; amoun
 }
 
 // Pending orders are checked against the amount stored on their own row at capture,
-// so orders created before a price change still settle at the price the buyer saw.
+// so orders created before a price change (e.g. USD 50 Max) still settle at the price
+// the buyer saw. The row's tier stays "max", which is shown as Premium.
 const PLAN_CONFIG: Record<BillingTier, { label: string; amount: string; amountCents: number }> = {
   pro: toPayPalPlan("pro"),
   max: toPayPalPlan("max"),

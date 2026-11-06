@@ -2,7 +2,7 @@
 import Database from "better-sqlite3";
 import { spawn, spawnSync } from "child_process";
 import { createServer } from "http";
-import { copyFile, mkdir, mkdtemp, rm, stat, symlink } from "fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { tmpdir } from "os";
 import { fileURLToPath, pathToFileURL } from "url";
@@ -125,7 +125,11 @@ async function prepareWorkspace() {
 
   await copyFile(join(repoRoot, "tsconfig.json"), join(workDir, "tsconfig.json"));
   await copyFile(join(repoRoot, "drizzle.config.ts"), join(workDir, "drizzle.config.ts"));
-  await copyFile(join(repoRoot, "shared", "schema.ts"), join(workDir, "shared", "schema.ts"));
+  // tsconfig maps @shared/* into this workspace, so server modules that import any
+  // shared file (not only the schema) need the whole directory.
+  await cp(join(repoRoot, "shared"), join(workDir, "shared"), { recursive: true });
+  // Load the copied shared files as ES modules, matching the repo's package.json.
+  await writeFile(join(workDir, "package.json"), JSON.stringify({ type: "module" }));
 
   try {
     await symlink(join(repoRoot, "node_modules"), join(workDir, "node_modules"), "junction");

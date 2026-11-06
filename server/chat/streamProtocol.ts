@@ -31,6 +31,8 @@ export interface StreamTurnResult {
   usage: { input_tokens?: number; output_tokens?: number };
   toolRequests: ToolRequest[];
   stopReason?: string | null;
+  /** The client disconnected and the provider stream was aborted mid-turn. */
+  cancelled?: boolean;
 }
 
 function normalizeTitle(value: string): string {

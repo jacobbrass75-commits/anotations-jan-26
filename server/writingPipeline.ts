@@ -139,8 +139,15 @@ function addUsage(total: TokenUsage, usage: TokenUsage): void {
   total.outputTokens += usage.outputTokens;
 }
 
+// Claude 5-family models (and Opus 4.8) reject manual thinking budgets and take
+// output_config.effort instead; adaptive thinking is always on for the 5.5 models.
 function usesAdaptiveThinking(model: string): boolean {
-  return /\b(fable|mythos|sonnet-5|opus-4-8)\b/i.test(model);
+  return /(fable|mythos|opus-4-8|(opus|sonnet|haiku)-5)/i.test(model);
+}
+
+function firstTextBlock(response: Anthropic.Message): string {
+  const block = response.content.find((item) => item.type === "text");
+  return block?.type === "text" ? block.text : "";
 }
 
 function applyWritingModelOptions(
@@ -543,7 +550,8 @@ ${sourceBlock || "(No sources provided - write based on topic alone)"}`;
   );
   addUsage(totalUsage, getUsage(response));
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  // Responses can start with thinking blocks, so read the text block by type.
+  const text = firstTextBlock(response);
 
   try {
     return {
@@ -816,9 +824,7 @@ export async function runWritingPipeline(
     onEvent({
       type: "status",
       phase: "planning",
-      message: usesAdaptiveThinking(model)
-        ? "Creating outline with Claude Fable 5..."
-        : "Creating outline...",
+      message: "Creating outline...",
     });
 
     const plannedWriting = await runPlanner(client, request, sources, model, voiceBlock);

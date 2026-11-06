@@ -24,7 +24,7 @@ Production configuration is validated by [server/productionConfig.ts](server/pro
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
 - Clerk publishable and secret keys (`VITE_CLERK_PUBLISHABLE_KEY` or `CLERK_PUBLISHABLE_KEY`, plus `CLERK_SECRET_KEY`)
-- Stripe billing keys (`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`) for paid subscriptions. New checkouts resolve Stripe prices by the lookup keys `scholarmark_pro_monthly_usd5` (USD 5/month) and `scholarmark_max_monthly` unless `STRIPE_PRO_PRICE_ID` and `STRIPE_MAX_PRICE_ID` are set, and fail closed if the price does not match `shared/billingPlans.ts`. The legacy `scholarmark_pro_monthly` lookup key and any `STRIPE_PRO_LEGACY_PRICE_IDS` keep granting Pro to existing subscribers.
+- Stripe billing keys (`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`) for paid subscriptions. New checkouts resolve Stripe prices by the lookup keys `scholarmark_pro_monthly_usd5` (Pro, USD 5/month) and `scholarmark_max_monthly_usd14` (Premium, USD 14/month) unless `STRIPE_PRO_PRICE_ID` and `STRIPE_MAX_PRICE_ID` are set, and fail closed if the price does not match `shared/billingPlans.ts`. Premium is the customer-facing name of the internal `max` tier. The legacy `scholarmark_pro_monthly` (USD 14) lookup key, any `STRIPE_PRO_LEGACY_PRICE_IDS`, and any price on `STRIPE_PRO_PRODUCT_IDS` keep granting Pro and are never mapped to Premium. The legacy `scholarmark_max_monthly` (USD 50 Max) lookup key keeps granting Premium. See `docs/billing/pricing.md`.
 - `ADMIN_USER_IDS` with at least one production admin user ID for launch dashboards.
 
 Production also validates additional settings such as `JWT_SECRET`, public app origins, Chrome extension IDs, and MCP URLs. Treat `server/productionConfig.ts` as the authoritative list.
