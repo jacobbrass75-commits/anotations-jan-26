@@ -152,6 +152,9 @@ private struct ScopeRow: View {
     }
 }
 
+// Preview data is DEBUG-only, and #Preview bodies are compiled in Release too.
+#if DEBUG
 #Preview {
     LibraryView().environment(LibraryStore.preview())
 }
+#endif

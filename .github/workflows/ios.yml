@@ -120,11 +120,15 @@ jobs:
   app:
     name: xcodebuild test (${{ inputs.scheme || 'ScholarMark' }})
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       DERIVED_DATA: build/DerivedData
       RESULTS_DIR: build/results
       LOGS_DIR: build/logs
+      ARCHIVE_PATH: build/Release/ScholarMark.xcarchive
+      # What the App Store build must be. Versions come from the Release build settings.
+      RELEASE_BUNDLE_ID: ai.scholarmark.ios
+      PRIVACY_MANIFEST_SOURCE: ios/ScholarMark/PrivacyInfo.xcprivacy
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -291,6 +295,146 @@ jobs:
             -resultBundlePath "$RESULTS_DIR/test.xcresult" \
             2>&1 | tee "$LOGS_DIR/test.log" | xcbeautify --renderer github-actions
 
+      # The simulator steps above never build for a real device. This archives the same checkout
+      # the way App Store builds are made (Release, generic iOS device) but with signing turned
+      # off: no team, certificate, profile, or secret is involved, and nothing is uploaded to
+      # Apple. An unsigned archive cannot be submitted, so the archive itself is not kept; its
+      # build log, result bundle, and the check report below are uploaded with the other logs.
+      - name: Archive Release for a generic iOS device (unsigned)
+        env:
+          FLAG: ${{ steps.discover.outputs.flag }}
+          CONTAINER: ${{ steps.discover.outputs.container }}
+        run: |
+          mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
+          echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+          xcodebuild archive \
+            "$FLAG" "$CONTAINER" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$RESULTS_DIR/archive.xcresult" \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee "$LOGS_DIR/archive.log" | xcbeautify --renderer github-actions
+
+      - name: Check the Release archive
+        env:
+          FLAG: ${{ steps.discover.outputs.flag }}
+          CONTAINER: ${{ steps.discover.outputs.container }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          report="$LOGS_DIR/archive-check.log"
+          failures=0
+          pass() { echo "PASS $*" | tee -a "$report"; }
+          fail() { echo "::error::Release archive: $*"; echo "FAIL $*" >> "$report"; failures=$((failures + 1)); }
+          plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$2" 2>/dev/null || true; }
+          {
+            echo "Release archive check"
+            echo "Candidate commit: $HEAD_SHA"
+            echo "Checked out: $(git rev-parse HEAD) (ios/ tree $(git rev-parse HEAD:ios))"
+            echo "Xcode: $(xcodebuild -version | paste -sd ' ' -); iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
+          } > "$report"
+
+          apps="$(find "$ARCHIVE_PATH/Products/Applications" -maxdepth 1 -name '*.app' -type d 2>/dev/null || true)"
+          if [[ -z "$apps" || "$(printf '%s\n' "$apps" | wc -l | tr -d ' ')" != 1 ]]; then
+            echo "::error::Expected exactly one .app in $ARCHIVE_PATH/Products/Applications, found: ${apps:-none}"
+            exit 1
+          fi
+          app="$apps"
+          info="$app/Info.plist"
+          exe="$app/$(plist CFBundleExecutable "$info")"
+          echo "App: ${app#"$ARCHIVE_PATH/"}" >> "$report"
+
+          # Expected values: the Release build settings of the app target.
+          settings="$(xcodebuild -showBuildSettings -json "$FLAG" "$CONTAINER" -scheme "$SCHEME" \
+                        -configuration Release -destination 'generic/platform=iOS' \
+                      | jq '[.[] | select(.buildSettings.WRAPPER_EXTENSION == "app")][0].buildSettings // {}')"
+          setting() { jq -r --arg k "$1" '.[$k] // ""' <<<"$settings"; }
+
+          # 1. Built for real devices: iphoneos SDK, arm64 only, LC_BUILD_VERSION platform IOS.
+          value="$(plist DTPlatformName "$info")"
+          if [[ "$value" == iphoneos ]]; then pass "DTPlatformName is iphoneos"
+          else fail "DTPlatformName is '$value', expected iphoneos"; fi
+          value="$(plist CFBundleSupportedPlatforms:0 "$info")"
+          if [[ "$value" == iPhoneOS ]]; then pass "CFBundleSupportedPlatforms is iPhoneOS"
+          else fail "CFBundleSupportedPlatforms is '$value', expected iPhoneOS"; fi
+          if [[ -f "$exe" ]]; then
+            value="$(lipo -archs "$exe")"
+            if [[ "$value" == arm64 ]]; then pass "executable architectures: $value"
+            else fail "executable architectures are '$value', expected arm64"; fi
+            value="$(xcrun vtool -show-build "$exe" | awk '$1 == "platform" { print $2 }' | sort -u | paste -sd ' ' -)"
+            if [[ "$value" == IOS ]]; then pass "LC_BUILD_VERSION platform: $value"
+            else fail "LC_BUILD_VERSION platform is '$value', expected IOS (not IOSSIMULATOR)"; fi
+          else
+            fail "executable '$exe' is missing"
+          fi
+          value="$(plist MinimumOSVersion "$info")"
+          if [[ -n "$value" && "$value" == "$(setting IPHONEOS_DEPLOYMENT_TARGET)" ]]; then pass "MinimumOSVersion $value"
+          else fail "MinimumOSVersion '$value' does not match IPHONEOS_DEPLOYMENT_TARGET '$(setting IPHONEOS_DEPLOYMENT_TARGET)'"; fi
+
+          # 2. Identity: bundle ID (in the app and the archive's Info.plist) and versions.
+          value="$(plist CFBundleIdentifier "$info")"
+          archived="$(plist ApplicationProperties:CFBundleIdentifier "$ARCHIVE_PATH/Info.plist")"
+          if [[ "$value" == "$RELEASE_BUNDLE_ID" && "$archived" == "$RELEASE_BUNDLE_ID" ]]; then pass "bundle ID $value"
+          else fail "bundle ID is '$value' (archive '$archived'), expected $RELEASE_BUNDLE_ID"; fi
+          value="$(plist CFBundleShortVersionString "$info")"
+          if [[ -n "$value" && "$value" == "$(setting MARKETING_VERSION)" ]]; then pass "version $value"
+          else fail "CFBundleShortVersionString '$value' does not match MARKETING_VERSION '$(setting MARKETING_VERSION)'"; fi
+          value="$(plist CFBundleVersion "$info")"
+          if [[ -n "$value" && "$value" == "$(setting CURRENT_PROJECT_VERSION)" ]]; then pass "build $value"
+          else fail "CFBundleVersion '$value' does not match CURRENT_PROJECT_VERSION '$(setting CURRENT_PROJECT_VERSION)'"; fi
+
+          # 3. Privacy manifest installed at the bundle root, identical to the checked-in file.
+          manifest="$app/PrivacyInfo.xcprivacy"
+          if [[ -f "$manifest" ]] && plutil -lint -s "$manifest" \
+             && diff <(plutil -convert json -o - "$manifest") <(plutil -convert json -o - "$PRIVACY_MANIFEST_SOURCE") >/dev/null; then
+            pass "PrivacyInfo.xcprivacy installed and matches $PRIVACY_MANIFEST_SOURCE"
+          else
+            fail "PrivacyInfo.xcprivacy is missing from the app bundle, invalid, or differs from $PRIVACY_MANIFEST_SOURCE"
+          fi
+
+          # 4. App icon compiled into the asset catalog and named as the primary icon.
+          value="$(plist CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName "$info")"
+          if [[ -f "$app/Assets.car" && "$value" == AppIcon ]] \
+             && xcrun assetutil --info "$app/Assets.car" | jq -e 'any(.[]; .Name? == "AppIcon")' >/dev/null; then
+            pass "AppIcon is in Assets.car and is the primary icon"
+          else
+            fail "AppIcon missing: Assets.car present=$([[ -f "$app/Assets.car" ]] && echo yes || echo no), CFBundleIconName='$value'"
+          fi
+
+          # 5. The DEBUG-only screenshot mode (Support/ScreenshotMode.swift) is not in the binary.
+          #    A string every Release build has is the positive control, so "not found" means absent.
+          if [[ -f "$exe" ]] && grep -a -q -F "Lookups never send your library" "$exe"; then
+            leaked=""
+            for marker in "ScreenshotScene" "-ScholarMarkScreenshot" "HIST 210: Memory & the Archive" "10.5555/jap.2022.0182"; do
+              if grep -a -q -F -- "$marker" "$exe"; then leaked="$leaked '$marker'"; fi
+            done
+            if [[ -z "$leaked" ]]; then pass "no screenshot-mode code or sample data in the executable"
+            else fail "screenshot-mode markers found in the Release executable:$leaked"; fi
+          else
+            fail "a known UI string is not in the executable, so the screenshot-mode scan cannot be trusted"
+          fi
+
+          # 6. Unsigned by design. The arm64 linker ad-hoc signs every executable, so look for a
+          #    real signing identity, a bundle signature, or a profile rather than any signature.
+          if [[ ! -e "$app/_CodeSignature" && ! -e "$app/embedded.mobileprovision" ]] \
+             && ! codesign -dvv "$app" 2>&1 | grep -q '^Authority='; then
+            pass "not signed with an identity, no bundle signature or provisioning profile"
+          else
+            fail "the app carries a signature or provisioning profile; this job must not sign"
+          fi
+
+          echo "Failures: $failures" >> "$report"
+          if (( failures > 0 )); then exit 1; fi
+
       - name: Summarize results
         if: always()
         env:
@@ -312,9 +456,19 @@ jobs:
               xcrun xcresulttool get test-results summary --path "$RESULTS_DIR/test.xcresult" 2>&1 | head -c 60000 || true
               echo '```'
             fi
+            if [[ -f "$LOGS_DIR/archive-check.log" ]]; then
+              echo "### Release archive (generic iOS device, unsigned)"
+              echo '```'
+              cat "$LOGS_DIR/archive-check.log"
+              echo '```'
+            elif [[ -f "$LOGS_DIR/archive.log" ]]; then
+              echo "### Release archive"
+              echo "The archive build did not finish; see archive.log in the uploaded artifact."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Only result bundles and logs; built .app products in DerivedData are never uploaded.
+      # Only result bundles and logs (including archive.log and archive-check.log); built .app
+      # products in DerivedData and the unsigned .xcarchive are never uploaded.
       - name: Upload result bundles and logs
         if: always()
         uses: actions/upload-artifact@v4

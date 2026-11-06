@@ -6,9 +6,9 @@ How to try the main features:
 3. Library tab: tap "New project" (shown in the Projects section while it is empty, and always in the toolbar; on iPhone, under the ellipsis button). Each project has its own citation style. Use "Move to" on a source screen to file a source in a project.
 4. Review tab: lists sources missing fields their citation style requires. To see an entry, capture a book title, tap "Enter details manually", and save it with only the title.
 5. Open a project or the Inbox and choose Export from the toolbar (on iPhone, under the ellipsis button) to copy or share a bibliography, Markdown notes, BibTeX, RIS, or a JSON backup.
-6. Settings tab: default citation style, a full library backup, and "Delete all projects and sources".
+6. Settings tab: default citation style, a full library backup, and "Delete all projects and sources". Under Privacy, "Privacy Policy" opens https://app.scholarmark.ai/privacy#ios in the system browser.
 
-Network use: requests are made only when the user taps "Look up details": to doi.org for a DOI (doi.org may redirect to the DOI registration agency that holds the record), or to the web page the user pasted. "Open source" opens the source's link in the system browser. There are no analytics, advertising, or tracking SDKs, and no in-app purchases or links to outside purchases.
+Network use: requests are made only when the user taps "Look up details": to doi.org for a DOI (doi.org may redirect to the DOI registration agency that holds the record), or to the web page the user pasted. "Open source" and "Privacy Policy" open their links in the system browser. Nothing is requested at launch. There are no analytics, advertising, or tracking SDKs, and no in-app purchases or links to outside purchases.
 
 This version does not connect to or sync with a ScholarMark web account.
 
