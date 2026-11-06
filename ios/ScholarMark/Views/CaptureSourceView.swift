@@ -82,7 +82,7 @@ struct CaptureSourceView: View {
                         Label(lookupError, systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
                     } else if classified.canLookUp {
-                        Text("Lookups contact doi.org or the page you pasted. No ScholarMark account is used, and nothing else leaves your device.")
+                        Text("Lookups contact doi.org or the page you pasted. No ScholarMark account is used, and lookups never send your library, notes, or quotes.")
                     }
                 }
             }
@@ -169,7 +169,10 @@ private struct ReviewDraft: Identifiable, Hashable {
     let origin: CaptureOrigin
 }
 
+// Preview data is DEBUG-only, and #Preview bodies are compiled in Release too.
+#if DEBUG
 #Preview {
     CaptureSourceView(initialScope: .inbox) { _ in }
         .environment(LibraryStore.preview())
 }
+#endif
