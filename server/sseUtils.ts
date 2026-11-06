@@ -30,6 +30,26 @@ export function startSseHeartbeat(
   return () => clearInterval(heartbeat);
 }
 
+/**
+ * Returns a signal that aborts when the client goes away before the response finishes.
+ *
+ * Call it before the handler's first await. Node emits `close` on the request as soon
+ * as its body has been read, so a `req.on("close")` listener added after body parsing
+ * never fires on a disconnect. The response emits `close` both after a normal finish
+ * and on a premature disconnect; `writableFinished` tells the two apart.
+ */
+export function trackClientDisconnect(res: Response): AbortSignal {
+  const controller = new AbortController();
+  if (res.destroyed) {
+    if (!res.writableFinished) controller.abort();
+    return controller.signal;
+  }
+  res.once("close", () => {
+    if (!res.writableFinished) controller.abort();
+  });
+  return controller.signal;
+}
+
 export function sanitizeSseError(error: unknown, fallback = "Request failed"): string {
   const raw = error instanceof Error ? error.message : String(error || fallback);
   const compact = raw.replace(/\s+/g, " ").trim();
