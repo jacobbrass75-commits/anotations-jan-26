@@ -6,6 +6,7 @@ import { createLogger } from "../logger";
 import type { ResearchFinding } from "../researchAgent";
 import type { TieredSource } from "../writingPipeline";
 import { clipText } from "./shared";
+import { isAnnotationSearchIndexCurrent } from "../annotationSearchIndex";
 import { parseStyleAnalysisValue } from "./promptBuilder";
 
 const logger = createLogger("chatToolRequests");
@@ -83,7 +84,7 @@ function scoreAnnotationMatch(
 
 /**
  * Semantic ranking when both sides have embeddings; keyword fraction as the
- * fallback for legacy annotations without a stored search embedding. The 0.6
+ * fallback for legacy annotations without a current stored search embedding. The 0.6
  * scale keeps keyword scores below typical relevant-cosine values so embedded
  * annotations win ties.
  */
@@ -95,7 +96,9 @@ export function scoreAnnotationForQuery(
   if (
     queryEmbedding &&
     Array.isArray(annotation.searchEmbedding) &&
-    annotation.searchEmbedding.length === queryEmbedding.length
+    annotation.searchEmbedding.length === queryEmbedding.length &&
+    // An embedding built from an older note or category would rank the old text.
+    isAnnotationSearchIndexCurrent(annotation)
   ) {
     return cosineSimilarity(annotation.searchEmbedding, queryEmbedding);
   }

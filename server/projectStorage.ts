@@ -1,4 +1,5 @@
-import { db } from "./db";
+import { db, sqlite } from "./db";
+import { currentAnnotationSearchText } from "./annotationSearchIndex";
 import { eq, desc, asc } from "drizzle-orm";
 import {
   projects,
@@ -86,6 +87,14 @@ export interface IProjectStorage {
       InsertProjectAnnotation & { searchableContent?: string; searchEmbedding?: number[] }
     >,
   ): Promise<ProjectAnnotation | undefined>;
+  editProjectAnnotation(
+    id: string,
+    edits: { note?: string | null; category?: AnnotationCategory },
+  ): Promise<ProjectAnnotation | undefined>;
+  writeProjectAnnotationSearchIndex(
+    id: string,
+    index: { searchableContent: string; searchEmbedding?: number[] },
+  ): Promise<boolean>;
   deleteProjectAnnotation(id: string): Promise<void>;
 
   // Prompt Templates
@@ -302,6 +311,68 @@ export const projectStorage: IProjectStorage = {
       .where(eq(projectAnnotations.id, id))
       .returning();
     return updated;
+  },
+
+  /**
+   * Apply a user edit and rebuild the annotation's keyword index in one immediate
+   * transaction, so concurrent partial edits each merge onto the latest row and the
+   * stored text always matches the stored note and category. The embedding describes
+   * the old text, so it is cleared here; callers that embed write it back through
+   * writeProjectAnnotationSearchIndex.
+   */
+  async editProjectAnnotation(id, edits) {
+    return sqlite
+      .transaction(() => {
+        const current = db
+          .select()
+          .from(projectAnnotations)
+          .where(eq(projectAnnotations.id, id))
+          .get();
+        if (!current) return undefined;
+        const next = {
+          note: edits.note !== undefined ? edits.note : current.note,
+          category: edits.category ?? current.category,
+        };
+        return db
+          .update(projectAnnotations)
+          .set({
+            ...next,
+            searchableContent: currentAnnotationSearchText({ ...current, ...next }),
+            searchEmbedding: null,
+          })
+          .where(eq(projectAnnotations.id, id))
+          .returning()
+          .get();
+      })
+      .immediate();
+  },
+
+  /**
+   * Store a search index computed asynchronously (after an embedding call, say), but
+   * only if it still describes the annotation. If an edit landed while the index was
+   * being built, the stale index is dropped and the edit's own index stays.
+   */
+  async writeProjectAnnotationSearchIndex(id, index) {
+    return sqlite
+      .transaction(() => {
+        const current = db
+          .select()
+          .from(projectAnnotations)
+          .where(eq(projectAnnotations.id, id))
+          .get();
+        if (!current || currentAnnotationSearchText(current) !== index.searchableContent) {
+          return false;
+        }
+        db.update(projectAnnotations)
+          .set({
+            searchableContent: index.searchableContent,
+            ...(index.searchEmbedding ? { searchEmbedding: index.searchEmbedding } : {}),
+          })
+          .where(eq(projectAnnotations.id, id))
+          .run();
+        return true;
+      })
+      .immediate();
   },
 
   async deleteProjectAnnotation(id: string): Promise<void> {

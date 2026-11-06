@@ -13,7 +13,7 @@ export function registerProjectSearchRoutes(app: Express): void {
 
   app.post("/api/projects/:projectId/search", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { query, filters, limit } = req.body;
+      const { query, filters, limit, includeSourceText } = req.body;
 
       if (!query || typeof query !== "string") {
         return res.status(400).json({ error: "Query is required" });
@@ -21,7 +21,9 @@ export function registerProjectSearchRoutes(app: Express): void {
 
       const project = await verifyProjectOwnership(req, res, req.params.projectId);
       if (!project) return;
-      const results = await globalSearch(req.params.projectId, query, filters, limit);
+      const results = await globalSearch(req.params.projectId, query, filters, limit, {
+        includeSourceText: includeSourceText === true,
+      });
       res.json(results);
     } catch (error) {
       logger.error({ err: error }, "Error performing search:");

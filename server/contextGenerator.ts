@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { getEmbeddingWithUsage } from "./openai";
 import { reportProviderUsage, type TokenUsageReporter } from "./aiUsage";
 import { createLogger } from "./logger";
+import { buildAnnotationSearchText } from "./annotationSearchIndex";
 
 const logger = createLogger("contextGenerator");
 
@@ -158,7 +159,7 @@ export async function generateSearchableContent(
   category: string,
   documentContext?: string,
 ): Promise<string> {
-  return `[${category}] ${highlightedText} ${note || ""} ${documentContext?.slice(0, 100) || ""}`.trim();
+  return buildAnnotationSearchText(highlightedText, note, category, documentContext);
 }
 
 /**

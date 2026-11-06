@@ -199,9 +199,9 @@ export async function analyzeProjectDocument(
     });
 
     buildAnnotationSearchIndex(ann.highlightText, ann.note, ann.category as AnnotationCategory)
-      .then((searchIndex) => {
-        projectStorage.updateProjectAnnotation(created.id, searchIndex);
-      })
+      .then((searchIndex) =>
+        projectStorage.writeProjectAnnotationSearchIndex(created.id, searchIndex),
+      )
       .catch((err) => logger.warn({ err: err }, "Search indexing failed (non-blocking):"));
   }
 
@@ -581,9 +581,9 @@ export function registerProjectAnalysisRoutes(app: Express): void {
               ann.note,
               ann.category as AnnotationCategory,
             )
-              .then((searchIndex) => {
-                projectStorage.updateProjectAnnotation(createdAnnotation.id, searchIndex);
-              })
+              .then((searchIndex) =>
+                projectStorage.writeProjectAnnotationSearchIndex(createdAnnotation.id, searchIndex),
+              )
               .catch((err) => logger.warn({ err: err }, "Search indexing failed (non-blocking):"));
           }
 

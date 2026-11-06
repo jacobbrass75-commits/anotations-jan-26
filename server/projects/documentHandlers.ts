@@ -25,12 +25,22 @@ import {
   citationDataSchema,
   batchAddDocumentsRequestSchema,
   projectDocuments,
+  annotationCategories,
   type BatchAddDocumentResult,
   type BatchAddDocumentsResponse,
 } from "@shared/schema";
 import { createLogger } from "../logger";
+import { z } from "zod";
 
 const logger = createLogger("projects/documentHandlers");
+
+// The only fields a user may change on a saved project annotation. Anything else in the
+// body (projectDocumentId, positions, search index columns) is dropped, so an edit cannot
+// move an annotation into another project document or overwrite its search index.
+const projectAnnotationEditSchema = z.object({
+  note: z.string().nullable().optional(),
+  category: z.enum(annotationCategories).optional(),
+});
 
 /** Verify the project belongs to the requesting user. Returns the project or sends 403/404. */
 export async function verifyProjectOwnership(req: Request, res: Response, projectId: string) {
@@ -494,7 +504,7 @@ export function registerProjectDocumentRoutes(app: Express): void {
                 validated.note || null,
                 validated.category,
               );
-          await projectStorage.updateProjectAnnotation(annotation.id, searchIndex);
+          await projectStorage.writeProjectAnnotationSearchIndex(annotation.id, searchIndex);
         } catch (indexError) {
           logger.warn({ err: indexError }, "Search indexing failed (non-blocking):");
         }
@@ -537,7 +547,25 @@ export function registerProjectDocumentRoutes(app: Express): void {
       );
       if (!projectDoc) return;
 
-      const updated = await projectStorage.updateProjectAnnotation(req.params.id, req.body);
+      const parsed = projectAnnotationEditSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid annotation update" });
+      }
+
+      // The edit and its keyword index are written together, so project search never
+      // matches the old note or category. Server-AI requests then embed the new text;
+      // host-AI requests leave the embedding empty and make no ScholarMark AI call.
+      let updated = await projectStorage.editProjectAnnotation(req.params.id, parsed.data);
+      if (updated && !isHostAiRequest(req)) {
+        const searchIndex = await buildAnnotationSearchIndex(
+          updated.highlightedText,
+          updated.note,
+          updated.category,
+        );
+        if (await projectStorage.writeProjectAnnotationSearchIndex(updated.id, searchIndex)) {
+          updated = await projectStorage.getProjectAnnotation(updated.id);
+        }
+      }
       if (!updated) {
         return res.status(404).json({ error: "Annotation not found" });
       }

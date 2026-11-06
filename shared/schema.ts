@@ -623,7 +623,7 @@ export type WebClip = typeof webClips.$inferSelect;
 
 // Global search result type
 export const globalSearchResultSchema = z.object({
-  type: z.enum(["annotation", "document_context", "folder_context"]),
+  type: z.enum(["annotation", "document_context", "folder_context", "source_text"]),
   documentId: z.string().optional(),
   documentFilename: z.string().optional(),
   folderId: z.string().optional(),
@@ -638,6 +638,7 @@ export const globalSearchResultSchema = z.object({
   similarityScore: z.number(),
   relevanceLevel: z.enum(["high", "medium", "low"]),
   startPosition: z.number().optional(),
+  endPosition: z.number().optional(),
 });
 export type GlobalSearchResult = z.infer<typeof globalSearchResultSchema>;
 
