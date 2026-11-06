@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { access, mkdtemp, readFile, rm, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { crc32, deflateSync } from "zlib";
@@ -68,15 +68,29 @@ describe("preprocessImageForVision (real sharp)", () => {
     await rm(outputDir, { recursive: true, force: true });
   });
 
+  // Mirrors the HEIC callers: the converted bytes are written to a temp path and the same
+  // buffer is handed to preprocessing, with the path kept as the fallback.
   async function writeInput(name: string, buffer: Buffer): Promise<string> {
     const path = join(inputDir, name);
     await writeFile(path, buffer);
     return path;
   }
 
+  async function preprocess(inputPath: string, name: string): Promise<string> {
+    return preprocessImageForVision(await readFile(inputPath), inputPath, outputDir, name);
+  }
+
+  // The OCR callers delete their temp inputs right after preprocessing. On Windows an open
+  // native handle makes that unlink fail with EPERM, so prove the input is released.
+  async function expectInputReleased(inputPath: string) {
+    await unlink(inputPath);
+    await expect(access(inputPath)).rejects.toMatchObject({ code: "ENOENT" });
+  }
+
   async function expectPreprocessedJpeg(inputPath: string, name: string) {
-    const outputPath = await preprocessImageForVision(inputPath, outputDir, name);
+    const outputPath = await preprocess(inputPath, name);
     expect(outputPath).toBe(join(outputDir, `${name}.jpg`));
+    await expectInputReleased(inputPath);
     const metadata = await sharp(await readFile(outputPath)).metadata();
     expect(metadata.format).toBe("jpeg");
     return metadata;
@@ -123,12 +137,16 @@ describe("preprocessImageForVision (real sharp)", () => {
 
   it("falls back to the original path for undecodable input", async () => {
     const input = await writeInput("garbage.jpg", Buffer.from("not an image ".repeat(32)));
-    await expect(preprocessImageForVision(input, outputDir, "garbage")).resolves.toBe(input);
+    await expect(preprocess(input, "garbage")).resolves.toBe(input);
+    await expectInputReleased(input);
   });
 
   it("keeps sharp's input pixel limit in force", async () => {
     const input = await writeInput("pixel-bomb.png", pixelBombPng());
-    await expect(sharp(input, { failOn: "none" }).toBuffer()).rejects.toThrow(/pixel limit/i);
-    await expect(preprocessImageForVision(input, outputDir, "pixel-bomb")).resolves.toBe(input);
+    await expect(sharp(await readFile(input), { failOn: "none" }).toBuffer()).rejects.toThrow(
+      /pixel limit/i,
+    );
+    await expect(preprocess(input, "pixel-bomb")).resolves.toBe(input);
+    await expectInputReleased(input);
   });
 });
