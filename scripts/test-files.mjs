@@ -27,6 +27,7 @@ export const testFiles = [
   "tests/server/sourceFiles.test.ts",
   "tests/server/uploadMiddleware.test.ts",
   "tests/server/productionConfig.test.ts",
+  "tests/server/networkTrust.test.ts",
   "tests/server/staticHeaders.test.ts",
   "tests/server/paidInstagramEntry.integration.test.ts",
   "tests/server/marketingSite.integration.test.ts",
