@@ -38,7 +38,7 @@ const ERROR_MEANINGS = {
   429: "too many requests (treated as potential spam)",
 };
 
-export class IndexNowError extends Error {}
+class IndexNowError extends Error {}
 
 /** Only the apex homepage, guide hub and guide articles. Everything else is dropped. */
 export function isSubmittableUrl(value) {
@@ -383,30 +383,6 @@ export async function runIndexNow({
         throw error;
       }
       if (state.urls[url]?.fingerprint !== fingerprints[url]) changed.push(url);
-    }
-
-    if (mode === "rebaseline") {
-      // Library-only (see scripts/oneoff/): replace stored fingerprints of pages already received
-      // by IndexNow, after the same live checks, keeping each receipt's status and time. No POST.
-      const stored = Object.keys(state.urls);
-      const notStored = candidates.filter((url) => !state.urls[url]);
-      const notLive = stored.filter((url) => !candidates.includes(url));
-      const notReceived = stored.filter((url) => ![200, 202].includes(state.urls[url].status));
-      if (notStored.length > 0 || notLive.length > 0 || notReceived.length > 0) {
-        throw new IndexNowError(
-          `rebaseline needs the live eligible URLs to equal the recorded 200/202 receipts (not recorded: ${notStored.length}, recorded but not live: ${notLive.length}, other status: ${notReceived.length}); nothing changed`,
-        );
-      }
-      const rebaselinedAt = now().toISOString();
-      const urls = {};
-      for (const url of candidates) {
-        urls[url] = { ...state.urls[url], fingerprint: fingerprints[url], rebaselinedAt };
-      }
-      await writeState(statePath, { version: 1, host: SITE_HOST, urls });
-      info(
-        `rebaselined ${candidates.length} fingerprints (${changed.length} differed); receipts kept; nothing sent`,
-      );
-      return 0;
     }
 
     if (changed.length === 0) {
