@@ -630,6 +630,24 @@ describe("Stripe billing routes", () => {
     }
   });
 
+  // Production pins STRIPE_MAX_PRICE_ID to the USD 50 Max price today. Until the pin
+  // moves to the USD 14 Premium price, Premium checkout must fail closed.
+  it("fails closed while STRIPE_MAX_PRICE_ID still points at the USD 50 Max price", async () => {
+    process.env.STRIPE_MAX_PRICE_ID = "price_max_usd50";
+    stripeClient.prices.retrieve.mockResolvedValueOnce(legacyMaxPrice({ lookup_key: null }));
+    const { server, token } = await createStripeApp();
+
+    try {
+      const response = await postCheckout(server.baseUrl, token, "max");
+
+      expect(response.status).toBe(502);
+      expect(stripeClient.prices.list).not.toHaveBeenCalled();
+      expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
   it("fails closed when Pro checkout resolves a Premium-configured price", async () => {
     process.env.STRIPE_PRO_PRICE_ID = "price_pro_pinned";
     stripeClient.prices.retrieve.mockResolvedValueOnce(
@@ -740,6 +758,40 @@ describe("Stripe billing routes", () => {
       env: { STRIPE_MAX_PRICE_ID: "price_pro_legacy" },
       price: legacyProPrice(),
       expectedTier: "pro",
+    },
+    {
+      // Billing portal plan switch: the price changes, the checkout metadata does not.
+      name: "a portal switch from USD 5 Pro to USD 14 Premium",
+      price: premiumPrice(),
+      subscriptionMetadata: { app: "scholarmark", tier: "pro", userId: "stripe-user" },
+      expectedTier: "max",
+    },
+    {
+      name: "a portal switch from USD 14 Premium to USD 5 Pro",
+      price: monthlyPrice(),
+      subscriptionMetadata: { app: "scholarmark", tier: "max", userId: "stripe-user" },
+      expectedTier: "pro",
+    },
+    {
+      // Release step: the pin moves to USD 14 Premium and the old pinned USD 50 Max
+      // price ID moves to the legacy list, so those subscribers keep Premium.
+      name: "a formerly pinned USD 50 Max price moved to STRIPE_MAX_LEGACY_PRICE_IDS",
+      env: {
+        STRIPE_MAX_PRICE_ID: "price_premium_usd14",
+        STRIPE_MAX_LEGACY_PRICE_IDS: "price_max_usd50",
+      },
+      price: legacyMaxPrice({ lookup_key: null }),
+      subscriptionMetadata: {},
+      expectedTier: "max",
+    },
+    {
+      // Why that step is required: repointing the pin alone leaves a pin-only USD 50
+      // price with no remaining signal.
+      name: "a formerly pinned USD 50 Max price when only the pin was moved",
+      env: { STRIPE_MAX_PRICE_ID: "price_premium_usd14" },
+      price: legacyMaxPrice({ lookup_key: null }),
+      subscriptionMetadata: {},
+      expectedTier: "free",
     },
     {
       name: "a USD 14 price on a Pro product, even when tagged scholarmark_tier=max",

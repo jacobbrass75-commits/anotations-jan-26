@@ -46,29 +46,61 @@ On any plan, users can connect ScholarMark to Claude or ChatGPT/Codex at `https:
 
 ## Rollout
 
-The Stripe provisioning session must finish first:
+### Production State Before Release
 
-1. Create an active, recurring, monthly, USD-only, flat USD 14 price with lookup key `scholarmark_max_monthly_usd14` on a Premium product. Do not add it to, or move it onto, the legacy USD 14 Pro product.
-2. Keep `scholarmark_max_monthly` (USD 50) and `scholarmark_pro_monthly` (USD 14) attached to their existing prices so legacy subscribers keep their tiers.
-3. Update the billing portal configuration so plan switching offers USD 5 Pro and USD 14 Premium, and not the legacy USD 14 Pro or USD 50 Max prices.
-4. Optionally rename the Stripe Max product to Premium so the portal and invoices match.
+Recorded from a read-only Stripe preflight and the signed-in Stripe Dashboard on 2026-11-06. No subscriber or charge was changed.
 
-Production environment:
+- The USD 5 Pro price (`scholarmark_pro_monthly_usd5`) and the USD 14 Premium price (`scholarmark_max_monthly_usd14`) are active. Each was confirmed by opening a live Stripe Checkout session that was not paid.
+- `STRIPE_MAX_PRICE_ID` still points at the legacy USD 50 Max price.
+- The app is pinned to its existing portal configuration through `STRIPE_PORTAL_CONFIGURATION_ID`. Live plan switching is enabled in that configuration. Its Pro option was already changed from the legacy USD 14 Pro price to the USD 5 Pro price. It still offers USD 50 Max.
+- Production direct Anthropic generation fails with an insufficient-credit error on Claude Haiku 5.5, Claude Sonnet 5.5, and Claude Opus 5.5. ScholarMark's own Claude calls do not work until the Anthropic account has credit. The host-side AI connector is not affected, because it makes no ScholarMark model calls.
 
-- Leave `STRIPE_MAX_PRICE_ID` unset, or set it to the new USD 14 Premium price ID. A value pointing at the old USD 50 Max price or the legacy USD 14 Pro price makes Premium checkout fail closed.
+### Launch Gates
+
+All of these must pass before launch:
+
+1. **One successful direct production generation on each model:** Claude Haiku 5.5, Claude Sonnet 5.5, and Claude Opus 5.5. Each model's availability can differ, so one model passing does not cover the others. Record the model ID, time, and result for each one. `npm run smoke:prod` does not count, because it makes no model calls. Do not sell Premium, change pricing, or show upgrade prompts until all three pass.
+2. The two Stripe changes below are scheduled for the release window.
+
+### Two Separate Stripe Changes
+
+These changes are independent. Each one controls a different path.
+
+| Change                       | Where                                                                          | What it controls                                                            | Release value                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **Application checkout pin** | App environment: `STRIPE_MAX_PRICE_ID`, `STRIPE_MAX_LEGACY_PRICE_IDS`          | New Premium Checkout sessions, and the tier that webhooks grant for a price | `STRIPE_MAX_PRICE_ID` = USD 14 Premium price ID. Append the old USD 50 Max price ID to `STRIPE_MAX_LEGACY_PRICE_IDS` |
+| **Portal switch**            | Stripe Dashboard: the portal configuration in `STRIPE_PORTAL_CONFIGURATION_ID` | Which prices existing subscribers can switch to in the billing portal       | Replace the USD 50 Max option with USD 14 Premium. Keep USD 5 Pro. `STRIPE_PORTAL_CONFIGURATION_ID` does not change  |
+
+Checkout pin details:
+
+- While `STRIPE_MAX_PRICE_ID` points at USD 50 Max, the new code fails Premium checkout closed (HTTP 502), and no session is created. Leaving it unset also works, because checkout then resolves the `scholarmark_max_monthly_usd14` lookup key.
+- Move the old USD 50 Max price ID into `STRIPE_MAX_LEGACY_PRICE_IDS`. If the pin moves and the old ID is not listed, a USD 50 subscriber whose price has no `scholarmark_max_monthly` lookup key and no ScholarMark checkout metadata resolves to Free on the next webhook. Regression coverage: `tests/server/stripeBillingRoutes.integration.test.ts`.
+- `STRIPE_PRO_PRICE_ID`, `STRIPE_PRO_LEGACY_PRICE_IDS`, and the PayPal settings keep their current values.
 - Recommended: set `STRIPE_PRO_PRODUCT_IDS` to every Pro product ID, including the legacy USD 14 Pro product and the product that holds the USD 5 price. When it is set, Pro checkout only sells prices on those products, so leaving out the USD 5 product makes Pro checkout fail closed.
 - Optional: set `STRIPE_MAX_PRODUCT_IDS` to the Premium and legacy Max product IDs. When it is set, Premium checkout only sells prices on those products.
-- No other env changes. `STRIPE_PRO_PRICE_ID`, `STRIPE_*_LEGACY_PRICE_IDS`, and the PayPal settings keep their current values.
 
-After deploy, `GET /api/billing/stripe/config` should report `plans.max` as `{ label: "Premium", amountCents: 1400, currency: "usd", lookupKey: "scholarmark_max_monthly_usd14" }`, and `GET /api/billing/paypal/config` should report `plans.max` as `{ label: "Premium", amount: "14.00", amountCents: 1400 }`.
+Keep `scholarmark_max_monthly` (USD 50) and `scholarmark_pro_monthly` (USD 14) attached to their existing prices, so legacy subscribers keep their tiers. Optionally rename the Stripe Max product to Premium, so the portal and invoices match.
 
-`npm run smoke:prod` (`scripts/smoke-prod.mjs`) asserts Pro at 500 cents on `scholarmark_pro_monthly_usd5` and Premium at 1400 cents, labeled `Premium`, on `scholarmark_max_monthly_usd14`. Set `SKIP_BILLING_SMOKE=1` only for deploys that do not touch billing.
+### Safe Order
 
-### Rollout Status
+1. Before the release window, append the old USD 50 Max price ID to `STRIPE_MAX_LEGACY_PRICE_IDS`. The current production code already honors this variable, so this step is safe on its own.
+2. Confirm launch gate 1. All three models must generate.
+3. Deploy the release and set `STRIPE_MAX_PRICE_ID` to the USD 14 Premium price ID in the same restart. If either one lands alone, Premium checkout fails closed. Nobody is charged a wrong amount.
+4. Right after the deploy, make the portal switch: replace USD 50 Max with USD 14 Premium.
+   - Not before the deploy. The current production code does not recognize `scholarmark_max_monthly_usd14`. A Pro subscriber who switched to it would be charged USD 14 and keep Pro.
+   - Not much later than the deploy. Until the switch is made, a Pro subscriber who upgrades in the portal lands on USD 50 Max, while the site advertises USD 14 Premium.
+5. Verify. Run `npm run smoke:prod`. Open one live Premium Checkout session without paying, and confirm it charges USD 14. Open the portal for a test Pro customer, and confirm that it offers exactly USD 5 Pro and USD 14 Premium.
 
-- Both Stripe prices are provisioned. The USD 5 Pro and USD 14 Premium prices were each confirmed by opening a live Stripe Checkout session that was not paid.
-- Production direct Anthropic generation currently fails with an insufficient-credit error from Anthropic. Claude model calls made by ScholarMark do not work until the Anthropic account has credit. The host-side AI connector is not affected because it makes no ScholarMark model calls.
-- Before any model or billing rollout, preflight with one successful production generation on a Claude model, and record the model and time. A smoke pass alone does not count, because the smoke does not call a model.
-- Do not sell Premium while the model service is unavailable. Premium is sold on Claude model access, including the Opus runs. Hold Premium marketing, pricing changes, and upgrade prompts until the preflight generation succeeds.
+`npm run smoke:prod` reports the static plan config. It passes even while `STRIPE_MAX_PRICE_ID` makes Premium checkout fail closed, so the unpaid Checkout session in step 5 is the real check.
 
-Rollback: point `CURRENT_PRICE_OFFERS.max` back to `MAX_PRICE_OFFERS.usd50Monthly` and redeploy. Both prices stay recognized.
+After deploy, `GET /api/billing/stripe/config` should report `plans.max` as `{ label: "Premium", amountCents: 1400, currency: "usd", lookupKey: "scholarmark_max_monthly_usd14" }`, and `GET /api/billing/paypal/config` should report `plans.max` as `{ label: "Premium", amount: "14.00", amountCents: 1400 }`. Set `SKIP_BILLING_SMOKE=1` only for deploys that do not touch billing.
+
+### Rollback
+
+Reverse the safe order:
+
+1. Make the portal switch back first: replace USD 14 Premium with USD 50 Max. This stops new USD 14 switches.
+2. Append the USD 14 Premium price ID to `STRIPE_MAX_LEGACY_PRICE_IDS`. The previous code only recognizes that price through this list. Without it, a subscriber who switched from Pro in the portal keeps Pro checkout metadata and would drop back to Pro.
+3. Set `STRIPE_MAX_PRICE_ID` back to the USD 50 Max price ID, and redeploy the previous release in the same restart.
+
+Price-only rollback (keep this code): point `CURRENT_PRICE_OFFERS.max` back to `MAX_PRICE_OFFERS.usd50Monthly`, set `STRIPE_MAX_PRICE_ID` back to USD 50 Max, make the portal switch back, and redeploy. Both prices stay recognized.
