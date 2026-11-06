@@ -57,6 +57,20 @@ itself loads no analytics, pixels or third-party resources (fonts are self-hoste
 cookies, and its client script sends nothing anywhere, so it needs no consent banner. The app's consent-gated Meta measurement
 takes over after signup.
 
+## Sample citation check
+
+The homepage section `#sample-audit` (`src/components/SampleAudit.astro`) lets a visitor pick one
+of three citations in a synthetic draft and see it beside the source page: one matches, one has
+an added word, one cites the wrong page. It is built from the synthetic Riverside survey used for
+plugin QA (`integrations/scholarmark-plugin/listing/review-fixtures/`), and is labeled as such.
+
+- Results are pre-written in `src/lib/sampleAudit.ts`; the build fails if a result contradicts
+  the source text it shows (a "match" that isn't verbatim, or a page that doesn't hold the passage).
+- It needs no JavaScript: the choices are native radio buttons and CSS shows the selected result.
+  Browsers without `:has()` show all three results in order. Nothing is typed in or sent anywhere.
+- A few guides link to it after their own text (`src/lib/sampleAuditEntries.ts`). A real build
+  fails if one of those guides is renamed or removed.
+
 ## Writing guides
 
 Guides are Markdown or MDX files directly in `src/content/guides/`. The file name becomes the
@@ -91,7 +105,8 @@ src/
   content.config.ts       guides collection schema
   layouts/BaseLayout.astro  head/SEO, header, footer, skip link
   components/             Button, Logo, SiteHeader, SiteFooter, CtaBand, GuideCard,
-                          WorkspaceIllustration (HTML/CSS, labeled as an illustration)
+                          WorkspaceIllustration (HTML/CSS, labeled as an illustration),
+                          SampleAudit (synthetic sample citation check)
   lib/                    links, guide helpers, rehype link normalizer
   pages/                  index, guides/, guides/[slug]/, 404, robots.txt, sitemap.xml
   styles/global.css       design tokens and shared primitives
