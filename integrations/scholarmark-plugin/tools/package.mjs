@@ -9,6 +9,8 @@
 // Writes, under integrations/scholarmark-plugin/dist/:
 //   scholarmark-openai-<version>.zip  plugin.json + mcp.json (Agent Plugins format) for ChatGPT and Codex
 //   scholarmark-claude-<version>.zip  .claude-plugin/plugin.json for claude.ai "Upload plugin" and Claude Code
+//   scholarmark-citation-audit-<version>.zip  skills-only Agent Plugins package (no MCP server), from
+//                                     ../skills-only plus the canonical skill (see skills-only.mjs)
 // Each ZIP holds the plugin files at its root, with no wrapping folder.
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, mkdtempSync } from "node:fs";
@@ -18,9 +20,11 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import zlib from "node:zlib";
+import { skillsOnlyFiles } from "./skills-only.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = resolve(here, "..", "plugin");
+const skillsOnlyRoot = resolve(here, "..", "skills-only");
 const distDir = resolve(here, "..", "dist");
 
 if (typeof zlib.crc32 !== "function") {
@@ -55,12 +59,12 @@ const targets = {
 const DOS_TIME = 0;
 const DOS_DATE = ((2026 - 1980) << 9) | (1 << 5) | 1;
 
-function buildZip(paths) {
+// entries: sorted [path, Buffer] pairs.
+function buildZip(entries) {
   const locals = [];
   const centrals = [];
   let offset = 0;
-  for (const path of paths) {
-    const data = readFileSync(join(pluginRoot, ...path.split("/")));
+  for (const [path, data] of entries) {
     const deflated = zlib.deflateRawSync(data, { level: 9 });
     const useDeflate = deflated.length < data.length;
     const body = useDeflate ? deflated : data;
@@ -101,8 +105,8 @@ function buildZip(paths) {
   const centralSize = centrals.reduce((sum, part) => sum + part.length, 0);
   const end = Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(paths.length, 8);
-  end.writeUInt16LE(paths.length, 10);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   return Buffer.concat([...locals, ...centrals, end]);
@@ -129,20 +133,35 @@ mkdirSync(distDir, { recursive: true });
 const all = listFiles(pluginRoot).sort();
 let failed = false;
 
-for (const [name, include] of Object.entries(targets)) {
-  const paths = all.filter(include);
-  const zip = buildZip(paths);
-  const file = join(distDir, `scholarmark-${name}-${version}.zip`);
+const builds = Object.entries(targets).map(([name, include]) => ({
+  file: `scholarmark-${name}-${version}.zip`,
+  target: name,
+  entries: all.filter(include).map((path) => [path, readFileSync(join(pluginRoot, ...path.split("/")))]),
+}));
+
+let skillsOnly;
+try {
+  skillsOnly = skillsOnlyFiles(pluginRoot, skillsOnlyRoot);
+} catch (err) {
+  console.error(`\n${err.message}\nNo packages written.`);
+  process.exit(1);
+}
+const skillsOnlyManifest = JSON.parse(skillsOnly.get("plugin.json").toString("utf8"));
+builds.push({ file: `${skillsOnlyManifest.name}-${skillsOnlyManifest.version}.zip`, target: "skills-only", entries: [...skillsOnly] });
+
+for (const { file: fileName, target, entries } of builds) {
+  const zip = buildZip(entries);
+  const file = join(distDir, fileName);
   writeFileSync(file, zip);
   const sha = createHash("sha256").update(zip).digest("hex");
-  console.log(`\nwrote dist/${relative(distDir, file)}  ${paths.length} files, ${zip.length} bytes`);
+  console.log(`\nwrote dist/${relative(distDir, file)}  ${entries.length} files, ${zip.length} bytes`);
   console.log(`sha256 ${sha}`);
 
   // Re-validate what was actually zipped.
-  const scratch = mkdtempSync(join(tmpdir(), `scholarmark-${name}-`));
+  const scratch = mkdtempSync(join(tmpdir(), `scholarmark-${target}-`));
   try {
     extractZip(zip, scratch);
-    if (!validate(scratch, name)) failed = true;
+    if (!validate(scratch, target)) failed = true;
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }

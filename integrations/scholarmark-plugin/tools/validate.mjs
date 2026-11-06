@@ -26,8 +26,10 @@ const pluginRoot = resolve(option("--dir") ?? join(here, "..", "plugin"));
 const repoRoot = resolve(here, "..", "..", "..");
 const MCP_URL = "https://mcp.scholarmark.ai/mcp";
 // --target claude|openai checks one packaging only, for an extracted ZIP.
+// --target skills-only checks the skills-only package (no MCP server or review).
 const target = option("--target") ?? "both";
-const checkClaude = target !== "openai";
+const skillsOnly = target === "skills-only";
+const checkClaude = target !== "openai" && !skillsOnly;
 const checkOpenai = target !== "claude";
 
 const errors = [];
@@ -322,7 +324,9 @@ if (openai) {
   limit("category", 200);
   if (/\b(mcp|mcp server|plugin)\s*$/i.test(ui.displayName ?? "")) error(`${label}: don't append "MCP" or "Plugin" to the display name`);
   for (const key of ["websiteURL", "supportURL", "privacyPolicyURL", "termsOfServiceURL"]) {
-    if (!ui[key]) error(`${label}: interface.${key} is required for MCP review`);
+    if (!ui[key]) {
+      if (!skillsOnly) error(`${label}: interface.${key} is required for MCP review`);
+    }
     else if (!isHttpsUrl(ui[key]) || ui[key].length > 1024) error(`${label}: interface.${key} must be an https URL of at most 1024 characters`);
   }
   if (ui.capabilities !== undefined) {
@@ -354,26 +358,34 @@ if (openai) {
   const review = ext?.review;
   const serialized = JSON.stringify(ext ?? {});
   if (/test_credentials|reviewer_instructions/.test(serialized)) error(`${label}: ZIP metadata rejects test_credentials and reviewer_instructions`);
-  const positive = review?.test_cases?.positive ?? [];
-  const negative = review?.test_cases?.negative ?? [];
-  if (positive.length !== 5) error(`${label}: initial MCP review needs exactly 5 positive test cases (found ${positive.length})`);
-  if (negative.length !== 3) error(`${label}: initial MCP review needs exactly 3 negative test cases (found ${negative.length})`);
-  positive.forEach((test, index) => {
-    for (const key of ["description", "prompt", "tools_triggered", "expected_behavior"]) {
-      if (!test[key]) error(`${label}: positive case ${index + 1} is missing ${key}`);
-    }
-    if ((test.description ?? "").length > 4000) error(`${label}: positive case ${index + 1} description over 4000 characters`);
-    if (tools) {
-      for (const tool of String(test.tools_triggered ?? "").split(/[,\s]+/).filter(Boolean)) {
-        if (!tools.host.has(tool)) error(`${label}: positive case ${index + 1} names "${tool}", which the host-mode server doesn't expose`);
+  if (skillsOnly) {
+    // A server can't be added to a skills-only listing later, so it must not reuse the combined plugin's identity.
+    if (openai.name === "scholarmark" || ui.displayName === "ScholarMark") error(`${label}: reuse of the combined plugin's name or display name`);
+    if (review) error(`${label}: a skills-only plugin must omit review`);
+    if (openai.mcpServers || /mcp/i.test(Object.keys(ext ?? {}).join(" "))) error(`${label}: a skills-only plugin must not declare MCP servers`);
+    if (/mcp\.scholarmark\.ai|\bMCP\b/.test(JSON.stringify(openai))) error(`${label}: skills-only metadata mentions an MCP server`);
+  } else {
+    const positive = review?.test_cases?.positive ?? [];
+    const negative = review?.test_cases?.negative ?? [];
+    if (positive.length !== 5) error(`${label}: initial MCP review needs exactly 5 positive test cases (found ${positive.length})`);
+    if (negative.length !== 3) error(`${label}: initial MCP review needs exactly 3 negative test cases (found ${negative.length})`);
+    positive.forEach((test, index) => {
+      for (const key of ["description", "prompt", "tools_triggered", "expected_behavior"]) {
+        if (!test[key]) error(`${label}: positive case ${index + 1} is missing ${key}`);
       }
-    }
-  });
-  negative.forEach((test, index) => {
-    for (const key of ["description", "prompt"]) if (!test[key]) error(`${label}: negative case ${index + 1} is missing ${key}`);
-  });
-  if (!review?.demo_recording_url) warn(`${label}: review.demo_recording_url is required before MCP review (add it once the walkthrough video exists)`);
-  else if (!isHttpsUrl(review.demo_recording_url)) error(`${label}: demo_recording_url must be https`);
+      if ((test.description ?? "").length > 4000) error(`${label}: positive case ${index + 1} description over 4000 characters`);
+      if (tools) {
+        for (const tool of String(test.tools_triggered ?? "").split(/[,\s]+/).filter(Boolean)) {
+          if (!tools.host.has(tool)) error(`${label}: positive case ${index + 1} names "${tool}", which the host-mode server doesn't expose`);
+        }
+      }
+    });
+    negative.forEach((test, index) => {
+      for (const key of ["description", "prompt"]) if (!test[key]) error(`${label}: negative case ${index + 1} is missing ${key}`);
+    });
+    if (!review?.demo_recording_url) warn(`${label}: review.demo_recording_url is required before MCP review (add it once the walkthrough video exists)`);
+    else if (!isHttpsUrl(review.demo_recording_url)) error(`${label}: demo_recording_url must be https`);
+  }
   const translations = ext?.publication?.translations;
   for (const [locale, text] of Object.entries(translations ?? {})) {
     if ((text?.subtitle ?? "").length > 30) error(`${label}: ${locale} subtitle over 30 characters`);
@@ -381,7 +393,12 @@ if (openai) {
   }
 }
 
-const portableMcp = checkOpenai ? readJson(join(pluginRoot, "mcp.json"), "mcp.json") : null;
+if (skillsOnly) {
+  for (const path of ["mcp.json", ".mcp.json", ".app.json", ".claude-plugin", ".codex-plugin", "hooks"]) {
+    if (existsSync(join(pluginRoot, path))) error(`${path}: not allowed in a skills-only plugin`);
+  }
+}
+const portableMcp = checkOpenai && !skillsOnly ? readJson(join(pluginRoot, "mcp.json"), "mcp.json") : null;
 if (portableMcp) {
   const label = "mcp.json";
   const MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
@@ -424,7 +441,7 @@ const mcpUrls = new Set([
   ...Object.values(claudeServers).map((server) => server.url),
   ...Object.values(portableMcp?.mcpServers ?? {}).map((server) => server.url),
 ]);
-if (mcpUrls.size !== 1 || !mcpUrls.has(MCP_URL)) error(`MCP URLs must all be ${MCP_URL} (found ${[...mcpUrls].join(", ")})`);
+if (!skillsOnly && (mcpUrls.size !== 1 || !mcpUrls.has(MCP_URL))) error(`MCP URLs must all be ${MCP_URL} (found ${[...mcpUrls].join(", ")})`);
 
 // --- skills ------------------------------------------------------------------
 
@@ -459,6 +476,7 @@ for (const dir of skillDirs) {
       mentioned.push(...[...readFileSync(file, "utf8").matchAll(/`([a-z]+(?:_[a-z]+)+)`/g)].map((m) => m[1]));
     }
     for (const name of new Set(mentioned)) {
+      if (skillsOnly && (tools.host.has(name) || tools.serverAi.has(name))) error(`skills/${dir.name}: mentions ScholarMark tool ${name}, which a skills-only plugin can't call`);
       if (tools.serverAi.has(name)) error(`skills/${dir.name}: mentions ${name}, which host-AI mode doesn't expose`);
       if (/^(get|save|find|read|search|create|add|upload|update|delete)_/.test(name) && !tools.host.has(name)) {
         error(`skills/${dir.name}: mentions ${name}, which the ScholarMark server doesn't register`);
@@ -468,7 +486,7 @@ for (const dir of skillDirs) {
 }
 
 // README tool lists must match the server's read-only annotations.
-if (tools && readme) {
+if (tools && readme && !skillsOnly) {
   const section = (heading) => {
     const match = readme.match(new RegExp(`${heading}[^\\n]*:\\s*([^\\n]+)`));
     return match ? [...match[1].matchAll(/`([a-z_]+)`/g)].map((m) => m[1]) : [];
